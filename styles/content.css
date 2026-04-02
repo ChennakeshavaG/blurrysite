@@ -1,0 +1,316 @@
+/**
+ * privacyblur — content.css
+ *
+ * Injected into every page. All selectors use the `pb-` prefix to avoid
+ * collisions with host-page styles.
+ *
+ * CSS custom properties (set on :root or <html> by content_script.js):
+ *   --pb-radius               default 8px    — blur filter amount
+ *   --pb-highlight-color      default #f59e0b — picker hover outline
+ *   --pb-transition-duration  default 200ms  — blur-in/out transition
+ */
+
+/* ─── Custom property defaults ─────────────────────────────────────────────── */
+
+:root {
+  --pb-radius: 8px;
+  --pb-highlight-color: #f59e0b;
+  --pb-transition-duration: 200ms;
+}
+
+/* ─── Blurred state ─────────────────────────────────────────────────────────── */
+
+/**
+ * Applied to any element the extension has blurred.
+ * Uses the CSS custom property so JS can update it globally without
+ * re-querying every blurred element.
+ */
+.pb-blurred {
+  filter: blur(var(--pb-radius, 8px)) !important;
+  -webkit-filter: blur(var(--pb-radius, 8px)) !important;
+  transition:
+    filter var(--pb-transition-duration, 200ms) ease,
+    -webkit-filter var(--pb-transition-duration, 200ms) ease !important;
+  animation: pb-blur-in var(--pb-transition-duration, 200ms) ease forwards;
+  /* Prevent blurred content from leaking outside its box */
+  overflow: hidden;
+  /* Promote to own compositing layer for GPU acceleration */
+  will-change: filter;
+}
+
+/**
+ * Video-specific blur: we overlay a canvas for the blur effect because CSS
+ * filter on <video> can be unreliable cross-browser, but also keep the class
+ * for simple cases.
+ */
+.pb-blurred-video {
+  position: relative !important;
+  /* The canvas overlay is absolutely positioned inside this wrapper */
+}
+
+/* ─── Reveal on hover (opt-in mode) ────────────────────────────────────────── */
+
+/**
+ * When the extension's "reveal on hover" setting is enabled,
+ * content_script.js adds this class alongside .pb-blurred.
+ * Hovering temporarily removes the filter, letting the user read content.
+ */
+.pb-reveal-on-hover:hover {
+  filter: none !important;
+  -webkit-filter: none !important;
+  transition:
+    filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
+    -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
+}
+
+/* ─── Blur animation ────────────────────────────────────────────────────────── */
+
+@keyframes pb-blur-in {
+  from {
+    filter: blur(0);
+    -webkit-filter: blur(0);
+  }
+  to {
+    filter: blur(var(--pb-radius, 8px));
+    -webkit-filter: blur(var(--pb-radius, 8px));
+  }
+}
+
+@keyframes pb-blur-out {
+  from {
+    filter: blur(var(--pb-radius, 8px));
+    -webkit-filter: blur(var(--pb-radius, 8px));
+  }
+  to {
+    filter: blur(0);
+    -webkit-filter: blur(0);
+  }
+}
+
+/* ─── Picker mode ───────────────────────────────────────────────────────────── */
+
+/**
+ * When the picker is active, override every element's cursor with a crosshair
+ * so the user clearly understands they are selecting.
+ * `!important` is intentional — page styles must not override this.
+ */
+.pb-picker-active *,
+.pb-picker-active *::before,
+.pb-picker-active *::after {
+  cursor: crosshair !important;
+}
+
+/**
+ * Hover highlight: shown on the element currently under the cursor while the
+ * picker is active.
+ */
+.pb-hover-highlight {
+  outline: 2px solid var(--pb-highlight-color, #f59e0b) !important;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 25%, transparent),
+    inset 0 0 0 2px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 15%, transparent) !important;
+  outline-offset: 1px !important;
+  /* Fallback for browsers without color-mix */
+  box-shadow:
+    0 0 0 4px rgba(245, 158, 11, 0.25),
+    inset 0 0 0 2px rgba(245, 158, 11, 0.15) !important;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 25%, transparent),
+    inset 0 0 0 2px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 15%, transparent) !important;
+  transition: outline var(--pb-transition-duration, 200ms) ease !important;
+}
+
+/* ─── Picker toolbar ────────────────────────────────────────────────────────── */
+
+/**
+ * Fixed toolbar shown at the top of the viewport when picker is active.
+ * Max z-index to sit above all page content.
+ */
+.pb-toolbar {
+  all: initial; /* Reset all inherited properties */
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 16px !important;
+  background: rgba(15, 15, 15, 0.93) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+  box-sizing: border-box !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  color: #f3f4f6 !important;
+  /* Prevent the picker's own mouseover from highlighting toolbar elements */
+  pointer-events: auto !important;
+}
+
+.pb-toolbar-label {
+  all: initial;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 13px !important;
+  color: #e5e7eb !important;
+  line-height: 1.4 !important;
+  flex: 1 !important;
+  padding-right: 12px !important;
+}
+
+.pb-toolbar-btn-group {
+  all: initial;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+}
+
+.pb-toolbar-btn {
+  all: initial;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4px 12px !important;
+  border-radius: 4px !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  cursor: pointer !important;
+  border: 1px solid transparent !important;
+  transition: background 120ms ease, border-color 120ms ease !important;
+  user-select: none !important;
+  white-space: nowrap !important;
+}
+
+.pb-toolbar-btn--clear {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #d1d5db !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.pb-toolbar-btn--clear:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #f3f4f6 !important;
+}
+
+.pb-toolbar-btn--close {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #fca5a5 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  font-size: 16px !important;
+  padding: 2px 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.4 !important;
+}
+
+.pb-toolbar-btn--close:hover {
+  background: rgba(239, 68, 68, 0.3) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  color: #fecaca !important;
+}
+
+.pb-toolbar-btn:focus-visible {
+  outline: 2px solid var(--pb-highlight-color, #f59e0b) !important;
+  outline-offset: 2px !important;
+}
+
+/* ─── Video canvas overlay ──────────────────────────────────────────────────── */
+
+/**
+ * Absolutely positioned canvas that BlurEngine places over <video> elements
+ * to draw a blurred frame overlay, since CSS filter on video has inconsistent
+ * behaviour across browsers.
+ */
+.pb-canvas-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  border-radius: inherit !important;
+}
+
+/* ─── Toast notification ────────────────────────────────────────────────────── */
+
+/**
+ * Transient notification shown in the bottom-right corner of the viewport
+ * to confirm blur/unblur actions.
+ */
+.pb-toast {
+  all: initial;
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  z-index: 2147483646 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 16px !important;
+  background: rgba(15, 15, 15, 0.92) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  color: #f3f4f6 !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1.4 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  animation: pb-toast-in 200ms ease forwards !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  max-width: 320px !important;
+  box-sizing: border-box !important;
+}
+
+.pb-toast--exiting {
+  animation: pb-toast-out 200ms ease forwards !important;
+}
+
+.pb-toast__icon {
+  all: initial;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  flex-shrink: 0 !important;
+}
+
+.pb-toast__message {
+  all: initial;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 13px !important;
+  color: #f3f4f6 !important;
+  line-height: 1.4 !important;
+}
+
+@keyframes pb-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pb-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+}

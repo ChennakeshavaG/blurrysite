@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PrivacyBlur</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- ===== HEADER ===== -->
+  <header class="header">
+    <div class="header__brand">
+      <svg class="header__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z" fill="#f59e0b" opacity="0.9"/>
+        <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="#1a1a2e"/>
+        <circle cx="12" cy="12" r="2" fill="#1a1a2e"/>
+        <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+      </svg>
+      <span class="header__title">PrivacyBlur</span>
+    </div>
+    <label class="toggle" title="Enable or disable PrivacyBlur">
+      <input type="checkbox" id="enableToggle" />
+      <span class="toggle__track">
+        <span class="toggle__thumb"></span>
+      </span>
+      <span class="toggle__label" id="enableLabel">On</span>
+    </label>
+  </header>
+
+  <!-- ===== TOAST ===== -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- ===== PAGE STATUS ===== -->
+  <section class="card" id="statusCard">
+    <div class="status-row">
+      <div class="status-info">
+        <span class="status-hostname" id="hostname">—</span>
+        <span class="status-badge" id="blurCount" title="Blurred elements on this page">0</span>
+      </div>
+      <div class="status-actions">
+        <button class="btn btn--primary" id="blurAllBtn" title="Blur all visible text on the page">Blur All</button>
+        <button class="btn btn--ghost" id="clearPageBtn" title="Remove all blurs on this page">Clear Page</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SHORTCUTS ===== -->
+  <section class="card">
+    <div class="card__header" id="shortcutsHeader">
+      <span class="card__title">Keyboard Shortcuts</span>
+    </div>
+    <ul class="shortcuts-list">
+      <li class="shortcut-item">
+        <span class="shortcut-label">Chord blur</span>
+        <span class="shortcut-keys"><kbd>Ctrl</kbd><kbd>K</kbd> then <kbd>V</kbd></span>
+        <button class="shortcut-customize" data-shortcut="chord" title="Customize shortcut">customize</button>
+      </li>
+      <li class="shortcut-item">
+        <span class="shortcut-label">Picker mode</span>
+        <span class="shortcut-keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>P</kbd></span>
+        <button class="shortcut-customize" data-shortcut="picker" title="Customize shortcut">customize</button>
+      </li>
+      <li class="shortcut-item">
+        <span class="shortcut-label">Blur all</span>
+        <span class="shortcut-keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>B</kbd></span>
+        <button class="shortcut-customize" data-shortcut="blurAll" title="Customize shortcut">customize</button>
+      </li>
+      <li class="shortcut-item">
+        <span class="shortcut-label">Clear page</span>
+        <span class="shortcut-keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>U</kbd></span>
+        <button class="shortcut-customize" data-shortcut="clear" title="Customize shortcut">customize</button>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ===== SETTINGS (COLLAPSIBLE) ===== -->
+  <section class="card card--collapsible" id="settingsCard">
+    <button class="card__header card__header--toggle" id="settingsToggle" aria-expanded="false" aria-controls="settingsBody">
+      <span class="card__title">Settings</span>
+      <svg class="card__chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="card__body" id="settingsBody">
+      <div class="setting-row">
+        <label class="setting-label" for="blurRadius">
+          Blur radius
+          <span class="setting-value" id="blurRadiusValue">8px</span>
+        </label>
+        <input
+          class="slider"
+          type="range"
+          id="blurRadius"
+          min="2"
+          max="20"
+          step="1"
+          value="8"
+          aria-label="Blur radius in pixels"
+        />
+      </div>
+
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="transitionToggle">Smooth transition</label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="transitionToggle" />
+          <span class="toggle__track">
+            <span class="toggle__thumb"></span>
+          </span>
+        </label>
+      </div>
+
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="hoverRevealToggle">Reveal on hover</label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="hoverRevealToggle" />
+          <span class="toggle__track">
+            <span class="toggle__thumb"></span>
+          </span>
+        </label>
+      </div>
+
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="highlightColor">Picker highlight</label>
+        <input type="color" id="highlightColor" class="color-picker" value="#f59e0b" aria-label="Picker highlight color" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BLURRED ELEMENTS LIST ===== -->
+  <section class="card">
+    <div class="card__header">
+      <span class="card__title">Blurred Elements</span>
+      <span class="list-count" id="listCount">0</span>
+    </div>
+    <div class="blur-list-wrapper">
+      <ul class="blur-list" id="blurList" aria-label="Blurred elements on current page">
+        <!-- Populated by popup.js -->
+      </ul>
+      <p class="blur-list-empty" id="blurListEmpty">No blurred elements on this page.</p>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <button class="footer__link" id="clearAllSitesBtn">Clear all sites</button>
+    <span class="footer__version" id="extVersion">v1.0.0</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

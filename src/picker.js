@@ -1,0 +1,306 @@
+/**
+ * privacyblur — picker.js
+ *
+ * Exposes `window.PrivacyBlurPicker`.
+ *
+ * Interactive element picker: the user hovers to highlight an element then
+ * clicks to blur (or unblur) it. Activated/deactivated programmatically
+ * by content_script.js.
+ *
+ * Depends on window globals: PrivacyBlurEngine (loaded before this
+ * file via manifest.json content_scripts order).
+ */
+
+'use strict';
+
+window.PrivacyBlurPicker = (() => {
+
+  // ─── Internal state ──────────────────────────────────────────────────────────
+
+  let isActive = false;
+
+  /** Currently hovered DOM element while picker is active. */
+  let hoveredElement = null;
+
+  /** Elements the picker has blurred in this session. */
+  const selectedElements = new Set();
+
+  /** Active settings snapshot: { blurRadius, highlightColor, … } */
+  let activeSettings = {
+    blurRadius: 8,
+    highlightColor: '#f59e0b',
+  };
+
+  /** Callbacks provided by content_script: { onBlur, onUnblur, onDeactivate } */
+  let activeCallbacks = {};
+
+  // ─── Toolbar DOM references ───────────────────────────────────────────────────
+
+  let toolbarEl = null;
+  let toastEl = null;
+
+  // ─── Toast notification ───────────────────────────────────────────────────────
+
+  /** Briefly show a small indicator on a blurred element. */
+  function flashElementIndicator(el, text) {
+    const badge = document.createElement('div');
+    badge.textContent = text;
+    Object.assign(badge.style, {
+      position: 'absolute',
+      top: '4px',
+      left: '4px',
+      background: 'rgba(0,0,0,0.75)',
+      color: '#fff',
+      fontSize: '11px',
+      fontFamily: 'system-ui, sans-serif',
+      padding: '2px 6px',
+      borderRadius: '3px',
+      zIndex: '2147483646',
+      pointerEvents: 'none',
+      userSelect: 'none',
+    });
+
+    // Badge needs a positioned ancestor.
+    const prevPosition = el.style.position;
+    const computed = getComputedStyle(el).position;
+    if (!computed || computed === 'static') {
+      el.style.position = 'relative';
+    }
+
+    el.appendChild(badge);
+    setTimeout(() => {
+      badge.remove();
+      if (!computed || computed === 'static') {
+        el.style.position = prevPosition;
+      }
+    }, 900);
+  }
+
+  // ─── Toolbar (fixed overlay) ──────────────────────────────────────────────────
+
+  /**
+   * Build and inject the fixed picker toolbar into the page.
+   * Uses high z-index and inline styles to guarantee visibility above all
+   * page stacking contexts.
+   */
+  function buildToolbar() {
+    if (toolbarEl) return;
+
+    toolbarEl = document.createElement('div');
+    toolbarEl.id = 'pb-picker-toolbar';
+    toolbarEl.className = 'pb-toolbar';
+    toolbarEl.setAttribute('data-pb-toolbar', 'true');
+
+    // Prevent picker events from propagating into the toolbar itself.
+    toolbarEl.addEventListener('mouseover', (e) => e.stopPropagation(), true);
+    toolbarEl.addEventListener('mouseout', (e) => e.stopPropagation(), true);
+    toolbarEl.addEventListener('click', (e) => e.stopPropagation(), true);
+
+    // ── Left: status text ──────────────────────────────────────────────────
+    const label = document.createElement('span');
+    label.className = 'pb-toolbar-label';
+    label.textContent =
+      'Picker Mode — hover an element and click to blur. Press Esc to exit.';
+
+    // ── Right: action buttons ──────────────────────────────────────────────
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'pb-toolbar-btn-group';
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'pb-toolbar-btn pb-toolbar-btn--clear';
+    clearBtn.textContent = 'Clear all';
+    clearBtn.title = 'Remove all blur from this page';
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearAllFromPicker();
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'pb-toolbar-btn pb-toolbar-btn--close';
+    closeBtn.textContent = '×';
+    closeBtn.title = 'Exit picker mode';
+    closeBtn.setAttribute('aria-label', 'Close picker');
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deactivate();
+    });
+
+    btnGroup.appendChild(clearBtn);
+    btnGroup.appendChild(closeBtn);
+
+    toolbarEl.appendChild(label);
+    toolbarEl.appendChild(btnGroup);
+
+    document.body.appendChild(toolbarEl);
+  }
+
+  function removeToolbar() {
+    if (toolbarEl) {
+      toolbarEl.remove();
+      toolbarEl = null;
+    }
+  }
+
+  /** Remove blur from all elements this picker session blurred, then persist. */
+  function clearAllFromPicker() {
+    for (const el of selectedElements) {
+      if (typeof activeCallbacks.onUnblur === 'function') {
+        activeCallbacks.onUnblur(el);
+      } else {
+        window.PrivacyBlurEngine.removeBlur(el);
+      }
+    }
+    selectedElements.clear();
+  }
+
+  // ─── Event listeners ──────────────────────────────────────────────────────────
+
+  function onMouseOver(e) {
+    const target = resolveTarget(e.target);
+    if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
+
+    if (hoveredElement && hoveredElement !== target) {
+      hoveredElement.classList.remove('pb-hover-highlight');
+    }
+    hoveredElement = target;
+    hoveredElement.classList.add('pb-hover-highlight');
+  }
+
+  function onMouseOut(e) {
+    const target = resolveTarget(e.target);
+    if (target) {
+      target.classList.remove('pb-hover-highlight');
+    }
+    if (hoveredElement === target) {
+      hoveredElement = null;
+    }
+  }
+
+  function onClick(e) {
+    const target = resolveTarget(e.target);
+    if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    const alreadyBlurred = target.classList.contains('pb-blurred');
+
+    if (alreadyBlurred) {
+      if (typeof activeCallbacks.onUnblur === 'function') {
+        activeCallbacks.onUnblur(target);
+      } else {
+        window.PrivacyBlurEngine.removeBlur(target);
+      }
+      selectedElements.delete(target);
+      flashElementIndicator(target, 'Unblurred');
+    } else {
+      if (typeof activeCallbacks.onBlur === 'function') {
+        activeCallbacks.onBlur(target);
+      } else {
+        window.PrivacyBlurEngine.applyBlur(target, activeSettings.blurRadius);
+      }
+      selectedElements.add(target);
+      flashElementIndicator(target, 'Blurred');
+    }
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      deactivate();
+    }
+  }
+
+  /**
+   * Walk up from a raw event target to a sensible element to highlight.
+   * Skip text nodes; also skip the toolbar.
+   * @param {EventTarget} raw
+   * @returns {Element|null}
+   */
+  function resolveTarget(raw) {
+    if (!raw || !(raw instanceof Element)) return null;
+    if (raw === document.documentElement || raw === document.body) return null;
+    return raw;
+  }
+
+  // ─── Public API ───────────────────────────────────────────────────────────────
+
+  /**
+   * Activate the picker.
+   * @param {object} settings  — { blurRadius, highlightColor, … }
+   * @param {object} callbacks — { onBlur, onUnblur, onDeactivate }
+   */
+  function activate(settings, callbacks) {
+    if (isActive) return;
+
+    activeSettings = { ...activeSettings, ...settings };
+    activeCallbacks = callbacks || {};
+    isActive = true;
+
+    // Add crosshair cursor cue to page root.
+    document.documentElement.classList.add('pb-picker-active');
+
+    // Build and show toolbar.
+    buildToolbar();
+
+    // Attach capture-phase listeners so we intercept before page handlers.
+    document.addEventListener('mouseover', onMouseOver, true);
+    document.addEventListener('mouseout', onMouseOut, true);
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKeyDown, true);
+  }
+
+  /**
+   * Deactivate the picker and clean up all side-effects.
+   */
+  function deactivate() {
+    if (!isActive) return;
+
+    isActive = false;
+
+    // Remove event listeners.
+    document.removeEventListener('mouseover', onMouseOver, true);
+    document.removeEventListener('mouseout', onMouseOut, true);
+    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+
+    // Remove highlight class from any lingering elements.
+    const highlighted = document.querySelectorAll('.pb-hover-highlight');
+    for (const el of highlighted) {
+      el.classList.remove('pb-hover-highlight');
+    }
+    hoveredElement = null;
+
+    // Remove visual cues.
+    document.documentElement.classList.remove('pb-picker-active');
+    removeToolbar();
+
+    // Notify content script.
+    if (typeof activeCallbacks.onDeactivate === 'function') {
+      activeCallbacks.onDeactivate();
+    }
+
+    activeCallbacks = {};
+  }
+
+  /**
+   * Update settings while the picker is active (e.g. user changes blur radius
+   * in the popup without closing picker).
+   * @param {object} newSettings
+   */
+  function setSettings(newSettings) {
+    activeSettings = { ...activeSettings, ...newSettings };
+  }
+
+  // ─── Exports ──────────────────────────────────────────────────────────────────
+
+  return {
+    get isActive() { return isActive; },
+    activate,
+    deactivate,
+    setSettings,
+  };
+
+})();
