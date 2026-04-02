@@ -41,14 +41,17 @@ window.PrivacyBlurPicker = (() => {
 
   // ─── Toast notification ───────────────────────────────────────────────────────
 
-  /** Briefly show a small indicator on a blurred element. */
+  /** Briefly show a small indicator near a blurred element. */
   function flashElementIndicator(el, text) {
+    const rect = el.getBoundingClientRect();
     const badge = document.createElement('div');
     badge.textContent = text;
+    // Fixed positioning anchored to viewport — never mutates the target element's
+    // layout properties, so fixed/sticky/absolute children are unaffected.
     Object.assign(badge.style, {
-      position: 'absolute',
-      top: '4px',
-      left: '4px',
+      position: 'fixed',
+      top:  `${Math.max(4, rect.top  + 4)}px`,
+      left: `${Math.max(4, rect.left + 4)}px`,
       background: 'rgba(0,0,0,0.75)',
       color: '#fff',
       fontSize: '11px',
@@ -60,20 +63,8 @@ window.PrivacyBlurPicker = (() => {
       userSelect: 'none',
     });
 
-    // Badge needs a positioned ancestor.
-    const prevPosition = el.style.position;
-    const computed = getComputedStyle(el).position;
-    if (!computed || computed === 'static') {
-      el.style.position = 'relative';
-    }
-
-    el.appendChild(badge);
-    setTimeout(() => {
-      badge.remove();
-      if (!computed || computed === 'static') {
-        el.style.position = prevPosition;
-      }
-    }, 900);
+    document.body.appendChild(badge);
+    setTimeout(() => badge.remove(), 900);
   }
 
   // ─── Toolbar (fixed overlay) ──────────────────────────────────────────────────

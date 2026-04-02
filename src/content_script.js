@@ -36,6 +36,9 @@
   /** Whether the element picker is currently active */
   let isPickerActive = false;
 
+  /** Last element the user right-clicked — used by the context menu blur handler */
+  let lastContextMenuTarget = null;
+
   /** MutationObserver watching for dynamically added nodes */
   let domObserver = null;
 
@@ -246,13 +249,14 @@
         break;
       }
 
-      // ── Context menu: blur the right-clicked element ──────────────────────
+      // ── Context menu: blur the right-clicked element ─────────────────────
       case 'CONTEXT_BLUR': {
-        if (message.elementSelector) {
-          const el = Selector.restoreSelector(message.elementSelector);
-          if (el) {
-            Engine.applyBlur(el, settings.blurRadius);
-            Store.saveBlurredElement(hostname, message.elementSelector).catch(() => {});
+        const target = lastContextMenuTarget;
+        if (target && target instanceof Element) {
+          Engine.applyBlur(target, settings.blurRadius);
+          const sel = Selector.getSelector(target);
+          if (sel) {
+            Store.saveBlurredElement(hostname, sel).catch(() => {});
           }
         }
         if (sendResponse) sendResponse({ ok: true });
@@ -261,11 +265,12 @@
 
       // ── Context menu: unblur the right-clicked element ────────────────────
       case 'CONTEXT_UNBLUR': {
-        if (message.elementSelector) {
-          const el = Selector.restoreSelector(message.elementSelector);
-          if (el) {
-            Engine.removeBlur(el);
-            Store.removeBlurredElement(hostname, message.elementSelector).catch(() => {});
+        const target = lastContextMenuTarget;
+        if (target && target instanceof Element) {
+          Engine.removeBlur(target);
+          const sel = Selector.getSelector(target);
+          if (sel) {
+            Store.removeBlurredElement(hostname, sel).catch(() => {});
           }
         }
         if (sendResponse) sendResponse({ ok: true });
@@ -328,7 +333,12 @@
     // 5. Register message listener from background / popup.
     chrome.runtime.onMessage.addListener(handleMessage);
 
-    // 6. Start DOM observer for dynamic content.
+    // 6. Track the last right-clicked element for context menu blur/unblur.
+    document.addEventListener('contextmenu', (e) => {
+      lastContextMenuTarget = e.target instanceof Element ? e.target : null;
+    }, true);
+
+    // 7. Start DOM observer for dynamic content.
     startDomObserver();
   }
 

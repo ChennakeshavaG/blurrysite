@@ -116,6 +116,13 @@ const PrivacyBlurEngine = (() => {
 
     videoParent.insertBefore(canvas, videoElement.nextSibling);
 
+    // Guard: if video has no parent (detached from DOM) we cannot overlay a canvas.
+    if (!videoParent) {
+      videoElement.classList.add(BLURRED_CLASS);
+      videoElement.style.setProperty("--pb-radius", `${radius}px`);
+      return;
+    }
+
     const ctx = canvas.getContext("2d");
 
     // Use an object so drawFrame always writes the latest handle into the same
@@ -284,27 +291,25 @@ const PrivacyBlurEngine = (() => {
    * @param {number} radius - Blur radius in pixels
    */
   function blurAllContent(radius = 8) {
-    // Structural text and media elements
-    const DIRECT_SELECTORS = [
-      "img",
-      "video",
-      "canvas",
+    // Media and structural block elements — always blur regardless of content
+    const MEDIA_SELECTORS = [
+      "img", "video", "canvas",
       "h1", "h2", "h3", "h4", "h5", "h6",
       "p",
-      "span",
-      '[class*="text"]'
     ];
 
-    // Apply to directly targeted elements
-    document.querySelectorAll(DIRECT_SELECTORS.join(",")).forEach((el) => {
+    document.querySelectorAll(MEDIA_SELECTORS.join(",")).forEach((el) => {
       applyBlur(el, radius);
     });
 
-    // For divs and sections, only blur those with meaningful direct text content
-    // to avoid blurring layout containers that contain child elements
-    document.querySelectorAll("div, section, article, li, td, th, label, button, a").forEach((el) => {
+    // Inline and generic elements — only blur when they contain direct text content.
+    // `span` is intentionally in this group: it is used for icons, badges, and
+    // decoration on most sites. Blurring every span unconditionally would make
+    // navigation illegible on sites like GitHub, Twitter, etc.
+    document.querySelectorAll(
+      "span, div, section, article, li, td, th, label, button, a"
+    ).forEach((el) => {
       if (el.classList.contains(BLURRED_CLASS)) return;
-
       if (hasMeaningfulTextContent(el)) {
         applyBlur(el, radius);
       }

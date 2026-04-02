@@ -98,6 +98,30 @@ chrome.commands.onCommand.addListener(async (command) => {
 });
 
 // ---------------------------------------------------------------------------
+// Input validation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * A valid hostname is a non-empty string ≤253 chars.
+ * Blocks prototype-pollution keys like "__proto__" and "constructor".
+ */
+function isValidHostname(h) {
+  return (
+    typeof h === "string" &&
+    h.length > 0 &&
+    h.length <= 253 &&
+    h !== "__proto__" &&
+    h !== "constructor" &&
+    h !== "prototype"
+  );
+}
+
+/** Selectors are capped at 2000 chars to prevent storage quota abuse. */
+function isValidSelector(s) {
+  return typeof s === "string" && s.length > 0 && s.length <= 2000;
+}
+
+// ---------------------------------------------------------------------------
 // Storage message handler — content scripts delegate all storage I/O here
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -105,6 +129,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // ---- Read selectors for a hostname ----
     case "GET_SELECTORS": {
+      if (!isValidHostname(message.hostname)) {
+        sendResponse({ selectors: [] });
+        return true;
+      }
       chrome.storage.local.get("blurred_selectors", (result) => {
         const map = result.blurred_selectors || {};
         sendResponse({ selectors: map[message.hostname] || [] });
@@ -114,6 +142,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // ---- Persist a newly blurred selector ----
     case "SAVE_SELECTOR": {
+      if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
+        sendResponse({ success: false, error: "invalid input" });
+        return true;
+      }
       chrome.storage.local.get("blurred_selectors", (result) => {
         const map = result.blurred_selectors || {};
         const list = map[message.hostname] || [];
@@ -133,6 +165,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // ---- Remove a single selector from a hostname ----
     case "REMOVE_SELECTOR": {
+      if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
+        sendResponse({ success: false, error: "invalid input" });
+        return true;
+      }
       chrome.storage.local.get("blurred_selectors", (result) => {
         const map = result.blurred_selectors || {};
         const list = (map[message.hostname] || []).filter(
@@ -154,6 +190,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // ---- Wipe all selectors for a specific hostname ----
     case "CLEAR_HOST": {
+      if (!isValidHostname(message.hostname)) {
+        sendResponse({ success: false, error: "invalid input" });
+        return true;
+      }
       chrome.storage.local.get("blurred_selectors", (result) => {
         const map = result.blurred_selectors || {};
         delete map[message.hostname];
@@ -184,6 +224,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // ---- Persist a partial settings update ----
     case "SAVE_SETTINGS": {
+      if (!message.settings || typeof message.settings !== "object" || Array.isArray(message.settings)) {
+        sendResponse({ success: false, error: "invalid settings" });
+        return true;
+      }
       chrome.storage.local.get("settings", (result) => {
         const current = result.settings || {};
         const updated = deepMerge(current, message.settings);
