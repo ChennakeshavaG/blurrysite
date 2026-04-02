@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "test-runner",
+      "runtimeExecutable": "/Users/keshava-13944/.local/share/mise/installs/node/22.22.2/bin/node",
+      "runtimeArgs": ["/Users/keshava-13944/privacyblur/node_modules/.bin/jest", "tests/unit", "--watchAll"],
+      "port": 0
+    }
+  ]
+}

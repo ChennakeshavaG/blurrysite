@@ -29,6 +29,7 @@
  */
 
 const PrivacyBlurStorage = (() => {
+  'use strict';
 
   // -------------------------------------------------------------------------
   // Default settings — kept here as documentation / for UI defaults reference
@@ -186,13 +187,10 @@ const PrivacyBlurStorage = (() => {
   async function saveSettings(partialSettings) {
     if (!partialSettings || typeof partialSettings !== "object") return;
 
-    // Fetch current settings, merge partial on top, then persist
-    const current = await getSettings();
-    const merged = Object.assign({}, current, partialSettings);
-
+    // Send partial to background — background.js deep-merges with stored settings
     await send({
       type: "SAVE_SETTINGS",
-      settings: merged
+      settings: partialSettings
     });
   }
 

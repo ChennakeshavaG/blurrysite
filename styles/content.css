@@ -106,14 +106,12 @@
  */
 .pb-hover-highlight {
   outline: 2px solid var(--pb-highlight-color, #f59e0b) !important;
-  box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 25%, transparent),
-    inset 0 0 0 2px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 15%, transparent) !important;
   outline-offset: 1px !important;
   /* Fallback for browsers without color-mix */
   box-shadow:
     0 0 0 4px rgba(245, 158, 11, 0.25),
     inset 0 0 0 2px rgba(245, 158, 11, 0.15) !important;
+  /* Progressive enhancement: color-mix for custom highlight color support */
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 25%, transparent),
     inset 0 0 0 2px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 15%, transparent) !important;

@@ -66,7 +66,7 @@ A module may only depend on modules loaded before it.
 
 ### storage_manager.js
 - All methods are Promise-based. `send()` is the single internal Promise wrapper.
-- `saveSettings(partial)` must first call `getSettings()` to fetch current, merge, then save. Direct save of partial is wrong.
+- `saveSettings(partial)` sends the partial directly to background.js, which deep-merges it with stored settings. Do NOT pre-merge in storage_manager — that causes a redundant double merge.
 - `getSettings()` must merge response with `DEFAULT_SETTINGS` via `Object.assign({}, DEFAULT_SETTINGS, stored)`.
 - `saveBlurredElement` must `return send(...)` (not `await send(...)` without return) so callers get the response.
 - DEFAULT_SETTINGS keys: `blurRadius`, `highlightColor`, `transitionDuration`, `revealOnHover`, `enabled`, `shortcuts`.

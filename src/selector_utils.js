@@ -6,26 +6,13 @@
  *
  * Selector strategy (most-specific first):
  *  1. Unique ID attribute  → #escaped-id
- *  2. Unique data attribute (data-testid, data-id, data-key, data-pb-id) → [attr="value"]
- *  3. nth-child path       → walked up to <body>
- *  4. Fallback             → stamp a generated data-pb-id UUID on the element
+ *  2. Fallback             → stamp a generated data-pb-id UUID on the element
  *
  * Exposed as window.PrivacyBlurSelectorUtils (IIFE, no ES module syntax).
  */
 
 const PrivacyBlurSelectorUtils = (() => {
-
-  // -------------------------------------------------------------------------
-  // Preferred data attributes to use as unique identifiers (in priority order)
-  // -------------------------------------------------------------------------
-  const UNIQUE_DATA_ATTRS = [
-    "data-pb-id",      // our own stamped ID (highest priority after id=)
-    "data-testid",
-    "data-id",
-    "data-key",
-    "data-cy",         // Cypress test IDs, often stable
-    "data-automation"
-  ];
+  'use strict';
 
   // -------------------------------------------------------------------------
   // Private helpers
@@ -58,51 +45,6 @@ const PrivacyBlurSelectorUtils = (() => {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Builds the nth-child segment for a single element within its parent.
-   * Returns a string like "div:nth-child(3)".
-   * @param {Element} element
-   * @returns {string}
-   */
-  function nthChildSegment(element) {
-    const tag = element.tagName.toLowerCase();
-
-    if (!element.parentElement) {
-      return tag;
-    }
-
-    // Count all sibling elements (nth-child counts all types, not just same tag)
-    const siblings = Array.from(element.parentElement.children);
-    const index = siblings.indexOf(element) + 1; // nth-child is 1-based
-
-    return `${tag}:nth-child(${index})`;
-  }
-
-  /**
-   * Walks up the DOM from `element` to <body> building an nth-child path.
-   * Stops as soon as an intermediate segment produces a unique selector,
-   * which keeps selectors as short as possible.
-   * @param {Element} element
-   * @returns {string} - A full selector path like "div:nth-child(2) > p:nth-child(1)"
-   */
-  function buildNthChildPath(element) {
-    const segments = [];
-    let current = element;
-
-    while (current && current !== document.body && current !== document.documentElement) {
-      segments.unshift(nthChildSegment(current));
-      current = current.parentElement;
-
-      // Test if the path so far is already unique — if yes, stop climbing
-      const candidateSelector = segments.join(" > ");
-      if (isUnique(candidateSelector)) {
-        return candidateSelector;
-      }
-    }
-
-    return segments.join(" > ");
   }
 
   // -------------------------------------------------------------------------

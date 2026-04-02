@@ -38,7 +38,6 @@ let currentHost   = '';
 let settings      = { ...DEFAULT_SETTINGS };
 let blurredItems  = [];   // string[] of CSS selectors
 let toastTimer    = null;
-let debounceTimer = null;
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
 
@@ -99,9 +98,10 @@ async function tabMessage(tabId, msg) {
  * Simple debounce — resets timer on every call.
  */
 function debounce(fn, delay) {
+  let timer = null;
   return (...args) => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => fn(...args), delay);
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
   };
 }
 

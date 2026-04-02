@@ -20,6 +20,7 @@
  */
 
 const PrivacyBlurShortcuts = (() => {
+  'use strict';
 
   // -------------------------------------------------------------------------
   // Internal state
@@ -56,42 +57,31 @@ const PrivacyBlurShortcuts = (() => {
   function showToast(text, duration = 1500) {
     // Remove any existing toast immediately
     if (currentToastEl && currentToastEl.parentNode) {
+      if (currentToastEl._removeTimer) {
+        clearTimeout(currentToastEl._removeTimer);
+      }
       currentToastEl.parentNode.removeChild(currentToastEl);
       currentToastEl = null;
     }
 
     const toast = document.createElement("div");
+    toast.className = "pb-toast";
     toast.setAttribute("role", "status");
     toast.setAttribute("aria-live", "polite");
 
-    Object.assign(toast.style, {
-      position:        "fixed",
-      top:             "16px",
-      right:           "16px",
-      zIndex:          "2147483647",       // max possible z-index
-      padding:         "8px 16px",
-      background:      "rgba(30, 30, 30, 0.9)",
-      color:           "#ffffff",
-      fontFamily:      "system-ui, -apple-system, sans-serif",
-      fontSize:        "13px",
-      lineHeight:      "1.4",
-      borderRadius:    "6px",
-      boxShadow:       "0 4px 12px rgba(0,0,0,0.3)",
-      pointerEvents:   "none",
-      userSelect:      "none",
-      transition:      "opacity 200ms ease",
-      opacity:         "1"
-    });
+    const msgSpan = document.createElement("span");
+    msgSpan.className = "pb-toast__message";
+    msgSpan.textContent = text;
+    toast.appendChild(msgSpan);
 
-    toast.textContent = text;
     document.body.appendChild(toast);
     currentToastEl = toast;
 
     // Fade out and remove
     const removeTimer = setTimeout(() => {
-      toast.style.opacity = "0";
+      toast.classList.add("pb-toast--exiting");
 
-      // Remove from DOM after the CSS transition completes
+      // Remove from DOM after the CSS animation completes
       setTimeout(() => {
         if (toast.parentNode) {
           toast.parentNode.removeChild(toast);
@@ -173,6 +163,7 @@ const PrivacyBlurShortcuts = (() => {
     destroy();
 
     const cfg = settings || {};
+    const cbs = callbacks || {};
     const chordKey1 = normaliseKey(cfg.chordKey      || "k");
     const chordKey2 = normaliseKey(cfg.chordSecond   || "v");
     const modifier  = normaliseKey(cfg.chordModifier || "ctrl");
@@ -187,9 +178,9 @@ const PrivacyBlurShortcuts = (() => {
       // ---- Escape: exit picker mode only when picker is active ----
       if (key === "escape") {
         resetChordState();
-        if (_isPickerActive && typeof callbacks.onExitPicker === "function") {
+        if (_isPickerActive && typeof cbs.onExitPicker === "function") {
           _isPickerActive = false;
-          callbacks.onExitPicker();
+          cbs.onExitPicker();
         }
         return;
       }
@@ -203,8 +194,8 @@ const PrivacyBlurShortcuts = (() => {
         lastChordKeyTime    = Date.now();
 
         // Notify optional listener so the content script can show a hint
-        if (typeof callbacks.onChordStart === "function") {
-          callbacks.onChordStart();
+        if (typeof cbs.onChordStart === "function") {
+          cbs.onChordStart();
         }
 
         // Auto-reset after 1 second if the user does not press chordKey2
@@ -231,8 +222,8 @@ const PrivacyBlurShortcuts = (() => {
 
           resetChordState();
 
-          if (typeof callbacks.TOGGLE_BLUR_ALL === "function") {
-            callbacks.TOGGLE_BLUR_ALL();
+          if (typeof cbs.TOGGLE_BLUR_ALL === "function") {
+            cbs.TOGGLE_BLUR_ALL();
           }
 
           showToast("PrivacyBlur: Blur All triggered", 1500);

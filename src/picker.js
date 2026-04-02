@@ -11,9 +11,8 @@
  * file via manifest.json content_scripts order).
  */
 
-'use strict';
-
 window.PrivacyBlurPicker = (() => {
+  'use strict';
 
   // ─── Internal state ──────────────────────────────────────────────────────────
 

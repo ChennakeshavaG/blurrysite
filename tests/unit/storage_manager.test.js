@@ -322,28 +322,24 @@ describe('PrivacyBlurStorage', () => {
   // ── saveSettings ───────────────────────────────────────────────────────────
 
   describe('saveSettings', () => {
-    test('deep-merges partial settings before saving', async () => {
-      // First call (getSettings inside saveSettings) returns current settings.
+    test('sends partial settings directly to background for merging', async () => {
+      // Single call — saveSettings sends the partial directly to background.
       chrome.runtime.sendMessage
-        .mockImplementationOnce((_msg, cb) => cb({ settings: { blurRadius: 8, revealOnHover: false } }))
-        // Second call (actual save) returns ok.
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
       await PrivacyBlurStorage.saveSettings({ revealOnHover: true });
 
-      // The second sendMessage call should contain the merged settings.
       const saveCalls = chrome.runtime.sendMessage.mock.calls.filter(
         ([msg]) => msg.type === 'SAVE_SETTINGS'
       );
-      expect(saveCalls.length).toBeGreaterThan(0);
+      expect(saveCalls.length).toBe(1);
       const savedSettings = saveCalls[0][0].settings;
-      expect(savedSettings.blurRadius).toBe(8);      // unchanged
-      expect(savedSettings.revealOnHover).toBe(true); // overridden
+      expect(savedSettings.revealOnHover).toBe(true); // the partial that was passed
+      expect(savedSettings.blurRadius).toBeUndefined(); // not pre-merged
     });
 
     test('sends SAVE_SETTINGS message type', async () => {
       chrome.runtime.sendMessage
-        .mockImplementationOnce((_msg, cb) => cb({ settings: {} }))
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
       await PrivacyBlurStorage.saveSettings({ blurRadius: 16 });
@@ -359,17 +355,7 @@ describe('PrivacyBlurStorage', () => {
 
   describe('error handling', () => {
     test('rejects when sendMessage triggers lastError', async () => {
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        Object.defineProperty(chrome.runtime, 'lastError', {
-          value: { message: 'Extension context invalidated' },
-          configurable: true,
-        });
-        if (cb) cb(undefined);
-        Object.defineProperty(chrome.runtime, 'lastError', {
-          value: null,
-          configurable: true,
-        });
-      });
+      mockSendMessageError('Extension context invalidated');
 
       await expect(
         PrivacyBlurStorage.saveBlurredElement('x.com', '#el')
@@ -377,21 +363,147 @@ describe('PrivacyBlurStorage', () => {
     });
 
     test('getBlurredSelectors handles sendMessage error gracefully by rejecting', async () => {
-      chrome.runtime.sendMessage.mockImplementation((msg, cb) => {
-        Object.defineProperty(chrome.runtime, 'lastError', {
-          value: { message: 'Background not ready' },
-          configurable: true,
-        });
-        if (cb) cb(undefined);
-        Object.defineProperty(chrome.runtime, 'lastError', {
-          value: null,
-          configurable: true,
-        });
-      });
+      mockSendMessageError('Background not ready');
 
       await expect(
         PrivacyBlurStorage.getBlurredSelectors('x.com')
       ).rejects.toBeTruthy();
+    });
+
+    test('rejects when sendMessage throws synchronously', async () => {
+      chrome.runtime.sendMessage.mockImplementation(() => {
+        throw new Error('Extension context invalidated');
+      });
+
+      await expect(
+        PrivacyBlurStorage.saveBlurredElement('x.com', '#el')
+      ).rejects.toThrow('Extension context invalidated');
+    });
+
+    test('clearAll rejects on lastError', async () => {
+      mockSendMessageError('Service worker suspended');
+
+      await expect(
+        PrivacyBlurStorage.clearAll()
+      ).rejects.toBeTruthy();
+    });
+
+    test('clearHost rejects on lastError', async () => {
+      mockSendMessageError('Service worker suspended');
+
+      await expect(
+        PrivacyBlurStorage.clearHost('example.com')
+      ).rejects.toBeTruthy();
+    });
+  });
+
+  // ── Guard clauses ─────────────────────────────────────────────────────────
+
+  describe('guard clauses', () => {
+    test('saveBlurredElement returns early for empty hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await PrivacyBlurStorage.saveBlurredElement('', '#el');
+
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('saveBlurredElement returns early for empty selector', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await PrivacyBlurStorage.saveBlurredElement('example.com', '');
+
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('removeBlurredElement returns early for empty hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await PrivacyBlurStorage.removeBlurredElement('', '#el');
+
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('getBlurredSelectors returns empty array for empty hostname', async () => {
+      const result = await PrivacyBlurStorage.getBlurredSelectors('');
+
+      expect(result).toEqual([]);
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('clearHost returns early for empty hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await PrivacyBlurStorage.clearHost('');
+
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('saveSettings returns early for null input', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await PrivacyBlurStorage.saveSettings(null);
+
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('saveSettings returns early for non-object input', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await PrivacyBlurStorage.saveSettings('not an object');
+
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── DEFAULT_SETTINGS ──────────────────────────────────────────────────────
+
+  describe('DEFAULT_SETTINGS', () => {
+    test('exposes DEFAULT_SETTINGS as a public property', () => {
+      expect(PrivacyBlurStorage.DEFAULT_SETTINGS).toBeDefined();
+    });
+
+    test('DEFAULT_SETTINGS contains expected keys', () => {
+      const defaults = PrivacyBlurStorage.DEFAULT_SETTINGS;
+      expect(defaults.blurRadius).toBeDefined();
+      expect(defaults.highlightColor).toBeDefined();
+      expect(defaults.transitionDuration).toBeDefined();
+      expect(typeof defaults.revealOnHover).toBe('boolean');
+      expect(typeof defaults.enabled).toBe('boolean');
+    });
+
+    test('DEFAULT_SETTINGS contains shortcuts sub-object', () => {
+      const shortcuts = PrivacyBlurStorage.DEFAULT_SETTINGS.shortcuts;
+      expect(shortcuts).toBeDefined();
+      expect(shortcuts.chordKey1).toBeDefined();
+      expect(shortcuts.chordKey2).toBeDefined();
+      expect(shortcuts.chordModifier).toBeDefined();
+    });
+  });
+
+  // ── getSettings merging ───────────────────────────────────────────────────
+
+  describe('getSettings merging', () => {
+    test('returns complete object even when background returns null response', async () => {
+      mockSendMessageResponse(null);
+
+      const settings = await PrivacyBlurStorage.getSettings();
+
+      expect(settings.blurRadius).toBeDefined();
+      expect(settings.highlightColor).toBeDefined();
+    });
+
+    test('stored values override defaults', async () => {
+      mockSendMessageResponse({
+        settings: { blurRadius: 20, highlightColor: '#ff0000' }
+      });
+
+      const settings = await PrivacyBlurStorage.getSettings();
+
+      expect(settings.blurRadius).toBe(20);
+      expect(settings.highlightColor).toBe('#ff0000');
+      // Defaults should still be present for non-overridden keys
+      expect(settings.transitionDuration).toBe(200);
     });
   });
 });

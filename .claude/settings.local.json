@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Read(//usr/local/bin/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(echo $PATH)",
+      "Bash(export PATH=\"/usr/local/bin:/opt/homebrew/bin:$HOME/.nvm/versions/node/*/bin:$PATH\")",
+      "Read(//usr/local/**)",
+      "Bash(/dev/null -name node -type f)",
+      "Bash(PATH=\"/Users/keshava-13944/.local/share/mise/installs/node/22.22.2/bin:$PATH\" npm run test:unit)",
+      "WebSearch"
+    ]
+  }
+}

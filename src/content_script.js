@@ -12,9 +12,9 @@
  *   picker.js          → window.PrivacyBlurPicker
  */
 
-'use strict';
-
 (() => {
+  'use strict';
+
   // ─── State ──────────────────────────────────────────────────────────────────
 
   /** @type {object} Settings loaded from background / storage */

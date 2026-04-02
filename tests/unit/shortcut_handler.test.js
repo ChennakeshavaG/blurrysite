@@ -314,5 +314,124 @@ describe('PrivacyBlurShortcuts', () => {
       fireKey('v');
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
+
+    test('custom chordModifier setting (alt) is honoured', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({ chordModifier: 'alt' }, actions);
+
+      // Ctrl+K should NOT trigger (wrong modifier)
+      fireKey('k', { ctrl: true });
+      fireKey('v');
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+
+      // Alt+K should trigger
+      fireKey('k', { alt: true });
+      fireKey('v');
+      expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
+    });
+
+    test('custom chordSecond setting is honoured', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({ chordSecond: 'b' }, actions);
+
+      fireKey('k', { ctrl: true });
+      fireKey('v'); // Old second key — should not trigger
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+
+      fireKey('k', { ctrl: true });
+      fireKey('b'); // New second key
+      expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── Chord first key preventDefault ────────────────────────────────────────
+
+  describe('first chord key behavior', () => {
+    test('first chord key (Ctrl+K) calls preventDefault to block browser action', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({}, actions);
+
+      const event = fireKey('k', { ctrl: true });
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    test('wrong key after chord first key resets state', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({}, actions);
+
+      fireKey('k', { ctrl: true }); // Start chord
+      fireKey('x');                  // Wrong second key — resets
+      fireKey('v');                  // V without prior Ctrl+K — no trigger
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Escape edge cases ─────────────────────────────────────────────────────
+
+  describe('Escape edge cases', () => {
+    test('Escape resets chord state if chord was in progress', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({}, actions);
+
+      fireKey('k', { ctrl: true }); // Start chord
+      fireKey('Escape');              // Reset
+      fireKey('v');                   // Should not trigger
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+
+    test('Escape does not throw when onExitPicker callback is missing', () => {
+      PrivacyBlurShortcuts.init({}, {}); // No callbacks
+      PrivacyBlurShortcuts._setPickerActive(true);
+
+      expect(() => fireKey('Escape')).not.toThrow();
+    });
+  });
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+
+  describe('showToast', () => {
+    test('showToast creates a toast element in the DOM', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({}, actions);
+
+      // Trigger chord to cause toast
+      fireKey('k', { ctrl: true });
+      fireKey('v');
+
+      // A toast should exist
+      const toast = document.querySelector('.pb-toast');
+      expect(toast).not.toBeNull();
+    });
+
+    test('showToast is accessible via public API', () => {
+      expect(typeof PrivacyBlurShortcuts.showToast).toBe('function');
+    });
+  });
+
+  // ── init with null/undefined ──────────────────────────────────────────────
+
+  describe('init edge cases', () => {
+    test('init with null settings uses defaults', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+
+      expect(() => PrivacyBlurShortcuts.init(null, actions)).not.toThrow();
+
+      // Default chord (Ctrl+K, V) should still work
+      fireKey('k', { ctrl: true });
+      fireKey('v');
+      expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
+    });
+
+    test('init with null callbacks does not throw on chord completion', () => {
+      PrivacyBlurShortcuts.init({}, null);
+
+      expect(() => {
+        fireKey('k', { ctrl: true });
+        fireKey('v');
+      }).not.toThrow();
+    });
   });
 });

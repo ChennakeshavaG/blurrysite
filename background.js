@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * background.js — PrivacyBlur MV3 Service Worker
  *
@@ -27,8 +29,7 @@ const DEFAULT_SETTINGS = {
 // ---------------------------------------------------------------------------
 // Context menu setup — created once on service-worker install/startup
 // ---------------------------------------------------------------------------
-chrome.runtime.onInstalled.addListener(() => {
-  // Remove any stale items first so we don't accumulate duplicates on reload
+function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "pb-blur-element",
@@ -42,25 +43,17 @@ chrome.runtime.onInstalled.addListener(() => {
       contexts: ["all"]
     });
   });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  createContextMenus();
 });
 
 // Also recreate menus when the service worker wakes from suspension,
 // because chrome.contextMenus is only persistent across sessions when
 // created inside onInstalled; a second call is harmless (removeAll guards it).
 chrome.runtime.onStartup.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: "pb-blur-element",
-      title: "Blur this element",
-      contexts: ["all"]
-    });
-
-    chrome.contextMenus.create({
-      id: "pb-unblur-element",
-      title: "Unblur this element",
-      contexts: ["all"]
-    });
-  });
+  createContextMenus();
 });
 
 // ---------------------------------------------------------------------------

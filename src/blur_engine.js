@@ -12,6 +12,8 @@
  */
 
 const PrivacyBlurEngine = (() => {
+  'use strict';
+
   // -------------------------------------------------------------------------
   // Internal constants
   // -------------------------------------------------------------------------
@@ -109,12 +111,6 @@ const PrivacyBlurEngine = (() => {
 
     // The video container must be positioned so the canvas can overlay it
     const videoParent = videoElement.parentElement;
-    const parentPos = window.getComputedStyle(videoParent).position;
-    if (parentPos === "static") {
-      videoParent.style.position = "relative";
-    }
-
-    videoParent.insertBefore(canvas, videoElement.nextSibling);
 
     // Guard: if video has no parent (detached from DOM) we cannot overlay a canvas.
     if (!videoParent) {
@@ -122,6 +118,13 @@ const PrivacyBlurEngine = (() => {
       videoElement.style.setProperty("--pb-radius", `${radius}px`);
       return;
     }
+
+    const parentPos = window.getComputedStyle(videoParent).position;
+    if (parentPos === "static") {
+      videoParent.style.position = "relative";
+    }
+
+    videoParent.insertBefore(canvas, videoElement.nextSibling);
 
     const ctx = canvas.getContext("2d");
 
@@ -135,8 +138,8 @@ const PrivacyBlurEngine = (() => {
     function drawFrame() {
       // Resize canvas if video dimensions changed (e.g., fullscreen, resolution switch)
       if (
-        canvas.width  !== videoElement.videoWidth  && videoElement.videoWidth  > 0 ||
-        canvas.height !== videoElement.videoHeight && videoElement.videoHeight > 0
+        (canvas.width  !== videoElement.videoWidth  && videoElement.videoWidth  > 0) ||
+        (canvas.height !== videoElement.videoHeight && videoElement.videoHeight > 0)
       ) {
         canvas.width  = videoElement.videoWidth;
         canvas.height = videoElement.videoHeight;
@@ -356,10 +359,7 @@ const PrivacyBlurEngine = (() => {
   function isBlurred(element) {
     if (!element || !(element instanceof Element)) return false;
 
-    // Direct class check
-    if (element.classList.contains(BLURRED_CLASS)) return true;
-
-    return false;
+    return element.classList.contains(BLURRED_CLASS);
   }
 
   // -------------------------------------------------------------------------

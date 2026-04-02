@@ -286,4 +286,119 @@ describe('PrivacyBlurSelectorUtils', () => {
       expect(results).toHaveLength(3);
     });
   });
+
+  // ── getSelector edge cases ────────────────────────────────────────────────
+
+  describe('getSelector edge cases', () => {
+    test('returns null when called with documentElement', () => {
+      const result = PrivacyBlurSelectorUtils.getSelector(document.documentElement);
+      expect(result).toBeFalsy();
+    });
+
+    test('returns null when called with undefined', () => {
+      const result = PrivacyBlurSelectorUtils.getSelector(undefined);
+      expect(result).toBeFalsy();
+    });
+
+    test('handles element with ID containing special characters', () => {
+      const div = document.createElement('div');
+      div.id = 'my:special.id';
+      document.body.appendChild(div);
+
+      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+
+      // Should either use escaped ID or fall back to data-pb-id
+      expect(selector).toBeTruthy();
+      const found = document.querySelector(selector);
+      expect(found).toBe(div);
+    });
+
+    test('handles element with numeric-starting ID', () => {
+      const div = document.createElement('div');
+      div.id = '123numeric';
+      document.body.appendChild(div);
+
+      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      expect(selector).toBeTruthy();
+
+      const found = document.querySelector(selector);
+      expect(found).toBe(div);
+    });
+
+    test('handles element with whitespace-only ID (falls back to data-pb-id)', () => {
+      const div = document.createElement('div');
+      div.setAttribute('id', '   ');
+      document.body.appendChild(div);
+
+      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+
+      // Whitespace ID should be skipped, use data-pb-id
+      expect(selector).toMatch(/\[data-pb-id="/);
+    });
+
+    test('does not re-stamp data-pb-id if element already has one', () => {
+      const div = document.createElement('div');
+      div.dataset.pbId = 'existing123';
+      document.body.appendChild(div);
+
+      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+
+      expect(div.dataset.pbId).toBe('existing123');
+      expect(selector).toBe('[data-pb-id="existing123"]');
+    });
+
+    test('different elements get different data-pb-id values', () => {
+      const div1 = document.createElement('div');
+      const div2 = document.createElement('div');
+      document.body.appendChild(div1);
+      document.body.appendChild(div2);
+
+      const s1 = PrivacyBlurSelectorUtils.getSelector(div1);
+      const s2 = PrivacyBlurSelectorUtils.getSelector(div2);
+
+      expect(s1).not.toBe(s2);
+    });
+  });
+
+  // ── restoreSelector edge cases ────────────────────────────────────────────
+
+  describe('restoreSelector edge cases', () => {
+    test('returns null for undefined input', () => {
+      const found = PrivacyBlurSelectorUtils.restoreSelector(undefined);
+      expect(found).toBeNull();
+    });
+
+    test('returns null for numeric input', () => {
+      const found = PrivacyBlurSelectorUtils.restoreSelector(42);
+      expect(found).toBeNull();
+    });
+
+    test('handles complex selectors correctly', () => {
+      document.body.innerHTML = '<div class="container"><p class="text">Hello</p></div>';
+
+      const found = PrivacyBlurSelectorUtils.restoreSelector('.container > .text');
+      expect(found).not.toBeNull();
+      expect(found.textContent).toBe('Hello');
+    });
+  });
+
+  // ── generateId robustness ─────────────────────────────────────────────────
+
+  describe('generateId robustness', () => {
+    test('all generated IDs are exactly 8 lowercase hex chars', () => {
+      for (let i = 0; i < 100; i++) {
+        const id = PrivacyBlurSelectorUtils.generateId();
+        expect(id).toMatch(/^[0-9a-f]{8}$/);
+      }
+    });
+
+    test('high uniqueness over many generations', () => {
+      const ids = new Set();
+      for (let i = 0; i < 500; i++) {
+        ids.add(PrivacyBlurSelectorUtils.generateId());
+      }
+      // With 32-bit space, 500 calls should have ~0 collisions
+      expect(ids.size).toBeGreaterThanOrEqual(495);
+    });
+  });
 });
