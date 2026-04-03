@@ -13,18 +13,18 @@
 // ---------------------------------------------------------------------------
 // Default settings — used when no saved value exists yet
 // ---------------------------------------------------------------------------
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS = Object.freeze({
   blurRadius: 8,
   transitionDuration: 200,
   highlightColor: "#f59e0b",
   revealOnHover: false,
   enabled: true,
-  shortcuts: {
+  shortcuts: Object.freeze({
     chordKey1: "k",
     chordKey2: "v",
     chordModifier: "ctrl"
-  }
-};
+  })
+});
 
 // ---------------------------------------------------------------------------
 // Context menu setup — created once on service-worker install/startup
@@ -115,6 +115,20 @@ function isValidSelector(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Write serializer — prevents concurrent get-then-set data loss
+// ---------------------------------------------------------------------------
+let writeQueue = Promise.resolve();
+
+/**
+ * Enqueue a storage mutation. Each callback receives no arguments, must
+ * perform its own get/set, and return a Promise. Mutations execute serially.
+ */
+function serialWrite(fn) {
+  writeQueue = writeQueue.then(fn, fn);
+  return writeQueue;
+}
+
+// ---------------------------------------------------------------------------
 // Storage message handler — content scripts delegate all storage I/O here
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -139,20 +153,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
-      chrome.storage.local.get("blurred_selectors", (result) => {
-        const map = result.blurred_selectors || {};
-        const list = map[message.hostname] || [];
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.get("blurred_selectors", (result) => {
+          const map = result.blurred_selectors || {};
+          const list = map[message.hostname] || [];
 
-        // Avoid storing duplicate selectors
-        if (!list.includes(message.selector)) {
-          list.push(message.selector);
-        }
+          // Cap at 500 selectors per host to prevent quota exhaustion
+          if (list.length >= 500) {
+            sendResponse({ success: false, error: "per-host limit reached" });
+            resolve();
+            return;
+          }
 
-        map[message.hostname] = list;
-        chrome.storage.local.set({ blurred_selectors: map }, () => {
-          sendResponse({ success: true });
+          // Avoid storing duplicate selectors
+          if (!list.includes(message.selector)) {
+            list.push(message.selector);
+          }
+
+          map[message.hostname] = list;
+          chrome.storage.local.set({ blurred_selectors: map }, () => {
+            sendResponse({ success: true });
+            resolve();
+          });
         });
-      });
+      }));
       return true;
     }
 
@@ -162,22 +186,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
-      chrome.storage.local.get("blurred_selectors", (result) => {
-        const map = result.blurred_selectors || {};
-        const list = (map[message.hostname] || []).filter(
-          (s) => s !== message.selector
-        );
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.get("blurred_selectors", (result) => {
+          const map = result.blurred_selectors || {};
+          const list = (map[message.hostname] || []).filter(
+            (s) => s !== message.selector
+          );
 
-        if (list.length > 0) {
-          map[message.hostname] = list;
-        } else {
-          delete map[message.hostname];
-        }
+          if (list.length > 0) {
+            map[message.hostname] = list;
+          } else {
+            delete map[message.hostname];
+          }
 
-        chrome.storage.local.set({ blurred_selectors: map }, () => {
-          sendResponse({ success: true });
+          chrome.storage.local.set({ blurred_selectors: map }, () => {
+            sendResponse({ success: true });
+            resolve();
+          });
         });
-      });
+      }));
       return true;
     }
 
@@ -187,21 +214,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
-      chrome.storage.local.get("blurred_selectors", (result) => {
-        const map = result.blurred_selectors || {};
-        delete map[message.hostname];
-        chrome.storage.local.set({ blurred_selectors: map }, () => {
-          sendResponse({ success: true });
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.get("blurred_selectors", (result) => {
+          const map = result.blurred_selectors || {};
+          delete map[message.hostname];
+          chrome.storage.local.set({ blurred_selectors: map }, () => {
+            sendResponse({ success: true });
+            resolve();
+          });
         });
-      });
+      }));
       return true;
     }
 
     // ---- Wipe the entire blurred_selectors map ----
     case "CLEAR_ALL": {
-      chrome.storage.local.set({ blurred_selectors: {} }, () => {
-        sendResponse({ success: true });
-      });
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.set({ blurred_selectors: {} }, () => {
+          sendResponse({ success: true });
+          resolve();
+        });
+      }));
       return true;
     }
 
@@ -221,13 +254,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid settings" });
         return true;
       }
-      chrome.storage.local.get("settings", (result) => {
-        const current = result.settings || {};
-        const updated = deepMerge(current, message.settings);
-        chrome.storage.local.set({ settings: updated }, () => {
-          sendResponse({ success: true });
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.get("settings", (result) => {
+          const current = result.settings || {};
+          const updated = deepMerge(current, message.settings);
+          chrome.storage.local.set({ settings: updated }, () => {
+            sendResponse({ success: true });
+            resolve();
+          });
         });
-      });
+      }));
       return true;
     }
 
@@ -266,6 +302,7 @@ function deepMerge(base, override) {
   const result = Object.assign({}, base);
 
   for (const key of Object.keys(override)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     if (
       override[key] !== null &&
       typeof override[key] === "object" &&

@@ -70,6 +70,9 @@
         const el = Selector.restoreSelector(selector);
         if (el) {
           Engine.applyBlur(el, settings.blurRadius);
+          if (settings.revealOnHover) {
+            el.classList.add('pb-reveal-on-hover');
+          }
         }
       }
     } catch (err) {
@@ -123,6 +126,9 @@
     /** Called by PrivacyBlurPicker when the user clicks to blur an element. */
     onBlur(el) {
       Engine.applyBlur(el, settings.blurRadius);
+      if (settings.revealOnHover) {
+        el.classList.add('pb-reveal-on-hover');
+      }
       const selector = Selector.getSelector(el);
       if (selector) {
         Store.saveBlurredElement(hostname, selector).catch(() => {});
@@ -131,6 +137,7 @@
 
     /** Called by PrivacyBlurPicker when the user clicks to unblur an element. */
     onUnblur(el) {
+      el.classList.remove('pb-reveal-on-hover');
       Engine.removeBlur(el);
       const selector = Selector.getSelector(el);
       if (selector) {
@@ -160,6 +167,21 @@
     };
   }
 
+  // ─── DOM helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Walk up from `el` to find the nearest ancestor (or self) with `.pb-blurred`.
+   * Returns null if none found.
+   */
+  function findBlurredAncestor(el) {
+    let node = el;
+    while (node && node !== document.documentElement) {
+      if (node instanceof Element && node.classList.contains('pb-blurred')) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   // ─── Keyboard shortcut action map ────────────────────────────────────────────
 
   const shortcutActionMap = {
@@ -182,6 +204,14 @@
   function handleMessage(message, _sender, sendResponse) {
     const { type } = message;
 
+    // Allow settings, status, and restore messages through even when disabled.
+    // Block blur/picker/context actions when the extension is disabled.
+    const alwaysAllowed = ['UPDATE_SETTINGS', 'GET_STATUS', 'RESTORE'];
+    if (settings.enabled === false && !alwaysAllowed.includes(type)) {
+      if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
+      return false;
+    }
+
     switch (type) {
       // ── Toggle blur-all mode ──────────────────────────────────────────────
       case 'TOGGLE_BLUR_ALL': {
@@ -190,6 +220,11 @@
           isPageBlurred = false;
         } else {
           Engine.blurAllContent(settings.blurRadius);
+          if (settings.revealOnHover) {
+            document.querySelectorAll('.pb-blurred').forEach((el) => {
+              el.classList.add('pb-reveal-on-hover');
+            });
+          }
           isPageBlurred = true;
         }
         if (sendResponse) sendResponse({ isPageBlurred });
@@ -213,6 +248,9 @@
 
       // ── Clear all blur on this page ───────────────────────────────────────
       case 'CLEAR_ALL_BLUR': {
+        document.querySelectorAll('.pb-reveal-on-hover').forEach((el) => {
+          el.classList.remove('pb-reveal-on-hover');
+        });
         Engine.unblurAll();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
@@ -240,9 +278,21 @@
         if (message.settings) {
           settings = { ...settings, ...message.settings };
           applySettingsToDom();
-          Shortcuts.init(shortcutSettings(), shortcutActionMap);
-          if (isPickerActive) {
-            Picker.setSettings(settings);
+
+          if (settings.enabled === false) {
+            // Tear down active features when disabled
+            Shortcuts.destroy();
+            if (isPickerActive) {
+              Picker.deactivate();
+              isPickerActive = false;
+            }
+            stopDomObserver();
+          } else {
+            Shortcuts.init(shortcutSettings(), shortcutActionMap);
+            if (isPickerActive) {
+              Picker.setSettings(settings);
+            }
+            startDomObserver();
           }
         }
         if (sendResponse) sendResponse({ ok: true });
@@ -254,11 +304,15 @@
         const target = lastContextMenuTarget;
         if (target && target instanceof Element) {
           Engine.applyBlur(target, settings.blurRadius);
+          if (settings.revealOnHover) {
+            target.classList.add('pb-reveal-on-hover');
+          }
           const sel = Selector.getSelector(target);
           if (sel) {
             Store.saveBlurredElement(hostname, sel).catch(() => {});
           }
         }
+        lastContextMenuTarget = null;
         if (sendResponse) sendResponse({ ok: true });
         break;
       }
@@ -266,11 +320,27 @@
       // ── Context menu: unblur the right-clicked element ────────────────────
       case 'CONTEXT_UNBLUR': {
         const target = lastContextMenuTarget;
-        if (target && target instanceof Element) {
-          Engine.removeBlur(target);
-          const sel = Selector.getSelector(target);
+        const unblurTarget = findBlurredAncestor(target);
+        if (unblurTarget) {
+          unblurTarget.classList.remove('pb-reveal-on-hover');
+          Engine.removeBlur(unblurTarget);
+          const sel = Selector.getSelector(unblurTarget);
           if (sel) {
             Store.removeBlurredElement(hostname, sel).catch(() => {});
+          }
+        }
+        lastContextMenuTarget = null;
+        if (sendResponse) sendResponse({ ok: true });
+        break;
+      }
+
+      // ── Unblur a specific selector (from popup remove button) ────────────
+      case 'UNBLUR_SELECTOR': {
+        if (message.selector) {
+          const el = document.querySelector(message.selector);
+          if (el) {
+            el.classList.remove('pb-reveal-on-hover');
+            Engine.removeBlur(el);
           }
         }
         if (sendResponse) sendResponse({ ok: true });
@@ -299,6 +369,11 @@
       '--pb-transition-duration',
       `${settings.transitionDuration || 200}ms`
     );
+
+    // Toggle reveal-on-hover class on all currently blurred elements
+    document.querySelectorAll('.pb-blurred').forEach((el) => {
+      el.classList.toggle('pb-reveal-on-hover', !!settings.revealOnHover);
+    });
   }
 
   // ─── Initialisation ───────────────────────────────────────────────────────────
@@ -324,23 +399,53 @@
     // 2. Apply CSS custom properties from settings.
     applySettingsToDom();
 
-    // 3. Initialise keyboard shortcut handler.
-    Shortcuts.init(shortcutSettings(), shortcutActionMap);
-
-    // 4. Restore previously blurred elements for this hostname.
-    await restoreBlurredElements();
-
-    // 5. Register message listener from background / popup.
+    // 3. Register message listener from background / popup (must be early so
+    //    UPDATE_SETTINGS and RESTORE messages are never missed).
     chrome.runtime.onMessage.addListener(handleMessage);
 
-    // 6. Track the last right-clicked element for context menu blur/unblur.
+    // 4. Track the last right-clicked element for context menu blur/unblur.
     document.addEventListener('contextmenu', (e) => {
       lastContextMenuTarget = e.target instanceof Element ? e.target : null;
     }, true);
 
-    // 7. Start DOM observer for dynamic content.
+    // 5. If the extension is disabled, stop here — don't init shortcuts,
+    //    don't restore blur, don't start the DOM observer.
+    if (settings.enabled === false) return;
+
+    // 6. Initialise keyboard shortcut handler.
+    Shortcuts.init(shortcutSettings(), shortcutActionMap);
+
+    // 7. Restore previously blurred elements for this hostname.
+    await restoreBlurredElements();
+
+    // 8. Start DOM observer for dynamic content.
     startDomObserver();
   }
+
+  // ─── Storage change listener ──────────────────────────────────────────────────
+  // Catches setting changes even when popup's tabMessage doesn't reach us
+  // (e.g. popup opened programmatically, or tab focus race).
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.settings) return;
+    const newSettings = changes.settings.newValue;
+    if (!newSettings) return;
+
+    settings = { ...settings, ...newSettings };
+    applySettingsToDom();
+
+    if (settings.enabled === false) {
+      Shortcuts.destroy();
+      if (isPickerActive) {
+        Picker.deactivate();
+        isPickerActive = false;
+      }
+      stopDomObserver();
+    } else {
+      Shortcuts.init(shortcutSettings(), shortcutActionMap);
+      startDomObserver();
+    }
+  });
 
   // ─── DOM-ready guard ──────────────────────────────────────────────────────────
 

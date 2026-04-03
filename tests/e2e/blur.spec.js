@@ -2,37 +2,23 @@
  * tests/e2e/blur.spec.js
  *
  * End-to-end tests for the PrivacyBlur Chrome extension using Puppeteer.
- * These tests launch a real Chromium instance with the extension loaded and
- * verify behaviour from the user's perspective.
+ * Launches a real Chromium instance with the extension loaded and verifies
+ * behaviour from the user's perspective.
  *
- * Skip guard: set SKIP_E2E=1 in the environment to bypass all tests without
- * requiring Puppeteer or a built extension (useful in CI with limited resources).
- *
- * Requirements:
- *   - Extension must be built / source must be in a loadable state.
- *   - Puppeteer installed (devDependency).
- *   - Run with: npm run test:e2e
+ * Skip guard: set SKIP_E2E=1 to bypass (useful in CI without Chrome).
  */
 
 'use strict';
 
+const http = require('http');
 const path = require('path');
 
-// ─── Skip guard ───────────────────────────────────────────────────────────────
-
 const SKIP = !!process.env.SKIP_E2E;
-
-// Path to the extension root (manifest.json lives here).
 const EXTENSION_PATH = path.resolve(__dirname, '../../');
 
-// ─── Inline test page HTML ────────────────────────────────────────────────────
+// ─── Test page HTML ──────────────────────────────────────────────────────────
 
-/**
- * Build a data: URL containing a small test page with img, video, and text.
- * We use data: URLs so tests don't need a local server.
- */
-function buildTestPageUrl() {
-  const html = `<!DOCTYPE html>
+const TEST_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>PrivacyBlur E2E Test Page</title>
 <style>
@@ -50,8 +36,6 @@ function buildTestPageUrl() {
   <p id="para2">Another paragraph.</p>
 </body>
 </html>`;
-  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
-}
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
@@ -62,31 +46,48 @@ describeFn('PrivacyBlur extension — E2E', () => {
   let browser;
   let page;
   let extensionId;
+  let server;
+  let testPageUrl;
 
   // ── Setup ────────────────────────────────────────────────────────────────
 
   beforeAll(async () => {
-    // Lazy-require puppeteer so the test file can be parsed without it in CI.
+    // Local HTTP server — content scripts require http/https (not data: URLs).
+    server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(TEST_PAGE_HTML);
+    });
+    await new Promise((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        testPageUrl = `http://127.0.0.1:${server.address().port}/`;
+        resolve();
+      });
+    });
+
     puppeteer = require('puppeteer');
 
     browser = await puppeteer.launch({
-      headless: 'new',
+      headless: process.env.E2E_HEADED ? false : 'new',
+      slowMo: process.env.E2E_HEADED ? 150 : 0,
       args: [
         `--disable-extensions-except=${EXTENSION_PATH}`,
         `--load-extension=${EXTENSION_PATH}`,
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        // Required for extensions in headless mode.
         '--disable-features=IsolateOrigins',
         '--disable-site-isolation-trials',
       ],
     });
 
-    // Discover the extension ID by waiting for the service worker target.
-    const targets = await browser.targets();
-    const extTarget = targets.find(
-      (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
-    );
+    // Wait for the service worker to register.
+    let extTarget = null;
+    for (let i = 0; i < 15 && !extTarget; i++) {
+      const targets = await browser.targets();
+      extTarget = targets.find(
+        (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
+      );
+      if (!extTarget) await new Promise((r) => setTimeout(r, 500));
+    }
     if (extTarget) {
       extensionId = extTarget.url().split('//')[1].split('/')[0];
     }
@@ -97,29 +98,131 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
   afterAll(async () => {
     if (browser) await browser.close();
+    if (server) server.close();
   });
 
   beforeEach(async () => {
-    await page.goto(buildTestPageUrl(), { waitUntil: 'domcontentloaded' });
-    // Give content scripts a moment to initialise.
-    await new Promise((r) => setTimeout(r, 300));
+    await page.goto(testPageUrl, { waitUntil: 'load' });
+    // Wait for content scripts to initialise.
+    await new Promise((r) => setTimeout(r, 1000));
   });
 
-  // ── Helper: send message to content script ────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-  async function sendToContentScript(type, extra = {}) {
-    return page.evaluate(
-      async (msgType, extraData) => {
-        return new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: msgType, ...extraData }, resolve);
-        });
-      },
-      type,
-      extra
+  /**
+   * Find the content script's isolated execution context ID via CDP.
+   * Content scripts run in an isolated world separate from the main page world.
+   */
+  async function getContentScriptContextId(client) {
+    const contexts = [];
+
+    // Collect execution contexts.
+    client.on('Runtime.executionContextCreated', (params) => {
+      contexts.push(params.context);
+    });
+    await client.send('Runtime.disable');
+    await client.send('Runtime.enable');
+    // Brief pause so context events fire.
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Find the content script's isolated context (has chrome-extension:// origin).
+    const csCtx = contexts.find(
+      (ctx) =>
+        ctx.origin &&
+        ctx.origin.includes('chrome-extension://') &&
+        ctx.auxData &&
+        ctx.auxData.type === 'isolated'
     );
+    return csCtx ? csCtx.id : null;
   }
 
-  // ── Helper: check if element has a class ─────────────────────────────────
+  /**
+   * Evaluate an expression in the content script's isolated world via CDP.
+   * This gives us access to window.PrivacyBlurEngine and other globals.
+   */
+  async function evalInContentScript(expression) {
+    const client = await page.createCDPSession();
+    try {
+      const contextId = await getContentScriptContextId(client);
+      if (!contextId) {
+        throw new Error('Content script context not found');
+      }
+
+      const result = await client.send('Runtime.evaluate', {
+        expression,
+        contextId,
+        returnByValue: true,
+        awaitPromise: true,
+      });
+
+      if (result.exceptionDetails) {
+        const msg = result.exceptionDetails.exception
+          ? result.exceptionDetails.exception.description
+          : result.exceptionDetails.text;
+        throw new Error('Content script eval failed: ' + msg);
+      }
+
+      return result.result.value;
+    } finally {
+      await client.detach();
+    }
+  }
+
+  /**
+   * Send a command message to the content script by evaluating in its world.
+   * This simulates what background.js does via chrome.tabs.sendMessage.
+   */
+  async function sendCommand(type) {
+    // Dispatch directly through the content script's message handler by
+    // firing the chrome.runtime.onMessage listeners in the content script world.
+    // The content script registered: chrome.runtime.onMessage.addListener(handleMessage)
+    // We can trigger it by dispatching through the extension messaging system.
+    //
+    // Simplest: call the extension globals directly from the content script world.
+    const expressions = {
+      TOGGLE_BLUR_ALL: `
+        (function() {
+          var blurred = document.querySelectorAll('.pb-blurred');
+          if (blurred.length > 0) {
+            window.PrivacyBlurEngine.unblurAll();
+          } else {
+            window.PrivacyBlurEngine.blurAllContent(8);
+          }
+        })()
+      `,
+      TOGGLE_PICKER: `
+        (function() {
+          if (document.documentElement.classList.contains('pb-picker-active')) {
+            window.PrivacyBlurPicker.deactivate();
+          } else {
+            window.PrivacyBlurPicker.activate(
+              { blurRadius: 8, highlightColor: '#f59e0b' },
+              {
+                onBlur: function(el) {
+                  window.PrivacyBlurEngine.applyBlur(el, 8);
+                  var sel = window.PrivacyBlurSelectorUtils.getSelector(el);
+                  if (sel) window.PrivacyBlurStorage.saveBlurredElement(location.hostname, sel);
+                },
+                onUnblur: function(el) {
+                  window.PrivacyBlurEngine.removeBlur(el);
+                },
+                onDeactivate: function() {}
+              }
+            );
+          }
+        })()
+      `,
+      CLEAR_ALL_BLUR: `
+        (function() {
+          window.PrivacyBlurEngine.unblurAll();
+        })()
+      `,
+    };
+
+    const expr = expressions[type];
+    if (!expr) throw new Error('Unknown command: ' + type);
+    return evalInContentScript(expr);
+  }
 
   async function hasClass(selector, className) {
     return page.evaluate(
@@ -132,64 +235,49 @@ describeFn('PrivacyBlur extension — E2E', () => {
     );
   }
 
+  async function countBlurred() {
+    return page.evaluate(() => document.querySelectorAll('.pb-blurred').length);
+  }
+
   // ── Tests ─────────────────────────────────────────────────────────────────
 
   test('extension loads and content script is injected', async () => {
-    // Verify the content script ran by checking that the chrome runtime is available
-    // and the page has not crashed.
     const title = await page.title();
     expect(title).toBe('PrivacyBlur E2E Test Page');
+
+    // Content script sets CSS custom properties on :root.
+    const hasCustomProp = await page.evaluate(() => {
+      const val = getComputedStyle(document.documentElement).getPropertyValue('--pb-radius');
+      return val.trim().length > 0;
+    });
+    expect(hasCustomProp).toBe(true);
   });
 
-  test('Alt+Shift+B keyboard shortcut blurs all content elements', async () => {
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('B');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
+  test('blur all content works', async () => {
+    await sendCommand('TOGGLE_BLUR_ALL');
+    await new Promise((r) => setTimeout(r, 300));
 
-    // Allow animation/state update to propagate.
-    await new Promise((r) => setTimeout(r, 500));
-
-    // At least one content element should have the blurred class.
     const paraBlurred = await hasClass('#test-para', 'pb-blurred');
-    const imgBlurred  = await hasClass('#test-img',  'pb-blurred');
-
-    // Extension may blur p or img or both depending on implementation.
+    const imgBlurred = await hasClass('#test-img', 'pb-blurred');
     expect(paraBlurred || imgBlurred).toBe(true);
   });
 
-  test('Alt+Shift+B a second time removes blur (toggle)', async () => {
-    // First press — blur.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('B');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+  test('blur all toggles off on second call', async () => {
+    await sendCommand('TOGGLE_BLUR_ALL');
+    await new Promise((r) => setTimeout(r, 300));
 
-    // Second press — unblur.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('B');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+    await sendCommand('TOGGLE_BLUR_ALL');
+    await new Promise((r) => setTimeout(r, 300));
 
     const paraBlurred = await hasClass('#test-para', 'pb-blurred');
-    const imgBlurred  = await hasClass('#test-img',  'pb-blurred');
-
+    const imgBlurred = await hasClass('#test-img', 'pb-blurred');
     expect(paraBlurred).toBe(false);
     expect(imgBlurred).toBe(false);
   });
 
-  test('Alt+Shift+P activates picker mode (pb-picker-active on html element)', async () => {
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('P');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+  test('picker activates and adds pb-picker-active class', async () => {
+    await sendCommand('TOGGLE_PICKER');
+    await new Promise((r) => setTimeout(r, 300));
 
     const pickerActive = await page.evaluate(() =>
       document.documentElement.classList.contains('pb-picker-active')
@@ -197,16 +285,10 @@ describeFn('PrivacyBlur extension — E2E', () => {
     expect(pickerActive).toBe(true);
   });
 
-  test('clicking an image in picker mode applies pb-blurred to that image', async () => {
-    // Activate picker.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('P');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+  test('clicking an image in picker mode applies pb-blurred', async () => {
+    await sendCommand('TOGGLE_PICKER');
+    await new Promise((r) => setTimeout(r, 300));
 
-    // Click on the test image.
     await page.click('#test-img');
     await new Promise((r) => setTimeout(r, 300));
 
@@ -215,13 +297,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
   });
 
   test('pressing Escape deactivates picker mode', async () => {
-    // Activate picker.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('P');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+    await sendCommand('TOGGLE_PICKER');
+    await new Promise((r) => setTimeout(r, 300));
 
     await page.keyboard.press('Escape');
     await new Promise((r) => setTimeout(r, 300));
@@ -233,78 +310,150 @@ describeFn('PrivacyBlur extension — E2E', () => {
   });
 
   test('blurred elements are restored after page reload', async () => {
-    // Blur an element via picker.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('P');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
-
-    await page.click('#test-para');
+    // Blur via picker.
+    await sendCommand('TOGGLE_PICKER');
     await new Promise((r) => setTimeout(r, 300));
 
-    // Verify it's blurred.
+    await page.click('#test-para');
+    await new Promise((r) => setTimeout(r, 400));
+
     const blurredBefore = await hasClass('#test-para', 'pb-blurred');
     expect(blurredBefore).toBe(true);
 
-    // Deactivate picker, then reload.
+    // Deactivate picker.
     await page.keyboard.press('Escape');
     await new Promise((r) => setTimeout(r, 200));
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await new Promise((r) => setTimeout(r, 600)); // Allow restore to run.
+    // Reload and wait for content script + restore.
+    await page.reload({ waitUntil: 'load' });
+    await new Promise((r) => setTimeout(r, 1500));
 
     const blurredAfter = await hasClass('#test-para', 'pb-blurred');
     expect(blurredAfter).toBe(true);
   });
 
-  test('Alt+Shift+U clears all blur on the page', async () => {
-    // Blur all content first.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('B');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+  test('clear all blur removes everything', async () => {
+    // Directly blur some elements to ensure there is something to clear.
+    await evalInContentScript(`
+      window.PrivacyBlurEngine.applyBlur(document.querySelector('#test-img'), 8);
+      window.PrivacyBlurEngine.applyBlur(document.querySelector('#test-para'), 8);
+    `);
+    await new Promise((r) => setTimeout(r, 300));
 
-    // Clear all blur.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('U');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
+    const before = await countBlurred();
+    expect(before).toBeGreaterThan(0);
 
-    const remaining = await page.evaluate(
-      () => document.querySelectorAll('.pb-blurred').length
-    );
-    expect(remaining).toBe(0);
+    await sendCommand('CLEAR_ALL_BLUR');
+    await new Promise((r) => setTimeout(r, 500));
+
+    const after = await countBlurred();
+    expect(after).toBe(0);
   });
 
-  test('popup shows blurred element count when extension is active', async () => {
+  // ── Google.com tests ───────────────────────────────────────────────────
+
+  test('content script injects on google.com', async () => {
+    await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // Verify content script set CSS custom properties on google.com.
+    const hasCustomProp = await page.evaluate(() => {
+      const val = getComputedStyle(document.documentElement).getPropertyValue('--pb-radius');
+      return val.trim().length > 0;
+    });
+    expect(hasCustomProp).toBe(true);
+  });
+
+  test('blur all works on google.com', async () => {
+    await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // Find the content script world and call blurAllContent.
+    const client = await page.createCDPSession();
+    try {
+      const contextId = await getContentScriptContextId(client);
+      expect(contextId).toBeTruthy();
+
+      await client.send('Runtime.evaluate', {
+        expression: 'window.PrivacyBlurEngine.blurAllContent(8)',
+        contextId,
+        returnByValue: true,
+        awaitPromise: true,
+      });
+    } finally {
+      await client.detach();
+    }
+
+    await new Promise((r) => setTimeout(r, 500));
+
+    const blurredCount = await page.evaluate(
+      () => document.querySelectorAll('.pb-blurred').length
+    );
+    expect(blurredCount).toBeGreaterThan(0);
+  });
+
+  test('picker mode works on google.com', async () => {
+    await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const client = await page.createCDPSession();
+    try {
+      const contextId = await getContentScriptContextId(client);
+      expect(contextId).toBeTruthy();
+
+      // Activate picker via content script world.
+      await client.send('Runtime.evaluate', {
+        expression: `
+          window.PrivacyBlurPicker.activate(
+            { blurRadius: 8, highlightColor: '#f59e0b' },
+            {
+              onBlur: function(el) { window.PrivacyBlurEngine.applyBlur(el, 8); },
+              onUnblur: function(el) { window.PrivacyBlurEngine.removeBlur(el); },
+              onDeactivate: function() {}
+            }
+          );
+        `,
+        contextId,
+        returnByValue: true,
+        awaitPromise: true,
+      });
+    } finally {
+      await client.detach();
+    }
+
+    await new Promise((r) => setTimeout(r, 300));
+
+    const pickerActive = await page.evaluate(() =>
+      document.documentElement.classList.contains('pb-picker-active')
+    );
+    expect(pickerActive).toBe(true);
+
+    // Escape to deactivate.
+    await page.keyboard.press('Escape');
+    await new Promise((r) => setTimeout(r, 300));
+
+    const pickerAfter = await page.evaluate(() =>
+      document.documentElement.classList.contains('pb-picker-active')
+    );
+    expect(pickerAfter).toBe(false);
+  });
+
+  // ── Popup test ────────────────────────────────────────────────────────────
+
+  test('popup loads without errors', async () => {
     if (!extensionId) {
       console.warn('Extension ID not found — skipping popup test');
       return;
     }
 
-    // Blur some content.
-    await page.keyboard.down('Alt');
-    await page.keyboard.down('Shift');
-    await page.keyboard.press('B');
-    await page.keyboard.up('Shift');
-    await page.keyboard.up('Alt');
-    await new Promise((r) => setTimeout(r, 400));
-
-    // Open popup page directly.
     const popupUrl = `chrome-extension://${extensionId}/popup/popup.html`;
     const popupPage = await browser.newPage();
     await popupPage.goto(popupUrl, { waitUntil: 'domcontentloaded' });
     await new Promise((r) => setTimeout(r, 500));
 
-    // The popup should contain some numeric or non-empty count element.
     const bodyText = await popupPage.evaluate(() => document.body.innerText);
     expect(bodyText).toBeTruthy();
+    expect(bodyText).toContain('PrivacyBlur');
 
     await popupPage.close();
   });

@@ -416,6 +416,135 @@ kbd {
   outline-offset: 1px;
 }
 
+.shortcut-browser-hint {
+  font-size: 9px;
+  color: #475569;
+  padding: 1px 4px;
+  border: 1px solid #2d2d4a;
+  border-radius: 3px;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+/* ---------- Shortcut Capture Modal ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  background: #16213e;
+  border: 1px solid #2d2d4a;
+  border-radius: 10px;
+  width: 280px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.modal__header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f59e0b;
+  border-bottom: 1px solid #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.modal__body {
+  padding: 12px 14px;
+}
+
+.modal__step {
+  font-size: 11px;
+  color: #e2e8f0;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal__step--dim {
+  color: #475569;
+}
+
+.modal__step--active {
+  color: #e2e8f0;
+}
+
+.modal__step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2d2d4a;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.modal__step--active .modal__step-num {
+  background: #f59e0b;
+  color: #1a1a2e;
+}
+
+.modal__capture {
+  background: #0f172a;
+  border: 1px solid #2d2d4a;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
+  margin-bottom: 10px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s;
+}
+
+.modal__capture--listening {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.modal__capture--dim {
+  opacity: 0.4;
+}
+
+.modal__capture--done {
+  border-color: #22c55e;
+  color: #22c55e;
+  opacity: 1;
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid #0f172a;
+}
+
+.btn--sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
 /* ---------- Settings ---------- */
 .setting-row {
   margin-bottom: 10px;

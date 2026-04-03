@@ -52,26 +52,50 @@
     <ul class="shortcuts-list">
       <li class="shortcut-item">
         <span class="shortcut-label">Chord blur</span>
-        <span class="shortcut-keys"><kbd>Ctrl</kbd><kbd>K</kbd> then <kbd>V</kbd></span>
+        <span class="shortcut-keys" id="chordKeysDisplay"><kbd>Ctrl</kbd><kbd>K</kbd> then <kbd>V</kbd></span>
         <button class="shortcut-customize" data-shortcut="chord" title="Customize shortcut">customize</button>
       </li>
       <li class="shortcut-item">
         <span class="shortcut-label">Picker mode</span>
         <span class="shortcut-keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>P</kbd></span>
-        <button class="shortcut-customize" data-shortcut="picker" title="Customize shortcut">customize</button>
+        <span class="shortcut-browser-hint" title="Change via chrome://extensions/shortcuts">browser</span>
       </li>
       <li class="shortcut-item">
         <span class="shortcut-label">Blur all</span>
         <span class="shortcut-keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>B</kbd></span>
-        <button class="shortcut-customize" data-shortcut="blurAll" title="Customize shortcut">customize</button>
+        <span class="shortcut-browser-hint" title="Change via chrome://extensions/shortcuts">browser</span>
       </li>
       <li class="shortcut-item">
         <span class="shortcut-label">Clear page</span>
         <span class="shortcut-keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>U</kbd></span>
-        <button class="shortcut-customize" data-shortcut="clear" title="Customize shortcut">customize</button>
+        <span class="shortcut-browser-hint" title="Change via chrome://extensions/shortcuts">browser</span>
       </li>
     </ul>
   </section>
+
+  <!-- ===== SHORTCUT CAPTURE MODAL ===== -->
+  <div class="modal-overlay" id="shortcutModal" hidden>
+    <div class="modal">
+      <div class="modal__header">Customize Chord Shortcut</div>
+      <div class="modal__body">
+        <p class="modal__step" id="modalStep1">
+          <span class="modal__step-num">1</span>
+          Press <strong>modifier + key</strong> for the first chord
+        </p>
+        <div class="modal__capture" id="captureDisplay">Press a key combo...</div>
+        <p class="modal__step modal__step--dim" id="modalStep2">
+          <span class="modal__step-num">2</span>
+          Then press a single key for the second chord
+        </p>
+        <div class="modal__capture modal__capture--dim" id="captureDisplay2">Waiting...</div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn--ghost btn--sm" id="modalCancel">Cancel</button>
+        <button class="btn btn--ghost btn--sm" id="modalReset">Reset default</button>
+        <button class="btn btn--primary btn--sm" id="modalSave" disabled>Save</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== SETTINGS (COLLAPSIBLE) ===== -->
   <section class="card card--collapsible" id="settingsCard">

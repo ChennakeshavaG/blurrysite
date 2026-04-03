@@ -26,6 +26,11 @@ const DEFAULT_SETTINGS = Object.freeze({
   transitionDuration: 200,
   revealOnHover:     false,
   highlightColor:    '#f59e0b',
+  shortcuts: Object.freeze({
+    chordKey1:     'k',
+    chordKey2:     'v',
+    chordModifier: 'ctrl',
+  }),
 });
 
 const DEBOUNCE_DELAY_MS = 300;
@@ -86,7 +91,12 @@ async function bgMessage(msg) {
  */
 async function tabMessage(tabId, msg) {
   try {
-    return await chrome.tabs.sendMessage(tabId, msg);
+    // Race against a timeout so the popup never hangs if the content script
+    // doesn't respond (e.g. tab navigating, extension context invalidated).
+    return await Promise.race([
+      chrome.tabs.sendMessage(tabId, msg),
+      new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
   } catch (err) {
     // Content script not present — non-fatal (chrome:// pages, etc.)
     console.warn('[PrivacyBlur popup] tabMessage failed:', err.message);
@@ -210,8 +220,27 @@ async function init() {
   const manifest = chrome.runtime.getManifest();
   ui.extVersion.textContent = `v${manifest.version}`;
 
-  // Get current active tab
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // Get current active tab — filter to http/https pages where content scripts run.
+  // When opened as a new page (dev/testing), the "active" tab may be the popup itself.
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  let tab = tabs.find(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://')));
+
+  // Fallback: if no http tab is active in this window, try lastFocusedWindow.
+  if (!tab) {
+    const fallbackTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    tab = fallbackTabs.find(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://')));
+  }
+
+  // Final fallback: find any http tab in any window.
+  if (!tab) {
+    const allTabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+    if (allTabs.length > 0) {
+      // Pick the most recently accessed tab.
+      allTabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+      tab = allTabs[0];
+    }
+  }
+
   currentTab  = tab || null;
   currentHost = tab ? extractHostname(tab.url) : '';
   ui.hostname.textContent = currentHost || '—';
@@ -230,6 +259,7 @@ async function init() {
   renderEnableToggle();
   renderSettingsPanel();
   renderBlurList();
+  renderChordDisplay();
 
   // Wire controls
   wireControls();
@@ -326,21 +356,22 @@ function wireControls() {
     // Remove from background storage
     await bgMessage({ type: MSG.REMOVE_SELECTOR, hostname: currentHost, selector });
 
+    // Unblur the DOM element in the active tab
+    if (currentTab) {
+      await tabMessage(currentTab.id, { type: 'UNBLUR_SELECTOR', selector });
+    }
+
     blurredItems = blurredItems.filter(s => s !== selector);
     renderBlurList();
     showToast('Blur removed');
   });
 
-  // Shortcut "customize" links — scroll/open settings panel
+  // Shortcut "customize" button — open key-capture modal for chord
   document.querySelectorAll('.shortcut-customize').forEach(btn => {
     btn.addEventListener('click', () => {
-      const isOpen = ui.settingsBody.classList.contains('is-open');
-      if (!isOpen) {
-        ui.settingsBody.classList.add('is-open');
-        ui.settingsToggle.setAttribute('aria-expanded', 'true');
+      if (btn.dataset.shortcut === 'chord') {
+        openShortcutModal();
       }
-      ui.settingsToggle.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      showToast('Shortcut customization coming soon');
     });
   });
 
@@ -361,6 +392,182 @@ function wireControls() {
     }
     showToast('All sites cleared');
   });
+}
+
+// ─── Shortcut customization modal ────────────────────────────────────────────
+
+const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
+
+/** Map event modifier to storage key name */
+function getModifierName(e) {
+  if (e.ctrlKey)  return 'ctrl';
+  if (e.altKey)   return 'alt';
+  if (e.metaKey)  return 'meta';
+  if (e.shiftKey) return 'shift';
+  return null;
+}
+
+/** Pretty-print a modifier name for display */
+function modifierLabel(mod) {
+  const labels = { ctrl: 'Ctrl', alt: 'Alt', meta: 'Cmd', shift: 'Shift' };
+  return labels[mod] || mod;
+}
+
+/** Update the chord keys display in the shortcuts list */
+function renderChordDisplay() {
+  const display = document.getElementById('chordKeysDisplay');
+  if (!display) return;
+  const s = settings.shortcuts || {};
+  const mod = modifierLabel(s.chordModifier || 'ctrl');
+  const k1  = (s.chordKey1 || 'k').toUpperCase();
+  const k2  = (s.chordKey2 || 'v').toUpperCase();
+
+  display.textContent = '';
+  const kbd1 = document.createElement('kbd');
+  kbd1.textContent = mod;
+  const kbd2 = document.createElement('kbd');
+  kbd2.textContent = k1;
+  const then = document.createTextNode(' then ');
+  const kbd3 = document.createElement('kbd');
+  kbd3.textContent = k2;
+  display.append(kbd1, kbd2, then, kbd3);
+}
+
+let modalKeyHandler = null;
+let pendingChord = { modifier: null, key1: null, key2: null };
+let modalPhase = 0; // 0 = waiting for first combo, 1 = waiting for second key
+
+function openShortcutModal() {
+  const modal      = document.getElementById('shortcutModal');
+  const step1      = document.getElementById('modalStep1');
+  const step2      = document.getElementById('modalStep2');
+  const cap1       = document.getElementById('captureDisplay');
+  const cap2       = document.getElementById('captureDisplay2');
+  const saveBtn    = document.getElementById('modalSave');
+  const cancelBtn  = document.getElementById('modalCancel');
+  const resetBtn   = document.getElementById('modalReset');
+
+  // Reset state
+  pendingChord = { modifier: null, key1: null, key2: null };
+  modalPhase = 0;
+  saveBtn.disabled = true;
+
+  step1.classList.add('modal__step--active');
+  step1.classList.remove('modal__step--dim');
+  step2.classList.add('modal__step--dim');
+  step2.classList.remove('modal__step--active');
+  cap1.textContent = 'Press a key combo...';
+  cap1.className = 'modal__capture modal__capture--listening';
+  cap2.textContent = 'Waiting...';
+  cap2.className = 'modal__capture modal__capture--dim';
+
+  modal.hidden = false;
+
+  // Key capture handler
+  if (modalKeyHandler) document.removeEventListener('keydown', modalKeyHandler, true);
+
+  modalKeyHandler = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === 'Escape') {
+      closeShortcutModal();
+      return;
+    }
+
+    // Ignore bare modifier presses
+    if (MODIFIER_KEYS.has(e.key)) return;
+
+    if (modalPhase === 0) {
+      // Phase 1: capture modifier + key
+      const mod = getModifierName(e);
+      if (!mod) {
+        cap1.textContent = 'Hold a modifier (Ctrl/Alt/Shift) + a key';
+        return;
+      }
+      pendingChord.modifier = mod;
+      pendingChord.key1 = e.key.toLowerCase();
+      cap1.textContent = `${modifierLabel(mod)} + ${e.key.toUpperCase()}`;
+      cap1.className = 'modal__capture modal__capture--done';
+
+      // Move to phase 2
+      modalPhase = 1;
+      step1.classList.remove('modal__step--active');
+      step2.classList.remove('modal__step--dim');
+      step2.classList.add('modal__step--active');
+      cap2.textContent = 'Press a single key...';
+      cap2.className = 'modal__capture modal__capture--listening';
+    } else if (modalPhase === 1) {
+      // Phase 2: capture second key (no modifier required)
+      if (e.ctrlKey || e.altKey || e.metaKey) {
+        cap2.textContent = 'Just press a single key (no modifier)';
+        return;
+      }
+      pendingChord.key2 = e.key.toLowerCase();
+      cap2.textContent = e.key.toUpperCase();
+      cap2.className = 'modal__capture modal__capture--done';
+      saveBtn.disabled = false;
+
+      // Remove listener — capture complete
+      document.removeEventListener('keydown', modalKeyHandler, true);
+      modalKeyHandler = null;
+    }
+  };
+
+  document.addEventListener('keydown', modalKeyHandler, true);
+
+  // Save button
+  const onSave = async () => {
+    if (!pendingChord.modifier || !pendingChord.key1 || !pendingChord.key2) return;
+    settings.shortcuts = {
+      chordModifier: pendingChord.modifier,
+      chordKey1:     pendingChord.key1,
+      chordKey2:     pendingChord.key2,
+    };
+    await saveSettings(true);
+    renderChordDisplay();
+    closeShortcutModal();
+    showToast('Chord shortcut saved');
+    cleanupModalListeners();
+  };
+
+  // Reset button — restore defaults
+  const onReset = async () => {
+    settings.shortcuts = {
+      chordModifier: 'ctrl',
+      chordKey1:     'k',
+      chordKey2:     'v',
+    };
+    await saveSettings(true);
+    renderChordDisplay();
+    closeShortcutModal();
+    showToast('Chord shortcut reset to default');
+    cleanupModalListeners();
+  };
+
+  const onCancel = () => {
+    closeShortcutModal();
+    cleanupModalListeners();
+  };
+
+  function cleanupModalListeners() {
+    saveBtn.removeEventListener('click', onSave);
+    cancelBtn.removeEventListener('click', onCancel);
+    resetBtn.removeEventListener('click', onReset);
+  }
+
+  saveBtn.addEventListener('click', onSave);
+  cancelBtn.addEventListener('click', onCancel);
+  resetBtn.addEventListener('click', onReset);
+}
+
+function closeShortcutModal() {
+  const modal = document.getElementById('shortcutModal');
+  modal.hidden = true;
+  if (modalKeyHandler) {
+    document.removeEventListener('keydown', modalKeyHandler, true);
+    modalKeyHandler = null;
+  }
 }
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────

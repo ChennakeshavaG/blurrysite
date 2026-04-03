@@ -262,6 +262,7 @@ window.PrivacyBlurPicker = (() => {
       el.classList.remove('pb-hover-highlight');
     }
     hoveredElement = null;
+    selectedElements.clear();
 
     // Remove visual cues.
     document.documentElement.classList.remove('pb-picker-active');

@@ -169,8 +169,15 @@ const PrivacyBlurStorage = (() => {
     const response = await send({ type: "GET_SETTINGS" });
 
     const stored = (response && response.settings) ? response.settings : {};
-    // Merge stored values over defaults so callers always get a complete object
-    return Object.assign({}, DEFAULT_SETTINGS, stored);
+    // Merge stored values over defaults so callers always get a complete object.
+    // Deep-merge shortcuts sub-object to avoid losing default keys.
+    const merged = Object.assign({}, DEFAULT_SETTINGS, stored);
+    merged.shortcuts = Object.assign(
+      {},
+      DEFAULT_SETTINGS.shortcuts,
+      stored.shortcuts || {}
+    );
+    return merged;
   }
 
   /**
