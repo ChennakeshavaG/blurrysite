@@ -63,6 +63,18 @@
     -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
 }
 
+/* Ancestor unblur: when JS walks up from a hovered element and adds
+   pb-ancestor-reveal to each blurred ancestor, this rule removes their
+   filter so the hovered content is visible through the ancestor chain.
+   Uses a JS-toggled class instead of :has(:hover) because :has() with
+   :hover is O(n) per mouse move across all blurred elements — crashes
+   pages with 500+ blurred elements (thorough blur mode). The JS approach
+   is O(depth) per hover event via event delegation on document. */
+.pb-ancestor-reveal {
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+
 /* ─── Blur animation ────────────────────────────────────────────────────────── */
 
 @keyframes pb-blur-in {

@@ -9,6 +9,11 @@
  *  - VIDEO: canvas overlay with requestAnimationFrame (bypasses DRM filter restriction)
  *  - Text nodes: wrapped in <span> so CSS filter can target them
  *  - Generic elements: CSS class + custom property approach
+ *
+ * Category-based blurring:
+ *  - blurAllContent accepts an options.categories object to control which
+ *    element groups are blurred (text, media, form, table, structure).
+ *  - Selector strings are cached and rebuilt only when categories change.
  */
 
 const PrivacyBlurEngine = (() => {
@@ -23,6 +28,108 @@ const PrivacyBlurEngine = (() => {
 
   // Map from video element -> { canvas, animFrameId } for cleanup
   const videoOverlayMap = new WeakMap();
+
+  // -------------------------------------------------------------------------
+  // Category selector definitions
+  // -------------------------------------------------------------------------
+  // Each category maps to two arrays: alwaysBlur (blurred unconditionally)
+  // and textCheck (blurred only when hasMeaningfulTextContent returns true).
+  // Frozen to prevent accidental mutation. Element lists sourced from
+  // docs/BLUR_CATEGORIES.md research.
+
+  const CATEGORY_SELECTORS = Object.freeze({
+    text: Object.freeze({
+      alwaysBlur: Object.freeze([
+        'h1','h2','h3','h4','h5','h6','p','blockquote','pre','figcaption','summary'
+      ]),
+      textCheck: Object.freeze([
+        'li','dt','dd','span','a','label','em','strong','b','i','u','cite','q',
+        'mark','abbr','time','address','small','code','kbd','samp','var','dfn',
+        'data','del','ins','s','sub','sup','bdo','bdi'
+      ]),
+    }),
+    media: Object.freeze({
+      alwaysBlur: Object.freeze(['img','video','canvas']),
+      textCheck:  Object.freeze([]),
+    }),
+    form: Object.freeze({
+      alwaysBlur: Object.freeze(['input','textarea','select']),
+      textCheck:  Object.freeze(['button','output','fieldset','legend']),
+    }),
+    table: Object.freeze({
+      alwaysBlur: Object.freeze(['caption']),
+      textCheck:  Object.freeze(['td','th']),
+    }),
+    structure: Object.freeze({
+      alwaysBlur: Object.freeze([]),
+      textCheck:  Object.freeze([
+        'div','section','article','aside','header','footer','figure','details','dialog'
+      ]),
+    }),
+  });
+
+  // All categories enabled — used as fallback when no options.categories provided
+  // so existing callers (blurAllContent(8)) continue to work unchanged.
+  const DEFAULT_ALL_ON = Object.freeze({
+    text: true, media: true, form: true, table: true, structure: true
+  });
+
+  // Category names in fixed order for cache key generation.
+  const CATEGORY_ORDER = Object.freeze(['text','media','form','table','structure']);
+
+  // -------------------------------------------------------------------------
+  // Selector cache
+  // -------------------------------------------------------------------------
+  // Stores pre-joined selector strings and a Set of active tag names.
+  // Rebuilt only when the category toggles change (invalidated explicitly
+  // or when the cache key no longer matches).
+  let selectorCache = null;
+
+  /**
+   * Builds selector strings and a tag Set from the given category toggles.
+   * @param {object} categories - { text: bool, media: bool, form: bool, table: bool, structure: bool }
+   * @returns {{ key: string, alwaysBlurSelector: string, textCheckSelector: string, tagSet: Set<string> }}
+   */
+  function buildSelectors(categories) {
+    const alwaysBlurTags = [];
+    const textCheckTags  = [];
+
+    for (const name of CATEGORY_ORDER) {
+      if (!categories[name]) continue;
+      const cat = CATEGORY_SELECTORS[name];
+      // Push is faster than spread for known-length frozen arrays.
+      for (let i = 0; i < cat.alwaysBlur.length; i++) alwaysBlurTags.push(cat.alwaysBlur[i]);
+      for (let i = 0; i < cat.textCheck.length; i++)  textCheckTags.push(cat.textCheck[i]);
+    }
+
+    // Build a Set of all active tags for O(1) membership checks in
+    // matchesActiveCategories. Both always-blur and text-check tags are
+    // included because the MutationObserver needs to know if a newly
+    // added element belongs to ANY active selector.
+    const tagSet = new Set(alwaysBlurTags);
+    for (let i = 0; i < textCheckTags.length; i++) tagSet.add(textCheckTags[i]);
+
+    // Pre-join into comma-separated selector strings. A single compound
+    // querySelectorAll("a,b,c") does one DOM walk — faster than N separate calls.
+    const key = CATEGORY_ORDER.map(n => categories[n] ? '1' : '0').join('');
+
+    return {
+      key,
+      alwaysBlurSelector: alwaysBlurTags.join(','),
+      textCheckSelector:  textCheckTags.join(','),
+      tagSet,
+    };
+  }
+
+  /**
+   * Returns cached selectors if the category toggles match, else rebuilds.
+   */
+  function getSelectors(categories) {
+    const key = CATEGORY_ORDER.map(n => categories[n] ? '1' : '0').join('');
+    if (selectorCache && selectorCache.key === key) return selectorCache;
+    selectorCache = buildSelectors(categories);
+    return selectorCache;
+  }
 
   // -------------------------------------------------------------------------
   // Private helpers
@@ -49,7 +156,6 @@ const PrivacyBlurEngine = (() => {
    * Returns the wrapper span, or null if there was nothing to wrap.
    */
   function wrapTextNodes(element) {
-    const fragment = document.createDocumentFragment();
     const nodesToWrap = [];
 
     for (const node of element.childNodes) {
@@ -205,6 +311,16 @@ const PrivacyBlurEngine = (() => {
     if (!element || !(element instanceof Element)) return;
     if (isBlurred(element)) return; // idempotent
 
+    // Never blur elements created by the blur engine itself.
+    // TEXT_WRAPPER_CLASS guard is critical: without it, a MutationObserver
+    // watching for new nodes creates an infinite loop (wrapTextNodes inserts
+    // a span → observer fires → applyBlur wraps again → observer fires → …).
+    // CANVAS_CLASS guard prevents double-blurring video overlay canvases.
+    if (element.classList.contains(TEXT_WRAPPER_CLASS) ||
+        element.classList.contains(CANVAS_CLASS)) {
+      return;
+    }
+
     const tag = element.tagName.toLowerCase();
 
     // ---- VIDEO: canvas overlay approach ----
@@ -223,17 +339,20 @@ const PrivacyBlurEngine = (() => {
       return;
     }
 
-    // ---- Elements with background-image: CSS filter on element itself ----
-    const bgImage = window.getComputedStyle(element).backgroundImage;
-    if (bgImage && bgImage !== "none" && tag !== "body" && tag !== "html") {
-      element.classList.add(BLURRED_CLASS);
-      element.style.setProperty("--pb-radius", `${radius}px`);
-      return;
-    }
-
     // ---- Text-containing elements: wrap bare text nodes if needed ----
+    // Check text content BEFORE background-image so we only call
+    // getComputedStyle (which forces a synchronous reflow) on elements
+    // that actually have text to wrap. Elements without text get the
+    // blur class either way — the background-image check only matters
+    // to decide whether to skip wrapTextNodes.
     if (hasMeaningfulTextContent(element)) {
-      wrapTextNodes(element);
+      // If the element has a background-image, CSS filter handles the blur
+      // via the class alone — don't wrap text nodes (the background is the
+      // primary visual content, not the text overlay).
+      const bgImage = window.getComputedStyle(element).backgroundImage;
+      if (!(bgImage && bgImage !== "none" && tag !== "body" && tag !== "html")) {
+        wrapTextNodes(element);
+      }
     }
 
     // ---- Generic element: class + custom property ----
@@ -299,34 +418,44 @@ const PrivacyBlurEngine = (() => {
 
   /**
    * Blurs all meaningful content elements on the page.
-   * Targets: img, video, canvas, headings, paragraphs, spans, and divs/sections
-   * that contain direct text-node content (to avoid blurring container divs).
-   * @param {number} radius - Blur radius in pixels
+   * Uses a two-pass model: always-blur elements are blurred unconditionally,
+   * text-check elements are blurred only when they have direct text content.
+   *
+   * @param {number} radius  - Blur radius in pixels (default 8)
+   * @param {object} [options] - Configuration object
+   * @param {object} [options.categories] - Category toggles: { text, media, form, table, structure }.
+   *   Each key is a boolean. Omitted keys default to true. If options.categories
+   *   is not provided, all categories are enabled (backward compatible).
+   * @param {boolean} [options.thoroughBlur] - When true, skips the
+   *   hasMeaningfulTextContent gate on text-check elements, blurring them
+   *   unconditionally. Catches containers where text lives entirely in child
+   *   elements, at the cost of also blurring empty layout wrappers and
+   *   icon-only elements.
    */
-  function blurAllContent(radius = 8) {
-    // Media and structural block elements — always blur regardless of content
-    const MEDIA_SELECTORS = [
-      "img", "video", "canvas",
-      "h1", "h2", "h3", "h4", "h5", "h6",
-      "p",
-    ];
+  function blurAllContent(radius = 8, options) {
+    const cats = (options && options.categories) ? options.categories : DEFAULT_ALL_ON;
+    const thorough = !!(options && options.thoroughBlur);
+    const { alwaysBlurSelector, textCheckSelector } = getSelectors(cats);
 
-    document.querySelectorAll(MEDIA_SELECTORS.join(",")).forEach((el) => {
-      applyBlur(el, radius);
-    });
-
-    // Inline and generic elements — only blur when they contain direct text content.
-    // `span` is intentionally in this group: it is used for icons, badges, and
-    // decoration on most sites. Blurring every span unconditionally would make
-    // navigation illegible on sites like GitHub, Twitter, etc.
-    document.querySelectorAll(
-      "span, div, section, article, li, td, th, label, button, a"
-    ).forEach((el) => {
-      if (el.classList.contains(BLURRED_CLASS)) return;
-      if (hasMeaningfulTextContent(el)) {
+    // Pass 1: always-blur elements — blurred unconditionally.
+    // Guard against empty selector (all categories off) which would throw.
+    if (alwaysBlurSelector) {
+      document.querySelectorAll(alwaysBlurSelector).forEach((el) => {
         applyBlur(el, radius);
-      }
-    });
+      });
+    }
+
+    // Pass 2: text-check elements.
+    // Normal mode: blurred only when they have direct text-node children.
+    // Thorough mode: blurred unconditionally (skips the text-check gate).
+    if (textCheckSelector) {
+      document.querySelectorAll(textCheckSelector).forEach((el) => {
+        if (el.classList.contains(BLURRED_CLASS)) return;
+        if (thorough || hasMeaningfulTextContent(el)) {
+          applyBlur(el, radius);
+        }
+      });
+    }
   }
 
   /**
@@ -362,7 +491,6 @@ const PrivacyBlurEngine = (() => {
 
   /**
    * Returns true if the element currently has blur applied.
-   * Checks the element itself and, for imgs, their parent wrapper.
    * @param {Element} element
    * @returns {boolean}
    */
@@ -370,6 +498,30 @@ const PrivacyBlurEngine = (() => {
     if (!element || !(element instanceof Element)) return false;
 
     return element.classList.contains(BLURRED_CLASS);
+  }
+
+  /**
+   * Drops the cached selector strings so the next blurAllContent call
+   * rebuilds them. Call this when category settings change.
+   */
+  function invalidateSelectorCache() {
+    selectorCache = null;
+  }
+
+  /**
+   * Returns true if the element's tag belongs to any enabled category.
+   * Used by the MutationObserver to decide whether a dynamically added
+   * node should be blurred in blur-all mode.
+   *
+   * @param {Element} element    - The DOM element to check
+   * @param {object}  categories - Category toggles (same shape as options.categories)
+   * @returns {boolean}
+   */
+  function matchesActiveCategories(element, categories) {
+    if (!element || !(element instanceof Element)) return false;
+    const cats = categories || DEFAULT_ALL_ON;
+    const { tagSet } = getSelectors(cats);
+    return tagSet.has(element.tagName.toLowerCase());
   }
 
   // -------------------------------------------------------------------------
@@ -381,7 +533,10 @@ const PrivacyBlurEngine = (() => {
     toggleBlur,
     blurAllContent,
     unblurAll,
-    isBlurred
+    isBlurred,
+    invalidateSelectorCache,
+    matchesActiveCategories,
+    CATEGORY_SELECTORS,
   };
 })();
 

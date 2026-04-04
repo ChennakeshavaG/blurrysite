@@ -506,5 +506,46 @@ describe('PrivacyBlurStorage', () => {
       // Defaults should still be present for non-overridden keys
       expect(settings.transitionDuration).toBe(200);
     });
+
+    test('returns blurCategories merged with defaults', async () => {
+      mockSendMessageResponse({
+        settings: { blurCategories: { form: true } }
+      });
+
+      const settings = await PrivacyBlurStorage.getSettings();
+
+      // Partial override: form changed to true
+      expect(settings.blurCategories.form).toBe(true);
+      // Defaults preserved for non-overridden keys
+      expect(settings.blurCategories.text).toBe(true);
+      expect(settings.blurCategories.media).toBe(true);
+      expect(settings.blurCategories.table).toBe(true);
+      expect(settings.blurCategories.structure).toBe(true);
+    });
+
+    test('returns default blurCategories when none saved', async () => {
+      mockSendMessageResponse({ settings: {} });
+
+      const settings = await PrivacyBlurStorage.getSettings();
+
+      expect(settings.blurCategories).toBeDefined();
+      expect(settings.blurCategories.text).toBe(true);
+      expect(settings.blurCategories.media).toBe(true);
+      expect(settings.blurCategories.form).toBe(false);
+      expect(settings.blurCategories.table).toBe(true);
+      expect(settings.blurCategories.structure).toBe(true);
+    });
+
+    test('returns thoroughBlur merged with default', async () => {
+      mockSendMessageResponse({ settings: { thoroughBlur: true } });
+      const settings = await PrivacyBlurStorage.getSettings();
+      expect(settings.thoroughBlur).toBe(true);
+    });
+
+    test('returns default thoroughBlur when none saved', async () => {
+      mockSendMessageResponse({ settings: {} });
+      const settings = await PrivacyBlurStorage.getSettings();
+      expect(settings.thoroughBlur).toBe(false);
+    });
   });
 });

@@ -107,6 +107,14 @@ const PrivacyBlur = (() => {
     HIGHLIGHT_COLOR:     '#f59e0b',
     REVEAL_ON_HOVER:     false,
     ENABLED:             true,
+    THOROUGH_BLUR:       false,
+    BLUR_CATEGORIES:     Object.freeze({
+      text:      true,
+      media:     true,
+      form:      false,
+      table:     true,
+      structure: true,
+    }),
   });
 
   // ── Build public object ─────────────────────────────────────────────────────

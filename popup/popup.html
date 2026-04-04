@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PrivacyBlur</title>
   <link rel="stylesheet" href="popup.css" />
+  <script src="../src/constants.js" defer></script>
+  <script src="popup.js" defer></script>
 </head>
 <body>
   <!-- ===== HEADER ===== -->
@@ -150,6 +152,61 @@
     </div>
   </section>
 
+  <!-- ===== BLUR CATEGORIES (COLLAPSIBLE) ===== -->
+  <section class="card card--collapsible" id="categoriesCard">
+    <button class="card__header card__header--toggle" id="categoriesToggle" aria-expanded="false" aria-controls="categoriesBody">
+      <span class="card__title">Blur Categories</span>
+      <svg class="card__chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="card__body" id="categoriesBody">
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="thoroughBlur">Thorough blur <span class="setting-hint">Blur all matched elements, even empty ones</span></label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="thoroughBlur" />
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </label>
+      </div>
+      <hr class="setting-divider" />
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="catText">Text <span class="setting-hint">Headings, paragraphs, links</span></label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="catText" />
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </label>
+      </div>
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="catMedia">Media <span class="setting-hint">Images, video, canvas</span></label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="catMedia" />
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </label>
+      </div>
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="catForm">Form <span class="setting-hint">Inputs, textareas, buttons</span></label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="catForm" />
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </label>
+      </div>
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="catTable">Table <span class="setting-hint">Cells and captions</span></label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="catTable" />
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </label>
+      </div>
+      <div class="setting-row setting-row--inline">
+        <label class="setting-label" for="catStructure">Structure <span class="setting-hint">Sections, articles, containers</span></label>
+        <label class="toggle toggle--sm">
+          <input type="checkbox" id="catStructure" />
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </label>
+      </div>
+    </div>
+  </section>
+
   <!-- ===== BLURRED ELEMENTS LIST ===== -->
   <section class="card">
     <div class="card__header">
@@ -169,8 +226,5 @@
     <button class="footer__link" id="clearAllSitesBtn">Clear all sites</button>
     <span class="footer__version" id="extVersion">v1.0.0</span>
   </footer>
-
-  <script src="../src/constants.js"></script>
-  <script src="popup.js"></script>
 </body>
 </html>

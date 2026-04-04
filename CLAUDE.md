@@ -26,7 +26,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/constants.js` | `globalThis.PrivacyBlur` | Message types (`STORAGE.*`, `COMMAND.*`, `POPUP.*`), `DEFAULTS`, `isValid()`, `categoryOf()` |
 | `src/selector_utils.js` | `window.PrivacyBlurSelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings` |
-| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred` |
+| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `CATEGORY_SELECTORS` |
 | `src/shortcut_handler.js` | `window.PrivacyBlurShortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
 | `src/picker.js` | `window.PrivacyBlurPicker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all globals via aliases after DOM ready |
@@ -97,6 +97,23 @@ settings.shortcuts = {
 
 **All default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS`.** Do not hardcode defaults anywhere else.
 
+### Settings Shape: blurCategories
+
+Unlike shortcuts, `blurCategories` has the **same shape everywhere** -- no flattening needed.
+
+**In `chrome.storage.local` / background / `PrivacyBlurStorage.getSettings()` / content_script.js / popup.js:**
+```js
+settings.blurCategories = {
+  text: true,        // headings, paragraphs, spans, etc.
+  media: true,       // img, video, audio, canvas, svg, picture, figure
+  form: false,       // input, textarea, select, button, label, fieldset
+  table: true,       // table, thead, tbody, tr, td, th
+  structure: true    // div, section, article, nav, aside, header, footer, main, li
+}
+```
+
+Default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS.BLUR_CATEGORIES`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
+
 ---
 
 ## Critical: Code Patterns
@@ -135,7 +152,7 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 
 ### Running tests
 ```bash
-npm run test:unit          # 179 unit tests, fast
+npm run test:unit          # 228 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 

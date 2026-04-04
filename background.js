@@ -30,6 +30,14 @@ const DEFAULT_SETTINGS = Object.freeze({
     chordCode1: D.CHORD_CODE1,
     chordCode2: D.CHORD_CODE2,
     chordModifier: D.CHORD_MODIFIER
+  }),
+  thoroughBlur: D.THOROUGH_BLUR,
+  blurCategories: Object.freeze({
+    text:      D.BLUR_CATEGORIES.text,
+    media:     D.BLUR_CATEGORIES.media,
+    form:      D.BLUR_CATEGORIES.form,
+    table:     D.BLUR_CATEGORIES.table,
+    structure: D.BLUR_CATEGORIES.structure,
   })
 });
 

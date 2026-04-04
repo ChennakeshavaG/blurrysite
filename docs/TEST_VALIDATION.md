@@ -448,6 +448,58 @@
 
 ---
 
+## Category-Based Blur Tests (blur_engine.test.js)
+
+Tests added for the category-aware `blurAllContent(radius, options)` API.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | blurs only media elements when only media category enabled | img blurred, p and input not | Set up DOM with img+p+input, call blurAllContent with only media ON, check classes |
+| 2 | blurs only text elements when only text category enabled | p blurred, img and input not | Set up DOM with p+img+input, call with only text ON |
+| 3 | blurs form elements when form category enabled | input, textarea, select all blurred | Set up form elements, call with only form ON |
+| 4 | does not blur form elements when form category off | input not blurred, p blurred | Default-like categories (form OFF), verify input skipped |
+| 5 | blurs table cells when table category enabled | td blurred | Table with td, call with only table ON |
+| 6 | blurs structure elements with text when structure enabled | div with text blurred | Div with bare text, call with only structure ON |
+| 7 | does not blur empty structure elements | div without direct text not blurred | Div with only span child, call with structure ON |
+| 8 | backward compatible: no options defaults to all categories on | p and img blurred | Call blurAllContent(8) with no second arg |
+| 9 | backward compatible: empty options defaults to all categories on | p and img blurred | Call blurAllContent(8, {}) |
+| 10 | does not throw when all categories off | no elements blurred, no throw | Call with all categories false |
+| 11 | text-check elements only blurred with meaningful text | span with text blurred, empty span not | Three spans: text, empty, whitespace-only |
+| 12 | new text elements (strong, em, code) blurred when text on | all three blurred | strong+em+code with text, text category ON |
+| 13 | button is in form category, not structure | button not blurred by structure, blurred by form | Test with structure-only then form-only |
+| 14 | invalidateSelectorCache causes rebuild | form ON then OFF produces different results | Blur with form ON, invalidate, blur with form OFF |
+| 15 | matchesActiveCategories true for img when media on | returns true | Create img, call with media ON |
+| 16 | matchesActiveCategories false for img when media off | returns false | Create img, call with media OFF |
+| 17 | matchesActiveCategories false for unknown tags | returns false | Create custom-widget, call with all ON |
+| 18 | matchesActiveCategories false for null | returns false | Call with null element |
+| 19 | matchesActiveCategories defaults to all categories | returns true for p | Call without categories arg |
+| 20 | CATEGORY_SELECTORS is frozen | Object.isFrozen returns true | Check frozen state |
+| 21 | CATEGORY_SELECTORS has 5 categories | exactly 5 keys | Check key count |
+| 22 | each category has alwaysBlur and textCheck arrays | both are arrays | Iterate and check |
+
+## Category Constants Tests (constants.test.js)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | DEFAULTS.BLUR_CATEGORIES exists and is frozen | defined and frozen | Check Object.isFrozen |
+| 2 | has correct default values | text:true, media:true, form:false, table:true, structure:true | Compare each key |
+| 3 | has exactly 5 keys | length is 5 | Check Object.keys length |
+
+## Category Storage Tests (storage_manager.test.js)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | returns blurCategories merged with defaults | partial override preserved, defaults kept | Mock response with {form:true}, check all 5 keys |
+| 2 | returns default blurCategories when none saved | all defaults present | Mock response with {}, check defaults |
+
+## Category E2E Test (mutation_loop.spec.js)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | MutationObserver respects categories: form elements not blurred when form OFF | injected input/textarea not blurred, injected p blurred | Activate blur-all with default categories, inject input+textarea+p via console, check classes |
+
+---
+
 ## Known Test Quality Issues
 
 | File | Test | Issue |

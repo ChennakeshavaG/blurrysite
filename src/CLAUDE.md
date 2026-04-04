@@ -59,6 +59,12 @@ A module may only depend on modules loaded before it.
 - Canvas class must be `"pb-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
 - IMG blur: apply `style.filter` directly on the `<img>`, not on a wrapper.
 
+#### Category-based blurring
+- `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[] }`. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
+- Selector cache (`selectorCache`) stores pre-joined selector strings keyed by a 5-bit category toggle string. Invalidated by `invalidateSelectorCache()`.
+- `blurAllContent(radius, options)` accepts optional `options.categories`. When omitted, defaults to all categories ON (backward compatible).
+- `matchesActiveCategories(element, categories)` uses the cached `tagSet` for O(1) tag lookup.
+
 ### selector_utils.js
 - `getSelector(body)` and `getSelector(documentElement)` must return `null` — tests assert this.
 - `getSelector(null)` must return `null` (not empty string).
@@ -70,7 +76,7 @@ A module may only depend on modules loaded before it.
 - `saveSettings(partial)` sends the partial directly to background.js, which deep-merges it with stored settings. Do NOT pre-merge in storage_manager — that causes a redundant double merge.
 - `getSettings()` must merge response with `DEFAULT_SETTINGS` via `Object.assign({}, DEFAULT_SETTINGS, stored)`.
 - `saveBlurredElement` must `return send(...)` (not `await send(...)` without return) so callers get the response.
-- DEFAULT_SETTINGS keys: `blurRadius`, `highlightColor`, `transitionDuration`, `revealOnHover`, `enabled`, `shortcuts`.
+- DEFAULT_SETTINGS keys: `blurRadius`, `highlightColor`, `transitionDuration`, `revealOnHover`, `enabled`, `shortcuts`, `blurCategories`.
 
 ### shortcut_handler.js
 - `init(settings, callbacks)` reads **flat** settings: `settings.chordKey`, `settings.chordSecond`, `settings.chordCode1`, `settings.chordCode2`, `settings.chordModifier`.
@@ -96,3 +102,7 @@ A module may only depend on modules loaded before it.
 - Use `shortcutSettings()` helper to flatten nested `settings.shortcuts` before calling `Shortcuts.init()`.
 - `GET_STATUS` response: count blurred elements as `document.querySelectorAll('.pb-blurred').length`.
 - Async message handlers that need `sendResponse` must `return true` from `handleMessage`.
+- `settings.blurCategories` is a flat boolean map: `{ text, media, form, table, structure }`.
+- `TOGGLE_BLUR_ALL` passes `{ categories: settings.blurCategories }` to `Engine.blurAllContent`.
+- MutationObserver gates new nodes with `Engine.matchesActiveCategories(node, settings.blurCategories)` before calling `applyBlur`.
+- `UPDATE_SETTINGS` and `storage.onChanged` both invalidate the selector cache when `blurCategories` changes.

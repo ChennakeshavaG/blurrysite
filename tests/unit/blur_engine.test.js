@@ -104,8 +104,16 @@ function buildStubSource() {
       document.querySelectorAll('.' + BLUR_CLASS).forEach(function(el) { removeBlur(el); });
     }
 
+    function invalidateSelectorCache() {}
+    function matchesActiveCategories(el, cats) {
+      if (!el || !el.tagName) return false;
+      return true; // stub always matches
+    }
+
     window.PrivacyBlurEngine = { applyBlur: applyBlur, removeBlur: removeBlur, toggleBlur: toggleBlur,
-      blurAllContent: blurAllContent, unblurAll: unblurAll, isBlurred: isBlurred };
+      blurAllContent: blurAllContent, unblurAll: unblurAll, isBlurred: isBlurred,
+      invalidateSelectorCache: invalidateSelectorCache, matchesActiveCategories: matchesActiveCategories,
+      CATEGORY_SELECTORS: {} };
   })();
   `;
 }
@@ -905,6 +913,210 @@ describe('PrivacyBlurEngine', () => {
       PrivacyBlurEngine.toggleBlur(div, 15);
 
       expect(div.style.getPropertyValue('--pb-radius')).toBe('15px');
+    });
+  });
+
+  // ── blurAllContent with categories ────────────────────────────────────────
+
+  describe('blurAllContent with categories', () => {
+    beforeEach(() => {
+      document.body.innerHTML = '';
+    });
+
+    const ONLY = (cat) => ({ text: false, media: false, form: false, table: false, structure: false, [cat]: true });
+    const ALL_ON = { text: true, media: true, form: true, table: true, structure: true };
+    const ALL_OFF = { text: false, media: false, form: false, table: false, structure: false };
+
+    test('blurs only media elements when only media category enabled', () => {
+      document.body.innerHTML = '<img src="#" /><p>text</p><input value="secret">';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('media') });
+      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(false);
+      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
+    });
+
+    test('blurs only text elements when only text category enabled', () => {
+      document.body.innerHTML = '<p>text</p><img src="#" /><input value="secret">';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('text') });
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(false);
+      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
+    });
+
+    test('blurs form elements when form category enabled', () => {
+      document.body.innerHTML = '<input value="a"><textarea>b</textarea><select><option>c</option></select>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('form') });
+      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('textarea').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('select').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('does not blur form elements when form category off (default-like)', () => {
+      document.body.innerHTML = '<input value="secret"><p>visible</p>';
+      const defaults = { text: true, media: true, form: false, table: true, structure: true };
+      PrivacyBlurEngine.blurAllContent(8, { categories: defaults });
+      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('blurs table cells when table category enabled', () => {
+      document.body.innerHTML = '<table><tr><td>Secret</td></tr></table>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('table') });
+      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('blurs structure elements with text when structure enabled', () => {
+      document.body.innerHTML = '<div>text content</div>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('structure') });
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('does not blur empty structure elements (text-check gate)', () => {
+      document.body.innerHTML = '<div><span>inner</span></div>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('structure') });
+      // div has no direct text node, only a child element
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
+    });
+
+    test('backward compatible: no options defaults to all categories on', () => {
+      document.body.innerHTML = '<p>text</p><img src="#" >';
+      PrivacyBlurEngine.blurAllContent(8);
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('backward compatible: empty options defaults to all categories on', () => {
+      document.body.innerHTML = '<p>text</p><img src="#" >';
+      PrivacyBlurEngine.blurAllContent(8, {});
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('does not throw when all categories off', () => {
+      document.body.innerHTML = '<p>text</p><img src="#" >';
+      expect(() => PrivacyBlurEngine.blurAllContent(8, { categories: ALL_OFF })).not.toThrow();
+      expect(document.querySelectorAll('.pb-blurred').length).toBe(0);
+    });
+
+    test('text-check elements only blurred with meaningful text', () => {
+      document.body.innerHTML = '<span>Visible</span><span></span><span>   </span>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('text') });
+      const spans = document.querySelectorAll('span');
+      expect(spans[0].classList.contains('pb-blurred')).toBe(true);
+      expect(spans[1].classList.contains('pb-blurred')).toBe(false);
+      expect(spans[2].classList.contains('pb-blurred')).toBe(false);
+    });
+
+    test('new text elements (strong, em, code) blurred when text on', () => {
+      document.body.innerHTML = '<strong>bold</strong><em>italic</em><code>secret</code>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('text') });
+      expect(document.querySelector('strong').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('em').classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('code').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('button is in form category, not structure', () => {
+      document.body.innerHTML = '<button>Click</button>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('structure') });
+      expect(document.querySelector('button').classList.contains('pb-blurred')).toBe(false);
+
+      PrivacyBlurEngine.unblurAll();
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('form') });
+      expect(document.querySelector('button').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('thoroughBlur blurs text-check elements without direct text', () => {
+      // div has only element children, no direct text nodes
+      document.body.innerHTML = '<div><span>inner text</span></div>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('structure'), thoroughBlur: true });
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('thoroughBlur off skips text-check elements without direct text', () => {
+      document.body.innerHTML = '<div><span>inner text</span></div>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('structure'), thoroughBlur: false });
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
+    });
+
+    test('thoroughBlur does not affect always-blur elements', () => {
+      document.body.innerHTML = '<p>text</p>';
+      // always-blur elements blurred regardless of thoroughBlur
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('text'), thoroughBlur: false });
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('thoroughBlur defaults to false when not specified', () => {
+      document.body.innerHTML = '<div><span>inner</span></div>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('structure') });
+      // Should NOT blur because thoroughBlur defaults to false
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
+    });
+  });
+
+  // ── invalidateSelectorCache ───────────────────────────────────────────────
+
+  describe('invalidateSelectorCache', () => {
+    test('causes rebuild on next blurAllContent call', () => {
+      document.body.innerHTML = '<input value="a"><p>text</p>';
+      // First call with form ON
+      PrivacyBlurEngine.blurAllContent(8, { categories: { text: true, media: true, form: true, table: true, structure: true } });
+      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(true);
+
+      PrivacyBlurEngine.unblurAll();
+      PrivacyBlurEngine.invalidateSelectorCache();
+
+      // Second call with form OFF — cached selectors must be gone
+      PrivacyBlurEngine.blurAllContent(8, { categories: { text: true, media: true, form: false, table: true, structure: true } });
+      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
+      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
+    });
+  });
+
+  // ── matchesActiveCategories ───────────────────────────────────────────────
+
+  describe('matchesActiveCategories', () => {
+    test('returns true for img when media is on', () => {
+      const img = document.createElement('img');
+      expect(PrivacyBlurEngine.matchesActiveCategories(img, { text: false, media: true, form: false, table: false, structure: false })).toBe(true);
+    });
+
+    test('returns false for img when media is off', () => {
+      const img = document.createElement('img');
+      expect(PrivacyBlurEngine.matchesActiveCategories(img, { text: true, media: false, form: false, table: false, structure: false })).toBe(false);
+    });
+
+    test('returns false for unknown tags', () => {
+      const el = document.createElement('custom-widget');
+      expect(PrivacyBlurEngine.matchesActiveCategories(el, { text: true, media: true, form: true, table: true, structure: true })).toBe(false);
+    });
+
+    test('returns false for null', () => {
+      expect(PrivacyBlurEngine.matchesActiveCategories(null, { text: true, media: true, form: true, table: true, structure: true })).toBe(false);
+    });
+
+    test('defaults to all categories when no categories argument', () => {
+      const p = document.createElement('p');
+      expect(PrivacyBlurEngine.matchesActiveCategories(p)).toBe(true);
+    });
+  });
+
+  // ── CATEGORY_SELECTORS export ─────────────────────────────────────────────
+
+  describe('CATEGORY_SELECTORS', () => {
+    test('exposes frozen category definitions', () => {
+      expect(PrivacyBlurEngine.CATEGORY_SELECTORS).toBeDefined();
+      expect(Object.isFrozen(PrivacyBlurEngine.CATEGORY_SELECTORS)).toBe(true);
+    });
+
+    test('has exactly 5 categories', () => {
+      expect(Object.keys(PrivacyBlurEngine.CATEGORY_SELECTORS)).toHaveLength(5);
+    });
+
+    test('each category has alwaysBlur and textCheck arrays', () => {
+      for (const cat of Object.values(PrivacyBlurEngine.CATEGORY_SELECTORS)) {
+        expect(Array.isArray(cat.alwaysBlur)).toBe(true);
+        expect(Array.isArray(cat.textCheck)).toBe(true);
+      }
     });
   });
 });

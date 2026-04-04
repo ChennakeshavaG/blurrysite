@@ -23,17 +23,29 @@ content_script.js  → (orchestrator, no global)
 | Variable | Type | Purpose |
 |---|---|---|
 | `videoOverlayMap` | `WeakMap<Element, {canvas, animFrameId}>` | Tracks canvas overlays and RAF handles for video elements |
+| `CATEGORY_SELECTORS` | `Record<string, string>` | Maps each category name to its CSS selector string (constant) |
+| `selectorCache` | `{ key: string, combined: string } \| null` | Cached combined selector string; invalidated when active categories change |
 
 ### Public API
 
 ```typescript
+type BlurCategories = {
+  text: boolean;
+  media: boolean;
+  form: boolean;
+  table: boolean;
+  structure: boolean;
+};
+
 interface PrivacyBlurEngine {
   applyBlur(element: Element, radius?: number): void;
   removeBlur(element: Element): void;
   toggleBlur(element: Element, radius?: number): void;
-  blurAllContent(radius?: number): void;
+  blurAllContent(radius?: number, options?: { categories?: BlurCategories }): void;
   unblurAll(): void;
   isBlurred(element: Element): boolean;
+  invalidateSelectorCache(): void;
+  matchesActiveCategories(element: Element, categories?: BlurCategories): boolean;
 }
 ```
 
@@ -173,6 +185,13 @@ DEFAULT_SETTINGS = {
     chordKey1: "k",
     chordKey2: "v",
     chordModifier: "ctrl"
+  },
+  blurCategories: {
+    text: true,
+    media: true,
+    form: false,
+    table: true,
+    structure: true
   }
 }
 ```
@@ -432,7 +451,19 @@ Translates the nested `settings.shortcuts` shape (used in storage) to the flat s
 
 ### MutationObserver — dynamic content in blur-all mode
 
-When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to `document.body`. Each newly added `Element` node (and all its descendants) is immediately passed to `Engine.applyBlur()`. The observer is dormant when the picker is active.
+When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to `document.body`. Each newly added `Element` node (and all its descendants) is checked against the active blur categories via `Engine.matchesActiveCategories(node, settings.blurCategories)` before being passed to `Engine.applyBlur()`. Nodes that do not match any active category are skipped. The observer is dormant when the picker is active.
+
+### Settings shape (local state)
+
+| Key | Type | Purpose |
+|---|---|---|
+| `blurRadius` | `number` | Pixel radius for CSS blur filter |
+| `highlightColor` | `string` | Hex colour for picker hover highlight |
+| `transitionDuration` | `number` | Milliseconds for blur transition |
+| `revealOnHover` | `boolean` | Whether hovering reveals blurred content |
+| `enabled` | `boolean` | Global on/off toggle |
+| `shortcuts` | `object` | Nested chord shortcut config (see §5) |
+| `blurCategories` | `BlurCategories` | Which element categories participate in blur-all mode |
 
 ### CSS custom properties applied to `:root`
 

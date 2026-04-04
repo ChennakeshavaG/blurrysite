@@ -581,6 +581,20 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+.setting-hint {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 400;
+  display: block;
+  margin-top: 1px;
+}
+
+.setting-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 6px 0;
+}
+
 /* ---------- Slider ---------- */
 .slider {
   -webkit-appearance: none;

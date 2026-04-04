@@ -133,4 +133,32 @@ describe('PrivacyBlur constants', () => {
       expect(Object.isFrozen(PB.POPUP)).toBe(true);
     });
   });
+
+  // ── BLUR_CATEGORIES defaults ────────────────────────────────────────────
+
+  describe('DEFAULTS.BLUR_CATEGORIES', () => {
+    test('exists and is frozen', () => {
+      expect(PB.DEFAULTS.BLUR_CATEGORIES).toBeDefined();
+      expect(Object.isFrozen(PB.DEFAULTS.BLUR_CATEGORIES)).toBe(true);
+    });
+
+    test('has correct default values', () => {
+      const bc = PB.DEFAULTS.BLUR_CATEGORIES;
+      expect(bc.text).toBe(true);
+      expect(bc.media).toBe(true);
+      expect(bc.form).toBe(false);
+      expect(bc.table).toBe(true);
+      expect(bc.structure).toBe(true);
+    });
+
+    test('has exactly 5 keys', () => {
+      expect(Object.keys(PB.DEFAULTS.BLUR_CATEGORIES)).toHaveLength(5);
+    });
+  });
+
+  describe('DEFAULTS.THOROUGH_BLUR', () => {
+    test('defaults to false', () => {
+      expect(PB.DEFAULTS.THOROUGH_BLUR).toBe(false);
+    });
+  });
 });

@@ -17,6 +17,7 @@
 
   const MSG = window.PrivacyBlur;
   const D   = window.PrivacyBlur.DEFAULTS;
+  const CATEGORY_KEYS = Object.keys(window.PrivacyBlurEngine.CATEGORY_SELECTORS);
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,14 @@
       chordCode1: D.CHORD_CODE1,
       chordCode2: D.CHORD_CODE2,
       chordModifier: D.CHORD_MODIFIER,
+    },
+    thoroughBlur: D.THOROUGH_BLUR,
+    blurCategories: {
+      text:      D.BLUR_CATEGORIES.text,
+      media:     D.BLUR_CATEGORIES.media,
+      form:      D.BLUR_CATEGORIES.form,
+      table:     D.BLUR_CATEGORIES.table,
+      structure: D.BLUR_CATEGORIES.structure,
     },
   };
 
@@ -92,24 +101,74 @@
    * Start watching the DOM for newly added nodes.
    * When "blur all" mode is active, automatically blur every new element.
    */
+  // ── Batched MutationObserver ────────────────────────────────────────────────
+  // SPA navigation can replace the entire DOM tree in one operation, producing
+  // thousands of added nodes. Processing them synchronously inside the observer
+  // callback causes layout thrashing (getComputedStyle interleaved with DOM
+  // writes) and blocks the main thread for seconds, crashing the tab or browser.
+  //
+  // Solution: collect added nodes in a queue, then process in chunks via
+  // requestAnimationFrame. Each chunk processes up to CHUNK_SIZE elements,
+  // then yields back to the main thread so the browser can paint and respond
+  // to input. Content may appear unblurred for 1-2 frames during heavy SPA
+  // transitions — acceptable tradeoff vs. a frozen browser.
+
+  const CHUNK_SIZE = 50;
+  let pendingNodes = [];
+  let processingScheduled = false;
+
+  function processBlurChunk() {
+    processingScheduled = false;
+    if (!isPageBlurred || pendingNodes.length === 0) {
+      pendingNodes = [];
+      return;
+    }
+
+    // Take one chunk from the front of the queue.
+    const chunk = pendingNodes.splice(0, CHUNK_SIZE);
+
+    for (let i = 0; i < chunk.length; i++) {
+      const node = chunk[i];
+      // Node may have been removed between queuing and processing (SPA teardown).
+      if (!node.isConnected) continue;
+
+      if (Engine.matchesActiveCategories(node, settings.blurCategories)) {
+        Engine.applyBlur(node, settings.blurRadius);
+        if (settings.revealOnHover) node.classList.add('pb-reveal-on-hover');
+      }
+    }
+
+    // Schedule next chunk if there are remaining nodes.
+    if (pendingNodes.length > 0) {
+      processingScheduled = true;
+      requestAnimationFrame(processBlurChunk);
+    }
+  }
+
   function startDomObserver() {
     if (domObserver) return;
 
     domObserver = new MutationObserver((mutations) => {
-      // In picker mode we leave new elements alone — the user picks manually.
       if (isPickerActive) return;
-      // In blur-all mode, extend blur to newly added content.
-      if (isPageBlurred) {
-        for (const mutation of mutations) {
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              Engine.applyBlur(node, settings.blurRadius);
-              node.querySelectorAll('*').forEach((child) => {
-                Engine.applyBlur(child, settings.blurRadius);
-              });
-            }
+      if (!isPageBlurred) return;
+
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          // Queue the node itself and all its descendants. querySelectorAll
+          // returns a static list so it's safe to run before the deferred
+          // processing — the elements won't shift under us.
+          pendingNodes.push(node);
+          const children = node.querySelectorAll('*');
+          for (let i = 0; i < children.length; i++) {
+            pendingNodes.push(children[i]);
           }
         }
+      }
+
+      if (!processingScheduled && pendingNodes.length > 0) {
+        processingScheduled = true;
+        requestAnimationFrame(processBlurChunk);
       }
     });
 
@@ -124,6 +183,10 @@
       domObserver.disconnect();
       domObserver = null;
     }
+    // Clear pending blur queue to prevent stale nodes from being processed
+    // after blur-all is toggled off, and release node references.
+    pendingNodes = [];
+    processingScheduled = false;
   }
 
   // ─── Picker callbacks ─────────────────────────────────────────────────────────
@@ -168,6 +231,7 @@
   function mergeSettings(incoming) {
     const merged = { ...settings, ...incoming };
     merged.shortcuts = { ...settings.shortcuts, ...(incoming.shortcuts || {}) };
+    merged.blurCategories = { ...settings.blurCategories, ...(incoming.blurCategories || {}) };
     return merged;
   }
 
@@ -201,6 +265,63 @@
       node = node.parentElement;
     }
     return null;
+  }
+
+  // ─── Reveal-on-hover ancestor management ─────────────────────────────────────
+  // When a blurred element with pb-reveal-on-hover is hovered, CSS removes its
+  // own filter. But CSS filter on a parent blurs the entire rendered output —
+  // including already-unblurred children. To make the hovered element readable,
+  // we must also remove filter from every blurred ancestor.
+  //
+  // Uses event delegation (one listener on document) instead of per-element
+  // listeners. Walks up O(depth) on each hover — not O(n) across all elements.
+
+  /** Tracks elements currently marked with pb-ancestor-reveal for cleanup. */
+  let revealedAncestors = [];
+
+  /** Clear all pb-ancestor-reveal classes and reset the tracking array. */
+  function clearRevealedAncestors() {
+    for (let i = 0; i < revealedAncestors.length; i++) {
+      revealedAncestors[i].classList.remove('pb-ancestor-reveal');
+    }
+    revealedAncestors = [];
+  }
+
+  function onRevealMouseOver(e) {
+    if (!settings.revealOnHover) return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+
+    const revealTarget = target.closest('.pb-reveal-on-hover');
+    if (!revealTarget) return;
+
+    // Clear previous ancestor chain first, then build the new one.
+    // This handles transitions between sibling elements correctly —
+    // old ancestors that are no longer in the chain get cleaned up.
+    clearRevealedAncestors();
+
+    let node = revealTarget.parentElement;
+    while (node && node !== document.documentElement) {
+      if (node.classList.contains('pb-blurred')) {
+        node.classList.add('pb-ancestor-reveal');
+        revealedAncestors.push(node);
+      }
+      node = node.parentElement;
+    }
+  }
+
+  function onRevealMouseOut(e) {
+    if (revealedAncestors.length === 0) return;
+    // relatedTarget is the element the mouse moved INTO.
+    // If moving to another reveal-on-hover element, mouseover will
+    // handle clearing + rebuilding the ancestor chain. Don't clear here
+    // to avoid a flash where ancestors briefly re-blur between events.
+    const related = e.relatedTarget;
+    if (related && related instanceof Element && related.closest('.pb-reveal-on-hover')) {
+      return;
+    }
+    // Mouse left all reveal-on-hover elements — clear everything.
+    clearRevealedAncestors();
   }
 
   // ─── Keyboard shortcut action map ────────────────────────────────────────────
@@ -240,7 +361,7 @@
           Engine.unblurAll();
           isPageBlurred = false;
         } else {
-          Engine.blurAllContent(settings.blurRadius);
+          Engine.blurAllContent(settings.blurRadius, { categories: settings.blurCategories, thoroughBlur: settings.thoroughBlur });
           if (settings.revealOnHover) {
             document.querySelectorAll('.pb-blurred').forEach((el) => {
               el.classList.add('pb-reveal-on-hover');
@@ -297,8 +418,16 @@
       // ── Update settings ───────────────────────────────────────────────────
       case MSG.UPDATE_SETTINGS: {
         if (message.settings) {
+          const oldCategories = settings.blurCategories;
           settings = mergeSettings(message.settings);
           applySettingsToDom();
+
+          // Invalidate cached selectors when category toggles change so the
+          // next blurAllContent call rebuilds with the new configuration.
+          if (message.settings.blurCategories) {
+            const changed = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.blurCategories[k]);
+            if (changed) Engine.invalidateSelectorCache();
+          }
 
           if (settings.enabled === false) {
             // Tear down active features when disabled
@@ -430,7 +559,7 @@
     }, true);
 
     // 5. If the extension is disabled, stop here — don't init shortcuts,
-    //    don't restore blur, don't start the DOM observer.
+    //    don't restore blur, don't start the DOM observer or hover listeners.
     if (settings.enabled === false) return;
 
     // 6. Initialise keyboard shortcut handler.
@@ -441,6 +570,10 @@
 
     // 8. Start DOM observer for dynamic content.
     startDomObserver();
+
+    // 9. Register hover delegation for reveal-on-hover ancestor unblur.
+    document.addEventListener('mouseover', onRevealMouseOver);
+    document.addEventListener('mouseout', onRevealMouseOut);
   }
 
   // ─── Storage change listener ──────────────────────────────────────────────────
@@ -452,8 +585,15 @@
     const newSettings = changes.settings.newValue;
     if (!newSettings) return;
 
+    const oldCategories = settings.blurCategories;
     settings = mergeSettings(newSettings);
     applySettingsToDom();
+
+    // Invalidate cached selectors if categories changed via cross-tab update.
+    if (newSettings.blurCategories) {
+      const changed = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.blurCategories[k]);
+      if (changed) Engine.invalidateSelectorCache();
+    }
 
     if (settings.enabled === false) {
       Shortcuts.destroy();

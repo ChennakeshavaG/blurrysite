@@ -101,6 +101,8 @@ Applies and removes blur from DOM elements. Handles three element categories dif
 
 Exposes `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`.
 
+**Category-based blurring:** `blurAllContent` accepts an `options.categories` object to control which element groups are blurred. Five categories are supported: **text**, **media**, **form**, **table**, and **structure**. Selector strings for each category are cached internally and rebuilt only when the active categories change.
+
 ### 3.4 selector_utils.js — Selector Generation
 
 Generates and resolves CSS selectors for DOM elements so blur state can be saved and re-applied across page loads. Selector strategy:
@@ -227,7 +229,8 @@ User changes blur radius slider
       "chordKey1": "k",
       "chordKey2": "v",
       "chordModifier": "ctrl"
-    }
+    },
+    "blurCategories": { "text": true, "media": true, "form": false, "table": true, "structure": true }
   }
 }
 ```

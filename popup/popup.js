@@ -26,6 +26,14 @@ const DEFAULT_SETTINGS = Object.freeze({
     chordCode2:    D.CHORD_CODE2,
     chordModifier: D.CHORD_MODIFIER,
   }),
+  thoroughBlur: D.THOROUGH_BLUR,
+  blurCategories: Object.freeze({
+    text:      D.BLUR_CATEGORIES.text,
+    media:     D.BLUR_CATEGORIES.media,
+    form:      D.BLUR_CATEGORIES.form,
+    table:     D.BLUR_CATEGORIES.table,
+    structure: D.BLUR_CATEGORIES.structure,
+  }),
 });
 
 const DEBOUNCE_DELAY_MS = 300;
@@ -63,6 +71,15 @@ const ui = {
   clearAllSitesBtn:  $('clearAllSitesBtn'),
   extVersion:        $('extVersion'),
   toast:             $('toast'),
+  // Category toggles
+  thoroughBlur:      $('thoroughBlur'),
+  categoriesToggle:  $('categoriesToggle'),
+  categoriesBody:    $('categoriesBody'),
+  catText:           $('catText'),
+  catMedia:          $('catMedia'),
+  catForm:           $('catForm'),
+  catTable:          $('catTable'),
+  catStructure:      $('catStructure'),
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -153,6 +170,16 @@ function renderSettingsPanel() {
   ui.highlightColor.value       = settings.highlightColor;
 }
 
+function renderCategoryToggles() {
+  ui.thoroughBlur.checked = settings.thoroughBlur;
+  const cats = settings.blurCategories;
+  ui.catText.checked      = cats.text;
+  ui.catMedia.checked     = cats.media;
+  ui.catForm.checked      = cats.form;
+  ui.catTable.checked     = cats.table;
+  ui.catStructure.checked = cats.structure;
+}
+
 function renderBlurList() {
   const count = blurredItems.length;
 
@@ -211,30 +238,21 @@ async function fetchBlurredSelectors() {
 // ─── Initialisation ──────────────────────────────────────────────────────────
 
 async function init() {
+  debugger;
   // Set extension version from manifest
   const manifest = chrome.runtime.getManifest();
-  ui.extVersion.textContent = `v${manifest.version}`;
+  ui.extVersion.textContent = `${manifest.version}`;
 
   // Get current active tab — filter to http/https pages where content scripts run.
   // When opened as a new page (dev/testing), the "active" tab may be the popup itself.
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  let tab = tabs.find(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://')));
-
-  // Fallback: if no http tab is active in this window, try lastFocusedWindow.
-  if (!tab) {
-    const fallbackTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    tab = fallbackTabs.find(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://')));
-  }
-
-  // Final fallback: find any http tab in any window.
-  if (!tab) {
-    const allTabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
-    if (allTabs.length > 0) {
-      // Pick the most recently accessed tab.
+  const allTabs = await chrome.tabs.query({ url: ['*://*/*'] });
+  let tab = null;
+  // find last accessed http tab in any window. 
+    if (allTabs && allTabs.length > 0) {
+      // Pick the most recently accessed tab. 
       allTabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
       tab = allTabs[0];
     }
-  }
 
   currentTab  = tab || null;
   currentHost = tab ? extractHostname(tab.url) : '';
@@ -248,6 +266,7 @@ async function init() {
       ...DEFAULT_SETTINGS,
       ...resp.settings,
       shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...(resp.settings.shortcuts || {}) },
+      blurCategories: { ...DEFAULT_SETTINGS.blurCategories, ...(resp.settings.blurCategories || {}) },
     };
   }
 
@@ -257,6 +276,7 @@ async function init() {
   // Render everything
   renderEnableToggle();
   renderSettingsPanel();
+  renderCategoryToggles();
   renderBlurList();
   renderChordDisplay();
 
@@ -277,6 +297,7 @@ function wireControls() {
 
   // Blur All button
   ui.blurAllBtn.addEventListener('click', async () => {
+    debugger;
     if (!currentTab) return;
     ui.blurAllBtn.disabled = true;
     await tabMessage(currentTab.id, { type: MSG.TOGGLE_BLUR_ALL });
@@ -306,6 +327,33 @@ function wireControls() {
     const isOpen = ui.settingsBody.classList.toggle('is-open');
     ui.settingsToggle.setAttribute('aria-expanded', String(isOpen));
   });
+
+  // Categories collapsible
+  ui.categoriesToggle.addEventListener('click', () => {
+    const isOpen = ui.categoriesBody.classList.toggle('is-open');
+    ui.categoriesToggle.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  // Thorough blur toggle
+  ui.thoroughBlur.addEventListener('change', async () => {
+    settings.thoroughBlur = ui.thoroughBlur.checked;
+    await saveSettings(true);
+  });
+
+  // Category toggles — each updates one key in settings.blurCategories
+  const categoryMap = {
+    catText:      'text',
+    catMedia:     'media',
+    catForm:      'form',
+    catTable:     'table',
+    catStructure: 'structure',
+  };
+  for (const [uiKey, catName] of Object.entries(categoryMap)) {
+    ui[uiKey].addEventListener('change', async () => {
+      settings.blurCategories[catName] = ui[uiKey].checked;
+      await saveSettings(true);
+    });
+  }
 
   // Blur radius slider (debounced)
   const saveRadius = debounce(async () => {
