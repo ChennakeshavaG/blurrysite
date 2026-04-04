@@ -32,14 +32,7 @@ function buildStubSource() {
   return `
   (function() {
     'use strict';
-
-    var DEFAULT_SETTINGS = {
-      blurRadius: 8,
-      highlightColor: '#f59e0b',
-      transitionDuration: 200,
-      revealOnHover: false,
-      shortcuts: {}
-    };
+    var MSG = window.PrivacyBlur;
 
     function sendMsg(msg) {
       return new Promise(function(resolve, reject) {
@@ -60,37 +53,32 @@ function buildStubSource() {
     function saveBlurredElement(hostname, selector) {
       return sendMsg({ type: 'SAVE_SELECTOR', hostname: hostname, selector: selector });
     }
-
     function removeBlurredElement(hostname, selector) {
       return sendMsg({ type: 'REMOVE_SELECTOR', hostname: hostname, selector: selector });
     }
-
     function getBlurredSelectors(hostname) {
       return sendMsg({ type: 'GET_SELECTORS', hostname: hostname }).then(function(res) {
         return (res && res.selectors) ? res.selectors : [];
       });
     }
-
-    function clearHost(hostname) {
-      return sendMsg({ type: 'CLEAR_HOST', hostname: hostname });
-    }
-
-    function clearAll() {
-      return sendMsg({ type: 'CLEAR_ALL' });
-    }
+    function clearHost(hostname) { return sendMsg({ type: 'CLEAR_HOST', hostname: hostname }); }
+    function clearAll() { return sendMsg({ type: 'CLEAR_ALL' }); }
 
     function getSettings() {
       return sendMsg({ type: 'GET_SETTINGS' }).then(function(res) {
-        var stored = (res && res.settings) ? res.settings : {};
-        return Object.assign({}, DEFAULT_SETTINGS, stored);
+        return (res && res.settings) ? res.settings : MSG.buildDefaultSettings();
       });
     }
-
-    function saveSettings(partial) {
-      return getSettings().then(function(current) {
-        var merged = Object.assign({}, current, partial);
-        return sendMsg({ type: 'SAVE_SETTINGS', settings: merged });
+    function saveSettings(fullSettings) {
+      return sendMsg({ type: 'SAVE_SETTINGS', settings: fullSettings });
+    }
+    function getRules() {
+      return sendMsg({ type: 'GET_RULES' }).then(function(res) {
+        return (res && Array.isArray(res.rules)) ? res.rules : [];
       });
+    }
+    function saveRules(rules) {
+      return sendMsg({ type: 'SAVE_RULES', rules: rules });
     }
 
     window.PrivacyBlurStorage = {
@@ -101,6 +89,8 @@ function buildStubSource() {
       clearAll: clearAll,
       getSettings: getSettings,
       saveSettings: saveSettings,
+      getRules: getRules,
+      saveRules: saveRules,
     };
   })();
   `;
@@ -288,62 +278,60 @@ describe('PrivacyBlurStorage', () => {
   // ── getSettings ────────────────────────────────────────────────────────────
 
   describe('getSettings', () => {
-    test('returns merged settings with defaults when storage is empty', async () => {
+    test('returns settings from background response', async () => {
+      mockSendMessageResponse({ settings: { BLUR_RADIUS: 12, ENABLED: true } });
+
+      const settings = await PrivacyBlurStorage.getSettings();
+
+      expect(settings.BLUR_RADIUS).toBe(12);
+      expect(settings.ENABLED).toBe(true);
+    });
+
+    test('falls back to defaults when response has no settings', async () => {
       mockSendMessageResponse({});
 
       const settings = await PrivacyBlurStorage.getSettings();
 
-      // Defaults must be present.
-      expect(settings.blurRadius).toBeDefined();
-      expect(settings.highlightColor).toBeDefined();
-      expect(settings.transitionDuration).toBeDefined();
-      expect(settings.revealOnHover).toBeDefined();
+      // buildDefaultSettings() returns a full default object
+      expect(settings.BLUR_RADIUS).toBe(8);
+      expect(settings.HIGHLIGHT_COLOR).toBe('#f59e0b');
+      expect(settings.TRANSITION_DURATION).toBe(200);
     });
 
-    test('overrides defaults with stored values', async () => {
-      mockSendMessageResponse({ settings: { blurRadius: 20, revealOnHover: true } });
+    test('falls back to defaults when response is null', async () => {
+      mockSendMessageResponse(null);
 
       const settings = await PrivacyBlurStorage.getSettings();
 
-      expect(settings.blurRadius).toBe(20);
-      expect(settings.revealOnHover).toBe(true);
-    });
-
-    test('fills missing stored keys with default values', async () => {
-      mockSendMessageResponse({ settings: { blurRadius: 15 } });
-
-      const settings = await PrivacyBlurStorage.getSettings();
-
-      // blurRadius overridden, transitionDuration should still be default.
-      expect(settings.blurRadius).toBe(15);
-      expect(settings.transitionDuration).toBe(200);
+      expect(settings.BLUR_RADIUS).toBe(8);
     });
   });
 
   // ── saveSettings ───────────────────────────────────────────────────────────
 
   describe('saveSettings', () => {
-    test('sends partial settings directly to background for merging', async () => {
-      // Single call — saveSettings sends the partial directly to background.
+    test('sends full settings object to background', async () => {
       chrome.runtime.sendMessage
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
-      await PrivacyBlurStorage.saveSettings({ revealOnHover: true });
+      const fullSettings = PrivacyBlur.buildDefaultSettings();
+      fullSettings.BLUR_RADIUS = 20;
+      await PrivacyBlurStorage.saveSettings(fullSettings);
 
       const saveCalls = chrome.runtime.sendMessage.mock.calls.filter(
         ([msg]) => msg.type === 'SAVE_SETTINGS'
       );
       expect(saveCalls.length).toBe(1);
       const savedSettings = saveCalls[0][0].settings;
-      expect(savedSettings.revealOnHover).toBe(true); // the partial that was passed
-      expect(savedSettings.blurRadius).toBeUndefined(); // not pre-merged
+      expect(savedSettings.BLUR_RADIUS).toBe(20);
+      expect(savedSettings.ENABLED).toBe(true); // full object includes all keys
     });
 
     test('sends SAVE_SETTINGS message type', async () => {
       chrome.runtime.sendMessage
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
-      await PrivacyBlurStorage.saveSettings({ blurRadius: 16 });
+      await PrivacyBlurStorage.saveSettings(PrivacyBlur.buildDefaultSettings());
 
       const saveCall = chrome.runtime.sendMessage.mock.calls.find(
         ([msg]) => msg.type === 'SAVE_SETTINGS'
@@ -457,95 +445,38 @@ describe('PrivacyBlurStorage', () => {
     });
   });
 
-  // ── DEFAULT_SETTINGS ──────────────────────────────────────────────────────
+  // ── getRules / saveRules ────────────────────────────────────────────────
 
-  describe('DEFAULT_SETTINGS', () => {
-    test('exposes DEFAULT_SETTINGS as a public property', () => {
-      expect(PrivacyBlurStorage.DEFAULT_SETTINGS).toBeDefined();
+  describe('getRules', () => {
+    test('returns rules array from background', async () => {
+      mockSendMessageResponse({ rules: [{ id: 'r1', pattern: '*.test.com' }] });
+
+      const rules = await PrivacyBlurStorage.getRules();
+      expect(rules).toHaveLength(1);
+      expect(rules[0].id).toBe('r1');
     });
 
-    test('DEFAULT_SETTINGS contains expected keys', () => {
-      const defaults = PrivacyBlurStorage.DEFAULT_SETTINGS;
-      expect(defaults.blurRadius).toBeDefined();
-      expect(defaults.highlightColor).toBeDefined();
-      expect(defaults.transitionDuration).toBeDefined();
-      expect(typeof defaults.revealOnHover).toBe('boolean');
-      expect(typeof defaults.enabled).toBe('boolean');
-    });
+    test('returns empty array when no rules saved', async () => {
+      mockSendMessageResponse({});
 
-    test('DEFAULT_SETTINGS contains shortcuts sub-object', () => {
-      const shortcuts = PrivacyBlurStorage.DEFAULT_SETTINGS.shortcuts;
-      expect(shortcuts).toBeDefined();
-      expect(shortcuts.chordKey1).toBeDefined();
-      expect(shortcuts.chordKey2).toBeDefined();
-      expect(shortcuts.chordModifier).toBeDefined();
+      const rules = await PrivacyBlurStorage.getRules();
+      expect(rules).toEqual([]);
     });
   });
 
-  // ── getSettings merging ───────────────────────────────────────────────────
+  describe('saveRules', () => {
+    test('sends SAVE_RULES message with rules array', async () => {
+      chrome.runtime.sendMessage
+        .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
-  describe('getSettings merging', () => {
-    test('returns complete object even when background returns null response', async () => {
-      mockSendMessageResponse(null);
+      const rules = [{ id: 'r1', pattern: '*.example.com', patternType: 'wildcard', settings: {} }];
+      await PrivacyBlurStorage.saveRules(rules);
 
-      const settings = await PrivacyBlurStorage.getSettings();
-
-      expect(settings.blurRadius).toBeDefined();
-      expect(settings.highlightColor).toBeDefined();
-    });
-
-    test('stored values override defaults', async () => {
-      mockSendMessageResponse({
-        settings: { blurRadius: 20, highlightColor: '#ff0000' }
-      });
-
-      const settings = await PrivacyBlurStorage.getSettings();
-
-      expect(settings.blurRadius).toBe(20);
-      expect(settings.highlightColor).toBe('#ff0000');
-      // Defaults should still be present for non-overridden keys
-      expect(settings.transitionDuration).toBe(200);
-    });
-
-    test('returns blurCategories merged with defaults', async () => {
-      mockSendMessageResponse({
-        settings: { blurCategories: { form: true } }
-      });
-
-      const settings = await PrivacyBlurStorage.getSettings();
-
-      // Partial override: form changed to true
-      expect(settings.blurCategories.form).toBe(true);
-      // Defaults preserved for non-overridden keys
-      expect(settings.blurCategories.text).toBe(true);
-      expect(settings.blurCategories.media).toBe(true);
-      expect(settings.blurCategories.table).toBe(true);
-      expect(settings.blurCategories.structure).toBe(true);
-    });
-
-    test('returns default blurCategories when none saved', async () => {
-      mockSendMessageResponse({ settings: {} });
-
-      const settings = await PrivacyBlurStorage.getSettings();
-
-      expect(settings.blurCategories).toBeDefined();
-      expect(settings.blurCategories.text).toBe(true);
-      expect(settings.blurCategories.media).toBe(true);
-      expect(settings.blurCategories.form).toBe(false);
-      expect(settings.blurCategories.table).toBe(true);
-      expect(settings.blurCategories.structure).toBe(true);
-    });
-
-    test('returns thoroughBlur merged with default', async () => {
-      mockSendMessageResponse({ settings: { thoroughBlur: true } });
-      const settings = await PrivacyBlurStorage.getSettings();
-      expect(settings.thoroughBlur).toBe(true);
-    });
-
-    test('returns default thoroughBlur when none saved', async () => {
-      mockSendMessageResponse({ settings: {} });
-      const settings = await PrivacyBlurStorage.getSettings();
-      expect(settings.thoroughBlur).toBe(false);
+      const saveCall = chrome.runtime.sendMessage.mock.calls.find(
+        ([msg]) => msg.type === 'SAVE_RULES'
+      );
+      expect(saveCall).toBeDefined();
+      expect(saveCall[0].rules).toEqual(rules);
     });
   });
 });
