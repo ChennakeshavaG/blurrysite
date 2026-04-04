@@ -14,7 +14,10 @@
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
-  /** @type {object} Settings — UPPER_SNAKE_CASE keys matching DEFAULT_SETTINGS */
+  /** @type {object} Global settings from storage (no URL rule overrides). */
+  let globalSettings = MSG.buildDefaultSettings();
+
+  /** @type {object} Resolved settings (global + URL rule overrides for current URL). */
   let settings = MSG.buildDefaultSettings();
 
   /** @type {Array} URL rules loaded from storage */
@@ -174,12 +177,15 @@
 
   // ─── URL rule pattern matching ──────────────────────────────────────────────
 
+  /** Max pattern string length to prevent ReDoS and storage abuse. */
+  const MAX_PATTERN_LENGTH = 500;
+
   /**
    * Convert a wildcard pattern (* = any chars) to a RegExp.
-   * Escapes all regex special chars, then replaces * with .*.
+   * Escapes all regex special chars (including ?), then replaces * with .*.
    */
   function wildcardToRegex(pattern) {
-    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp('^' + escaped.replace(/\*/g, '.*') + '$', 'i');
   }
 
@@ -191,14 +197,16 @@
    * @returns {boolean}
    */
   function matchesPattern(url, pattern, patternType) {
+    if (!pattern || typeof pattern !== 'string') return false;
+    // Reject excessively long patterns to prevent ReDoS
+    if (pattern.length > MAX_PATTERN_LENGTH) return false;
+
     try {
       if (patternType === 'regex') {
         return new RegExp(pattern, 'i').test(url);
       }
-      // Default to wildcard
       return wildcardToRegex(pattern).test(url);
     } catch (_e) {
-      // Invalid regex — skip this rule
       return false;
     }
   }
@@ -428,7 +436,8 @@
         if (message.settings) {
           const oldCategories = settings.BLUR_CATEGORIES;
           const oldThorough = settings.THOROUGH_BLUR;
-          settings = mergeSettings(message.settings);
+          globalSettings = MSG.deepMerge(globalSettings, message.settings);
+          settings = resolveSettings(location.href, globalSettings, rules);
           applySettingsToDom();
 
           // Detect if blur configuration changed (categories or thoroughBlur)
@@ -570,8 +579,9 @@
         Store.getRules(),
       ]);
       if (loadedRules) rules = loadedRules;
-      // Resolve settings: URL rule overrides > global settings > defaults
-      settings = resolveSettings(location.href, loaded || {}, rules);
+      if (loaded) globalSettings = loaded;
+      // Resolve: URL rule overrides > global settings > defaults
+      settings = resolveSettings(location.href, globalSettings, rules);
     } catch (_e) {
       // Background not ready — use defaults.
     }
@@ -615,14 +625,15 @@
   let lastUrl = location.href;
 
   function onUrlChange() {
+    if (!Engine) return; // init not complete yet
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
     lastUrl = currentUrl;
 
-    // Re-resolve settings from URL rules for the new URL.
+    // Re-resolve from globalSettings (not `settings` which has rule overrides baked in)
     const oldCategories = settings.BLUR_CATEGORIES;
     const oldThorough = settings.THOROUGH_BLUR;
-    settings = resolveSettings(currentUrl, settings, rules);
+    settings = resolveSettings(currentUrl, globalSettings, rules);
     applySettingsToDom();
 
     // Re-blur if needed
@@ -649,13 +660,14 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (!Engine) return; // init not complete yet
 
     // Rules changed — re-resolve settings for current URL
     if (changes.rules) {
       rules = changes.rules.newValue || [];
       const oldCategories = settings.BLUR_CATEGORIES;
       const oldThorough = settings.THOROUGH_BLUR;
-      settings = resolveSettings(location.href, settings, rules);
+      settings = resolveSettings(location.href, globalSettings, rules);
       applySettingsToDom();
       const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
       if (catsChanged) Engine.invalidateSelectorCache();
@@ -674,7 +686,8 @@
 
     const oldCategories = settings.BLUR_CATEGORIES;
     const oldThorough = settings.THOROUGH_BLUR;
-    settings = mergeSettings(newSettings);
+    globalSettings = MSG.deepMerge(globalSettings, newSettings);
+    settings = resolveSettings(location.href, globalSettings, rules);
     applySettingsToDom();
 
     const catsChanged = newSettings.BLUR_CATEGORIES &&

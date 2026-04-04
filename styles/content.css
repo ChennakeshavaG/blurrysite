@@ -31,9 +31,9 @@
   transition:
     filter var(--pb-transition-duration, 200ms) ease,
     -webkit-filter var(--pb-transition-duration, 200ms) ease !important;
-  animation: pb-blur-in var(--pb-transition-duration, 200ms) ease forwards;
-  /* Prevent blurred content from leaking outside its box */
-  overflow: hidden;
+  /* animation removed — transition handles the blur-in smoothly.
+     animation + transition both animating filter was redundant and
+     re-triggered the animation on every class toggle. */
   /* will-change: filter removed — it creates a permanent stacking context that
      breaks position:fixed/sticky children, z-index hover elevation, and clips
      overflow for dropdowns/tooltips. The blur transition is smooth enough

@@ -247,6 +247,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid rules" });
         return true;
       }
+      // Cap rules at 100 and validate field lengths
+      if (message.rules.length > 100) {
+        sendResponse({ success: false, error: "max 100 rules" });
+        return true;
+      }
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.set({ rules: message.rules }, () => {
           sendResponse({ success: true });

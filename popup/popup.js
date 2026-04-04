@@ -437,19 +437,6 @@ function wireControls() {
   });
 }
 
-// ─── Shortcut customization modal ────────────────────────────────────────────
-
-const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
-
-/** Map event modifier to storage key name */
-function getModifierName(e) {
-  if (e.ctrlKey)  return 'ctrl';
-  if (e.altKey)   return 'alt';
-  if (e.metaKey)  return 'meta';
-  if (e.shiftKey) return 'shift';
-  return null;
-}
-
 // ─── URL Rules CRUD ─────────────────────────────────────────────────────────
 
 function generateRuleId() {
@@ -546,6 +533,14 @@ function openRuleModal(existingRule) {
     const pattern = patInput.value.trim();
     if (!pattern) {
       showToast('Pattern is required');
+      return;
+    }
+    if (pattern.length > 500) {
+      showToast('Pattern too long (max 500 chars)');
+      return;
+    }
+    if (name.length > 100) {
+      showToast('Name too long (max 100 chars)');
       return;
     }
 
@@ -645,7 +640,6 @@ const MODIFIER_CODE_SET = new Set([
 ]);
 
 let modalKeydownHandler = null;
-let modalKeyupHandler   = null;
 let _activeModalCleanup = null;
 let activeModalAction   = null;
 let capturedPrimaryMod  = null;
@@ -670,7 +664,6 @@ function openShortcutModal(actionName) {
 
   // Remove old handlers
   if (modalKeydownHandler) document.removeEventListener('keydown', modalKeydownHandler, true);
-  if (modalKeyupHandler) document.removeEventListener('keyup', modalKeyupHandler, true);
 
   function updateDisplay() {
     const parts = [];
@@ -715,12 +708,7 @@ function openShortcutModal(actionName) {
     }
   };
 
-  modalKeyupHandler = () => {
-    // No action needed — we capture on keydown, display updates live
-  };
-
   document.addEventListener('keydown', modalKeydownHandler, true);
-  document.addEventListener('keyup', modalKeyupHandler, true);
 
   // Button handlers
   const onSave = async () => {
@@ -768,10 +756,6 @@ function closeShortcutModal() {
   if (modalKeydownHandler) {
     document.removeEventListener('keydown', modalKeydownHandler, true);
     modalKeydownHandler = null;
-  }
-  if (modalKeyupHandler) {
-    document.removeEventListener('keyup', modalKeyupHandler, true);
-    modalKeyupHandler = null;
   }
   if (_activeModalCleanup) {
     _activeModalCleanup();
