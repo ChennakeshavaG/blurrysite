@@ -397,7 +397,7 @@
             }
             stopDomObserver();
           } else {
-            Shortcuts.init(shortcutSettings(), shortcutActionMap);
+            try { Shortcuts.init(shortcutSettings(), shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ }
             if (isPickerActive) {
               Picker.setSettings({
                 blurRadius: settings.BLUR_RADIUS,
@@ -526,7 +526,9 @@
     if (settings.ENABLED === false) return;
 
     // 6. Initialise keyboard shortcut handler.
-    Shortcuts.init(shortcutSettings(), shortcutActionMap);
+    // TODO: shortcutSettings() returns malformed data until Refactor 2 (shortcut rewrite).
+    // Wrap in try/catch to prevent crashing init and blocking observer/reveal setup.
+    try { try { Shortcuts.init(shortcutSettings(), shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ } } catch (_e) { /* noop until Refactor 2 */ }
 
     // 7. Restore previously blurred elements for this hostname.
     await restoreBlurredElements();
@@ -565,7 +567,7 @@
       }
       stopDomObserver();
     } else {
-      Shortcuts.init(shortcutSettings(), shortcutActionMap);
+      try { Shortcuts.init(shortcutSettings(), shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ }
       startDomObserver();
     }
   });
