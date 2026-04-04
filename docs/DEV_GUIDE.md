@@ -106,9 +106,20 @@ for the full element taxonomy.
 `hasMeaningfulTextContent` gate, blurring all matching elements unconditionally.
 Catches containers with nested-only text at the cost of blurring empty layout wrappers.
 
-**Settings path:** `constants.js DEFAULTS` → `background.js DEFAULT_SETTINGS` →
-`chrome.storage.local` → `storage_manager.js getSettings()` → `content_script.js settings` →
+**Settings path:** `constants.js DEFAULT_SETTINGS` → `background.js` →
+`chrome.storage.local` → `storage_manager.js getSettings()` → `content_script.js resolveSettings()` →
 `Engine.blurAllContent(radius, { categories, thoroughBlur })`.
+
+**URL Rules:** Per-URL settings overrides stored in `chrome.storage.local.rules`.
+Each rule has `{ id, name, pattern, patternType, settings }`. Rules are matched
+top-down against the full URL. First match wins. Rule settings are partial — merged
+over global settings via `deepMerge`.
+
+Pattern types:
+- `wildcard`: `*` matches any chars. `*.bank.com/*` matches banking sites.
+- `regex`: raw regex matched case-insensitively against the full URL.
+
+SPA URL changes detected via `popstate` + `hashchange` → re-resolve settings.
 
 ---
 

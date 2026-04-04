@@ -695,6 +695,89 @@ kbd {
   outline-offset: 2px;
 }
 
+/* ---------- Text Input (small) ---------- */
+.input-sm {
+  width: 100%;
+  background: #2d2d4a;
+  border: 1px solid #3d3d5c;
+  border-radius: 5px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 8px;
+}
+
+.input-sm:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.input-sm::placeholder {
+  color: #64748b;
+}
+
+/* ---------- Rules List ---------- */
+.rules-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rules-list-empty {
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.rule-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.rule-item:last-child {
+  border-bottom: none;
+}
+
+.rule-item__name {
+  flex: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-item__pattern {
+  font-size: 10px;
+  color: #94a3b8;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-item__btn {
+  all: initial;
+  font-family: inherit;
+  font-size: 10px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.rule-item__btn:hover {
+  color: #e2e8f0;
+}
+
+.rule-item__btn--delete:hover {
+  color: #ef4444;
+}
+
 /* ---------- Blur List ---------- */
 .blur-list-wrapper {
   position: relative;

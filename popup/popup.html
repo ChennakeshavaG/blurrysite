@@ -195,6 +195,75 @@
     </div>
   </section>
 
+  <!-- ===== URL RULES (COLLAPSIBLE) ===== -->
+  <section class="card card--collapsible" id="rulesCard">
+    <button class="card__header card__header--toggle" id="rulesToggle" aria-expanded="false" aria-controls="rulesBody">
+      <span class="card__title">URL Rules</span>
+      <span class="list-count" id="rulesCount">0</span>
+      <svg class="card__chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="card__body" id="rulesBody">
+      <p class="setting-hint" style="margin-bottom:8px">Per-URL settings overrides. First matching rule wins.</p>
+      <ul class="rules-list" id="rulesList" aria-label="URL-based blur rules">
+        <!-- Populated by popup.js -->
+      </ul>
+      <p class="rules-list-empty" id="rulesListEmpty">No URL rules configured.</p>
+      <button class="btn btn--ghost btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%">+ Add Rule</button>
+    </div>
+  </section>
+
+  <!-- ===== RULE EDITOR MODAL ===== -->
+  <div class="modal-overlay" id="ruleModal" hidden>
+    <div class="modal">
+      <div class="modal__header" id="ruleModalTitle">Add URL Rule</div>
+      <div class="modal__body">
+        <div class="setting-row">
+          <label class="setting-label" for="ruleName">Name</label>
+          <input type="text" class="input-sm" id="ruleName" placeholder="e.g. Banking sites" />
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="rulePattern">URL Pattern</label>
+          <input type="text" class="input-sm" id="rulePattern" placeholder="*.bank.com/*" />
+        </div>
+        <div class="setting-row setting-row--inline">
+          <label class="setting-label" for="rulePatternType">Pattern type</label>
+          <select class="select-sm" id="rulePatternType">
+            <option value="wildcard">Wildcard</option>
+            <option value="regex">Regex</option>
+          </select>
+        </div>
+        <hr class="setting-divider" />
+        <p class="setting-hint" style="margin-bottom:6px">Settings overrides for matching URLs:</p>
+        <div class="setting-row setting-row--inline">
+          <label class="setting-label" for="ruleFormToggle">Blur forms</label>
+          <label class="toggle toggle--sm">
+            <input type="checkbox" id="ruleFormToggle" />
+            <span class="toggle__track"><span class="toggle__thumb"></span></span>
+          </label>
+        </div>
+        <div class="setting-row setting-row--inline">
+          <label class="setting-label" for="ruleThoroughToggle">Thorough blur</label>
+          <label class="toggle toggle--sm">
+            <input type="checkbox" id="ruleThoroughToggle" />
+            <span class="toggle__track"><span class="toggle__thumb"></span></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="ruleBlurRadius">
+            Blur radius <span class="setting-value" id="ruleBlurRadiusValue">8px</span>
+          </label>
+          <input class="slider" type="range" id="ruleBlurRadius" min="2" max="20" step="1" value="8" />
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn--ghost btn--sm" id="ruleModalCancel">Cancel</button>
+        <button class="btn btn--primary btn--sm" id="ruleModalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== BLURRED ELEMENTS LIST ===== -->
   <section class="card">
     <div class="card__header">

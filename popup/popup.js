@@ -22,6 +22,7 @@ let currentTab    = null;
 let currentHost   = '';
 let settings      = MSG.buildDefaultSettings();
 let blurredItems  = [];   // string[] of CSS selectors
+let urlRules      = [];   // URL rules array from storage
 let toastTimer    = null;
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
@@ -57,6 +58,13 @@ const ui = {
   catForm:           $('catForm'),
   catTable:          $('catTable'),
   catStructure:      $('catStructure'),
+  // URL Rules
+  rulesToggle:       $('rulesToggle'),
+  rulesBody:         $('rulesBody'),
+  rulesCount:        $('rulesCount'),
+  rulesList:         $('rulesList'),
+  rulesListEmpty:    $('rulesListEmpty'),
+  addRuleBtn:        $('addRuleBtn'),
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -243,13 +251,16 @@ async function init() {
     settings = resp.settings;
   }
 
-  // Fetch blurred selectors for this hostname
+  // Fetch blurred selectors and URL rules
   blurredItems = await fetchBlurredSelectors();
+  const rulesResp = await bgMessage({ type: MSG.GET_RULES });
+  if (rulesResp && Array.isArray(rulesResp.rules)) urlRules = rulesResp.rules;
 
   // Render everything
   renderEnableToggle();
   renderSettingsPanel();
   renderCategoryToggles();
+  renderRulesList();
   renderBlurList();
   renderShortcutDisplays();
 
@@ -305,6 +316,16 @@ function wireControls() {
   ui.categoriesToggle.addEventListener('click', () => {
     const isOpen = ui.categoriesBody.classList.toggle('is-open');
     ui.categoriesToggle.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  // URL Rules collapsible + add button
+  ui.rulesToggle.addEventListener('click', () => {
+    const isOpen = ui.rulesBody.classList.toggle('is-open');
+    ui.rulesToggle.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  ui.addRuleBtn.addEventListener('click', () => {
+    openRuleModal(null);
   });
 
   // Thorough blur toggle
@@ -427,6 +448,152 @@ function getModifierName(e) {
   if (e.metaKey)  return 'meta';
   if (e.shiftKey) return 'shift';
   return null;
+}
+
+// ─── URL Rules CRUD ─────────────────────────────────────────────────────────
+
+function generateRuleId() {
+  return 'r_' + Math.random().toString(36).slice(2, 10);
+}
+
+function renderRulesList() {
+  const count = urlRules.length;
+  ui.rulesCount.textContent = String(count);
+  ui.rulesListEmpty.style.display = count === 0 ? '' : 'none';
+  ui.rulesList.style.display = count > 0 ? '' : 'none';
+
+  ui.rulesList.textContent = '';
+  for (const rule of urlRules) {
+    const li = document.createElement('li');
+    li.className = 'rule-item';
+
+    const name = document.createElement('span');
+    name.className = 'rule-item__name';
+    name.textContent = rule.name || 'Untitled';
+    name.title = rule.name || '';
+
+    const pattern = document.createElement('span');
+    pattern.className = 'rule-item__pattern';
+    pattern.textContent = rule.pattern || '';
+    pattern.title = `${rule.patternType || 'wildcard'}: ${rule.pattern || ''}`;
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'rule-item__btn';
+    editBtn.textContent = 'edit';
+    editBtn.addEventListener('click', () => openRuleModal(rule));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'rule-item__btn rule-item__btn--delete';
+    delBtn.textContent = 'del';
+    delBtn.addEventListener('click', async () => {
+      urlRules = urlRules.filter(r => r.id !== rule.id);
+      await bgMessage({ type: MSG.SAVE_RULES, rules: urlRules });
+      renderRulesList();
+      showToast('Rule deleted');
+    });
+
+    li.append(name, pattern, editBtn, delBtn);
+    ui.rulesList.appendChild(li);
+  }
+}
+
+let editingRuleId = null; // null = adding new, string = editing existing
+
+function openRuleModal(existingRule) {
+  const modal     = document.getElementById('ruleModal');
+  const title     = document.getElementById('ruleModalTitle');
+  const nameInput = document.getElementById('ruleName');
+  const patInput  = document.getElementById('rulePattern');
+  const patType   = document.getElementById('rulePatternType');
+  const formTgl   = document.getElementById('ruleFormToggle');
+  const thorTgl   = document.getElementById('ruleThoroughToggle');
+  const radSlider = document.getElementById('ruleBlurRadius');
+  const radValue  = document.getElementById('ruleBlurRadiusValue');
+  const saveBtn   = document.getElementById('ruleModalSave');
+  const cancelBtn = document.getElementById('ruleModalCancel');
+
+  if (existingRule) {
+    editingRuleId = existingRule.id;
+    title.textContent = 'Edit URL Rule';
+    nameInput.value = existingRule.name || '';
+    patInput.value = existingRule.pattern || '';
+    patType.value = existingRule.patternType || 'wildcard';
+    const s = existingRule.settings || {};
+    formTgl.checked = !!(s.BLUR_CATEGORIES && s.BLUR_CATEGORIES.FORM);
+    thorTgl.checked = !!s.THOROUGH_BLUR;
+    radSlider.value = s.BLUR_RADIUS || 8;
+    radValue.textContent = (s.BLUR_RADIUS || 8) + 'px';
+  } else {
+    editingRuleId = null;
+    title.textContent = 'Add URL Rule';
+    nameInput.value = '';
+    patInput.value = '';
+    patType.value = 'wildcard';
+    formTgl.checked = false;
+    thorTgl.checked = false;
+    radSlider.value = 8;
+    radValue.textContent = '8px';
+  }
+
+  modal.hidden = false;
+
+  radSlider.oninput = () => {
+    radValue.textContent = radSlider.value + 'px';
+  };
+
+  const onSave = async () => {
+    const name = nameInput.value.trim();
+    const pattern = patInput.value.trim();
+    if (!pattern) {
+      showToast('Pattern is required');
+      return;
+    }
+
+    const ruleSettings = {};
+    if (formTgl.checked) {
+      ruleSettings.BLUR_CATEGORIES = { FORM: true };
+    }
+    if (thorTgl.checked) {
+      ruleSettings.THOROUGH_BLUR = true;
+    }
+    const radius = Number(radSlider.value);
+    if (radius !== 8) {
+      ruleSettings.BLUR_RADIUS = radius;
+    }
+
+    if (editingRuleId) {
+      // Update existing
+      const idx = urlRules.findIndex(r => r.id === editingRuleId);
+      if (idx >= 0) {
+        urlRules[idx] = { ...urlRules[idx], name, pattern, patternType: patType.value, settings: ruleSettings };
+      }
+    } else {
+      // Add new
+      urlRules.push({ id: generateRuleId(), name, pattern, patternType: patType.value, settings: ruleSettings });
+    }
+
+    await bgMessage({ type: MSG.SAVE_RULES, rules: urlRules });
+    renderRulesList();
+    closeRuleModal();
+    showToast(editingRuleId ? 'Rule updated' : 'Rule added');
+    cleanup();
+  };
+
+  const onCancel = () => { closeRuleModal(); cleanup(); };
+
+  function cleanup() {
+    saveBtn.removeEventListener('click', onSave);
+    cancelBtn.removeEventListener('click', onCancel);
+    radSlider.oninput = null;
+  }
+
+  saveBtn.addEventListener('click', onSave);
+  cancelBtn.addEventListener('click', onCancel);
+}
+
+function closeRuleModal() {
+  document.getElementById('ruleModal').hidden = true;
+  editingRuleId = null;
 }
 
 // ─── Shortcut display & capture ─────────────────────────────────────────────

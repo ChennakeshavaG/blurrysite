@@ -17,6 +17,9 @@
   /** @type {object} Settings — UPPER_SNAKE_CASE keys matching DEFAULT_SETTINGS */
   let settings = MSG.buildDefaultSettings();
 
+  /** @type {Array} URL rules loaded from storage */
+  let rules = [];
+
   /** Whether the "blur all page content" mode is active */
   let isPageBlurred = false;
 
@@ -167,6 +170,55 @@
 
   function mergeSettings(incoming) {
     return MSG.deepMerge(settings, incoming);
+  }
+
+  // ─── URL rule pattern matching ──────────────────────────────────────────────
+
+  /**
+   * Convert a wildcard pattern (* = any chars) to a RegExp.
+   * Escapes all regex special chars, then replaces * with .*.
+   */
+  function wildcardToRegex(pattern) {
+    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('^' + escaped.replace(/\*/g, '.*') + '$', 'i');
+  }
+
+  /**
+   * Tests whether a URL matches a rule's pattern.
+   * @param {string} url         - Full page URL
+   * @param {string} pattern     - Wildcard or regex string
+   * @param {string} patternType - 'wildcard' | 'regex'
+   * @returns {boolean}
+   */
+  function matchesPattern(url, pattern, patternType) {
+    try {
+      if (patternType === 'regex') {
+        return new RegExp(pattern, 'i').test(url);
+      }
+      // Default to wildcard
+      return wildcardToRegex(pattern).test(url);
+    } catch (_e) {
+      // Invalid regex — skip this rule
+      return false;
+    }
+  }
+
+  /**
+   * Resolve settings for the current URL.
+   * Priority: first matching URL rule > user global settings > DEFAULT_SETTINGS.
+   * Rule settings are partial — deep-merged over the global settings.
+   */
+  function resolveSettings(url, globalSettings, urlRules) {
+    let resolved = MSG.deepMerge(MSG.DEFAULT_SETTINGS, globalSettings);
+
+    for (const rule of urlRules) {
+      if (matchesPattern(url, rule.pattern, rule.patternType)) {
+        resolved = MSG.deepMerge(resolved, rule.settings || {});
+        break; // first match wins
+      }
+    }
+
+    return resolved;
   }
 
   // shortcutSettings() helper removed — SHORTCUTS shape matches handler API directly.
@@ -511,12 +563,15 @@
     Picker    = window.PrivacyBlurPicker;
     Shortcuts = window.PrivacyBlurShortcuts;
 
-    // 1. Load settings from storage.
+    // 1. Load settings and URL rules from storage.
     try {
-      const loaded = await Store.getSettings();
-      if (loaded) {
-        settings = mergeSettings(loaded);
-      }
+      const [loaded, loadedRules] = await Promise.all([
+        Store.getSettings(),
+        Store.getRules(),
+      ]);
+      if (loadedRules) rules = loadedRules;
+      // Resolve settings: URL rule overrides > global settings > defaults
+      settings = resolveSettings(location.href, loaded || {}, rules);
     } catch (_e) {
       // Background not ready — use defaults.
     }
@@ -563,9 +618,28 @@
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
     lastUrl = currentUrl;
-    // TODO: re-resolve settings from URL rules when rule management UI is built.
-    // For now, this detects the change; rule resolution will be added in the
-    // URL rules popup UI implementation.
+
+    // Re-resolve settings from URL rules for the new URL.
+    const oldCategories = settings.BLUR_CATEGORIES;
+    const oldThorough = settings.THOROUGH_BLUR;
+    settings = resolveSettings(currentUrl, settings, rules);
+    applySettingsToDom();
+
+    // Re-blur if needed
+    const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
+    const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
+
+    if (catsChanged) Engine.invalidateSelectorCache();
+    if (isPageBlurred && (catsChanged || thoroughChanged)) {
+      Engine.unblurAll();
+      Engine.blurAllContent(settings.BLUR_RADIUS, {
+        categories: settings.BLUR_CATEGORIES,
+        thoroughBlur: settings.THOROUGH_BLUR,
+      });
+      if (settings.REVEAL_MODE === 'hover') {
+        document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
+      }
+    }
   }
 
   window.addEventListener('popstate', onUrlChange);
@@ -574,7 +648,27 @@
   // ─── Storage change listener ──────────────────────────────────────────────────
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes.settings) return;
+    if (area !== 'local') return;
+
+    // Rules changed — re-resolve settings for current URL
+    if (changes.rules) {
+      rules = changes.rules.newValue || [];
+      const oldCategories = settings.BLUR_CATEGORIES;
+      const oldThorough = settings.THOROUGH_BLUR;
+      settings = resolveSettings(location.href, settings, rules);
+      applySettingsToDom();
+      const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
+      if (catsChanged) Engine.invalidateSelectorCache();
+      if (isPageBlurred && (catsChanged || oldThorough !== settings.THOROUGH_BLUR)) {
+        Engine.unblurAll();
+        Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR });
+        if (settings.REVEAL_MODE === 'hover') {
+          document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
+        }
+      }
+    }
+
+    if (!changes.settings) return;
     const newSettings = changes.settings.newValue;
     if (!newSettings) return;
 
