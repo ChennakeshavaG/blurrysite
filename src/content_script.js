@@ -166,20 +166,7 @@
     return MSG.deepMerge(settings, incoming);
   }
 
-  /**
-   * Flatten nested shortcuts shape for shortcut_handler.js init().
-   * TODO: Remove after shortcut system rewrite (Refactor 2).
-   */
-  function shortcutSettings() {
-    const s = settings.SHORTCUTS || {};
-    return {
-      chordKey:      s.chordKey1 || s.TOGGLE_BLUR_ALL,
-      chordSecond:   s.chordKey2,
-      chordCode1:    s.chordCode1,
-      chordCode2:    s.chordCode2,
-      chordModifier: s.chordModifier,
-    };
-  }
+  // shortcutSettings() helper removed — SHORTCUTS shape matches handler API directly.
 
   // ─── DOM helpers ─────────────────────────────────────────────────────────────
 
@@ -286,6 +273,12 @@
   const shortcutActionMap = {
     TOGGLE_BLUR_ALL() {
       handleMessage({ type: MSG.TOGGLE_BLUR_ALL }, null, () => {});
+    },
+    TOGGLE_PICKER() {
+      handleMessage({ type: MSG.TOGGLE_PICKER }, null, () => {});
+    },
+    CLEAR_ALL() {
+      handleMessage({ type: MSG.CLEAR_ALL_BLUR }, null, () => {});
     },
     onExitPicker() {
       if (isPickerActive) {
@@ -397,7 +390,7 @@
             }
             stopDomObserver();
           } else {
-            try { Shortcuts.init(shortcutSettings(), shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ }
+            Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
             if (isPickerActive) {
               Picker.setSettings({
                 blurRadius: settings.BLUR_RADIUS,
@@ -528,7 +521,7 @@
     // 6. Initialise keyboard shortcut handler.
     // TODO: shortcutSettings() returns malformed data until Refactor 2 (shortcut rewrite).
     // Wrap in try/catch to prevent crashing init and blocking observer/reveal setup.
-    try { try { Shortcuts.init(shortcutSettings(), shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ } } catch (_e) { /* noop until Refactor 2 */ }
+    try { Shortcuts.init(settings.SHORTCUTS, shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ }
 
     // 7. Restore previously blurred elements for this hostname.
     await restoreBlurredElements();
@@ -567,7 +560,7 @@
       }
       stopDomObserver();
     } else {
-      try { Shortcuts.init(shortcutSettings(), shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ }
+      Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
       startDomObserver();
     }
   });

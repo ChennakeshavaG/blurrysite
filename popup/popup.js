@@ -215,7 +215,7 @@ async function fetchBlurredSelectors() {
 // ─── Initialisation ──────────────────────────────────────────────────────────
 
 async function init() {
-  debugger;
+
   // Set extension version from manifest
   const manifest = chrome.runtime.getManifest();
   ui.extVersion.textContent = `${manifest.version}`;
@@ -250,7 +250,7 @@ async function init() {
   renderSettingsPanel();
   renderCategoryToggles();
   renderBlurList();
-  renderChordDisplay();
+  renderShortcutDisplays();
 
   // Wire controls
   wireControls();
@@ -269,7 +269,7 @@ function wireControls() {
 
   // Blur All button
   ui.blurAllBtn.addEventListener('click', async () => {
-    debugger;
+  
     if (!currentTab) return;
     ui.blurAllBtn.disabled = true;
     await tabMessage(currentTab.id, { type: MSG.TOGGLE_BLUR_ALL });
@@ -386,11 +386,12 @@ function wireControls() {
     showToast('Blur removed');
   });
 
-  // Shortcut "customize" button — open key-capture modal for chord
+  // Shortcut "customize" buttons — open capture modal for the specified action
   document.querySelectorAll('.shortcut-customize').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.shortcut === 'chord') {
-        openShortcutModal();
+      const action = btn.dataset.shortcut;
+      if (action && settings.SHORTCUTS && settings.SHORTCUTS[action]) {
+        openShortcutModal(action);
       }
     });
   });
@@ -427,155 +428,159 @@ function getModifierName(e) {
   return null;
 }
 
-/** Pretty-print a modifier name for display */
-function modifierLabel(mod) {
-  const labels = { ctrl: 'Ctrl', alt: 'Alt', meta: 'Cmd', shift: 'Shift' };
-  return labels[mod] || mod;
+// ─── Shortcut display & capture ─────────────────────────────────────────────
+
+const CODE_LABELS = {
+  ShiftLeft: 'L-Shift', ShiftRight: 'R-Shift',
+  ControlLeft: 'L-Ctrl', ControlRight: 'R-Ctrl',
+  AltLeft: 'L-Alt', AltRight: 'R-Alt',
+  MetaLeft: 'L-Cmd', MetaRight: 'R-Cmd',
+  CapsLock: 'CapsLock', Fn: 'Fn',
+};
+
+function codeLabel(code) {
+  return CODE_LABELS[code] || code;
 }
 
-/** Update the chord keys display in the shortcuts list */
-function renderChordDisplay() {
-  const display = document.getElementById('chordKeysDisplay');
-  if (!display) return;
-  const s = settings.SHORTCUTS || {};
-  const mod = modifierLabel(s.chordModifier || 'ctrl');
-  const k1  = (s.chordKey1 || 'k').toUpperCase();
-  const k2  = (s.chordKey2 || 'v').toUpperCase();
+function renderShortcutDisplays() {
+  const shortcuts = settings.SHORTCUTS || {};
+  for (const [action, binding] of Object.entries(shortcuts)) {
+    const display = document.getElementById('shortcutDisplay-' + action);
+    if (!display || !binding) continue;
+    display.textContent = '';
 
-  display.textContent = '';
-  const kbd1 = document.createElement('kbd');
-  kbd1.textContent = mod;
-  const kbd2 = document.createElement('kbd');
-  kbd2.textContent = k1;
-  const then = document.createTextNode(' then ');
-  const kbd3 = document.createElement('kbd');
-  kbd3.textContent = k2;
-  display.append(kbd1, kbd2, then, kbd3);
+    // Primary modifier
+    const modKbd = document.createElement('kbd');
+    modKbd.textContent = codeLabel(binding.primaryModifier);
+    display.appendChild(modKbd);
+
+    // Additional keys
+    if (Array.isArray(binding.keys)) {
+      for (const k of binding.keys) {
+        const kbd = document.createElement('kbd');
+        kbd.textContent = CODE_LABELS[k.code] || (k.key || '').toUpperCase();
+        display.appendChild(kbd);
+      }
+    }
+  }
 }
 
-let modalKeyHandler = null;
+/** Set of modifier key values to ignore during capture (bare modifier press). */
+const MODIFIER_KEY_VALUES = new Set([
+  'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Fn',
+]);
+
+/** Set of modifier event.code values. */
+const MODIFIER_CODE_SET = new Set([
+  'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
+  'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'CapsLock', 'Fn',
+]);
+
+let modalKeydownHandler = null;
+let modalKeyupHandler   = null;
 let _activeModalCleanup = null;
-let pendingChord = { modifier: null, key1: null, key2: null, code1: null, code2: null };
-let modalPhase = 0; // 0 = waiting for first combo, 1 = waiting for second key
+let activeModalAction   = null;
+let capturedPrimaryMod  = null;
+let capturedKeys        = [];   // { key, code }
+let capturedKeyCodes    = new Set();
 
-function openShortcutModal() {
-  const modal      = document.getElementById('shortcutModal');
-  const step1      = document.getElementById('modalStep1');
-  const step2      = document.getElementById('modalStep2');
-  const cap1       = document.getElementById('captureDisplay');
-  const cap2       = document.getElementById('captureDisplay2');
-  const saveBtn    = document.getElementById('modalSave');
-  const cancelBtn  = document.getElementById('modalCancel');
-  const resetBtn   = document.getElementById('modalReset');
+function openShortcutModal(actionName) {
+  const modal   = document.getElementById('shortcutModal');
+  const cap     = document.getElementById('captureDisplay');
+  const saveBtn = document.getElementById('modalSave');
+  const cancelBtn = document.getElementById('modalCancel');
+  const resetBtn  = document.getElementById('modalReset');
 
-  // Reset state
-  pendingChord = { modifier: null, key1: null, key2: null, code1: null, code2: null };
-  modalPhase = 0;
+  activeModalAction = actionName;
+  capturedPrimaryMod = null;
+  capturedKeys = [];
+  capturedKeyCodes = new Set();
   saveBtn.disabled = true;
-
-  step1.classList.add('modal__step--active');
-  step1.classList.remove('modal__step--dim');
-  step2.classList.add('modal__step--dim');
-  step2.classList.remove('modal__step--active');
-  cap1.textContent = 'Press a key combo...';
-  cap1.className = 'modal__capture modal__capture--listening';
-  cap2.textContent = 'Waiting...';
-  cap2.className = 'modal__capture modal__capture--dim';
-
+  cap.textContent = 'Press a key combo...';
+  cap.className = 'modal__capture modal__capture--listening';
   modal.hidden = false;
 
-  // Key capture handler
-  if (modalKeyHandler) document.removeEventListener('keydown', modalKeyHandler, true);
+  // Remove old handlers
+  if (modalKeydownHandler) document.removeEventListener('keydown', modalKeydownHandler, true);
+  if (modalKeyupHandler) document.removeEventListener('keyup', modalKeyupHandler, true);
 
-  modalKeyHandler = (e) => {
+  function updateDisplay() {
+    const parts = [];
+    if (capturedPrimaryMod) parts.push(codeLabel(capturedPrimaryMod));
+    for (const k of capturedKeys) {
+      parts.push(CODE_LABELS[k.code] || k.key.toUpperCase());
+    }
+    cap.textContent = parts.length > 0 ? parts.join(' + ') : 'Press a key combo...';
+  }
+
+  modalKeydownHandler = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.key === 'Escape') { closeShortcutModal(); return; }
 
-    if (e.key === 'Escape') {
-      closeShortcutModal();
+    // First modifier pressed → set as primary modifier
+    if (!capturedPrimaryMod && MODIFIER_CODE_SET.has(e.code)) {
+      capturedPrimaryMod = e.code;
+      updateDisplay();
       return;
     }
 
-    // Ignore bare modifier presses
-    if (MODIFIER_KEYS.has(e.key)) return;
+    // Subsequent modifier presses → add to keys array (secondary modifiers)
+    if (MODIFIER_CODE_SET.has(e.code) && capturedPrimaryMod && !capturedKeyCodes.has(e.code)) {
+      capturedKeys.push({ key: e.key, code: e.code });
+      capturedKeyCodes.add(e.code);
+      updateDisplay();
+      return;
+    }
 
-    if (modalPhase === 0) {
-      // Phase 1: capture modifier + key
-      const mod = getModifierName(e);
-      if (!mod) {
-        cap1.textContent = 'Hold a modifier (Ctrl/Alt/Shift) + a key';
+    // Non-modifier key → add to keys, enable save
+    if (!MODIFIER_CODE_SET.has(e.code) && !capturedKeyCodes.has(e.code)) {
+      if (!capturedPrimaryMod) {
+        cap.textContent = 'Hold a modifier first, then press keys';
         return;
       }
-      pendingChord.modifier = mod;
-      pendingChord.key1 = e.key.toLowerCase();
-      pendingChord.code1 = e.code;
-      cap1.textContent = `${modifierLabel(mod)} + ${e.key.toUpperCase()}`;
-      cap1.className = 'modal__capture modal__capture--done';
-
-      // Move to phase 2
-      modalPhase = 1;
-      step1.classList.remove('modal__step--active');
-      step2.classList.remove('modal__step--dim');
-      step2.classList.add('modal__step--active');
-      cap2.textContent = 'Press a single key...';
-      cap2.className = 'modal__capture modal__capture--listening';
-    } else if (modalPhase === 1) {
-      // Phase 2: capture second key (no modifier required)
-      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
-        cap2.textContent = 'Just press a single key (no modifier)';
-        return;
-      }
-      pendingChord.key2 = e.key.toLowerCase();
-      pendingChord.code2 = e.code;
-      cap2.textContent = e.key.toUpperCase();
-      cap2.className = 'modal__capture modal__capture--done';
+      capturedKeys.push({ key: e.key, code: e.code });
+      capturedKeyCodes.add(e.code);
+      cap.className = 'modal__capture modal__capture--done';
       saveBtn.disabled = false;
-
-      // Remove listener — capture complete
-      document.removeEventListener('keydown', modalKeyHandler, true);
-      modalKeyHandler = null;
+      updateDisplay();
     }
   };
 
-  document.addEventListener('keydown', modalKeyHandler, true);
+  modalKeyupHandler = () => {
+    // No action needed — we capture on keydown, display updates live
+  };
 
-  // Save button
+  document.addEventListener('keydown', modalKeydownHandler, true);
+  document.addEventListener('keyup', modalKeyupHandler, true);
+
+  // Button handlers
   const onSave = async () => {
-    if (!pendingChord.modifier || !pendingChord.key1 || !pendingChord.key2) return;
-    settings.SHORTCUTS = {
-      chordModifier: pendingChord.modifier,
-      chordKey1:     pendingChord.key1,
-      chordKey2:     pendingChord.key2,
-      chordCode1:    pendingChord.code1,
-      chordCode2:    pendingChord.code2,
+    if (!capturedPrimaryMod || capturedKeys.length === 0) return;
+    settings.SHORTCUTS[activeModalAction] = {
+      primaryModifier: capturedPrimaryMod,
+      keys: capturedKeys.map(k => ({ key: k.key, code: k.code })),
     };
     await saveSettings(true);
-    renderChordDisplay();
+    renderShortcutDisplays();
     closeShortcutModal();
-    showToast('Chord shortcut saved');
+    showToast('Shortcut saved');
     cleanupModalListeners();
   };
 
-  // Reset button — restore defaults
   const onReset = async () => {
-    settings.SHORTCUTS = {
-      chordModifier: D.CHORD_MODIFIER,
-      chordKey1:     D.CHORD_KEY1,
-      chordKey2:     D.CHORD_KEY2,
-      chordCode1:    D.CHORD_CODE1,
-      chordCode2:    D.CHORD_CODE2,
-    };
-    await saveSettings(true);
-    renderChordDisplay();
+    const defaults = MSG.DEFAULT_SETTINGS.SHORTCUTS[activeModalAction];
+    if (defaults) {
+      settings.SHORTCUTS[activeModalAction] = JSON.parse(JSON.stringify(defaults));
+      await saveSettings(true);
+      renderShortcutDisplays();
+    }
     closeShortcutModal();
-    showToast('Chord shortcut reset to default');
+    showToast('Shortcut reset to default');
     cleanupModalListeners();
   };
 
-  const onCancel = () => {
-    closeShortcutModal();
-    cleanupModalListeners();
-  };
+  const onCancel = () => { closeShortcutModal(); cleanupModalListeners(); };
 
   function cleanupModalListeners() {
     saveBtn.removeEventListener('click', onSave);
@@ -583,9 +588,7 @@ function openShortcutModal() {
     resetBtn.removeEventListener('click', onReset);
   }
 
-  // Store cleanup ref so closeShortcutModal can call it on Escape
   _activeModalCleanup = cleanupModalListeners;
-
   saveBtn.addEventListener('click', onSave);
   cancelBtn.addEventListener('click', onCancel);
   resetBtn.addEventListener('click', onReset);
@@ -594,9 +597,13 @@ function openShortcutModal() {
 function closeShortcutModal() {
   const modal = document.getElementById('shortcutModal');
   modal.hidden = true;
-  if (modalKeyHandler) {
-    document.removeEventListener('keydown', modalKeyHandler, true);
-    modalKeyHandler = null;
+  if (modalKeydownHandler) {
+    document.removeEventListener('keydown', modalKeydownHandler, true);
+    modalKeydownHandler = null;
+  }
+  if (modalKeyupHandler) {
+    document.removeEventListener('keyup', modalKeyupHandler, true);
+    modalKeyupHandler = null;
   }
   if (_activeModalCleanup) {
     _activeModalCleanup();

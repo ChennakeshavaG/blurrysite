@@ -1,24 +1,21 @@
 /**
  * shortcut_handler.js — PrivacyBlur Keyboard Shortcut Handler
  *
- * Handles the chord shortcut sequence (e.g. Ctrl+K → V within 1 second)
- * which cannot be expressed through the Manifest Commands API.
- * The Commands API covers Alt+Shift+B/P/U; this module handles the chord.
+ * Handles user-configurable shortcuts with a primary modifier + N additional
+ * keys pressed simultaneously. Shortcuts are dynamically inferred from the
+ * settings object — no hardcoded shortcuts exist in this module.
  *
- * Chord detection logic:
- *  1. User presses [modifier]+[chordKey1]  (e.g. Ctrl+K)
- *     → record the key + timestamp, show a visual hint
- *     → preventDefault so the browser doesn't open its own Ctrl+K dialog
- *  2. If the user presses [chordKey2] (e.g. V) within 1000 ms of step 1:
- *     → fire callbacks.TOGGLE_BLUR_ALL
- *     → show a "Blur All triggered" toast for 1.5 s
- *     → reset chord state
- *  3. Any other key within 1 s, or timeout, resets chord state silently.
- *  4. Escape calls callbacks.onExitPicker only when picker is active.
+ * Each shortcut is defined as:
+ *   { primaryModifier: 'AltLeft', keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'b', code: 'KeyB' }] }
  *
- * Key matching uses event.code (physical key, layout-independent) when
- * available, falling back to event.key for backwards compatibility with
- * settings saved before code values were captured.
+ * Detection logic:
+ *  1. Track all currently held keys via keydown/keyup + a Set<code>.
+ *  2. On every keydown, check each registered shortcut:
+ *     a. Is the primaryModifier held? (via heldKeys Set + event modifier properties)
+ *     b. Are ALL keys in the shortcut's keys[] array held?
+ *     c. If both → fire the action callback, preventDefault, show toast.
+ *  3. Escape always calls onExitPicker when picker is active.
+ *  4. Window blur clears the heldKeys Set (prevents phantom held keys).
  *
  * Exposed as window.PrivacyBlurShortcuts (IIFE — no ES module syntax).
  */
@@ -30,40 +27,86 @@ const PrivacyBlurShortcuts = (() => {
   // Internal state
   // -------------------------------------------------------------------------
 
-  /** The keydown listener currently attached to document, or null */
-  let activeListener = null;
+  /** Set of event.code values currently held down. */
+  let heldKeys = new Set();
 
-  /** Timestamp (ms) of the last chord first-key press */
-  let lastChordKeyTime = 0;
+  /** The keydown/keyup/blur listeners currently attached, or null. */
+  let activeKeydownListener = null;
+  let activeKeyupListener   = null;
+  let activeBlurListener    = null;
 
-  /** Whether we are waiting for the chord's second key */
-  let awaitingChordSecond = false;
-
-  /** Timeout handle for clearing chord state after 1 second */
-  let chordTimeoutId = null;
-
-  /** Reference to the current toast element so we can remove it early */
+  /** Reference to the current toast element so we can remove it early. */
   let currentToastEl = null;
 
-  /** Whether the element picker is currently active (set by content_script) */
+  /** Whether the element picker is currently active (set by content_script). */
   let _isPickerActive = false;
 
+  /** Registered shortcuts: array of { actionName, primaryModifier, keys, parsedKeys }. */
+  let registeredShortcuts = [];
+
+  /** Registered callbacks: { actionName: fn, onExitPicker: fn }. */
+  let registeredCallbacks = {};
+
   // -------------------------------------------------------------------------
-  // Private: toast notification
+  // Action labels for toast messages
   // -------------------------------------------------------------------------
 
+  const ACTION_LABELS = {
+    TOGGLE_BLUR_ALL: 'Blur All triggered',
+    TOGGLE_PICKER:   'Picker toggled',
+    CLEAR_ALL:       'Page cleared',
+  };
+
+  // -------------------------------------------------------------------------
+  // Modifier detection helpers
+  // -------------------------------------------------------------------------
+
+  /** Modifier codes that map to event boolean properties. */
+  const MODIFIER_PROPERTY_MAP = {
+    ShiftLeft:    'shiftKey',
+    ShiftRight:   'shiftKey',
+    ControlLeft:  'ctrlKey',
+    ControlRight: 'ctrlKey',
+    AltLeft:      'altKey',
+    AltRight:     'altKey',
+    MetaLeft:     'metaKey',
+    MetaRight:    'metaKey',
+  };
+
+  /** Set of all modifier key codes (used to distinguish modifiers from regular keys). */
+  const MODIFIER_CODES = new Set([
+    'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
+    'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight',
+    'CapsLock', 'Fn',
+  ]);
+
   /**
-   * Shows a brief, non-interactive toast notification at the top-right of
-   * the viewport. Automatically disappears after `duration` milliseconds.
-   * @param {string} text     - Message to display
-   * @param {number} duration - Display duration in ms (default 1500)
+   * Checks whether the primary modifier is currently held.
+   * Uses both the event's modifier boolean (is Shift/Ctrl/Alt/Meta active?)
+   * and the heldKeys Set (is the SPECIFIC left/right key held?).
    */
-  function showToast(text, duration = 1500) {
-    // Remove any existing toast immediately
+  function isPrimaryModifierHeld(event, modifierCode) {
+    // CapsLock: use getModifierState (toggle-based)
+    if (modifierCode === 'CapsLock') {
+      return event.getModifierState && event.getModifierState('CapsLock');
+    }
+
+    // Standard modifiers: check the event boolean first (is the class active?)
+    const prop = MODIFIER_PROPERTY_MAP[modifierCode];
+    if (!prop || !event[prop]) return false;
+
+    // Then check the specific side via heldKeys
+    return heldKeys.has(modifierCode);
+  }
+
+  // -------------------------------------------------------------------------
+  // Toast notification (kept from previous implementation)
+  // -------------------------------------------------------------------------
+
+  function showToast(text, duration) {
+    if (duration === undefined) duration = 1500;
     if (currentToastEl && currentToastEl.parentNode) {
-      if (currentToastEl._removeTimer) {
-        clearTimeout(currentToastEl._removeTimer);
-      }
+      if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
       currentToastEl.parentNode.removeChild(currentToastEl);
       currentToastEl = null;
     }
@@ -81,102 +124,15 @@ const PrivacyBlurShortcuts = (() => {
     document.body.appendChild(toast);
     currentToastEl = toast;
 
-    // Fade out and remove
     const removeTimer = setTimeout(() => {
       toast.classList.add("pb-toast--exiting");
-
-      // Remove from DOM after the CSS animation completes
       setTimeout(() => {
-        if (toast.parentNode) {
-          toast.parentNode.removeChild(toast);
-        }
-        if (currentToastEl === toast) {
-          currentToastEl = null;
-        }
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+        if (currentToastEl === toast) currentToastEl = null;
       }, 250);
     }, duration);
 
-    // Store on the element so we can cancel it if a new toast replaces this one
     toast._removeTimer = removeTimer;
-  }
-
-  // -------------------------------------------------------------------------
-  // Private: chord state management
-  // -------------------------------------------------------------------------
-
-  /**
-   * Resets all chord detection state.
-   * Called when a chord times out or an unexpected key is pressed.
-   */
-  function resetChordState() {
-    awaitingChordSecond = false;
-    lastChordKeyTime    = 0;
-
-    if (chordTimeoutId !== null) {
-      clearTimeout(chordTimeoutId);
-      chordTimeoutId = null;
-    }
-  }
-
-  /**
-   * Normalises a key string to lowercase for case-insensitive comparison.
-   * @param {string} key
-   * @returns {string}
-   */
-  function normaliseKey(key) {
-    return (key || "").toLowerCase();
-  }
-
-  // -------------------------------------------------------------------------
-  // Private: KeyboardEvent helpers (W3C UI Events spec-compliant)
-  // -------------------------------------------------------------------------
-
-  /**
-   * Checks whether a keyboard event matches the configured modifier key.
-   * Uses the browser's normalised modifier boolean properties:
-   *   ctrlKey  — Control on all platforms
-   *   altKey   — Alt (Win/Linux) / Option (Mac)
-   *   shiftKey — Shift on all platforms
-   *   metaKey  — Meta/Win (Win/Linux) / Command (Mac)
-   *
-   * Each check is exclusive — the named modifier must be active and the
-   * other non-Shift modifiers must NOT be active (Shift is allowed to
-   * co-exist since it only changes key casing, not intent).
-   *
-   * @param {KeyboardEvent} event
-   * @param {string}        modifier - "ctrl", "alt", "shift", or "meta"
-   * @returns {boolean}
-   */
-  function modifierActive(event, modifier) {
-    switch (modifier) {
-      case "ctrl":  return event.ctrlKey  && !event.altKey && !event.metaKey;
-      case "alt":   return event.altKey   && !event.ctrlKey && !event.metaKey;
-      case "shift": return event.shiftKey && !event.ctrlKey && !event.metaKey;
-      case "meta":  return event.metaKey  && !event.ctrlKey && !event.altKey;
-      default:      return false;
-    }
-  }
-
-  /**
-   * Checks whether a keyboard event matches a configured chord key.
-   *
-   * Prefers event.code (physical key position, layout-independent) when a
-   * code value is stored. Falls back to event.key (logical key) for
-   * backwards compatibility with settings saved before code capture.
-   *
-   * @param {KeyboardEvent} event
-   * @param {string}        keyValue  - Stored event.key value (lowercase), may be empty
-   * @param {string|null}   codeValue - Stored event.code value, or null
-   * @returns {boolean}
-   */
-  function matchesKey(event, keyValue, codeValue) {
-    if (codeValue) {
-      return event.code === codeValue;
-    }
-    if (keyValue) {
-      return normaliseKey(event.key) === keyValue;
-    }
-    return false;
   }
 
   // -------------------------------------------------------------------------
@@ -184,144 +140,127 @@ const PrivacyBlurShortcuts = (() => {
   // -------------------------------------------------------------------------
 
   /**
-   * Attaches keyboard listeners and activates chord detection.
-   * Safe to call multiple times — will detach the previous listener first.
+   * Attaches keyboard listeners and registers shortcuts.
+   * Safe to call multiple times — detaches previous listeners first.
    *
-   * This function does NOT apply defaults — callers must pass complete
-   * settings. Defaults are centralised in constants.js and applied at
-   * the storage/settings layer.
+   * @param {object} shortcuts  - { ACTION_NAME: { primaryModifier, keys: [{ key, code }] } }
+   *   Dynamically inferred from settings. No hardcoded actions.
    *
-   * @param {object} settings  - Shortcut settings (flat shape from content_script)
-   *   @param {string} [settings.chordKey]       - First key display value (e.g. "k")
-   *   @param {string} [settings.chordSecond]    - Second key display value (e.g. "v")
-   *   @param {string} [settings.chordCode1]     - First key event.code (e.g. "KeyK")
-   *   @param {string} [settings.chordCode2]     - Second key event.code (e.g. "KeyV")
-   *   @param {string} [settings.chordModifier]  - Modifier name ("ctrl"/"alt"/"shift"/"meta")
-   *
-   * @param {object} callbacks - Functions fired on shortcut events
-   *   @param {Function} [callbacks.TOGGLE_BLUR_ALL] - Chord completed → blur all
-   *   @param {Function} [callbacks.onExitPicker]    - Escape pressed when picker active
-   *   @param {Function} [callbacks.onChordStart]    - First key detected (optional)
+   * @param {object} callbacks  - { ACTION_NAME: fn, onExitPicker: fn }
+   *   Each key matches an action name from shortcuts. onExitPicker fires on Escape.
    */
-  function init(settings, callbacks) {
-    // Remove any previously installed listener first
+  function init(shortcuts, callbacks) {
     destroy();
 
-    const cfg = settings || {};
-    const cbs = callbacks || {};
-    const chordKey1  = normaliseKey(cfg.chordKey    || "");
-    const chordKey2  = normaliseKey(cfg.chordSecond || "");
-    const chordCode1 = cfg.chordCode1 || null;
-    const chordCode2 = cfg.chordCode2 || null;
-    const modifier   = normaliseKey(cfg.chordModifier || "");
+    registeredCallbacks = callbacks || {};
 
-    /**
-     * Main keydown handler — attached to document at the capture phase so
-     * it fires before any page scripts can intercept the event.
-     */
+    // Parse shortcuts into a flat lookup array for fast iteration on keydown.
+    registeredShortcuts = [];
+    if (shortcuts && typeof shortcuts === 'object') {
+      for (const [actionName, binding] of Object.entries(shortcuts)) {
+        if (!binding || !binding.primaryModifier || !Array.isArray(binding.keys)) continue;
+        registeredShortcuts.push({
+          actionName,
+          primaryModifier: binding.primaryModifier,
+          // Pre-extract codes for O(1) Set lookups during matching.
+          keyCodes: binding.keys.map(k => k.code).filter(Boolean),
+        });
+      }
+    }
+
+    // ── Keydown handler ─────────────────────────────────────────────────────
     function onKeyDown(event) {
-      // ---- Early exits for non-actionable events (W3C UI Events spec) ----
-
-      // Repeated keydown from holding a key — ignore to prevent spamming.
+      // Early exits (W3C UI Events spec)
       if (event.repeat) return;
-
-      // IME composition in progress (CJK input, accent sequences, etc.).
       if (event.isComposing) return;
+      if (event.key === 'Dead') return;
+      if (event.getModifierState && event.getModifierState('AltGraph')) return;
 
-      // Dead key (accent/diacritic composition on European layouts).
-      if (event.key === "Dead") return;
+      // Track this key as held
+      if (event.code) heldKeys.add(event.code);
 
-      // AltGr on European Windows keyboards sends ctrlKey + altKey
-      // simultaneously. Detect via getModifierState to avoid false matches.
-      if (event.getModifierState && event.getModifierState("AltGraph")) return;
-
-      const key = normaliseKey(event.key);
-
-      // ---- Escape: exit picker mode only when picker is active ----
-      if (key === "escape") {
-        resetChordState();
-        if (_isPickerActive && typeof cbs.onExitPicker === "function") {
+      // Escape: exit picker (always, regardless of shortcut config)
+      if (event.key === 'Escape') {
+        if (_isPickerActive && typeof registeredCallbacks.onExitPicker === 'function') {
           _isPickerActive = false;
-          cbs.onExitPicker();
+          registeredCallbacks.onExitPicker();
         }
         return;
       }
 
-      // ---- Chord first key: modifier + chordKey1 ----
-      if (!awaitingChordSecond && modifierActive(event, modifier) && matchesKey(event, chordKey1, chordCode1)) {
-        // Prevent browser from acting on Ctrl+K (address bar, link popup, etc.)
+      // Check each registered shortcut
+      for (let i = 0; i < registeredShortcuts.length; i++) {
+        const sc = registeredShortcuts[i];
+
+        // Is the primary modifier held?
+        if (!isPrimaryModifierHeld(event, sc.primaryModifier)) continue;
+
+        // Are ALL required keys held?
+        let allHeld = true;
+        for (let j = 0; j < sc.keyCodes.length; j++) {
+          if (!heldKeys.has(sc.keyCodes[j])) {
+            allHeld = false;
+            break;
+          }
+        }
+        if (!allHeld) continue;
+
+        // Match found — fire action
         event.preventDefault();
 
-        awaitingChordSecond = true;
-        lastChordKeyTime    = Date.now();
-
-        // Notify optional listener so the content script can show a hint
-        if (typeof cbs.onChordStart === "function") {
-          cbs.onChordStart();
+        if (typeof registeredCallbacks[sc.actionName] === 'function') {
+          registeredCallbacks[sc.actionName]();
         }
 
-        // Auto-reset after 1 second if the user does not press chordKey2
-        chordTimeoutId = setTimeout(() => {
-          resetChordState();
-        }, 1000);
-
-        return;
-      }
-
-      // ---- Chord second key: chordKey2 within 1 second (no modifier held) ----
-      if (awaitingChordSecond) {
-        const elapsed = Date.now() - lastChordKeyTime;
-
-        if (
-          elapsed <= 1000 &&
-          matchesKey(event, chordKey2, chordCode2) &&
-          !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey
-        ) {
-          // Intentionally do NOT call event.preventDefault() here so that
-          // legitimate typing (e.g., the user types "v" into a text field)
-          // is not blocked. The chord only fires when we are already in
-          // "awaiting second key" state, which itself required Ctrl+K.
-
-          resetChordState();
-
-          if (typeof cbs.TOGGLE_BLUR_ALL === "function") {
-            cbs.TOGGLE_BLUR_ALL();
-          }
-
-          showToast("PrivacyBlur: Blur All triggered", 1500);
-          return;
-        }
-
-        // Wrong key or timeout expired — reset and let the key propagate normally
-        resetChordState();
+        const label = ACTION_LABELS[sc.actionName] || sc.actionName;
+        showToast('PrivacyBlur: ' + label, 1500);
         return;
       }
     }
 
-    // Attach at capture phase (true) so we intercept before page scripts
-    document.addEventListener("keydown", onKeyDown, true);
+    // ── Keyup handler ─────────────────────────────────────────────────────
+    function onKeyUp(event) {
+      if (event.code) heldKeys.delete(event.code);
+    }
 
-    // Keep a reference for cleanup
-    activeListener = onKeyDown;
+    // ── Window blur handler ───────────────────────────────────────────────
+    function onWindowBlur() {
+      heldKeys.clear();
+    }
+
+    // Attach at capture phase so we intercept before page scripts
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', onWindowBlur);
+
+    activeKeydownListener = onKeyDown;
+    activeKeyupListener   = onKeyUp;
+    activeBlurListener    = onWindowBlur;
   }
 
   /**
-   * Removes the keydown listener and resets all chord state.
-   * Call this when the content script is torn down or the extension is disabled.
+   * Removes all listeners and resets state.
    */
   function destroy() {
-    if (activeListener) {
-      document.removeEventListener("keydown", activeListener, true);
-      activeListener = null;
+    if (activeKeydownListener) {
+      document.removeEventListener('keydown', activeKeydownListener, true);
+      activeKeydownListener = null;
+    }
+    if (activeKeyupListener) {
+      document.removeEventListener('keyup', activeKeyupListener, true);
+      activeKeyupListener = null;
+    }
+    if (activeBlurListener) {
+      window.removeEventListener('blur', activeBlurListener);
+      activeBlurListener = null;
     }
 
-    resetChordState();
+    heldKeys.clear();
+    registeredShortcuts = [];
+    registeredCallbacks = {};
 
-    // Remove any visible toast
     if (currentToastEl && currentToastEl.parentNode) {
-      if (currentToastEl._removeTimer) {
-        clearTimeout(currentToastEl._removeTimer);
-      }
+      if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
       currentToastEl.parentNode.removeChild(currentToastEl);
       currentToastEl = null;
     }
@@ -333,12 +272,9 @@ const PrivacyBlurShortcuts = (() => {
   return {
     init,
     destroy,
-    // Exposed for tests / popup UI to trigger a toast manually
     showToast,
-    // Exposed for content_script to notify shortcut handler that picker is active
-    _setPickerActive(v) { _isPickerActive = !!v; }
+    _setPickerActive(v) { _isPickerActive = !!v; },
   };
 })();
 
-// Attach to window so content_script.js can access it
 window.PrivacyBlurShortcuts = PrivacyBlurShortcuts;
