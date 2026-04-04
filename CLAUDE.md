@@ -25,7 +25,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 |---|---|---|
 | `src/constants.js` | `globalThis.PrivacyBlur` | Message types (`STORAGE.*`, `COMMAND.*`, `POPUP.*`), `DEFAULTS`, `isValid()`, `categoryOf()` |
 | `src/selector_utils.js` | `window.PrivacyBlurSelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
-| `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings` |
+| `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules` |
 | `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `CATEGORY_SELECTORS` |
 | `src/shortcut_handler.js` | `window.PrivacyBlurShortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
 | `src/picker.js` | `window.PrivacyBlurPicker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
@@ -50,6 +50,8 @@ Any mismatch between sender message type and background.js handler silently drop
 | Clear all selectors everywhere | `CLEAR_ALL` |
 | Fetch settings (merged with defaults) | `GET_SETTINGS` |
 | Persist settings (partial merge) | `SAVE_SETTINGS` |
+| Fetch URL rules array | `GET_RULES` |
+| Persist URL rules array | `SAVE_RULES` |
 
 ### background.js → content_script.js (command relay + restore)
 
@@ -68,32 +70,37 @@ Any mismatch between sender message type and background.js handler silently drop
 |---|---|
 | Live settings update | `UPDATE_SETTINGS` |
 | Query page status | `GET_STATUS` |
+| Unblur a specific selector | `UNBLUR_SELECTOR` |
 
 ---
 
-## Critical: Settings Shape Mismatch
+## Critical: Settings Shape
 
-Two different shapes exist for shortcut settings. **Do not confuse them.**
+Settings use UPPER_SNAKE_CASE keys everywhere. There is no two-shape duality — the same shape is used in storage, background, content script, and popup.
 
-**In `chrome.storage.local` / background / `PrivacyBlurStorage.getSettings()`** — nested:
+**`settings.SHORTCUTS`** — per-command shortcut definitions:
 ```js
-settings.shortcuts = {
-  chordKey1: "k", chordKey2: "v",           // display keys (event.key)
-  chordCode1: null, chordCode2: null,        // physical keys (event.code), null = legacy
-  chordModifier: "ctrl"                      // "ctrl" | "alt" | "shift" | "meta"
+settings.SHORTCUTS = {
+  TOGGLE_BLUR_ALL: {
+    primaryModifier: 'AltLeft',
+    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'b', code: 'KeyB' }]
+  },
+  TOGGLE_PICKER: {
+    primaryModifier: 'AltLeft',
+    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'p', code: 'KeyP' }]
+  },
+  CLEAR_ALL_BLUR: {
+    primaryModifier: 'AltLeft',
+    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'u', code: 'KeyU' }]
+  }
 }
 ```
 
-**In `PrivacyBlurShortcuts.init(settings, callbacks)`** — flat:
-```js
-{
-  chordKey: "k", chordSecond: "v",           // display keys
-  chordCode1: null, chordCode2: null,        // physical keys (event.code)
-  chordModifier: "ctrl"                      // modifier name
-}
-```
+`content_script.js` passes `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
 
-`content_script.js` flattens via `shortcutSettings()` helper before calling `Shortcuts.init()`. If you add shortcut config keys, update both shapes and `shortcutSettings()`.
+**`REVEAL_MODE`** — controls how blurred elements can be temporarily revealed: `'hover'` | `'click'` | `'none'`.
+
+**`THOROUGH_BLUR`** — boolean; when true, applies deeper blur processing for more thorough coverage.
 
 **All default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS`.** Do not hardcode defaults anywhere else.
 
@@ -103,16 +110,18 @@ Unlike shortcuts, `blurCategories` has the **same shape everywhere** -- no flatt
 
 **In `chrome.storage.local` / background / `PrivacyBlurStorage.getSettings()` / content_script.js / popup.js:**
 ```js
-settings.blurCategories = {
-  text: true,        // headings, paragraphs, spans, etc.
-  media: true,       // img, video, audio, canvas, svg, picture, figure
-  form: false,       // input, textarea, select, button, label, fieldset
-  table: true,       // table, thead, tbody, tr, td, th
-  structure: true    // div, section, article, nav, aside, header, footer, main, li
+settings.BLUR_CATEGORIES = {
+  TEXT: true,        // headings, paragraphs, spans, etc.
+  MEDIA: true,       // img, video, audio, canvas, svg, picture, figure
+  FORM: false,       // input, textarea, select, button, label, fieldset
+  TABLE: true,       // table, thead, tbody, tr, td, th
+  STRUCTURE: true    // div, section, article, nav, aside, header, footer, main, li
 }
 ```
 
 Default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS.BLUR_CATEGORIES`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
+
+Note: the section heading says "blurCategories" but the key is now `BLUR_CATEGORIES` (UPPER_SNAKE_CASE), consistent with the rest of the settings shape.
 
 ---
 
@@ -132,7 +141,7 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 
 ### Blur engine element handling — dispatch order
 1. `<video>` → canvas overlay + RAF loop (`pb-canvas-overlay` class)
-2. `<img>` → direct `style.filter = blur()` + `pb-blurred` class
+2. `<img>` → CSS class only (`pb-blurred`), no inline filter
 3. Background-image elements → `pb-blurred` class only (CSS handles it)
 4. Everything else → wrap text nodes if needed, then `pb-blurred` class
 
@@ -145,6 +154,9 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 | Hover highlight | `pb-hover-highlight` |
 | Picker active (on `<html>`) | `pb-picker-active` |
 | Toolbar | `pb-toolbar` (id: `pb-picker-toolbar`) |
+| Click-to-reveal active state | `pb-revealed` |
+| Ancestor chain unblur (click and hover) | `pb-ancestor-reveal` |
+| Hover-to-reveal target | `pb-reveal-on-hover` |
 
 ---
 
@@ -165,7 +177,7 @@ npm test                   # + coverage (~91% line coverage on src/)
 | `requestAnimationFrame` mock must NOT call the callback | Video blur uses `requestAnimationFrame` in an infinite loop; auto-executing causes OOM |
 | `HTMLCanvasElement.prototype.getContext` must be mocked | jsdom returns `null` from `getContext()`; `ctx.clearRect()` then throws |
 | `KeyboardEvent.prototype.getModifierState` must be mocked | jsdom may not implement it; shortcut handler uses it for AltGr detection |
-| All 5 test files use the same load pattern | `fs.existsSync(MODULE_PATH) ? require(MODULE_PATH) : eval(buildStubSource())` |
+| All 6 test files use the same load pattern | `fs.existsSync(MODULE_PATH) ? require(MODULE_PATH) : eval(buildStubSource())` |
 
 ### Adding a new unit test file
 
@@ -227,3 +239,4 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | SPA selector staleness | `data-pb-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/CROSS_BROWSER.md §6.3` |
 | Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/CROSS_BROWSER.md §6.6` |
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |
+| `<select>` dropdown options visible when opened | CSS filter only blurs closed state | Known limitation |

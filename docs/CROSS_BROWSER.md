@@ -118,13 +118,13 @@ Both browsers support the `commands` API. However, default shortcut assignments 
 | `Alt+Shift+*` | ✓ All OS | ✓ All OS |
 | Reassignment | `chrome://extensions/shortcuts` | `about:addons` → extension cog → Manage Extension Shortcuts |
 
-### Chord shortcut (Ctrl+K → V)
+### Multi-key simultaneous shortcuts
 
-Implemented entirely in `shortcut_handler.js` via `keydown` event listeners — no browser API used. Works identically in both browsers.
+Implemented entirely in `shortcut_handler.js` via `keydown`/`keyup` event listeners — no browser API used. Works identically in both browsers. The handler tracks held keys via a `Set<code>` and fires when all required keys for a shortcut are held simultaneously.
 
-**Known conflict — Chrome:** `Ctrl+K` opens the address bar in Chrome on Linux. The shortcut handler calls `event.preventDefault()` on the first chord key, which should suppress the browser action on most platforms. However, on Linux with some desktop environments, `Ctrl+K` may not be preventable.
+**Default shortcuts:** Alt+Shift+B (toggle blur all), Alt+Shift+P (toggle picker), Alt+Shift+U (clear all blur). These match the `commands` entries in `manifest.json`.
 
-**Workaround:** Users can change `chordModifier` to `"alt"` or `"meta"` in the popup settings.
+**Ctrl+K conflicts are no longer relevant** since the default shortcuts use Alt+Shift, which does not conflict with browser address bar shortcuts on any platform.
 
 ---
 
@@ -236,7 +236,7 @@ When the user presses `Escape` inside `picker.js`, the picker calls `deactivate(
 | Canvas 2D `ctx.filter` | ✓ | ✓ | ✓ | ✓ |
 | `requestAnimationFrame` | ✓ | ✓ | ✓ | ✓ |
 | CSS custom properties | ✓ | ✓ | ✓ | ✓ |
-| Chord shortcut (JS) | ✓ | ✓ | ✓ | N/A (no extension support) |
+| Multi-key shortcut (JS) | ✓ | ✓ | ✓ | N/A (no extension support) |
 | Context menus API | ✓ | ✓ | ✓ | ✗ |
 | `color-mix()` CSS | Chrome 111+ | Edge 111+ | Firefox 113+ | Safari 16.2+ |
 | `all_frames: true` (future) | ✓ | ✓ | ✓ | N/A |

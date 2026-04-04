@@ -57,10 +57,10 @@ A module may only depend on modules loaded before it.
 - `applyBlur` is idempotent — always guard with `if (isBlurred(el)) return`.
 - Video elements use `videoOverlayMap` (WeakMap) to track canvas + RAF handle. Never store canvas on `el._pbCanvas` — that was a previous iteration.
 - Canvas class must be `"pb-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
-- IMG blur: apply `style.filter` directly on the `<img>`, not on a wrapper.
+- IMG blur: CSS class only (`pb-blurred`). No inline `style.filter` — the CSS rule handles it via `var(--pb-radius)` from `:root`.
 
 #### Category-based blurring
-- `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[] }`. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
+- `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[] }`. Keys are UPPER_SNAKE_CASE: TEXT, MEDIA, FORM, TABLE, STRUCTURE. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
 - Selector cache (`selectorCache`) stores pre-joined selector strings keyed by a 5-bit category toggle string. Invalidated by `invalidateSelectorCache()`.
 - `blurAllContent(radius, options)` accepts optional `options.categories`. When omitted, defaults to all categories ON (backward compatible).
 - `matchesActiveCategories(element, categories)` uses the cached `tagSet` for O(1) tag lookup.

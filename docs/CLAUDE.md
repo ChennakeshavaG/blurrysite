@@ -15,8 +15,8 @@ These were hard-won during initial development. Do not let them drift:
 ### Message type registry
 The single source of truth for message type strings is the protocol table in `HLD.md §6`. Any new message type must be added to both the sending module AND the background.js handler AND this table — all three or none.
 
-### Settings shape duality
-Two shapes coexist intentionally. This is documented in `HLD.md §5` and `LLD.md §4`. Do not "unify" them without updating `content_script.js#shortcutSettings()` and the shortcut_handler tests.
+### Settings shape
+Settings use a single UPPER_SNAKE_CASE shape everywhere. `content_script.js` passes `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
 
 ### Load order
 The module load order diagram in `HLD.md §2` must match `manifest.json content_scripts.js[]` exactly.

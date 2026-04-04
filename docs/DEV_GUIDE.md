@@ -328,7 +328,7 @@ chrome.tabs.query({active: true, currentWindow: true}, ([tab]) => {
 1. Check that dynamically added elements have `pb-reveal-on-hover` class
 2. Run: `document.querySelectorAll('.pb-blurred:not(.pb-reveal-on-hover)').length`
 3. If > 0: elements were blurred by the MutationObserver before RAF chunk added the class
-4. Check that `settings.revealOnHover` is `true`
+4. Check that `settings.REVEAL_MODE` is set correctly
 
 ### "Page freezes during SPA navigation"
 1. The batched MutationObserver should prevent this
@@ -365,7 +365,7 @@ privacyblur/
 │   ├── selector_utils.js   ← CSS selector generation for persistence
 │   ├── storage_manager.js  ← Async API wrapping chrome.runtime.sendMessage
 │   ├── blur_engine.js      ← DOM manipulation: category-based blur (CSS + canvas)
-│   ├── shortcut_handler.js ← Chord keyboard shortcut detection (Ctrl+K → V)
+│   ├── shortcut_handler.js ← Multi-key simultaneous shortcut detection
 │   ├── picker.js           ← Interactive hover-and-click element picker
 │   └── content_script.js   ← Orchestrator: binds modules, handles messages, batched observer
 ├── popup/

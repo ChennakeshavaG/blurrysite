@@ -45,7 +45,7 @@ PrivacyBlur is a Manifest V3 browser extension targeting Chrome, Edge, and Firef
 │  │  │  ┌──────────────┐  ┌───────────────┐                │  │  │
 │  │  │  │ Storage      │  │ Shortcuts     │                │  │  │
 │  │  │  │ Manager      │  │ Handler       │                │  │  │
-│  │  │  │ (→ bg.js)    │  │ chord / Esc   │                │  │  │
+│  │  │  │ (→ bg.js)    │  │ held-key set  │                │  │  │
 │  │  │  └──────────────┘  └───────────────┘                │  │  │
 │  │  │                                                      │  │  │
 │  │  │  ┌───────────────────────────────────────────────┐  │  │  │
@@ -96,10 +96,10 @@ Applies and removes blur from DOM elements. Handles three element categories dif
 | Category | Method |
 |---|---|
 | `<video>` | `<canvas>` overlay + `requestAnimationFrame` loop |
-| `<img>` | `style.filter = blur(Xpx)` directly on the element |
-| Everything else | `.pb-blurred` CSS class + `--pb-radius` custom property |
+| `<img>` | `.pb-blurred` CSS class (CSS rule applies `blur(var(--pb-radius))`) |
+| Everything else | `.pb-blurred` CSS class |
 
-Exposes `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`.
+Exposes `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `CATEGORY_SELECTORS`.
 
 **Category-based blurring:** `blurAllContent` accepts an `options.categories` object to control which element groups are blurred. Five categories are supported: **text**, **media**, **form**, **table**, and **structure**. Selector strings for each category are cached internally and rebuilt only when the active categories change.
 
@@ -119,15 +119,11 @@ A thin Promise-based wrapper around `chrome.runtime.sendMessage`. All methods de
 - Prevents content scripts from needing `storage` permission directly
 - Makes the storage layer mockable in unit tests (mock `chrome.runtime.sendMessage`)
 
-### 3.6 shortcut_handler.js — Keyboard Chord
+### 3.6 shortcut_handler.js — Multi-Key Shortcuts
 
-Detects a two-key chord sequence that the `Commands` API cannot express:
+Tracks held keys via `Set<code>`. Fires action when primary modifier + all required keys are held simultaneously. Three configurable actions: `TOGGLE_BLUR_ALL`, `TOGGLE_PICKER`, `CLEAR_ALL`.
 
-1. User presses `[modifier]+[key1]` (default: `Ctrl+K`) → `preventDefault`, enter "awaiting second key" state
-2. Within 1000 ms, user presses `[key2]` (default: `V`) with no modifier → fire `TOGGLE_BLUR_ALL`
-3. Any other key or timeout → reset state silently
-
-Also handles `Escape` to exit picker mode (only fires when `_isPickerActive` is set).
+Also handles `Escape` to exit picker mode (only fires when `_isPickerActive` is set). Window blur clears the held-key set to prevent phantom keys.
 
 ### 3.7 picker.js — Element Picker UI
 
@@ -145,7 +141,9 @@ HTML/CSS/JS popup opened via the browser action icon. Communicates exclusively v
 
 - Toggle the extension on/off
 - View and remove individual blurred selectors for the current page
-- Adjust settings (blur radius, transitions, reveal-on-hover, chord keys)
+- Adjust settings (blur radius, transitions, reveal mode, shortcut customization)
+- Toggle blur categories, thorough blur mode
+- Manage URL rules (per-site settings overrides)
 - Clear all saved blur data
 
 ---
@@ -180,19 +178,25 @@ chrome.tabs.onUpdated (status: "complete")
                   → PrivacyBlurEngine.applyBlur(el, radius)
 ```
 
-### 4.3 Chord shortcut
+### 4.3 Multi-key shortcut
 
 ```
-User presses Ctrl+K
+User holds Alt (left)
   → shortcut_handler.js onKeyDown (capture phase)
-    → records chord state + starts 1s timeout
+    → adds "AltLeft" to heldKeys Set
 
-User presses V (within 1s, no modifier)
-  → shortcut_handler.js onKeyDown
-    → fires shortcutActionMap.TOGGLE_BLUR_ALL()
+User holds Shift (left) while Alt still held
+  → adds "ShiftLeft" to heldKeys Set
+
+User presses B while Alt+Shift still held
+  → adds "KeyB" to heldKeys Set
+  → checks each registered shortcut:
+    → TOGGLE_BLUR_ALL: primaryModifier=AltLeft + keys=[ShiftLeft, KeyB]
+    → all held? YES → preventDefault, fire callback
         → content_script.js handleMessage({ type: "TOGGLE_BLUR_ALL" })
-            → PrivacyBlurEngine.blurAllContent(radius)
+            → PrivacyBlurEngine.blurAllContent(radius, options)
                or PrivacyBlurEngine.unblurAll()
+        → showToast("PrivacyBlur: Blur All triggered")
 ```
 
 ### 4.4 Settings change from popup
@@ -203,11 +207,11 @@ User changes blur radius slider
       → content_script.js handleMessage("UPDATE_SETTINGS")
           → updates local settings object
           → document.documentElement.style.setProperty("--pb-radius", ...)
-          → PrivacyBlurShortcuts.init(newSettings, ...)
+          → PrivacyBlurShortcuts.init(settings.SHORTCUTS, ...)
           → PrivacyBlurPicker.setSettings(newSettings)
   → popup.js also sends SAVE_SETTINGS to background
       → background.js SAVE_SETTINGS handler
-          → chrome.storage.local.set({ settings: merged })
+          → chrome.storage.local.set({ settings: fullObject })
 ```
 
 ---
@@ -221,17 +225,22 @@ User changes blur radius slider
     "news.ycombinator.com": [".athing:nth-child(1) > .title"]
   },
   "settings": {
-    "blurRadius": 8,
-    "blurTransition": true,
-    "pickerHighlightColor": "#f59e0b",
-    "enabled": true,
-    "shortcuts": {
-      "chordKey1": "k",
-      "chordKey2": "v",
-      "chordModifier": "ctrl"
+    "BLUR_RADIUS": 8,
+    "TRANSITION_DURATION": 200,
+    "HIGHLIGHT_COLOR": "#f59e0b",
+    "REVEAL_MODE": "hover",
+    "ENABLED": true,
+    "THOROUGH_BLUR": false,
+    "SHORTCUTS": {
+      "TOGGLE_BLUR_ALL": { "primaryModifier": "AltLeft", "keys": [{ "key": "Shift", "code": "ShiftLeft" }, { "key": "b", "code": "KeyB" }] },
+      "TOGGLE_PICKER":   { "primaryModifier": "AltLeft", "keys": [{ "key": "Shift", "code": "ShiftLeft" }, { "key": "p", "code": "KeyP" }] },
+      "CLEAR_ALL":       { "primaryModifier": "AltLeft", "keys": [{ "key": "Shift", "code": "ShiftLeft" }, { "key": "u", "code": "KeyU" }] }
     },
-    "blurCategories": { "text": true, "media": true, "form": false, "table": true, "structure": true }
-  }
+    "BLUR_CATEGORIES": { "TEXT": true, "MEDIA": true, "FORM": false, "TABLE": true, "STRUCTURE": true }
+  },
+  "rules": [
+    { "id": "abc123", "name": "Social media", "pattern": "*://twitter.com/*", "patternType": "wildcard", "settings": { "BLUR_RADIUS": 12, "THOROUGH_BLUR": true } }
+  ]
 }
 ```
 
@@ -253,6 +262,7 @@ All inter-component communication uses typed message objects.
 | `UPDATE_SETTINGS` | `{ settings }` | Apply new settings live |
 | `CONTEXT_BLUR` | `{ elementSelector }` | Blur element by selector (context menu) |
 | `CONTEXT_UNBLUR` | `{ elementSelector }` | Unblur element by selector (context menu) |
+| `UNBLUR_SELECTOR` | `{ selector }` | Unblur a specific selector (popup remove button) |
 
 ### storage_manager → background
 
@@ -264,7 +274,9 @@ All inter-component communication uses typed message objects.
 | `CLEAR_HOST` | `{ hostname }` | Clear all selectors for host |
 | `CLEAR_ALL` | — | Clear all selectors across all hosts |
 | `GET_SETTINGS` | — | Fetch settings merged with defaults |
-| `SAVE_SETTINGS` | `{ settings }` | Persist partial settings update |
+| `SAVE_SETTINGS` | `{ settings }` | Persist full settings object |
+| `GET_RULES` | — | Fetch URL rules array |
+| `SAVE_RULES` | `{ rules }` | Persist full URL rules array |
 
 ---
 

@@ -6,6 +6,7 @@ Each source module is an IIFE that assigns exactly one global on `window`. Modul
 
 **Load order:**
 ```
+constants.js       → globalThis.PrivacyBlur (message types + DEFAULTS)
 selector_utils.js  → window.PrivacyBlurSelectorUtils
 storage_manager.js → window.PrivacyBlurStorage
 blur_engine.js     → window.PrivacyBlurEngine
@@ -23,7 +24,7 @@ content_script.js  → (orchestrator, no global)
 | Variable | Type | Purpose |
 |---|---|---|
 | `videoOverlayMap` | `WeakMap<Element, {canvas, animFrameId}>` | Tracks canvas overlays and RAF handles for video elements |
-| `CATEGORY_SELECTORS` | `Record<string, string>` | Maps each category name to its CSS selector string (constant) |
+| `CATEGORY_SELECTORS` | `Record<string, { alwaysBlur: string[], textCheck: string[] }>` | Maps each category to unconditional and text-check tag arrays (frozen constant) |
 | `selectorCache` | `{ key: string, combined: string } \| null` | Cached combined selector string; invalidated when active categories change |
 
 ### Public API
@@ -60,22 +61,17 @@ applyBlur(el, radius = 8)
   
   if tag === "video":
     el.classList.add(BLURRED_CLASS)
-    el.style.setProperty("--pb-radius", radius + "px")
     startVideoBlurCanvas(el, radius)
     
   elif tag === "img":
     el.classList.add(BLURRED_CLASS)
-    el.style.setProperty("--pb-radius", radius + "px")
-    el.style.filter = "blur(" + radius + "px)"
     
   elif backgroundImage !== "none":
     el.classList.add(BLURRED_CLASS)
-    el.style.setProperty("--pb-radius", radius + "px")
     
   else:
-    wrapTextNodes(el)  // wrap bare text nodes in <span>
+    wrapTextNodes(el)  // wrap bare text nodes in <span class="pb-text-node-wrapper">
     el.classList.add(BLURRED_CLASS)
-    el.style.setProperty("--pb-radius", radius + "px")
 ```
 
 ### Video canvas overlay
@@ -106,13 +102,27 @@ startVideoBlurCanvas(videoElement, radius)
   videoOverlayMap.set(videoElement, { canvas, animFrameId })
 ```
 
-### blurAllContent — target selectors
+### blurAllContent — category-based two-pass
 
-Queries and blurs all of:
 ```
-img, video, canvas, h1, h2, h3, h4, h5, h6, p, span, [class*="text"]
+blurAllContent(radius = 8, options = {})
+  categories = options.categories || all-categories-ON
+  thoroughBlur = options.thoroughBlur || false
+
+  // Build/cache combined selector from active CATEGORY_SELECTORS
+  // Selector cache is keyed by a 5-bit category toggle string; rebuilt on change.
+
+  // Pass 1 — alwaysBlur tags: query combined selector, applyBlur each match
+  for each active category:
+    querySelectorAll(alwaysBlur tags joined by comma)
+    applyBlur(el, radius) for each result
+
+  // Pass 2 — textCheck tags: query, filter by hasMeaningfulTextContent
+  for each active category:
+    querySelectorAll(textCheck tags joined by comma)
+    if hasMeaningfulTextContent(el) OR thoroughBlur:
+      applyBlur(el, radius)
 ```
-Then separately iterates `div, section, article, li, td, th, label, button, a` and blurs only those with meaningful direct text-node children.
 
 ### CSS class constants
 
@@ -121,7 +131,6 @@ Then separately iterates `div, section, article, li, td, th, label, button, a` a
 | `BLURRED_CLASS` | `"pb-blurred"` |
 | `CANVAS_CLASS` | `"pb-canvas-overlay"` |
 | `TEXT_WRAPPER_CLASS` | `"pb-text-node-wrapper"` |
-| `WRAPPER_CLASS` | `"pb-img-wrapper"` |
 
 ---
 
@@ -174,27 +183,7 @@ Calls `CSS.escape()` when available; falls back to a regex that backslash-escape
 
 ### Constants
 
-```javascript
-DEFAULT_SETTINGS = {
-  blurRadius: 8,
-  highlightColor: "#f59e0b",
-  transitionDuration: 200,
-  revealOnHover: false,
-  enabled: true,
-  shortcuts: {
-    chordKey1: "k",
-    chordKey2: "v",
-    chordModifier: "ctrl"
-  },
-  blurCategories: {
-    text: true,
-    media: true,
-    form: false,
-    table: true,
-    structure: true
-  }
-}
-```
+No local `DEFAULT_SETTINGS`. Uses `MSG.DEFAULT_SETTINGS` and `MSG.buildDefaultSettings()` from `constants.js` (referenced as `window.PrivacyBlur`). All settings keys are UPPER_SNAKE_CASE.
 
 ### Public API
 
@@ -206,8 +195,9 @@ interface PrivacyBlurStorage {
   clearHost(hostname: string): Promise<void>;
   clearAll(): Promise<void>;
   getSettings(): Promise<object>;
-  saveSettings(partial: object): Promise<void>;
-  DEFAULT_SETTINGS: object;
+  saveSettings(fullSettings: object): Promise<void>;
+  getRules(): Promise<Array>;
+  saveRules(rules: Array): Promise<void>;
 }
 ```
 
@@ -225,23 +215,36 @@ send(message)
   })
 ```
 
-### saveSettings — fetch-merge-save
+### saveSettings — full-object write
 
 ```
-saveSettings(partial)
-  if partial is null or not object → return
-  current = await getSettings()   // fetches from background, merged with defaults
-  merged = Object.assign({}, current, partial)
-  await send({ type: "SAVE_SETTINGS", settings: merged })
+saveSettings(fullSettings)
+  if fullSettings is null or not object → return
+  await send({ type: "SAVE_SETTINGS", settings: fullSettings })
 ```
 
-### getSettings — merge with defaults
+No partial merge — caller must pass the complete settings object.
+
+### getSettings — passthrough
 
 ```
 getSettings()
   response = await send({ type: "GET_SETTINGS" })
-  stored = response.settings || {}
-  return Object.assign({}, DEFAULT_SETTINGS, stored)
+  return response.settings || MSG.buildDefaultSettings()
+```
+
+Background merges stored settings over `DEFAULT_SETTINGS` before responding, so the result is always complete. Falls back to a fresh default clone if background is unreachable.
+
+### getRules / saveRules — URL rules CRUD
+
+```
+getRules()
+  response = await send({ type: "GET_RULES" })
+  return response.rules || []
+
+saveRules(rules)
+  if rules is not Array → return
+  await send({ type: "SAVE_RULES", rules })
 ```
 
 ---
@@ -252,10 +255,12 @@ getSettings()
 
 | Variable | Type | Purpose |
 |---|---|---|
-| `activeListener` | `Function \| null` | Reference to the installed keydown handler |
-| `awaitingChordSecond` | `boolean` | True after first chord key detected |
-| `lastChordKeyTime` | `number` | `Date.now()` when first chord key was pressed |
-| `chordTimeoutId` | `number \| null` | Timeout that resets chord state after 1000 ms |
+| `heldKeys` | `Set<string>` | Set of `event.code` values currently held down |
+| `activeKeydownListener` | `Function \| null` | Reference to the installed keydown handler |
+| `activeKeyupListener` | `Function \| null` | Reference to the installed keyup handler |
+| `activeBlurListener` | `Function \| null` | Reference to the window blur handler |
+| `registeredShortcuts` | `Array<{ actionName, primaryModifier, keyCodes }>` | Parsed shortcuts for fast iteration |
+| `registeredCallbacks` | `Record<string, Function>` | Action callbacks + `onExitPicker` |
 | `currentToastEl` | `Element \| null` | Currently displayed toast element |
 | `_isPickerActive` | `boolean` | Set by content_script when picker opens/closes |
 
@@ -263,74 +268,72 @@ getSettings()
 
 ```typescript
 interface PrivacyBlurShortcuts {
-  init(settings: ShortcutSettings, callbacks: ShortcutCallbacks): void;
+  init(shortcuts: Record<string, ShortcutBinding>, callbacks: ShortcutCallbacks): void;
   destroy(): void;
   showToast(text: string, duration?: number): void;
   _setPickerActive(active: boolean): void;
 }
 
-interface ShortcutSettings {
-  chordKey?: string;       // default "k"
-  chordSecond?: string;    // default "v"
-  chordModifier?: string;  // "ctrl" | "alt" | "shift" | "meta", default "ctrl"
+interface ShortcutBinding {
+  primaryModifier: string;  // event.code of the modifier, e.g. "AltLeft"
+  keys: Array<{ key: string; code: string }>;  // additional keys required
 }
 
 interface ShortcutCallbacks {
   TOGGLE_BLUR_ALL?: () => void;
+  TOGGLE_PICKER?: () => void;
+  CLEAR_ALL?: () => void;
   onExitPicker?: () => void;
-  onChordStart?: () => void;  // optional, fires on first chord key
 }
 ```
 
-### init — chord detection logic
+### init — held-key matching logic
 
 ```
-init(settings, callbacks)
-  destroy()  // detach any existing listener
+init(shortcuts, callbacks)
+  destroy()  // detach any existing listeners, clear heldKeys
 
-  chordKey1 = settings.chordKey || "k"
-  chordKey2 = settings.chordSecond || "v"
-  modifier  = settings.chordModifier || "ctrl"
+  registeredCallbacks = callbacks
+  registeredShortcuts = parse shortcuts into flat array:
+    for each [actionName, binding] in shortcuts:
+      push { actionName, primaryModifier: binding.primaryModifier,
+             keyCodes: binding.keys.map(k => k.code) }
 
   onKeyDown(event):
-    key = event.key.toLowerCase()
+    if event.repeat or event.isComposing or event.key === "Dead" → return
+    if getModifierState("AltGraph") → return (dead-key AltGr guard)
 
-    if key === "escape":
-      resetChordState()
-      if _isPickerActive:
-        _isPickerActive = false
-        callbacks.onExitPicker?.()
+    heldKeys.add(event.code)
+
+    if event.key === "Escape":
+      if _isPickerActive → callbacks.onExitPicker?.(), _isPickerActive = false
       return
 
-    if !awaitingChordSecond AND modifierActive(event, modifier) AND key === chordKey1:
+    for each registered shortcut sc:
+      if !isPrimaryModifierHeld(event, sc.primaryModifier) → skip
+      if any code in sc.keyCodes not in heldKeys → skip
+      // All keys held — match found
       event.preventDefault()
-      awaitingChordSecond = true
-      lastChordKeyTime = Date.now()
-      callbacks.onChordStart?.()
-      chordTimeoutId = setTimeout(resetChordState, 1000)
+      callbacks[sc.actionName]?.()
+      showToast("PrivacyBlur: " + ACTION_LABELS[sc.actionName])
       return
 
-    if awaitingChordSecond:
-      elapsed = Date.now() - lastChordKeyTime
-      if elapsed <= 1000 AND key === chordKey2 AND !anyModifier(event):
-        resetChordState()
-        callbacks.TOGGLE_BLUR_ALL?.()
-        showToast("PrivacyBlur: Blur All triggered")
-      else:
-        resetChordState()  // wrong key or timeout
-      return
+  onKeyUp(event):
+    heldKeys.delete(event.code)
 
-  document.addEventListener("keydown", onKeyDown, true)  // capture phase
-  activeListener = onKeyDown
+  onWindowBlur():
+    heldKeys.clear()
+
+  attach keydown + keyup at capture phase, window blur at bubble phase
 ```
 
-### modifierActive — strict modifier check
+### isPrimaryModifierHeld
 
-Returns true only when the named modifier is held AND no other modifiers are held. This prevents e.g. `Ctrl+Alt+K` from being treated as the chord start.
+Checks both the event boolean property (e.g. `event.altKey`) and the specific side via `heldKeys.has(modifierCode)`. CapsLock uses `getModifierState('CapsLock')`.
 
 ### showToast
 
-Creates a fixed-position `<div>` at top-right (z-index: 2147483647), appends to body, fades out after `duration` ms with a 200ms CSS transition, then removes from DOM.
+Creates a `<div class="pb-toast">` at bottom-right, appends to body, fades out after `duration` ms with a CSS animation, then removes from DOM.
 
 ---
 
@@ -422,6 +425,19 @@ Creates a `<div id="pb-picker-toolbar">` with:
 
 ## 7. content_script.js
 
+### State
+
+Two settings objects coexist:
+
+| Variable | Type | Purpose |
+|---|---|---|
+| `globalSettings` | `object` | User-configured settings from storage (no URL rule overrides) |
+| `settings` | `object` | Resolved settings: URL rule overrides > global > defaults |
+| `rules` | `Array` | URL rules loaded from storage |
+| `isPageBlurred` | `boolean` | Whether blur-all mode is active |
+| `isPickerActive` | `boolean` | Whether the element picker is open |
+| `observerSelector` | `string` | Combined CSS selector for MutationObserver queries, built from CATEGORY_SELECTORS |
+
 ### Initialisation sequence
 
 ```
@@ -429,47 +445,58 @@ if DOM not ready → wait for DOMContentLoaded
 
 init():
   1. Bind module aliases (Engine, Store, Selector, Picker, Shortcuts)
-  2. Load settings via Store.getSettings()
-  3. Apply CSS custom properties to :root
-  4. Shortcuts.init(shortcutSettings(), shortcutActionMap)
-  5. restoreBlurredElements()
-  6. chrome.runtime.onMessage.addListener(handleMessage)
-  7. startDomObserver()
+  2. Load settings and URL rules via Promise.all([Store.getSettings(), Store.getRules()])
+  3. Resolve settings: resolveSettings(location.href, globalSettings, rules)
+  4. Apply CSS custom properties to :root (applySettingsToDom)
+  5. Register message listener: chrome.runtime.onMessage.addListener(handleMessage)
+  6. Track contextmenu target for context menu blur/unblur
+  7. If ENABLED === false → return early
+  8. Shortcuts.init(settings.SHORTCUTS, shortcutActionMap) — no flattening needed
+  9. restoreBlurredElements(), startDomObserver(), register reveal handlers
 ```
 
-### shortcutSettings() — settings flattening
+### resolveSettings — URL rule priority
 
-Translates the nested `settings.shortcuts` shape (used in storage) to the flat shape that `PrivacyBlurShortcuts.init()` expects:
-
-```javascript
-{
-  chordKey:      settings.shortcuts.chordKey1      || "k",
-  chordSecond:   settings.shortcuts.chordKey2      || "v",
-  chordModifier: settings.shortcuts.chordModifier  || "ctrl"
-}
 ```
+resolveSettings(url, globalSettings, urlRules)
+  resolved = deepMerge(DEFAULT_SETTINGS, globalSettings)
+  for each rule in urlRules:
+    if matchesPattern(url, rule.pattern, rule.patternType):
+      resolved = deepMerge(resolved, rule.settings)
+      break  // first match wins
+  return resolved
+```
+
+### matchesPattern / wildcardToRegex
+
+`matchesPattern(url, pattern, patternType)` supports `"wildcard"` (glob with `*`) and `"regex"` pattern types. Patterns exceeding 500 chars are rejected to prevent ReDoS.
+
+### buildObserverSelector
+
+Builds a combined CSS selector from active `CATEGORY_SELECTORS` (both `alwaysBlur` and `textCheck` tags). Used by MutationObserver to `querySelectorAll` on inserted subtrees instead of iterating all descendants.
 
 ### MutationObserver — dynamic content in blur-all mode
 
-When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to `document.body`. Each newly added `Element` node (and all its descendants) is checked against the active blur categories via `Engine.matchesActiveCategories(node, settings.blurCategories)` before being passed to `Engine.applyBlur()`. Nodes that do not match any active category are skipped. The observer is dormant when the picker is active.
+When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to `document.body`. Added nodes and their descendants (via `querySelectorAll(observerSelector)`) are queued in batches of 50 and processed via `requestAnimationFrame`. Each node is checked against active categories via `Engine.matchesActiveCategories(node, settings.BLUR_CATEGORIES)` before `Engine.applyBlur()`. The observer is dormant when the picker is active.
 
-### Settings shape (local state)
+### Settings shape (local state) — UPPER_SNAKE_CASE
 
 | Key | Type | Purpose |
 |---|---|---|
-| `blurRadius` | `number` | Pixel radius for CSS blur filter |
-| `highlightColor` | `string` | Hex colour for picker hover highlight |
-| `transitionDuration` | `number` | Milliseconds for blur transition |
-| `revealOnHover` | `boolean` | Whether hovering reveals blurred content |
-| `enabled` | `boolean` | Global on/off toggle |
-| `shortcuts` | `object` | Nested chord shortcut config (see §5) |
-| `blurCategories` | `BlurCategories` | Which element categories participate in blur-all mode |
+| `BLUR_RADIUS` | `number` | Pixel radius for CSS blur filter |
+| `HIGHLIGHT_COLOR` | `string` | Hex colour for picker hover highlight |
+| `TRANSITION_DURATION` | `number` | Milliseconds for blur transition |
+| `REVEAL_MODE` | `string` | `"none"` \| `"click"` \| `"hover"` |
+| `ENABLED` | `boolean` | Global on/off toggle |
+| `THOROUGH_BLUR` | `boolean` | Blur textCheck elements even without meaningful text |
+| `SHORTCUTS` | `object` | `{ ACTION_NAME: { primaryModifier, keys } }` (see §5) |
+| `BLUR_CATEGORIES` | `object` | `{ TEXT, MEDIA, FORM, TABLE, STRUCTURE }` — which categories participate in blur-all |
 
 ### CSS custom properties applied to `:root`
 
 | Property | Value | Used by |
 |---|---|---|
-| `--pb-radius` | `${blurRadius}px` | `.pb-blurred { filter: blur(var(--pb-radius)) }` |
+| `--pb-radius` | `${BLUR_RADIUS}px` | `.pb-blurred { filter: blur(var(--pb-radius)) }` |
 | `--pb-highlight-color` | `#f59e0b` (default) | `.pb-hover-highlight` outline |
 | `--pb-transition-duration` | `200ms` (default) | `.pb-blurred` transition |
 
@@ -477,14 +504,15 @@ When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to
 
 | Message type | Action |
 |---|---|
-| `TOGGLE_BLUR_ALL` | `Engine.blurAllContent()` or `Engine.unblurAll()`, toggles `isPageBlurred` |
+| `TOGGLE_BLUR_ALL` | `Engine.blurAllContent(radius, { categories, thoroughBlur })` or `Engine.unblurAll()`, toggles `isPageBlurred` |
 | `TOGGLE_PICKER` | `Picker.activate()` or `Picker.deactivate()`, toggles `isPickerActive` |
 | `CLEAR_ALL_BLUR` | `Engine.unblurAll()`, `Store.clearHost(hostname)` |
 | `RESTORE` | `restoreBlurredElements()` — async, returns true |
 | `GET_STATUS` | Returns `{isPageBlurred, isPickerActive, blurredCount}` |
-| `UPDATE_SETTINGS` | Merges settings, re-inits shortcuts, updates CSS properties |
-| `CONTEXT_BLUR` | `Selector.restoreSelector()` → `Engine.applyBlur()` → `Store.saveBlurredElement()` |
-| `CONTEXT_UNBLUR` | `Selector.restoreSelector()` → `Engine.removeBlur()` → `Store.removeBlurredElement()` |
+| `UPDATE_SETTINGS` | Merges into globalSettings, re-resolves via URL rules, re-inits shortcuts, updates CSS properties. Invalidates selector cache and re-blurs if categories/thoroughBlur changed. |
+| `CONTEXT_BLUR` | `Engine.applyBlur(lastContextMenuTarget)` → `Store.saveBlurredElement()` |
+| `CONTEXT_UNBLUR` | `findBlurredAncestor(target)` → `Engine.removeBlur()` → `Store.removeBlurredElement()` |
+| `UNBLUR_SELECTOR` | `querySelector(selector)` → `Engine.removeBlur()` |
 
 ---
 
@@ -500,13 +528,15 @@ When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to
 | `CLEAR_HOST` | `storage.get` → `delete map[hostname]` → `storage.set` |
 | `CLEAR_ALL` | `storage.set({ blurred_selectors: {} })` |
 | `GET_SETTINGS` | `storage.get("settings")` → `deepMerge(DEFAULT_SETTINGS, saved)` |
-| `SAVE_SETTINGS` | `storage.get("settings")` → `deepMerge(current, partial)` → `storage.set` |
+| `SAVE_SETTINGS` | `storage.set({ settings: message.settings })` — full-object write, no partial merge |
+| `GET_RULES` | `storage.get("rules")` → return `rules \|\| []` |
+| `SAVE_RULES` | `storage.set({ rules: message.rules })` — capped at 100 rules |
 
-All handlers return `true` to keep the message channel open for the async `sendResponse` callback.
+All handlers return `true` to keep the message channel open for the async `sendResponse` callback. Write operations use `serialWrite()` to prevent concurrent get-then-set data loss.
 
 ### deepMerge
 
-Recursive object merge (second wins). Arrays are replaced, not concatenated. Non-object values are assigned directly.
+Sourced from `constants.js` (`PrivacyBlur.deepMerge`). Recursive object merge (second wins) with depth limit (5). Arrays are replaced, not concatenated. Non-object values are assigned directly. Prototype-pollution safe (skips `__proto__`, `constructor`, `prototype`).
 
 ---
 
@@ -528,18 +558,41 @@ Recursive object merge (second wins). Arrays are replaced, not concatenated. Non
 .pb-blurred {
   filter: blur(var(--pb-radius, 8px)) !important;
   -webkit-filter: blur(var(--pb-radius, 8px)) !important;
-  transition: filter var(--pb-transition-duration, 200ms) ease !important;
-  overflow: hidden !important;
-  will-change: filter !important;
+  transition: filter var(--pb-transition-duration, 200ms) ease,
+              -webkit-filter var(--pb-transition-duration, 200ms) ease !important;
+  /* will-change: filter removed — creates permanent stacking context that
+     breaks position:fixed/sticky children and z-index hover elevation. */
 }
 ```
 
-### Reveal-on-hover
+### Reveal modes
 
-Applied by toggling `.pb-reveal-on-hover` class on the element:
+**Click-to-reveal** (`pb-revealed`): JS adds class on click, removes on second click or Escape.
+
+```css
+.pb-revealed {
+  filter: none !important;
+  -webkit-filter: none !important;
+  transition: filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
+              -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
+  outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
+  outline-offset: 2px !important;
+}
+```
+
+**Hover-to-reveal** (`pb-reveal-on-hover`): CSS hover removes filter. Only active when content_script adds the class.
 
 ```css
 .pb-reveal-on-hover:hover {
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+```
+
+**Ancestor unblur** (`pb-ancestor-reveal`): JS adds to blurred ancestors when a descendant is revealed (click or hover). Removes ancestor filter so revealed content is visible through the chain.
+
+```css
+.pb-ancestor-reveal {
   filter: none !important;
   -webkit-filter: none !important;
 }
@@ -561,9 +614,9 @@ Applied by toggling `.pb-reveal-on-hover` class on the element:
 ### Unit tests (tests/unit/)
 
 Each test file:
-1. Tries to load the real source file from `src/`.
-2. If missing, falls back to an inline stub that satisfies the same contract.
-3. Uses `(0, eval)(src)` — not `vm.runInThisContext` — so the code runs in Jest's jsdom context where `window === global`.
+1. Uses `require(MODULE_PATH)` to load the real source file (enables Jest coverage instrumentation).
+2. If the source file is missing, falls back to `(0, eval)(buildStubSource())` with an inline stub that satisfies the same contract.
+3. The `require()` approach runs the IIFE in Jest's jsdom context where `window === global`, so `window.PrivacyBlur*` assignments work correctly.
 
 ### Setup (tests/setup.js)
 

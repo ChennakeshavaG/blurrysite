@@ -11,7 +11,7 @@ npm test                 # + coverage report (~91% line coverage on src/)
 
 ---
 
-## Test File Pattern (all 5 unit files follow this)
+## Test File Pattern (all 6 unit files follow this)
 
 ```js
 const fs   = require('fs');

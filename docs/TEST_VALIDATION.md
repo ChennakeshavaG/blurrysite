@@ -1,6 +1,6 @@
 # PrivacyBlur — Test Validation & Manual Replication Guide
 
-**179 unit tests** across 5 test files. All validated 2026-04-03.
+**215 unit tests across 6 test files.** All validated 2026-04-03.
 
 ---
 
@@ -195,90 +195,56 @@
 
 ---
 
-## 3. shortcut_handler.test.js (33 tests)
+## 3. shortcut_handler.test.js (19 tests)
 
-### chord detection (6 tests)
+### multi-key shortcut detection (6 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 1 | fires TOGGLE_BLUR_ALL on Ctrl+K then V | Press Ctrl+K, release, press V within 1 second. All elements blur. Toast appears. |
-| 2 | does NOT fire after 1000ms timeout | Press Ctrl+K, wait >1 second, press V. Nothing happens. |
-| 3 | V without prior Ctrl+K does nothing | Press V alone. No blur action. |
-| 4 | Ctrl+V after Ctrl+K does not fire (modifier on second key) | Press Ctrl+K, then Ctrl+V (paste). Paste happens, no blur. |
-| 5 | plain K then V does not fire (no modifier) | Type "kv" in a text field. No blur action. |
-| 6 | fires only once per chord | Execute chord, press V again. Only one blur-all. |
+| 1 | fires TOGGLE_BLUR_ALL when Alt+Shift+B pressed | Hold Alt+Shift+B simultaneously. All elements blur. |
+| 2 | fires TOGGLE_PICKER when Alt+Shift+P pressed | Hold Alt+Shift+P. Picker activates with crosshair cursor. |
+| 3 | fires CLEAR_ALL when Alt+Shift+U pressed | Hold Alt+Shift+U. All blur removed. |
+| 4 | does NOT fire when wrong modifier side is held | Hold right-Alt instead of left-Alt with Shift+B. No action fires. |
+| 5 | does NOT fire when primary modifier is not held | Press Shift+B without Alt. No action fires. |
+| 6 | does NOT fire when not all keys are held | Press Alt+B without Shift. No action fires. |
+
+### callback routing (1 test)
+
+| # | Test | Manual Replication |
+|---|---|---|
+| 7 | different shortcuts fire different callbacks | Alt+Shift+B fires blur-all, Alt+Shift+P fires picker, Alt+Shift+U fires clear. Each triggers its own callback. |
 
 ### Escape key (2 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 7 | fires onExitPicker when picker active | Activate picker (Alt+Shift+P), press Escape. Picker deactivates. |
-| 8 | Escape is no-op when picker inactive | Press Escape on any page without picker. No extension effect. |
+| 8 | Escape fires onExitPicker when picker active | Activate picker (Alt+Shift+P), press Escape. Picker deactivates. |
+| 9 | does NOT fire onExitPicker when picker inactive | Press Escape on any page without picker. No extension effect. |
 
-### destroy (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 9 | chord stops working after destroy | After page navigation/teardown, shortcuts don't respond. |
-| 10 | Escape stops working after destroy | After teardown, Escape has no extension effect. |
-| 11 | double destroy does not throw | Internal cleanup is safe to call repeatedly. |
-
-### settings update (5 tests)
+### early-exit guards (4 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 12 | re-init replaces previous listener | Change settings in popup. New settings take effect immediately. |
-| 13 | custom chordKey (j) is honoured | Set first key to J. Ctrl+J then V triggers; Ctrl+K then V does not. |
-| 14 | custom chordModifier (alt) is honoured | Set modifier to Alt. Alt+K then V triggers; Ctrl+K does not. |
-| 15 | custom chordSecond (b) is honoured | Set second key to B. Ctrl+K then B triggers; Ctrl+K then V does not. |
-| 16 | meta modifier works for Command key on Mac | On macOS, set modifier to Command. Cmd+K then V triggers. |
+| 10 | ignores repeated keydown events | Hold Alt+Shift+B. Only fires once, repeated keydowns ignored. |
+| 11 | ignores events during IME composition | Use CJK input method, press Alt+Shift+B during composition. Extension ignores it. |
+| 12 | ignores Dead key events | Use European keyboard, press accent dead key. Extension ignores it. |
+| 13 | ignores AltGraph events | On German QWERTZ keyboard, press AltGr+B. Extension ignores it. |
 
-### first chord key behavior (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 17 | Ctrl+K calls preventDefault | Press Ctrl+K. Chrome address bar search does NOT open. |
-| 18 | wrong key after first key resets state | Press Ctrl+K, then X, then V. Nothing happens. |
-
-### Escape edge cases (2 tests)
+### destroy and re-init (2 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 19 | Escape resets in-progress chord | Press Ctrl+K, change mind, press Escape, then V. No blur-all. |
-| 20 | Escape with no onExitPicker callback does not throw | Defensive edge case — no crash. |
+| 14 | removes listeners so shortcuts stop firing | After destroy, Alt+Shift+B no longer triggers blur-all. |
+| 15 | re-calling init replaces previous listener | Change settings in popup. New settings take effect immediately, old listener removed. |
 
-### showToast (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 21 | chord completion creates toast in DOM | Execute Ctrl+K then V. Toast appears top-right: "PrivacyBlur: Blur All triggered". |
-| 22 | showToast is public API | `typeof PrivacyBlurShortcuts.showToast` returns `'function'` in DevTools. |
-
-### init edge cases (3 tests)
+### init edge cases (4 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 23 | explicit settings produce working chord | Standard happy path — chord works with complete settings. |
-| 24 | null callbacks does not throw | Defensive — no crash on malformed init. |
-| 25 | empty settings means chord never matches | Corrupted/empty settings silently disable shortcuts. |
-
-### early-exit guards (5 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 26 | ignores repeated keydown (event.repeat) | Hold V key after Ctrl+K. Only first V (non-repeat) would count. |
-| 27 | ignores repeated first chord key | Hold Ctrl+K. Repeated keydowns are ignored. |
-| 28 | ignores events during IME composition | Use CJK input method, press Ctrl+K during composition. Extension ignores it. |
-| 29 | ignores dead key events | Use European keyboard, press accent dead key. Extension ignores it. |
-| 30 | ignores AltGr events | On German QWERTZ keyboard, press AltGr+K to type `{`. Extension ignores it. |
-
-### event.code matching (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 31 | matches on event.code (layout independence) | On Dvorak/AZERTY, press the physical key at QWERTY K position. Chord works regardless of what character the key produces. |
-| 32 | falls back to event.key when no code configured | Users with old settings (pre-code-capture) can still use shortcuts normally. |
-| 33 | code mismatch prevents chord even if key matches | On remapped layout where physical J produces 'k'. Pressing that key does NOT trigger chord — wrong physical position. |
+| 16 | supports single modifier + single key | Configure shortcut with one modifier and one key. Fires correctly. |
+| 17 | supports MetaLeft as primary modifier | On macOS, set modifier to Command. Cmd+Shift+B triggers. |
+| 18 | handles empty shortcuts object gracefully | Corrupted/empty shortcuts silently disable all shortcuts. No crash. |
+| 19 | handles null shortcuts gracefully | Null shortcuts input does not throw. Shortcuts disabled. |
 
 ---
 
