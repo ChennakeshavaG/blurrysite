@@ -714,8 +714,7 @@
     settings = resolveSettings(location.href, globalSettings, rules);
     applySettingsToDom();
 
-    const catsChanged = newSettings.BLUR_CATEGORIES &&
-      CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
+    const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
     const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
 
     if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
@@ -742,6 +741,12 @@
       stopDomObserver();
     } else {
       Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
+      if (isPickerActive) {
+        Picker.setSettings({
+          blurRadius: settings.BLUR_RADIUS,
+          highlightColor: settings.HIGHLIGHT_COLOR,
+        });
+      }
       startDomObserver();
     }
   });
