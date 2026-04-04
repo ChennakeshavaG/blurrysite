@@ -9,3 +9,7 @@ debug.js
 
 # Claude Code artifacts
 .claude/worktrees/
+.claude/settings.local.json
+
+# Chrome extension cache
+chrome-extension:/
