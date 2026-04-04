@@ -365,7 +365,7 @@ privacyblur/
 │   └── content.css         ← Injected page styles (pb-blurred, pb-ancestor-reveal, etc.)
 ├── tests/
 │   ├── setup.js            ← Jest mocks for chrome.*, canvas, rAF
-│   ├── unit/               ← 228 unit tests (6 test files)
+│   ├── unit/               ← 215 unit tests (6 test files)
 │   └── e2e/                ← 4 e2e tests (Puppeteer + real Chrome)
 ├── docs/
 │   ├── HLD.md              ← High-level architecture

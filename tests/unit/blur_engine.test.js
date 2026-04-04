@@ -157,13 +157,14 @@ describe('PrivacyBlurEngine', () => {
      * across transitions and animations without further JS involvement.
      * Reproduce: Create a <div>, call applyBlur(div, 12), read custom property.
      */
-    test('sets --pb-radius CSS custom property', () => {
+    test('does not set per-element --pb-radius (uses :root cascade)', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
       PrivacyBlurEngine.applyBlur(div, 12);
 
-      expect(div.style.getPropertyValue('--pb-radius')).toBe('12px');
+      // Non-video elements rely on :root --pb-radius from applySettingsToDom()
+      expect(div.style.getPropertyValue('--pb-radius')).toBe('');
     });
 
     /**
@@ -173,13 +174,13 @@ describe('PrivacyBlurEngine', () => {
      * blur_engine.js and DEFAULT_SETTINGS in storage_manager.js.
      * Reproduce: Create a <div>, call applyBlur(div) with no radius argument.
      */
-    test('uses default radius of 8px when not specified', () => {
+    test('adds pb-blurred class when no radius specified', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
       PrivacyBlurEngine.applyBlur(div);
 
-      expect(div.style.getPropertyValue('--pb-radius')).toBe('8px');
+      expect(div.classList.contains('pb-blurred')).toBe(true);
     });
 
     /**
@@ -189,14 +190,15 @@ describe('PrivacyBlurEngine', () => {
      * specificity than the stylesheet rule.
      * Reproduce: Create an <img>, call applyBlur(img, 10), check style.filter.
      */
-    test('applies CSS filter directly on img elements', () => {
+    test('applies blur class on img without inline filter', () => {
       const img = document.createElement('img');
       document.body.appendChild(img);
 
       PrivacyBlurEngine.applyBlur(img, 10);
 
       expect(img.classList.contains('pb-blurred')).toBe(true);
-      expect(img.style.filter).toContain('blur(10px)');
+      // No inline style.filter — CSS class handles it via var(--pb-radius)
+      expect(img.style.filter).toBe('');
     });
 
     /**
@@ -717,7 +719,6 @@ describe('PrivacyBlurEngine', () => {
       PrivacyBlurEngine.applyBlur(div, 10);
 
       expect(div.classList.contains('pb-blurred')).toBe(true);
-      expect(div.style.getPropertyValue('--pb-radius')).toBe('10px');
     });
 
     /**
@@ -780,15 +781,15 @@ describe('PrivacyBlurEngine', () => {
      * though the pb-blurred class is gone, causing user confusion.
      * Reproduce: Blur an image (sets style.filter), removeBlur, check filter is empty.
      */
-    test('removeBlur on img clears inline filter style', () => {
+    test('removeBlur on img removes pb-blurred class', () => {
       const img = document.createElement('img');
       document.body.appendChild(img);
 
       PrivacyBlurEngine.applyBlur(img, 12);
-      expect(img.style.filter).toContain('blur(12px)');
+      expect(img.classList.contains('pb-blurred')).toBe(true);
 
       PrivacyBlurEngine.removeBlur(img);
-      expect(img.style.filter).toBe('');
+      expect(img.classList.contains('pb-blurred')).toBe(false);
     });
   });
 
@@ -906,13 +907,13 @@ describe('PrivacyBlurEngine', () => {
      * on, the configured radius must be applied, not the hardcoded default.
      * Reproduce: Toggle with radius 15, check --pb-radius custom property.
      */
-    test('uses custom radius when toggling on', () => {
+    test('adds pb-blurred class when toggling on', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
       PrivacyBlurEngine.toggleBlur(div, 15);
 
-      expect(div.style.getPropertyValue('--pb-radius')).toBe('15px');
+      expect(div.classList.contains('pb-blurred')).toBe(true);
     });
   });
 

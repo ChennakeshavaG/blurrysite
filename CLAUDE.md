@@ -152,7 +152,7 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 
 ### Running tests
 ```bash
-npm run test:unit          # 228 unit tests, fast
+npm run test:unit          # 215 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 

@@ -330,11 +330,12 @@ const PrivacyBlurEngine = (() => {
       return;
     }
 
-    // ---- IMG: apply CSS filter directly ----
+    // ---- IMG: CSS class only (no inline filter) ----
+    // The .pb-blurred CSS rule applies filter via var(--pb-radius) from :root.
+    // No inline style.filter — it would override the CSS variable and prevent
+    // live radius updates from propagating without a page reload.
     if (tag === "img") {
       element.classList.add(BLURRED_CLASS);
-      element.style.setProperty("--pb-radius", `${radius}px`);
-      element.style.filter = `blur(${radius}px)`;
       return;
     }
 
@@ -354,9 +355,10 @@ const PrivacyBlurEngine = (() => {
       }
     }
 
-    // ---- Generic element: class + custom property ----
+    // ---- Generic element: class only ----
+    // CSS .pb-blurred uses var(--pb-radius) from :root, set by applySettingsToDom().
+    // No per-element --pb-radius — this lets radius changes propagate instantly.
     element.classList.add(BLURRED_CLASS);
-    element.style.setProperty("--pb-radius", `${radius}px`);
   }
 
   /**
@@ -376,17 +378,14 @@ const PrivacyBlurEngine = (() => {
       return;
     }
 
-    // ---- IMG: remove CSS filter directly ----
+    // ---- IMG: remove class only ----
     if (tag === "img") {
       element.classList.remove(BLURRED_CLASS);
-      element.style.removeProperty("--pb-radius");
-      element.style.filter = "";
       return;
     }
 
     // ---- Generic element ----
     element.classList.remove(BLURRED_CLASS);
-    element.style.removeProperty("--pb-radius");
 
     // Clean up any text-node wrappers this engine introduced
     const textWrappers = element.querySelectorAll(`.${TEXT_WRAPPER_CLASS}`);

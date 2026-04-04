@@ -376,10 +376,23 @@
           settings = mergeSettings(message.settings);
           applySettingsToDom();
 
-          // Invalidate cached selectors when category toggles change
-          if (message.settings.BLUR_CATEGORIES) {
-            const changed = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-            if (changed) Engine.invalidateSelectorCache();
+          // Detect if blur configuration changed (categories or thoroughBlur)
+          const catsChanged = message.settings.BLUR_CATEGORIES &&
+            CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
+          const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
+
+          if (catsChanged) Engine.invalidateSelectorCache();
+
+          // Re-blur the page if blur-all is active and blur config changed
+          if (isPageBlurred && (catsChanged || thoroughChanged)) {
+            Engine.unblurAll();
+            Engine.blurAllContent(settings.BLUR_RADIUS, {
+              categories: settings.BLUR_CATEGORIES,
+              thoroughBlur: settings.THOROUGH_BLUR,
+            });
+            if (settings.REVEAL_MODE === 'hover') {
+              document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
+            }
           }
 
           if (settings.ENABLED === false) {
@@ -536,6 +549,24 @@
     document.addEventListener('mouseout', onRevealMouseOut);
   }
 
+  // ─── SPA URL change detection ──────────────────────────────────────────────────
+  // When the URL changes without a full navigation (SPA), re-resolve settings
+  // from URL rules so per-site overrides take effect.
+
+  let lastUrl = location.href;
+
+  function onUrlChange() {
+    const currentUrl = location.href;
+    if (currentUrl === lastUrl) return;
+    lastUrl = currentUrl;
+    // TODO: re-resolve settings from URL rules when rule management UI is built.
+    // For now, this detects the change; rule resolution will be added in the
+    // URL rules popup UI implementation.
+  }
+
+  window.addEventListener('popstate', onUrlChange);
+  window.addEventListener('hashchange', onUrlChange);
+
   // ─── Storage change listener ──────────────────────────────────────────────────
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -544,12 +575,26 @@
     if (!newSettings) return;
 
     const oldCategories = settings.BLUR_CATEGORIES;
+    const oldThorough = settings.THOROUGH_BLUR;
     settings = mergeSettings(newSettings);
     applySettingsToDom();
 
-    if (newSettings.BLUR_CATEGORIES) {
-      const changed = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-      if (changed) Engine.invalidateSelectorCache();
+    const catsChanged = newSettings.BLUR_CATEGORIES &&
+      CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
+    const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
+
+    if (catsChanged) Engine.invalidateSelectorCache();
+
+    // Re-blur if blur-all active and config changed
+    if (isPageBlurred && (catsChanged || thoroughChanged)) {
+      Engine.unblurAll();
+      Engine.blurAllContent(settings.BLUR_RADIUS, {
+        categories: settings.BLUR_CATEGORIES,
+        thoroughBlur: settings.THOROUGH_BLUR,
+      });
+      if (settings.REVEAL_MODE === 'hover') {
+        document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
+      }
     }
 
     if (settings.ENABLED === false) {
