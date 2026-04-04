@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   blurRadius:         D.BLUR_RADIUS,
   transitionDuration: D.TRANSITION_DURATION,
   revealOnHover:      D.REVEAL_ON_HOVER,
+  revealMode:         D.REVEAL_MODE,
   highlightColor:     D.HIGHLIGHT_COLOR,
   shortcuts: Object.freeze({
     chordKey1:     D.CHORD_KEY1,
@@ -63,7 +64,7 @@ const ui = {
   blurRadius:        $('blurRadius'),
   blurRadiusValue:   $('blurRadiusValue'),
   transitionToggle:  $('transitionToggle'),
-  hoverRevealToggle: $('hoverRevealToggle'),
+  revealModeSelect:  $('revealModeSelect'),
   highlightColor:    $('highlightColor'),
   blurList:          $('blurList'),
   blurListEmpty:     $('blurListEmpty'),
@@ -166,7 +167,7 @@ function renderSettingsPanel() {
   ui.blurRadius.value           = settings.blurRadius;
   ui.blurRadiusValue.textContent = `${settings.blurRadius}px`;
   ui.transitionToggle.checked   = (settings.transitionDuration || 0) > 0;
-  ui.hoverRevealToggle.checked  = settings.revealOnHover;
+  ui.revealModeSelect.value     = settings.revealMode || 'click';
   ui.highlightColor.value       = settings.highlightColor;
 }
 
@@ -374,11 +375,12 @@ function wireControls() {
     showToast(ui.transitionToggle.checked ? 'Smooth transition on' : 'Instant transition');
   });
 
-  // Reveal on hover toggle
-  ui.hoverRevealToggle.addEventListener('change', async () => {
-    settings.revealOnHover = ui.hoverRevealToggle.checked;
-    await saveSettings();
-    showToast(settings.revealOnHover ? 'Reveal on hover on' : 'Reveal on hover off');
+  // Reveal mode select
+  ui.revealModeSelect.addEventListener('change', async () => {
+    settings.revealMode = ui.revealModeSelect.value;
+    await saveSettings(true);
+    const labels = { click: 'Click to peek', hover: 'Hover to peek', none: 'Reveal disabled' };
+    showToast(labels[settings.revealMode] || 'Reveal mode updated');
   });
 
   // Highlight color (debounced)

@@ -35,6 +35,7 @@
       chordCode2: D.CHORD_CODE2,
       chordModifier: D.CHORD_MODIFIER,
     },
+    revealMode: D.REVEAL_MODE,
     thoroughBlur: D.THOROUGH_BLUR,
     blurCategories: {
       text:      D.BLUR_CATEGORIES.text,
@@ -85,7 +86,7 @@
         const el = Selector.restoreSelector(selector);
         if (el) {
           Engine.applyBlur(el, settings.blurRadius);
-          if (settings.revealOnHover) {
+          if (settings.revealMode === 'hover') {
             el.classList.add('pb-reveal-on-hover');
           }
         }
@@ -134,7 +135,7 @@
 
       if (Engine.matchesActiveCategories(node, settings.blurCategories)) {
         Engine.applyBlur(node, settings.blurRadius);
-        if (settings.revealOnHover) node.classList.add('pb-reveal-on-hover');
+        if (settings.revealMode === 'hover') node.classList.add('pb-reveal-on-hover');
       }
     }
 
@@ -195,7 +196,7 @@
     /** Called by PrivacyBlurPicker when the user clicks to blur an element. */
     onBlur(el) {
       Engine.applyBlur(el, settings.blurRadius);
-      if (settings.revealOnHover) {
+      if (settings.revealMode === 'hover') {
         el.classList.add('pb-reveal-on-hover');
       }
       const selector = Selector.getSelector(el);
@@ -267,17 +268,26 @@
     return null;
   }
 
-  // ─── Reveal-on-hover ancestor management ─────────────────────────────────────
-  // When a blurred element with pb-reveal-on-hover is hovered, CSS removes its
-  // own filter. But CSS filter on a parent blurs the entire rendered output —
-  // including already-unblurred children. To make the hovered element readable,
-  // we must also remove filter from every blurred ancestor.
+  // ─── Reveal management (click + hover modes) ──────────────────────────────────
+  // CSS filter on a parent blurs the entire rendered output, including children.
+  // To make a revealed element readable, we must also remove filter from every
+  // blurred ancestor. Both click and hover modes share the ancestor chain logic.
   //
-  // Uses event delegation (one listener on document) instead of per-element
-  // listeners. Walks up O(depth) on each hover — not O(n) across all elements.
+  // Click mode (default): click a blurred element to peek, click again or
+  //   Escape to re-blur. Explicit intent — no hover conflicts, touch-friendly,
+  //   WCAG compliant (dismissible via Escape).
+  // Hover mode (optional): CSS :hover removes filter. JS manages ancestor chain
+  //   via event delegation with debounced mouseout (150ms) to reduce dropdown
+  //   timing conflicts.
 
   /** Tracks elements currently marked with pb-ancestor-reveal for cleanup. */
   let revealedAncestors = [];
+
+  /** The element currently click-revealed (only one at a time). */
+  let clickRevealedEl = null;
+
+  /** Timer for debounced mouseout in hover mode. */
+  let mouseoutTimer = null;
 
   /** Clear all pb-ancestor-reveal classes and reset the tracking array. */
   function clearRevealedAncestors() {
@@ -287,20 +297,10 @@
     revealedAncestors = [];
   }
 
-  function onRevealMouseOver(e) {
-    if (!settings.revealOnHover) return;
-    const target = e.target;
-    if (!(target instanceof Element)) return;
-
-    const revealTarget = target.closest('.pb-reveal-on-hover');
-    if (!revealTarget) return;
-
-    // Clear previous ancestor chain first, then build the new one.
-    // This handles transitions between sibling elements correctly —
-    // old ancestors that are no longer in the chain get cleaned up.
+  /** Walk up from an element and add pb-ancestor-reveal to blurred ancestors. */
+  function revealAncestorChain(el) {
     clearRevealedAncestors();
-
-    let node = revealTarget.parentElement;
+    let node = el.parentElement;
     while (node && node !== document.documentElement) {
       if (node.classList.contains('pb-blurred')) {
         node.classList.add('pb-ancestor-reveal');
@@ -310,18 +310,80 @@
     }
   }
 
+  /** Dismiss click-reveal: remove pb-revealed and ancestor chain. */
+  function dismissClickReveal() {
+    if (clickRevealedEl) {
+      clickRevealedEl.classList.remove('pb-revealed');
+      clickRevealedEl = null;
+    }
+    clearRevealedAncestors();
+  }
+
+  // ── Click-to-reveal handler (event delegation) ─────────────────────────────
+
+  function onRevealClick(e) {
+    if (settings.revealMode !== 'click') return;
+    if (isPickerActive) return;
+
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+
+    // Find the nearest blurred element at or above the click target.
+    const blurredEl = target.closest('.pb-blurred');
+    if (!blurredEl) return;
+
+    // If clicking the already-revealed element, dismiss it.
+    if (blurredEl === clickRevealedEl) {
+      dismissClickReveal();
+      return;
+    }
+
+    // Dismiss any previous reveal, then reveal the clicked element.
+    dismissClickReveal();
+    blurredEl.classList.add('pb-revealed');
+    clickRevealedEl = blurredEl;
+    revealAncestorChain(blurredEl);
+  }
+
+  function onRevealKeydown(e) {
+    if (e.key === 'Escape' && clickRevealedEl) {
+      dismissClickReveal();
+    }
+  }
+
+  // ── Hover-to-reveal handlers (event delegation) ────────────────────────────
+
+  function onRevealMouseOver(e) {
+    if (settings.revealMode !== 'hover') return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+
+    const revealTarget = target.closest('.pb-reveal-on-hover');
+    if (!revealTarget) return;
+
+    // Cancel any pending mouseout debounce — mouse is back on a reveal element.
+    if (mouseoutTimer) {
+      clearTimeout(mouseoutTimer);
+      mouseoutTimer = null;
+    }
+
+    revealAncestorChain(revealTarget);
+  }
+
   function onRevealMouseOut(e) {
     if (revealedAncestors.length === 0) return;
-    // relatedTarget is the element the mouse moved INTO.
-    // If moving to another reveal-on-hover element, mouseover will
-    // handle clearing + rebuilding the ancestor chain. Don't clear here
-    // to avoid a flash where ancestors briefly re-blur between events.
     const related = e.relatedTarget;
     if (related && related instanceof Element && related.closest('.pb-reveal-on-hover')) {
       return;
     }
-    // Mouse left all reveal-on-hover elements — clear everything.
-    clearRevealedAncestors();
+    // Debounce: wait 150ms before re-blurring ancestors. This gives the user
+    // time to move the mouse into dropdown menus or tooltips that appear on
+    // hover without the ancestors flashing blurred between events.
+    if (mouseoutTimer) clearTimeout(mouseoutTimer);
+    mouseoutTimer = setTimeout(() => {
+      mouseoutTimer = null;
+      clearRevealedAncestors();
+    }, 150);
   }
 
   // ─── Keyboard shortcut action map ────────────────────────────────────────────
@@ -358,11 +420,12 @@
       // ── Toggle blur-all mode ──────────────────────────────────────────────
       case MSG.TOGGLE_BLUR_ALL: {
         if (isPageBlurred) {
+          dismissClickReveal();
           Engine.unblurAll();
           isPageBlurred = false;
         } else {
           Engine.blurAllContent(settings.blurRadius, { categories: settings.blurCategories, thoroughBlur: settings.thoroughBlur });
-          if (settings.revealOnHover) {
+          if (settings.revealMode === 'hover') {
             document.querySelectorAll('.pb-blurred').forEach((el) => {
               el.classList.add('pb-reveal-on-hover');
             });
@@ -454,7 +517,7 @@
         const target = lastContextMenuTarget;
         if (target && target instanceof Element) {
           Engine.applyBlur(target, settings.blurRadius);
-          if (settings.revealOnHover) {
+          if (settings.revealMode === 'hover') {
             target.classList.add('pb-reveal-on-hover');
           }
           const sel = Selector.getSelector(target);
@@ -520,10 +583,17 @@
       `${settings.transitionDuration || D.TRANSITION_DURATION}ms`
     );
 
-    // Toggle reveal-on-hover class on all currently blurred elements
+    // Update reveal classes based on revealMode.
+    // Hover mode: add pb-reveal-on-hover to all blurred elements.
+    // Click/none mode: remove pb-reveal-on-hover (hover CSS rule inactive).
+    // Also dismiss any active click reveal when mode changes.
+    const isHoverMode = settings.revealMode === 'hover';
     document.querySelectorAll('.pb-blurred').forEach((el) => {
-      el.classList.toggle('pb-reveal-on-hover', !!settings.revealOnHover);
+      el.classList.toggle('pb-reveal-on-hover', isHoverMode);
     });
+    if (settings.revealMode !== 'click') {
+      dismissClickReveal();
+    }
   }
 
   // ─── Initialisation ───────────────────────────────────────────────────────────
@@ -571,7 +641,9 @@
     // 8. Start DOM observer for dynamic content.
     startDomObserver();
 
-    // 9. Register hover delegation for reveal-on-hover ancestor unblur.
+    // 9. Register reveal handlers (both modes use event delegation on document).
+    document.addEventListener('click', onRevealClick);
+    document.addEventListener('keydown', onRevealKeydown);
     document.addEventListener('mouseover', onRevealMouseOver);
     document.addEventListener('mouseout', onRevealMouseOut);
   }

@@ -675,6 +675,26 @@ kbd {
   outline-offset: 2px;
 }
 
+/* ---------- Select (small) ---------- */
+.select-sm {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #2d2d4a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E") no-repeat right 8px center;
+  border: 1px solid #3d3d5c;
+  border-radius: 5px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: inherit;
+  padding: 4px 24px 4px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.select-sm:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
 /* ---------- Blur List ---------- */
 .blur-list-wrapper {
   position: relative;

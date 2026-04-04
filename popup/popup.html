@@ -136,13 +136,12 @@
       </div>
 
       <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="hoverRevealToggle">Reveal on hover</label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="hoverRevealToggle" />
-          <span class="toggle__track">
-            <span class="toggle__thumb"></span>
-          </span>
-        </label>
+        <label class="setting-label" for="revealModeSelect">Reveal mode</label>
+        <select class="select-sm" id="revealModeSelect" aria-label="How to reveal blurred content">
+          <option value="click">Click to peek</option>
+          <option value="hover">Hover to peek</option>
+          <option value="none">Disabled</option>
+        </select>
       </div>
 
       <div class="setting-row setting-row--inline">

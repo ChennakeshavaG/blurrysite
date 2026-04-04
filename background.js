@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   transitionDuration: D.TRANSITION_DURATION,
   highlightColor: D.HIGHLIGHT_COLOR,
   revealOnHover: D.REVEAL_ON_HOVER,
+  revealMode: D.REVEAL_MODE,
   enabled: D.ENABLED,
   shortcuts: Object.freeze({
     chordKey1: D.CHORD_KEY1,

@@ -43,6 +43,7 @@ const PrivacyBlurStorage = (() => {
     highlightColor: D.HIGHLIGHT_COLOR,
     transitionDuration: D.TRANSITION_DURATION,
     revealOnHover: D.REVEAL_ON_HOVER,
+    revealMode: D.REVEAL_MODE,
     enabled: D.ENABLED,
     shortcuts: {
       chordKey1: D.CHORD_KEY1,

@@ -34,8 +34,10 @@
   animation: pb-blur-in var(--pb-transition-duration, 200ms) ease forwards;
   /* Prevent blurred content from leaking outside its box */
   overflow: hidden;
-  /* Promote to own compositing layer for GPU acceleration */
-  will-change: filter;
+  /* will-change: filter removed — it creates a permanent stacking context that
+     breaks position:fixed/sticky children, z-index hover elevation, and clips
+     overflow for dropdowns/tooltips. The blur transition is smooth enough
+     without GPU promotion on modern browsers. */
 }
 
 /**
@@ -48,12 +50,26 @@
   /* The canvas overlay is absolutely positioned inside this wrapper */
 }
 
-/* ─── Reveal on hover (opt-in mode) ────────────────────────────────────────── */
+/* ─── Reveal modes ─────────────────────────────────────────────────────────── */
 
 /**
- * When the extension's "reveal on hover" setting is enabled,
- * content_script.js adds this class alongside .pb-blurred.
- * Hovering temporarily removes the filter, letting the user read content.
+ * Click-to-reveal (default): JS adds pb-revealed on click, removes on
+ * second click or Escape. Explicit user intent — no hover conflicts.
+ */
+.pb-revealed {
+  filter: none !important;
+  -webkit-filter: none !important;
+  transition:
+    filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
+    -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
+  /* Indicate revealed state with a subtle outline */
+  outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
+  outline-offset: 2px !important;
+}
+
+/**
+ * Hover-to-reveal (optional): CSS hover removes filter.
+ * Only active when content_script adds pb-reveal-on-hover class.
  */
 .pb-reveal-on-hover:hover {
   filter: none !important;
@@ -63,13 +79,12 @@
     -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
 }
 
-/* Ancestor unblur: when JS walks up from a hovered element and adds
-   pb-ancestor-reveal to each blurred ancestor, this rule removes their
-   filter so the hovered content is visible through the ancestor chain.
-   Uses a JS-toggled class instead of :has(:hover) because :has() with
-   :hover is O(n) per mouse move across all blurred elements — crashes
-   pages with 500+ blurred elements (thorough blur mode). The JS approach
-   is O(depth) per hover event via event delegation on document. */
+/**
+ * Ancestor unblur: JS adds pb-ancestor-reveal to blurred ancestors
+ * when a descendant is revealed (click or hover). Removes the ancestor's
+ * filter so the revealed content is visible through the ancestor chain.
+ * Used by both click and hover reveal modes.
+ */
 .pb-ancestor-reveal {
   filter: none !important;
   -webkit-filter: none !important;

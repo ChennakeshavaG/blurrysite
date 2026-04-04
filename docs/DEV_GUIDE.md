@@ -112,6 +112,31 @@ Catches containers with nested-only text at the cost of blurring empty layout wr
 
 ---
 
+## Reveal Modes
+
+`settings.revealMode` controls how users peek at blurred content:
+
+| Mode | Default | Behavior |
+|---|---|---|
+| `click` | YES | Click a blurred element to peek. Click again or press Escape to re-blur. WCAG compliant, touch-friendly, no hover conflicts. |
+| `hover` | no | Hover to peek. JS manages ancestor chain with 150ms debounced mouseout. May conflict with site dropdowns/tooltips. |
+| `none` | no | No reveal — blurred content stays blurred until manually unblurred via picker or clear. |
+
+Both click and hover modes use the same ancestor chain mechanism: when an element
+is revealed, JS walks up the DOM and adds `pb-ancestor-reveal` to blurred ancestors
+so the revealed content is visible through the ancestor chain.
+
+**CSS classes:**
+- `pb-revealed` — added by click mode (JS-toggled)
+- `pb-reveal-on-hover` — added by hover mode (CSS `:hover` drives it)
+- `pb-ancestor-reveal` — added to blurred ancestors in both modes
+
+**`will-change: filter` was removed** from `.pb-blurred` because it creates a
+permanent stacking context that breaks `position: fixed/sticky` children and
+z-index hover elevation on sites.
+
+---
+
 ## Performance Architecture
 
 ### MutationObserver (batched)
@@ -126,21 +151,6 @@ Observer callback → collect addedNodes into pendingNodes[]
 processBlurChunk → process 50 elements from queue
                  → if more remain, schedule another RAF
                  → skips disconnected nodes (node.isConnected check)
-```
-
-### Hover ancestor reveal (event delegation)
-
-CSS `filter: blur()` on a parent blurs the entire rendered output including children.
-To reveal a hovered element, blurred ancestors must also unblur.
-
-```
-document mouseover → target.closest('.pb-reveal-on-hover')
-                   → walk up parentElement chain
-                   → add 'pb-ancestor-reveal' to blurred ancestors
-                   → CSS removes filter on .pb-ancestor-reveal
-
-document mouseout  → if relatedTarget inside reveal element: skip (no flash)
-                   → otherwise: clear all pb-ancestor-reveal classes
 ```
 
 ### Selector cache
