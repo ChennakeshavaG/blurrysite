@@ -1,45 +1,67 @@
 # PrivacyBlur
 
-A browser extension for Chrome and Firefox that lets you blur sensitive text, images, and videos on any webpage — instantly, with a keyboard shortcut or by clicking individual elements.
+A browser extension for Chrome and Firefox that blurs sensitive content on any
+webpage — text, images, videos, form fields. Designed for screen-sharing,
+presentations, and over-the-shoulder privacy.
 
 ---
 
 ## Features
 
-- **Chord shortcut** — `Ctrl+K` → `V` (within 1 second) blurs/unblurs all page content
-- **Manifest shortcuts** — `Alt+Shift+B` (blur all), `Alt+Shift+P` (picker), `Alt+Shift+U` (clear)
-- **Element picker** — hover any element to highlight it, click to blur or unblur it individually
-- **Persistent blur** — blurred elements are saved per hostname and restored on every page visit
-- **Video support** — canvas overlay approach works on DRM-protected video players
-- **Reveal on hover** — optional setting that temporarily unblurs elements under the cursor
-- **Right-click menu** — "Blur this element" and "Unblur this element" context menu entries
-- **No external requests** — all state is stored locally; no data ever leaves your browser
+- **Blur all** — one shortcut blurs all content on the page, organized into 5
+  togglable categories (text, media, forms, tables, structure)
+- **Element picker** — hover to highlight, click to blur/unblur individual elements
+- **URL rules** — configure per-site settings with wildcard or regex URL patterns
+- **Thorough blur** — optional mode that blurs all containers, even those without
+  direct text content (catches framework-rendered pages)
+- **Reveal modes** — hover-to-peek (default) or click-to-peek with Escape to dismiss
+- **Configurable shortcuts** — primary modifier + any key combination, per action
+- **Persistent blur** — blurred elements saved per hostname, restored on every visit
+- **Video support** — canvas overlay approach works on DRM-protected players
+- **Context menu** — right-click "Blur this element" / "Unblur this element"
+- **No external requests** — all data stays in `chrome.storage.local`
 
 ---
 
 ## Keyboard Shortcuts
 
-| Action | Shortcut |
-|--------|----------|
+| Action | Default Shortcut |
+|--------|-----------------|
 | Blur / unblur all content | `Alt+Shift+B` |
 | Open element picker | `Alt+Shift+P` |
 | Clear all blur on page | `Alt+Shift+U` |
-| Chord — blur all (configurable) | `Ctrl+K` then `V` within 1 second |
 | Exit picker mode | `Escape` |
 
-> The chord keys and modifier are configurable in the popup settings panel.
-> The `Alt+Shift+*` shortcuts can be remapped at `chrome://extensions/shortcuts`.
+All shortcuts are customizable in the popup (hold a primary modifier, then press
+additional keys). Browser-level shortcuts can be remapped at
+`chrome://extensions/shortcuts`.
 
 ---
 
-## How Blur Works
+## Blur Categories
 
-| Element type | Technique |
-|---|---|
-| Generic element / text | CSS `filter: blur()` via `.pb-blurred` class and CSS custom property `--pb-radius` |
-| `<img>` | CSS `filter: blur()` applied directly on the element |
-| `<video>` | `<canvas>` overlay drawn per frame via `requestAnimationFrame`; bypasses DRM restrictions |
-| Background images | CSS `filter: blur()` on the element |
+| Category | Default | What it blurs |
+|----------|---------|--------------|
+| Text | ON | Headings, paragraphs, links, inline semantic tags (64 element types) |
+| Media | ON | Images, video, canvas |
+| Form | OFF | Inputs, textareas, selects, buttons |
+| Table | ON | Table cells, captions |
+| Structure | ON | Divs, sections, articles, containers |
+
+Categories are toggled in the popup under "Blur Categories". The Form category is
+off by default because CSS blur on interactive fields degrades usability.
+
+---
+
+## URL Rules
+
+Per-URL settings overrides. First matching rule wins.
+
+- **Wildcard**: `*.bank.com/*` matches all banking site pages
+- **Regex**: `https://portal\.health\..*` for medical portals
+
+Each rule can override blur radius, form category, and thorough blur settings.
+Managed in the popup under "URL Rules".
 
 ---
 
@@ -47,43 +69,16 @@ A browser extension for Chrome and Firefox that lets you blur sensitive text, im
 
 ### Chrome / Edge
 
-1. Clone or download this repository.
-2. Open `chrome://extensions`.
-3. Enable **Developer mode** (top-right toggle).
-4. Click **Load unpacked** and select the `privacyblur/` folder.
+1. Clone or download this repository
+2. Open `chrome://extensions`
+3. Enable **Developer mode** (top-right toggle)
+4. Click **Load unpacked** and select the project folder
 
 ### Firefox
 
-1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on**.
-3. Select `privacyblur/manifest.json`.
-
-> For a permanent Firefox install the extension must be signed via [AMO](https://addons.mozilla.org/developers/).  
-> For local development only, set `xpinstall.signatures.required` to `false` in `about:config`.
-
----
-
-## Usage
-
-### Blur everything on the page
-
-Press `Alt+Shift+B` or the chord `Ctrl+K` → `V`. Press again to remove all blur.
-
-### Use the element picker
-
-1. Press `Alt+Shift+P` (or click the toolbar icon → "Pick elements").
-2. Hover an element — an amber outline appears.
-3. Click to blur. Click again to unblur.
-4. Press `Escape` to exit.
-
-### Persistent blur
-
-When you blur an element via the picker, its CSS selector is saved for the hostname. On every subsequent visit PrivacyBlur automatically re-applies blur — no re-selection needed.
-
-### Clearing blur
-
-- **Current page**: `Alt+Shift+U` or "Clear page" button in the popup.
-- **All sites**: popup → "Clear all data".
+1. Open `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on**
+3. Select `manifest.json`
 
 ---
 
@@ -91,13 +86,11 @@ When you blur an element via the picker, its CSS selector is saved for the hostn
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Blur radius | `8px` | Blur intensity in pixels |
-| Smooth transition | `on` | Animate blur on/off |
-| Reveal on hover | `off` | Temporarily unblur on mouse-over |
-| Highlight colour | `#f59e0b` | Picker hover outline colour |
-| Chord key 1 | `k` | First key (with modifier) |
-| Chord key 2 | `v` | Second key (plain, within 1 second) |
-| Chord modifier | `ctrl` | Modifier: `ctrl`, `alt`, `shift`, or `meta` |
+| Blur radius | 8px | Blur intensity (2-20px) |
+| Reveal mode | Hover | How to peek at blurred content (hover/click/disabled) |
+| Thorough blur | OFF | Blur all matched elements even without direct text |
+| Smooth transition | ON | Animate blur on/off |
+| Highlight colour | #f59e0b | Picker hover outline colour |
 
 ---
 
@@ -105,105 +98,89 @@ When you blur an element via the picker, its CSS selector is saved for the hostn
 
 ### Requirements
 
-- Node.js 18+, npm 9+
+Node.js 18+, npm 9+
 
 ### Setup
 
 ```bash
-cd privacyblur
 npm install
 ```
 
 ### Tests
 
 ```bash
-npm run test:unit     # unit tests only (fast, jsdom, no browser)
-npm test              # all tests + coverage report
-npm run test:watch    # watch mode
-npm run test:e2e      # Puppeteer end-to-end (requires Chrome)
+npm run test:unit     # 215 unit tests (fast, jsdom)
+npm test              # unit + coverage report
+npm run test:e2e      # 4 Puppeteer e2e tests (requires Chrome)
 SKIP_E2E=1 npm test   # skip e2e in CI
 ```
 
-Coverage thresholds: **70% lines**, **70% functions** across `src/`.
-
-### Lint
-
-```bash
-npm run lint
-```
-
-### Project structure
+### Project Structure
 
 ```
 privacyblur/
-├── manifest.json           MV3 extension manifest (Chrome + Firefox)
+├── manifest.json           MV3 extension manifest
 ├── background.js           Service worker: storage, commands, context menu
 ├── src/
-│   ├── blur_engine.js      DOM blur/unblur, canvas overlay for video
-│   ├── content_script.js   Page orchestrator: wires all modules
+│   ├── constants.js        Message types, DEFAULT_SETTINGS, deepMerge
+│   ├── blur_engine.js      DOM blur/unblur, canvas overlay, category selectors
+│   ├── content_script.js   Page orchestrator, settings resolution, URL rules
+│   ├── shortcut_handler.js Multi-key simultaneous shortcut detection
 │   ├── picker.js           Interactive element picker UI
 │   ├── selector_utils.js   Stable CSS selector generation
-│   ├── shortcut_handler.js Keyboard chord detection
 │   └── storage_manager.js  Storage abstraction (messages to background)
-├── styles/content.css      Injected page stylesheet (all pb- prefixed)
-├── popup/                  Toolbar popup UI
-├── icons/                  Extension icons: 16, 32, 48, 128 px
+├── styles/content.css      Injected page stylesheet (pb-* prefixed)
+├── popup/                  Toolbar popup UI (settings, categories, rules, shortcuts)
 ├── tests/
-│   ├── setup.js            Jest setup: chrome.* mocks, canvas stub, rAF stub
-│   ├── unit/               104 Jest + jsdom unit tests
-│   └── e2e/                Puppeteer e2e tests
+│   ├── unit/               215 unit tests (6 test files)
+│   └── e2e/                4 Puppeteer e2e tests
 └── docs/
+    ├── BLUR_CATEGORIES.md  Category taxonomy (64 elements across 5 categories)
+    ├── DEV_GUIDE.md        Developer debugging guide
     ├── HLD.md              High-level architecture
-    ├── LLD.md              Low-level design and module contracts
-    └── CROSS_BROWSER.md    Chrome / Firefox compatibility guide
+    ├── LLD.md              Module contracts
+    └── CROSS_BROWSER.md    Chrome/Firefox compatibility
 ```
 
 ---
 
-## Architecture Summary
+## Architecture
 
 ```
-Browser Action / Shortcut / Context Menu
-          │
-     background.js (service worker)
-          │  chrome.storage.local
-          │  chrome.tabs.sendMessage
-          ▼
-     content_script.js  (injected per page)
-      ├── PrivacyBlurEngine      blur/unblur DOM
-      ├── PrivacyBlurStorage     save/load selectors via background
-      ├── PrivacyBlurSelectorUtils  stable CSS selector generation
-      ├── PrivacyBlurShortcuts   chord + Escape keyboard handling
-      └── PrivacyBlurPicker      hover-highlight + click-to-blur UI
+Popup / Shortcut / Context Menu
+         │
+    background.js (service worker)
+         │  chrome.storage.local (settings, rules, selectors)
+         │  chrome.tabs.sendMessage
+         ▼
+    content_script.js (injected per page)
+     ├── resolveSettings()       URL rule resolution
+     ├── PrivacyBlurEngine       category-based blur/unblur
+     ├── PrivacyBlurShortcuts    multi-key shortcut detection
+     ├── PrivacyBlurPicker       hover-highlight + click-to-blur
+     ├── PrivacyBlurStorage      async storage API
+     └── PrivacyBlurSelectorUtils CSS selector generation
 ```
 
-See [`docs/HLD.md`](docs/HLD.md) and [`docs/LLD.md`](docs/LLD.md) for full design documentation.
+See [`docs/HLD.md`](docs/HLD.md) and [`docs/LLD.md`](docs/LLD.md) for details.
 
 ---
 
 ## Known Limitations
 
-- **DRM video** — canvas cannot read DRM-encrypted frames (Netflix, Disney+). The canvas overlay shows a solid dark mask instead of a blurred frame.
-- **Cross-origin iframes** — content scripts cannot reach inside cross-origin iframes.
-- **Shadow DOM** — closed shadow roots are not accessible via CSS selectors.
-- **SPA navigation** — route changes that re-render the DOM may invalidate stored selectors. Re-apply via the picker after navigation.
-- **`position: fixed` children** — CSS `filter` creates a new stacking context; `fixed` descendants of a blurred container will move with the container. Target children individually to avoid this.
+- **DRM video** — canvas cannot read encrypted frames; shows dark mask instead
+- **Cross-origin iframes** — content scripts cannot reach inside
+- **Closed shadow DOM** — not accessible via CSS selectors
+- **`<select>` dropdowns** — CSS blur only covers closed state; open dropdown is visible
+- **SVG diagrams** — SVGs excluded globally to preserve icons; blur manually via picker
+- **`filter: blur()` at large fonts** — 8px radius partially readable at 20px+ font
 
 ---
 
 ## Privacy
 
-PrivacyBlur stores blur state only in `chrome.storage.local` on your device. No analytics, no external servers, no telemetry of any kind.
-
----
-
-## Contributing
-
-1. Fork the repository and create a branch from `main`.
-2. Follow the existing code style — vanilla JS, no bundler, no ES modules.
-3. Add tests for any behaviour change. Coverage must stay ≥ 70%.
-4. Run `npm test` and `npm run lint` before opening a PR.
-5. All features must work in Chrome (MV3) and Firefox 109+.
+All data stored locally in `chrome.storage.local`. No analytics, no external
+servers, no telemetry.
 
 ---
 
