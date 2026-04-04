@@ -8,28 +8,23 @@
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MSG = Object.freeze({
-  GET_SETTINGS:    'GET_SETTINGS',
-  SAVE_SETTINGS:   'SAVE_SETTINGS',
-  GET_SELECTORS:   'GET_SELECTORS',
-  REMOVE_SELECTOR: 'REMOVE_SELECTOR',
-  CLEAR_HOST:      'CLEAR_HOST',
-  CLEAR_ALL:       'CLEAR_ALL',
-  TOGGLE_BLUR_ALL: 'TOGGLE_BLUR_ALL',
-  CLEAR_ALL_BLUR:  'CLEAR_ALL_BLUR',
-  UPDATE_SETTINGS: 'UPDATE_SETTINGS',
-});
+// Message type constants — loaded from src/constants.js via manifest.
+// popup.html must include <script src="../src/constants.js"></script> before this file.
+const MSG = window.PrivacyBlur;
 
+const D = window.PrivacyBlur.DEFAULTS;
 const DEFAULT_SETTINGS = Object.freeze({
-  enabled:           true,
-  blurRadius:        8,
-  transitionDuration: 200,
-  revealOnHover:     false,
-  highlightColor:    '#f59e0b',
+  enabled:            D.ENABLED,
+  blurRadius:         D.BLUR_RADIUS,
+  transitionDuration: D.TRANSITION_DURATION,
+  revealOnHover:      D.REVEAL_ON_HOVER,
+  highlightColor:     D.HIGHLIGHT_COLOR,
   shortcuts: Object.freeze({
-    chordKey1:     'k',
-    chordKey2:     'v',
-    chordModifier: 'ctrl',
+    chordKey1:     D.CHORD_KEY1,
+    chordKey2:     D.CHORD_KEY2,
+    chordCode1:    D.CHORD_CODE1,
+    chordCode2:    D.CHORD_CODE2,
+    chordModifier: D.CHORD_MODIFIER,
   }),
 });
 
@@ -40,7 +35,7 @@ const TOAST_DURATION_MS = 1800;
 
 let currentTab    = null;
 let currentHost   = '';
-let settings      = { ...DEFAULT_SETTINGS };
+let settings      = { ...DEFAULT_SETTINGS, shortcuts: { ...DEFAULT_SETTINGS.shortcuts } };
 let blurredItems  = [];   // string[] of CSS selectors
 let toastTimer    = null;
 
@@ -249,7 +244,11 @@ async function init() {
   // Fetch settings from background
   const resp = await bgMessage({ type: MSG.GET_SETTINGS });
   if (resp && resp.settings) {
-    settings = { ...DEFAULT_SETTINGS, ...resp.settings };
+    settings = {
+      ...DEFAULT_SETTINGS,
+      ...resp.settings,
+      shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...(resp.settings.shortcuts || {}) },
+    };
   }
 
   // Fetch blurred selectors for this hostname
@@ -358,7 +357,7 @@ function wireControls() {
 
     // Unblur the DOM element in the active tab
     if (currentTab) {
-      await tabMessage(currentTab.id, { type: 'UNBLUR_SELECTOR', selector });
+      await tabMessage(currentTab.id, { type: MSG.UNBLUR_SELECTOR, selector });
     }
 
     blurredItems = blurredItems.filter(s => s !== selector);
@@ -434,7 +433,8 @@ function renderChordDisplay() {
 }
 
 let modalKeyHandler = null;
-let pendingChord = { modifier: null, key1: null, key2: null };
+let _activeModalCleanup = null;
+let pendingChord = { modifier: null, key1: null, key2: null, code1: null, code2: null };
 let modalPhase = 0; // 0 = waiting for first combo, 1 = waiting for second key
 
 function openShortcutModal() {
@@ -448,7 +448,7 @@ function openShortcutModal() {
   const resetBtn   = document.getElementById('modalReset');
 
   // Reset state
-  pendingChord = { modifier: null, key1: null, key2: null };
+  pendingChord = { modifier: null, key1: null, key2: null, code1: null, code2: null };
   modalPhase = 0;
   saveBtn.disabled = true;
 
@@ -487,6 +487,7 @@ function openShortcutModal() {
       }
       pendingChord.modifier = mod;
       pendingChord.key1 = e.key.toLowerCase();
+      pendingChord.code1 = e.code;
       cap1.textContent = `${modifierLabel(mod)} + ${e.key.toUpperCase()}`;
       cap1.className = 'modal__capture modal__capture--done';
 
@@ -499,11 +500,12 @@ function openShortcutModal() {
       cap2.className = 'modal__capture modal__capture--listening';
     } else if (modalPhase === 1) {
       // Phase 2: capture second key (no modifier required)
-      if (e.ctrlKey || e.altKey || e.metaKey) {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) {
         cap2.textContent = 'Just press a single key (no modifier)';
         return;
       }
       pendingChord.key2 = e.key.toLowerCase();
+      pendingChord.code2 = e.code;
       cap2.textContent = e.key.toUpperCase();
       cap2.className = 'modal__capture modal__capture--done';
       saveBtn.disabled = false;
@@ -523,6 +525,8 @@ function openShortcutModal() {
       chordModifier: pendingChord.modifier,
       chordKey1:     pendingChord.key1,
       chordKey2:     pendingChord.key2,
+      chordCode1:    pendingChord.code1,
+      chordCode2:    pendingChord.code2,
     };
     await saveSettings(true);
     renderChordDisplay();
@@ -534,9 +538,11 @@ function openShortcutModal() {
   // Reset button — restore defaults
   const onReset = async () => {
     settings.shortcuts = {
-      chordModifier: 'ctrl',
-      chordKey1:     'k',
-      chordKey2:     'v',
+      chordModifier: D.CHORD_MODIFIER,
+      chordKey1:     D.CHORD_KEY1,
+      chordKey2:     D.CHORD_KEY2,
+      chordCode1:    D.CHORD_CODE1,
+      chordCode2:    D.CHORD_CODE2,
     };
     await saveSettings(true);
     renderChordDisplay();
@@ -556,6 +562,9 @@ function openShortcutModal() {
     resetBtn.removeEventListener('click', onReset);
   }
 
+  // Store cleanup ref so closeShortcutModal can call it on Escape
+  _activeModalCleanup = cleanupModalListeners;
+
   saveBtn.addEventListener('click', onSave);
   cancelBtn.addEventListener('click', onCancel);
   resetBtn.addEventListener('click', onReset);
@@ -567,6 +576,10 @@ function closeShortcutModal() {
   if (modalKeyHandler) {
     document.removeEventListener('keydown', modalKeyHandler, true);
     modalKeyHandler = null;
+  }
+  if (_activeModalCleanup) {
+    _activeModalCleanup();
+    _activeModalCleanup = null;
   }
 }
 

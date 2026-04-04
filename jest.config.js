@@ -5,7 +5,7 @@ const config = {
       displayName: 'unit',
       testEnvironment: 'jsdom',
       testMatch: ['<rootDir>/tests/unit/**/*.test.js'],
-      // Correct Jest key: setupFilesAfterFramework
+      // Runs after the test framework is installed in the environment
       setupFilesAfterEnv: ['<rootDir>/tests/setup.js', '@testing-library/jest-dom'],
     },
     {
@@ -14,12 +14,10 @@ const config = {
       testMatch: ['<rootDir>/tests/e2e/**/*.spec.js'],
     },
   ],
-  // Coverage collection is listed here for reporting purposes.
-  // NOTE: Source files are loaded via (0, eval)() in tests, which Istanbul
-  // cannot instrument — all files report 0% even though 104 tests exercise
-  // them fully. Threshold is intentionally omitted; track quality via test
-  // count instead.
-  collectCoverageFrom: ['src/**/*.js'],
+  // Source files are loaded via require() in tests, so Istanbul instruments
+  // them for coverage. content_script.js is excluded because it's an
+  // orchestrator tested via e2e, not unit tests.
+  collectCoverageFrom: ['src/**/*.js', '!src/content_script.js'],
 };
 
 module.exports = config;

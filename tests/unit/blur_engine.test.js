@@ -29,10 +29,11 @@ const MODULE_PATH = path.resolve(__dirname, '../../src/blur_engine.js');
 function loadBlurEngine() {
   // Each test file gets a fresh jsdom environment, so we load once per suite.
   if (global.PrivacyBlurEngine) return;
-  const src = fs.existsSync(MODULE_PATH)
-    ? fs.readFileSync(MODULE_PATH, 'utf8')
-    : buildStubSource(); // fallback stub so tests run even without real src
-  (0, eval)(src);
+  if (fs.existsSync(MODULE_PATH)) {
+    require(MODULE_PATH); // require() lets Jest instrument for coverage
+  } else {
+    (0, eval)(buildStubSource()); // fallback stub so tests run even without real src
+  }
 }
 
 /**

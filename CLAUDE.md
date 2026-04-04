@@ -23,6 +23,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Global | Exposed API |
 |---|---|---|
+| `src/constants.js` | `globalThis.PrivacyBlur` | Message types (`STORAGE.*`, `COMMAND.*`, `POPUP.*`), `DEFAULTS`, `isValid()`, `categoryOf()` |
 | `src/selector_utils.js` | `window.PrivacyBlurSelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings` |
 | `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred` |
@@ -30,7 +31,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/picker.js` | `window.PrivacyBlurPicker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all globals via aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — selector_utils → storage_manager → blur_engine → shortcut_handler → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — constants → selector_utils → storage_manager → blur_engine → shortcut_handler → picker → content_script. Never reorder.
 
 ---
 
@@ -76,15 +77,25 @@ Two different shapes exist for shortcut settings. **Do not confuse them.**
 
 **In `chrome.storage.local` / background / `PrivacyBlurStorage.getSettings()`** — nested:
 ```js
-settings.shortcuts = { chordKey1: "k", chordKey2: "v", chordModifier: "ctrl" }
+settings.shortcuts = {
+  chordKey1: "k", chordKey2: "v",           // display keys (event.key)
+  chordCode1: null, chordCode2: null,        // physical keys (event.code), null = legacy
+  chordModifier: "ctrl"                      // "ctrl" | "alt" | "shift" | "meta"
+}
 ```
 
 **In `PrivacyBlurShortcuts.init(settings, callbacks)`** — flat:
 ```js
-{ chordKey: "k", chordSecond: "v", chordModifier: "ctrl" }
+{
+  chordKey: "k", chordSecond: "v",           // display keys
+  chordCode1: null, chordCode2: null,        // physical keys (event.code)
+  chordModifier: "ctrl"                      // modifier name
+}
 ```
 
 `content_script.js` flattens via `shortcutSettings()` helper before calling `Shortcuts.init()`. If you add shortcut config keys, update both shapes and `shortcutSettings()`.
+
+**All default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS`.** Do not hardcode defaults anywhere else.
 
 ---
 
@@ -124,27 +135,29 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 
 ### Running tests
 ```bash
-npm run test:unit          # 104 unit tests, fast
-npm test                   # + coverage (must stay ≥70% lines & functions)
+npm run test:unit          # 179 unit tests, fast
+npm test                   # + coverage (~91% line coverage on src/)
 ```
 
-### Constraints (from hard-learned failures this session)
+### Constraints (from hard-learned failures)
 
 | Rule | Why |
 |---|---|
-| Use `(0, eval)(src)` to load source files in tests | `vm.runInThisContext` runs in Node.js V8 context where `window` is undefined; `eval` runs in Jest's jsdom context |
+| Use `require(MODULE_PATH)` to load source files in tests | `require()` lets Jest instrument for coverage. Fallback to `(0, eval)(buildStubSource())` when file missing. |
 | `global.window = global` must be in `tests/setup.js` | IIFEs assign `window.PrivacyBlur*`; without this alias, the globals are lost |
 | `requestAnimationFrame` mock must NOT call the callback | Video blur uses `requestAnimationFrame` in an infinite loop; auto-executing causes OOM |
 | `HTMLCanvasElement.prototype.getContext` must be mocked | jsdom returns `null` from `getContext()`; `ctx.clearRect()` then throws |
-| All 5 test files use the same load pattern | `fs.existsSync(MODULE_PATH) ? readFile : buildStubSource()` — stubs are the contract spec |
+| `KeyboardEvent.prototype.getModifierState` must be mocked | jsdom may not implement it; shortcut handler uses it for AltGr detection |
+| All 5 test files use the same load pattern | `fs.existsSync(MODULE_PATH) ? require(MODULE_PATH) : eval(buildStubSource())` |
 
 ### Adding a new unit test file
 
 Follow the pattern in any existing `tests/unit/*.test.js`:
 1. `loadXxx()` guards with `if (global.PrivacyBlurXxx) return;`
-2. Use `(0, eval)(src)` to execute the source
+2. Use `require(MODULE_PATH)` to load the source (enables coverage)
 3. Provide a `buildStubSource()` that matches the public contract exactly
 4. `afterEach` or `beforeEach` must clean up any DOM and call `destroy()` if applicable
+5. **Add every new test to `docs/TEST_VALIDATION.md`** with manual replication steps
 
 ---
 
@@ -155,6 +168,37 @@ Follow the pattern in any existing `tests/unit/*.test.js`:
 - Service worker (`background.js`) must be stateless between wake cycles — never store mutable state in module-level variables in background.js.
 - Always guard against `moz-extension://` URLs in background.js tab listeners (already done).
 - Test shortcut behaviour: `Ctrl+K` may conflict with Firefox address bar on some platforms; document this in release notes.
+
+---
+
+## Documentation Maintenance
+
+Docs are not optional artifacts — they are load-bearing references used by both humans and Claude. When code changes, the relevant docs MUST be updated in the same change.
+
+### When to update which doc
+
+| What changed | Update |
+|---|---|
+| Added/removed/renamed a public API method on any module | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` module-specific rules, `docs/LLD.md` contract |
+| Added/removed a `chrome.runtime.sendMessage` type | `src/constants.js` (source of truth), `CLAUDE.md` Message Protocol tables, `docs/HLD.md §6` protocol table |
+| Changed a default value (blur radius, chord keys, etc.) | `src/constants.js` DEFAULTS — all other files reference it |
+| Changed settings shape (new keys, renamed keys) | `CLAUDE.md` Settings Shape section, `docs/LLD.md` |
+| Added a new source file under `src/` | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` load order, `manifest.json` content_scripts |
+| Added/modified/removed a unit test | `docs/TEST_VALIDATION.md` — add entry with test name, assertion, and manual replication steps |
+| Added a new test file | `docs/TEST_VALIDATION.md` new section, `tests/CLAUDE.md` if test patterns differ |
+| Changed test loading pattern or setup | `CLAUDE.md` Testing section, `tests/CLAUDE.md` |
+| Changed keyboard shortcut handling | `CLAUDE.md` Settings Shape section, `src/CLAUDE.md` shortcut_handler rules |
+| Changed CSS class names or IDs | `CLAUDE.md` CSS class constants table |
+| Changed Firefox compatibility behavior | `CLAUDE.md` Firefox Compatibility Rules |
+| Found a new known limitation | `CLAUDE.md` Known Limitations table |
+
+### Rules
+
+1. **Same-commit rule** — doc updates go in the same commit as the code change. Never leave docs for a follow-up.
+2. **Update, don't append** — when a behavior changes, find and update the existing doc entry. Don't add a new contradicting entry.
+3. **Test count** — keep the test count in the Testing section current. Run `npm run test:unit` and update the number.
+4. **TEST_VALIDATION.md** — every test must have: test name, what it asserts, and step-by-step manual replication instructions. When adding a test, add its entry. When modifying a test, update its entry. When removing a test, remove its entry.
+5. **Don't document internals** — only document things that affect how other code interacts with a module (public API, message types, settings shapes, CSS classes). Private implementation details belong in code comments, not docs.
 
 ---
 

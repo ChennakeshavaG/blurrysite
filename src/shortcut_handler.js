@@ -16,6 +16,10 @@
  *  3. Any other key within 1 s, or timeout, resets chord state silently.
  *  4. Escape calls callbacks.onExitPicker only when picker is active.
  *
+ * Key matching uses event.code (physical key, layout-independent) when
+ * available, falling back to event.key for backwards compatibility with
+ * settings saved before code values were captured.
+ *
  * Exposed as window.PrivacyBlurShortcuts (IIFE — no ES module syntax).
  */
 
@@ -123,21 +127,56 @@ const PrivacyBlurShortcuts = (() => {
     return (key || "").toLowerCase();
   }
 
+  // -------------------------------------------------------------------------
+  // Private: KeyboardEvent helpers (W3C UI Events spec-compliant)
+  // -------------------------------------------------------------------------
+
   /**
    * Checks whether a keyboard event matches the configured modifier key.
-   * Supported values: "ctrl", "alt", "shift", "meta".
+   * Uses the browser's normalised modifier boolean properties:
+   *   ctrlKey  — Control on all platforms
+   *   altKey   — Alt (Win/Linux) / Option (Mac)
+   *   shiftKey — Shift on all platforms
+   *   metaKey  — Meta/Win (Win/Linux) / Command (Mac)
+   *
+   * Each check is exclusive — the named modifier must be active and the
+   * other non-Shift modifiers must NOT be active (Shift is allowed to
+   * co-exist since it only changes key casing, not intent).
+   *
    * @param {KeyboardEvent} event
-   * @param {string}        modifier - One of the above strings
+   * @param {string}        modifier - "ctrl", "alt", "shift", or "meta"
    * @returns {boolean}
    */
   function modifierActive(event, modifier) {
-    switch (normaliseKey(modifier)) {
+    switch (modifier) {
       case "ctrl":  return event.ctrlKey  && !event.altKey && !event.metaKey;
       case "alt":   return event.altKey   && !event.ctrlKey && !event.metaKey;
       case "shift": return event.shiftKey && !event.ctrlKey && !event.metaKey;
       case "meta":  return event.metaKey  && !event.ctrlKey && !event.altKey;
       default:      return false;
     }
+  }
+
+  /**
+   * Checks whether a keyboard event matches a configured chord key.
+   *
+   * Prefers event.code (physical key position, layout-independent) when a
+   * code value is stored. Falls back to event.key (logical key) for
+   * backwards compatibility with settings saved before code capture.
+   *
+   * @param {KeyboardEvent} event
+   * @param {string}        keyValue  - Stored event.key value (lowercase), may be empty
+   * @param {string|null}   codeValue - Stored event.code value, or null
+   * @returns {boolean}
+   */
+  function matchesKey(event, keyValue, codeValue) {
+    if (codeValue) {
+      return event.code === codeValue;
+    }
+    if (keyValue) {
+      return normaliseKey(event.key) === keyValue;
+    }
+    return false;
   }
 
   // -------------------------------------------------------------------------
@@ -148,10 +187,16 @@ const PrivacyBlurShortcuts = (() => {
    * Attaches keyboard listeners and activates chord detection.
    * Safe to call multiple times — will detach the previous listener first.
    *
-   * @param {object} settings  - Shortcut settings (flat or from storage_manager.js)
-   *   @param {string} [settings.chordKey]       - First key (e.g. "k"), default "k"
-   *   @param {string} [settings.chordSecond]    - Second key (e.g. "v"), default "v"
-   *   @param {string} [settings.chordModifier]  - Modifier name ("ctrl"), default "ctrl"
+   * This function does NOT apply defaults — callers must pass complete
+   * settings. Defaults are centralised in constants.js and applied at
+   * the storage/settings layer.
+   *
+   * @param {object} settings  - Shortcut settings (flat shape from content_script)
+   *   @param {string} [settings.chordKey]       - First key display value (e.g. "k")
+   *   @param {string} [settings.chordSecond]    - Second key display value (e.g. "v")
+   *   @param {string} [settings.chordCode1]     - First key event.code (e.g. "KeyK")
+   *   @param {string} [settings.chordCode2]     - Second key event.code (e.g. "KeyV")
+   *   @param {string} [settings.chordModifier]  - Modifier name ("ctrl"/"alt"/"shift"/"meta")
    *
    * @param {object} callbacks - Functions fired on shortcut events
    *   @param {Function} [callbacks.TOGGLE_BLUR_ALL] - Chord completed → blur all
@@ -164,15 +209,32 @@ const PrivacyBlurShortcuts = (() => {
 
     const cfg = settings || {};
     const cbs = callbacks || {};
-    const chordKey1 = normaliseKey(cfg.chordKey      || "k");
-    const chordKey2 = normaliseKey(cfg.chordSecond   || "v");
-    const modifier  = normaliseKey(cfg.chordModifier || "ctrl");
+    const chordKey1  = normaliseKey(cfg.chordKey    || "");
+    const chordKey2  = normaliseKey(cfg.chordSecond || "");
+    const chordCode1 = cfg.chordCode1 || null;
+    const chordCode2 = cfg.chordCode2 || null;
+    const modifier   = normaliseKey(cfg.chordModifier || "");
 
     /**
      * Main keydown handler — attached to document at the capture phase so
      * it fires before any page scripts can intercept the event.
      */
     function onKeyDown(event) {
+      // ---- Early exits for non-actionable events (W3C UI Events spec) ----
+
+      // Repeated keydown from holding a key — ignore to prevent spamming.
+      if (event.repeat) return;
+
+      // IME composition in progress (CJK input, accent sequences, etc.).
+      if (event.isComposing) return;
+
+      // Dead key (accent/diacritic composition on European layouts).
+      if (event.key === "Dead") return;
+
+      // AltGr on European Windows keyboards sends ctrlKey + altKey
+      // simultaneously. Detect via getModifierState to avoid false matches.
+      if (event.getModifierState && event.getModifierState("AltGraph")) return;
+
       const key = normaliseKey(event.key);
 
       // ---- Escape: exit picker mode only when picker is active ----
@@ -186,7 +248,7 @@ const PrivacyBlurShortcuts = (() => {
       }
 
       // ---- Chord first key: modifier + chordKey1 ----
-      if (!awaitingChordSecond && modifierActive(event, modifier) && key === chordKey1) {
+      if (!awaitingChordSecond && modifierActive(event, modifier) && matchesKey(event, chordKey1, chordCode1)) {
         // Prevent browser from acting on Ctrl+K (address bar, link popup, etc.)
         event.preventDefault();
 
@@ -212,7 +274,7 @@ const PrivacyBlurShortcuts = (() => {
 
         if (
           elapsed <= 1000 &&
-          key === chordKey2 &&
+          matchesKey(event, chordKey2, chordCode2) &&
           !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey
         ) {
           // Intentionally do NOT call event.preventDefault() here so that

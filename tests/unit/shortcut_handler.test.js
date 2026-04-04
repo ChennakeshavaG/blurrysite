@@ -5,7 +5,8 @@
  * Module exposes window.PrivacyBlurShortcuts with: init, destroy
  *
  * The module listens for keydown events and fires action callbacks when
- * specific key chords are detected.
+ * specific key chords are detected. Key matching uses event.code when
+ * available, falling back to event.key for backwards compatibility.
  */
 
 'use strict';
@@ -19,16 +20,19 @@ const MODULE_PATH = path.resolve(__dirname, '../../src/shortcut_handler.js');
 
 function loadShortcutHandler() {
   if (global.PrivacyBlurShortcuts) return;
-  const src = fs.existsSync(MODULE_PATH)
-    ? fs.readFileSync(MODULE_PATH, 'utf8')
-    : buildStubSource();
-  (0, eval)(src);
+  if (fs.existsSync(MODULE_PATH)) {
+    require(MODULE_PATH);
+  } else {
+    (0, eval)(buildStubSource());
+  }
 }
 
 /**
  * Stub implementation that satisfies the contract.
- * Chord: Ctrl+K then V within 1000ms → fires TOGGLE_BLUR_ALL (blurAllChord key).
+ * Chord: modifier+key1 then key2 within 1000ms → fires TOGGLE_BLUR_ALL.
  * Escape when picker active → fires onExitPicker.
+ * Supports event.code matching with event.key fallback.
+ * Guards: repeat, isComposing, Dead key, AltGraph.
  */
 function buildStubSource() {
   return `
@@ -37,104 +41,127 @@ function buildStubSource() {
 
     var _actions = null;
     var _settings = null;
-    var _lastChordKey = null;
     var _lastChordTime = 0;
+    var _awaitingSecond = false;
     var _keydownListener = null;
     var _isPickerActive = false;
-
-    var DEFAULT_CHORD_MODIFIER = 'ctrl';
-    var DEFAULT_CHORD_KEY = 'k';
-    var DEFAULT_CHORD_SECOND = 'v';
     var CHORD_TIMEOUT_MS = 1000;
 
+    function normaliseKey(k) { return (k || '').toLowerCase(); }
+
+    function matchesKey(event, keyValue, codeValue) {
+      if (codeValue) return event.code === codeValue;
+      if (keyValue) return normaliseKey(event.key) === keyValue;
+      return false;
+    }
+
+    function modifierActive(event, modifier) {
+      switch (modifier) {
+        case 'ctrl':  return event.ctrlKey  && !event.altKey && !event.metaKey;
+        case 'alt':   return event.altKey   && !event.ctrlKey && !event.metaKey;
+        case 'shift': return event.shiftKey && !event.ctrlKey && !event.metaKey;
+        case 'meta':  return event.metaKey  && !event.ctrlKey && !event.altKey;
+        default:      return false;
+      }
+    }
+
     function _handleKeydown(e) {
-      var chordMod = (_settings && _settings.chordModifier) || DEFAULT_CHORD_MODIFIER;
-      var chordKey = (_settings && _settings.chordKey) || DEFAULT_CHORD_KEY;
-      var chordSecond = (_settings && _settings.chordSecond) || DEFAULT_CHORD_SECOND;
+      if (e.repeat) return;
+      if (e.isComposing) return;
+      if (e.key === 'Dead') return;
+      if (e.getModifierState && e.getModifierState('AltGraph')) return;
 
-      var modifierHeld = (chordMod === 'ctrl' && e.ctrlKey) ||
-                         (chordMod === 'alt' && e.altKey) ||
-                         (chordMod === 'shift' && e.shiftKey) ||
-                         (chordMod === 'meta' && e.metaKey);
+      var s = _settings || {};
+      var chordKey1  = normaliseKey(s.chordKey || '');
+      var chordKey2  = normaliseKey(s.chordSecond || '');
+      var chordCode1 = s.chordCode1 || null;
+      var chordCode2 = s.chordCode2 || null;
+      var modifier   = normaliseKey(s.chordModifier || '');
+      var key = normaliseKey(e.key);
 
-      // Escape key — exit picker.
-      if (e.key === 'Escape' && _isPickerActive) {
-        _isPickerActive = false;
-        if (_actions && _actions.onExitPicker) _actions.onExitPicker();
+      if (key === 'escape') {
+        _awaitingSecond = false;
+        if (_isPickerActive && _actions && _actions.onExitPicker) {
+          _isPickerActive = false;
+          _actions.onExitPicker();
+        }
         return;
       }
 
-      // First chord key: Ctrl+K (modifier + chordKey).
-      if (modifierHeld && e.key.toLowerCase() === chordKey.toLowerCase()) {
-        _lastChordKey = chordKey;
+      if (!_awaitingSecond && modifierActive(e, modifier) && matchesKey(e, chordKey1, chordCode1)) {
+        _awaitingSecond = true;
         _lastChordTime = Date.now();
         e.preventDefault();
         return;
       }
 
-      // Second chord key: V (no modifier) — must follow within CHORD_TIMEOUT_MS.
-      if (
-        _lastChordKey &&
-        e.key.toLowerCase() === chordSecond.toLowerCase() &&
-        !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
-      ) {
+      if (_awaitingSecond) {
         var elapsed = Date.now() - _lastChordTime;
-        _lastChordKey = null;
-        if (elapsed <= CHORD_TIMEOUT_MS) {
+        if (elapsed <= CHORD_TIMEOUT_MS && matchesKey(e, chordKey2, chordCode2) &&
+            !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+          _awaitingSecond = false;
           if (_actions && _actions.TOGGLE_BLUR_ALL) _actions.TOGGLE_BLUR_ALL();
+          return;
         }
+        _awaitingSecond = false;
         return;
       }
-
-      // Any other key clears the first chord.
-      _lastChordKey = null;
     }
 
     function init(settings, actions) {
+      destroy();
       _settings = settings || {};
       _actions = actions || {};
       _isPickerActive = false;
-
-      if (_keydownListener) {
-        document.removeEventListener('keydown', _keydownListener);
-      }
       _keydownListener = _handleKeydown;
-      document.addEventListener('keydown', _keydownListener);
+      document.addEventListener('keydown', _keydownListener, true);
     }
 
     function destroy() {
       if (_keydownListener) {
-        document.removeEventListener('keydown', _keydownListener);
+        document.removeEventListener('keydown', _keydownListener, true);
         _keydownListener = null;
       }
       _actions = null;
       _settings = null;
-      _lastChordKey = null;
+      _awaitingSecond = false;
       _isPickerActive = false;
     }
 
-    // Expose for testing: allow tests to set picker state.
-    function _setPickerActive(v) { _isPickerActive = v; }
+    function _setPickerActive(v) { _isPickerActive = !!v; }
 
-    window.PrivacyBlurShortcuts = { init: init, destroy: destroy, _setPickerActive: _setPickerActive };
+    window.PrivacyBlurShortcuts = { init: init, destroy: destroy, showToast: function() {}, _setPickerActive: _setPickerActive };
   })();
   `;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Default settings matching PrivacyBlur.DEFAULTS — used by most tests. */
+const CHORD_SETTINGS = {
+  chordKey: 'k',
+  chordSecond: 'v',
+  chordCode1: 'KeyK',
+  chordCode2: 'KeyV',
+  chordModifier: 'ctrl',
+};
+
 /**
  * Dispatch a keydown event on document.
+ * Supports code, repeat, and isComposing for spec-compliant testing.
  */
 function fireKey(key, modifiers = {}) {
   const event = new KeyboardEvent('keydown', {
     key,
-    bubbles: true,
-    cancelable: true,
-    ctrlKey: modifiers.ctrl || false,
-    altKey: modifiers.alt || false,
-    shiftKey: modifiers.shift || false,
-    metaKey: modifiers.meta || false,
+    code:        modifiers.code        || '',
+    bubbles:     true,
+    cancelable:  true,
+    ctrlKey:     modifiers.ctrl        || false,
+    altKey:      modifiers.alt         || false,
+    shiftKey:    modifiers.shift       || false,
+    metaKey:     modifiers.meta        || false,
+    repeat:      modifiers.repeat      || false,
+    isComposing: modifiers.isComposing || false,
   });
   document.dispatchEvent(event);
   return event;
@@ -157,10 +184,10 @@ describe('PrivacyBlurShortcuts', () => {
   describe('chord detection', () => {
     test('fires TOGGLE_BLUR_ALL when Ctrl+K then V pressed within 1000ms', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k', { ctrl: true }); // First: Ctrl+K
-      fireKey('v');                  // Second: V
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
@@ -168,11 +195,11 @@ describe('PrivacyBlurShortcuts', () => {
     test('does NOT fire when V is pressed more than 1000ms after Ctrl+K', () => {
       jest.useFakeTimers();
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k', { ctrl: true }); // First chord key.
-      jest.advanceTimersByTime(1500); // Exceed 1000ms window.
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      jest.advanceTimersByTime(1500);
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
       jest.useRealTimers();
@@ -180,40 +207,40 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('does NOT fire when V is pressed without the prior Ctrl+K', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('v'); // No prior Ctrl+K.
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
 
     test('does NOT fire when second key pressed with a modifier (Ctrl+V)', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k', { ctrl: true }); // First chord.
-      fireKey('v', { ctrl: true }); // Second key WITH ctrl — should not trigger.
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { ctrl: true, code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
 
     test('does NOT fire when chord keys pressed without modifier (plain K then V)', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k'); // No modifier.
-      fireKey('v');
+      fireKey('k', { code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
 
     test('fires only once per chord invocation (not on every subsequent V)', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k', { ctrl: true });
-      fireKey('v');
-      fireKey('v'); // Second V — no preceding Ctrl+K, should not trigger again.
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
@@ -224,8 +251,7 @@ describe('PrivacyBlurShortcuts', () => {
   describe('Escape key', () => {
     test('fires onExitPicker when Escape pressed and picker is active', () => {
       const actions = { onExitPicker: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
-      // Signal that picker is active.
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
       if (PrivacyBlurShortcuts._setPickerActive) {
         PrivacyBlurShortcuts._setPickerActive(true);
       }
@@ -237,8 +263,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('does NOT fire onExitPicker when Escape pressed but picker is inactive', () => {
       const actions = { onExitPicker: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
-      // Picker not active (default).
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
       fireKey('Escape');
 
@@ -251,20 +276,19 @@ describe('PrivacyBlurShortcuts', () => {
   describe('destroy', () => {
     test('removes keydown event listener so chords no longer fire after destroy()', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
       PrivacyBlurShortcuts.destroy();
 
-      // After destroy, chord should not fire.
-      fireKey('k', { ctrl: true });
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
 
     test('removes keydown listener so Escape no longer triggers onExitPicker after destroy()', () => {
       const actions = { onExitPicker: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
       if (PrivacyBlurShortcuts._setPickerActive) {
         PrivacyBlurShortcuts._setPickerActive(true);
       }
@@ -276,7 +300,7 @@ describe('PrivacyBlurShortcuts', () => {
     });
 
     test('calling destroy multiple times does not throw', () => {
-      PrivacyBlurShortcuts.init({}, {});
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, {});
       expect(() => {
         PrivacyBlurShortcuts.destroy();
         PrivacyBlurShortcuts.destroy();
@@ -291,11 +315,11 @@ describe('PrivacyBlurShortcuts', () => {
       const actions1 = { TOGGLE_BLUR_ALL: jest.fn() };
       const actions2 = { TOGGLE_BLUR_ALL: jest.fn() };
 
-      PrivacyBlurShortcuts.init({}, actions1);
-      PrivacyBlurShortcuts.init({}, actions2); // Re-init with new actions.
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions1);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions2);
 
-      fireKey('k', { ctrl: true });
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions2.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
       expect(actions1.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
@@ -303,43 +327,63 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('custom chordKey setting is honoured when provided', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      // Override chord key to 'j'.
-      PrivacyBlurShortcuts.init({ chordKey: 'j', chordSecond: 'v' }, actions);
+      PrivacyBlurShortcuts.init(
+        { chordKey: 'j', chordSecond: 'v', chordCode1: 'KeyJ', chordCode2: 'KeyV', chordModifier: 'ctrl' },
+        actions
+      );
 
-      fireKey('k', { ctrl: true }); // Old chord — should do nothing.
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' }); // Old chord — should do nothing.
+      fireKey('v', { code: 'KeyV' });
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
 
-      fireKey('j', { ctrl: true }); // New chord.
-      fireKey('v');
+      fireKey('j', { ctrl: true, code: 'KeyJ' }); // New chord.
+      fireKey('v', { code: 'KeyV' });
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
 
     test('custom chordModifier setting (alt) is honoured', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({ chordModifier: 'alt' }, actions);
+      PrivacyBlurShortcuts.init(
+        { ...CHORD_SETTINGS, chordModifier: 'alt' },
+        actions
+      );
 
       // Ctrl+K should NOT trigger (wrong modifier)
-      fireKey('k', { ctrl: true });
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
 
       // Alt+K should trigger
-      fireKey('k', { alt: true });
-      fireKey('v');
+      fireKey('k', { alt: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
 
     test('custom chordSecond setting is honoured', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({ chordSecond: 'b' }, actions);
+      PrivacyBlurShortcuts.init(
+        { ...CHORD_SETTINGS, chordSecond: 'b', chordCode2: 'KeyB' },
+        actions
+      );
 
-      fireKey('k', { ctrl: true });
-      fireKey('v'); // Old second key — should not trigger
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' }); // Old second key — should not trigger
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
 
-      fireKey('k', { ctrl: true });
-      fireKey('b'); // New second key
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('b', { code: 'KeyB' }); // New second key
+      expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
+    });
+
+    test('meta modifier works for Command key on Mac', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(
+        { ...CHORD_SETTINGS, chordModifier: 'meta' },
+        actions
+      );
+
+      fireKey('k', { meta: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
   });
@@ -349,20 +393,20 @@ describe('PrivacyBlurShortcuts', () => {
   describe('first chord key behavior', () => {
     test('first chord key (Ctrl+K) calls preventDefault to block browser action', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      const event = fireKey('k', { ctrl: true });
+      const event = fireKey('k', { ctrl: true, code: 'KeyK' });
 
       expect(event.defaultPrevented).toBe(true);
     });
 
     test('wrong key after chord first key resets state', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k', { ctrl: true }); // Start chord
-      fireKey('x');                  // Wrong second key — resets
-      fireKey('v');                  // V without prior Ctrl+K — no trigger
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('x', { code: 'KeyX' });
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
@@ -373,17 +417,17 @@ describe('PrivacyBlurShortcuts', () => {
   describe('Escape edge cases', () => {
     test('Escape resets chord state if chord was in progress', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      fireKey('k', { ctrl: true }); // Start chord
-      fireKey('Escape');              // Reset
-      fireKey('v');                   // Should not trigger
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('Escape');
+      fireKey('v', { code: 'KeyV' });
 
       expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
 
     test('Escape does not throw when onExitPicker callback is missing', () => {
-      PrivacyBlurShortcuts.init({}, {}); // No callbacks
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, {});
       PrivacyBlurShortcuts._setPickerActive(true);
 
       expect(() => fireKey('Escape')).not.toThrow();
@@ -395,13 +439,11 @@ describe('PrivacyBlurShortcuts', () => {
   describe('showToast', () => {
     test('showToast creates a toast element in the DOM', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
-      PrivacyBlurShortcuts.init({}, actions);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      // Trigger chord to cause toast
-      fireKey('k', { ctrl: true });
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
 
-      // A toast should exist
       const toast = document.querySelector('.pb-toast');
       expect(toast).not.toBeNull();
     });
@@ -414,24 +456,143 @@ describe('PrivacyBlurShortcuts', () => {
   // ── init with null/undefined ──────────────────────────────────────────────
 
   describe('init edge cases', () => {
-    test('init with null settings uses defaults', () => {
+    test('init with explicit settings works (no internal defaults)', () => {
       const actions = { TOGGLE_BLUR_ALL: jest.fn() };
 
-      expect(() => PrivacyBlurShortcuts.init(null, actions)).not.toThrow();
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
 
-      // Default chord (Ctrl+K, V) should still work
-      fireKey('k', { ctrl: true });
-      fireKey('v');
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
       expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
     });
 
     test('init with null callbacks does not throw on chord completion', () => {
-      PrivacyBlurShortcuts.init({}, null);
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, null);
 
       expect(() => {
-        fireKey('k', { ctrl: true });
-        fireKey('v');
+        fireKey('k', { ctrl: true, code: 'KeyK' });
+        fireKey('v', { code: 'KeyV' });
       }).not.toThrow();
+    });
+
+    test('init with empty settings means chord never matches', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init({}, actions);
+
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Early-exit guards (W3C UI Events spec) ────────────────────────────────
+
+  describe('early-exit guards', () => {
+    test('ignores repeated keydown events (event.repeat)', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      // Normal first press
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      // Repeated second key — should be ignored
+      fireKey('v', { code: 'KeyV', repeat: true });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+
+    test('ignores first chord key when repeated', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      // Repeated first key — should be ignored
+      fireKey('k', { ctrl: true, code: 'KeyK', repeat: true });
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+
+    test('ignores events during IME composition (event.isComposing)', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      fireKey('k', { ctrl: true, code: 'KeyK', isComposing: true });
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+
+    test('ignores dead key events (event.key === "Dead")', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      // Dead key on first chord position
+      fireKey('Dead', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+
+    test('ignores AltGr events (getModifierState("AltGraph") returns true)', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      // AltGr sends ctrlKey+altKey both true
+      const event = new KeyboardEvent('keydown', {
+        key: 'k',
+        code: 'KeyK',
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true,
+        altKey: true,
+      });
+      // Mock getModifierState for AltGr detection
+      event.getModifierState = jest.fn((mod) => mod === 'AltGraph');
+      document.dispatchEvent(event);
+
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── event.code matching (layout independence) ─────────────────────────────
+
+  describe('event.code matching', () => {
+    test('matches on event.code even when event.key differs (layout independence)', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      // Simulate a different layout where the physical KeyK produces a different character
+      fireKey('\u02DA', { ctrl: true, code: 'KeyK' }); // ˚ (Mac Option+K produces this)
+      fireKey('\u221A', { code: 'KeyV' }); // √ (Mac Option+V produces this)
+
+      expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
+    });
+
+    test('falls back to event.key matching when no chordCode is configured', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      // Legacy settings — no chordCode1/chordCode2
+      PrivacyBlurShortcuts.init(
+        { chordKey: 'k', chordSecond: 'v', chordModifier: 'ctrl' },
+        actions
+      );
+
+      fireKey('k', { ctrl: true, code: 'KeyK' });
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).toHaveBeenCalledTimes(1);
+    });
+
+    test('event.code mismatch prevents chord even if event.key matches', () => {
+      const actions = { TOGGLE_BLUR_ALL: jest.fn() };
+      PrivacyBlurShortcuts.init(CHORD_SETTINGS, actions);
+
+      // Right key name but wrong physical key code
+      fireKey('k', { ctrl: true, code: 'KeyJ' });
+      fireKey('v', { code: 'KeyV' });
+
+      expect(actions.TOGGLE_BLUR_ALL).not.toHaveBeenCalled();
     });
   });
 });

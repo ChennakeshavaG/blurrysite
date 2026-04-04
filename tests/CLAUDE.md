@@ -5,8 +5,8 @@ See `../CLAUDE.md` for project-level rules. This file covers test-specific patte
 ## Quick Reference
 
 ```bash
-npm run test:unit        # run all 5 unit test files (104 tests)
-npm test                 # + coverage report (threshold: 70% lines + functions)
+npm run test:unit        # run all 5 unit test files (179 tests)
+npm test                 # + coverage report (~91% line coverage on src/)
 ```
 
 ---
@@ -21,10 +21,11 @@ const MODULE_PATH = path.resolve(__dirname, '../../src/xxx.js');
 
 function loadXxx() {
   if (global.PrivacyBlurXxx) return;          // load only once per suite
-  const src = fs.existsSync(MODULE_PATH)
-    ? fs.readFileSync(MODULE_PATH, 'utf8')
-    : buildStubSource();
-  (0, eval)(src);                              // ← eval, NOT vm.runInThisContext
+  if (fs.existsSync(MODULE_PATH)) {
+    require(MODULE_PATH);                      // require() enables Istanbul coverage
+  } else {
+    (0, eval)(buildStubSource());              // fallback stub for contract testing
+  }
 }
 
 function buildStubSource() {
@@ -32,11 +33,9 @@ function buildStubSource() {
 }
 ```
 
-### Why `(0, eval)` and not `vm.runInThisContext`
+### Why `require()` and not `eval()`
 
-`vm.runInThisContext` runs code in Node.js's V8 context where `window` is not defined.
-`(0, eval)(src)` runs code in the current context — Jest's jsdom where `window === global`.
-Both are established by `tests/setup.js` with `global.window = global`.
+Source files are loaded via `require()` so Jest's Istanbul transform instruments them for coverage. The earlier `(0, eval)(fs.readFileSync(...))` pattern bypassed the require chain, causing 0% coverage. The `buildStubSource()` fallback still uses `eval()` since stubs are inline strings.
 
 ### The stub is the contract spec
 
@@ -49,10 +48,12 @@ The `buildStubSource()` inline stub in each test file defines the exact API cont
 | Mock | Reason |
 |---|---|
 | `global.window = global` | IIFEs assign `window.PrivacyBlur*`; without this alias jsdom context loses the globals |
+| `require('../src/constants.js')` | Loads message types + DEFAULTS before any source module |
 | `global.chrome = { runtime, storage, tabs, commands, contextMenus, action }` | All `jest.fn()` — lets unit tests assert message calls without a real browser |
 | `HTMLCanvasElement.prototype.getContext = jest.fn(() => fakeCtx)` | jsdom returns `null` from `getContext()`; `ctx.clearRect()` throws if not mocked |
 | `global.requestAnimationFrame = jest.fn()` returning handle, **no callback execution** | Video blur loops call RAF recursively; auto-executing causes OOM |
 | `global.cancelAnimationFrame = jest.fn()` | Tests assert RAF is cancelled on video `removeBlur` |
+| `KeyboardEvent.prototype.getModifierState = function() { return false; }` | jsdom may not implement it; shortcut handler uses it for AltGr detection |
 | `beforeEach(() => jest.clearAllMocks())` | Resets call counts between every test |
 
 **Do not change the RAF stub to execute callbacks.** This was the cause of a heap OOM in development.
@@ -91,16 +92,27 @@ Fire events directly on `document` — capture-phase listeners on document still
 function fireKey(key, modifiers = {}) {
   const event = new KeyboardEvent('keydown', {
     key,
-    bubbles: true,
-    cancelable: true,
-    ctrlKey:  modifiers.ctrl  || false,
-    altKey:   modifiers.alt   || false,
-    shiftKey: modifiers.shift || false,
-    metaKey:  modifiers.meta  || false,
+    code:        modifiers.code        || '',
+    bubbles:     true,
+    cancelable:  true,
+    ctrlKey:     modifiers.ctrl        || false,
+    altKey:      modifiers.alt         || false,
+    shiftKey:    modifiers.shift       || false,
+    metaKey:     modifiers.meta        || false,
+    repeat:      modifiers.repeat      || false,
+    isComposing: modifiers.isComposing || false,
   });
   document.dispatchEvent(event);
   return event;
 }
+```
+
+### Testing AltGr (getModifierState)
+
+```js
+const event = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, altKey: true });
+event.getModifierState = jest.fn((mod) => mod === 'AltGraph');
+document.dispatchEvent(event);
 ```
 
 ### Resetting picker state between tests
@@ -127,23 +139,32 @@ afterEach(() => {
 
 ---
 
-## Coverage Requirements
+## Coverage
 
-Enforced in `jest.config.js`:
+Configured in `jest.config.js`:
 
 ```js
-coverageThreshold: {
-  global: { lines: 70, functions: 70 }
-}
+collectCoverageFrom: ['src/**/*.js', '!src/content_script.js']
 ```
 
-Only `src/**/*.js` files count toward coverage. `background.js`, `popup/`, `tests/` are excluded.
+`content_script.js` is excluded because it's an orchestrator tested via e2e, not unit tests. All other `src/` files are instrumented via `require()`.
 
-If you add a new file to `src/`, add a corresponding `tests/unit/xxx.test.js`. The file will fail the threshold if left untested.
+If you add a new file to `src/`, add a corresponding `tests/unit/xxx.test.js`.
 
 ---
 
-## e2e Tests (tests/e2e/blur.spec.js)
+## Documentation
+
+**Every test must be documented in `docs/TEST_VALIDATION.md`** with:
+- Test name (exact string from `test('...')`)
+- What it asserts
+- Step-by-step manual replication instructions for verifying in a real browser
+
+When adding, modifying, or removing tests, update `docs/TEST_VALIDATION.md` in the same commit.
+
+---
+
+## e2e Tests (tests/e2e/)
 
 Uses Puppeteer to launch real Chromium with the extension loaded. Requires Chrome to be installed.
 

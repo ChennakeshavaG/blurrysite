@@ -3,3 +3,9 @@ coverage/
 dist/
 *.zip
 .DS_Store
+
+# Dev-only files
+debug.js
+
+# Claude Code artifacts
+.claude/worktrees/

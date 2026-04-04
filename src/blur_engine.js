@@ -63,19 +63,12 @@ const PrivacyBlurEngine = (() => {
     const span = document.createElement("span");
     span.classList.add(TEXT_WRAPPER_CLASS);
 
-    // Move text nodes into the span, preserving document order
-    for (const node of nodesToWrap) {
-      span.appendChild(node.cloneNode(true));
-    }
-
-    // Replace the first text node with the wrapper; remove the rest
+    // Insert wrapper before the first text node, then move all text nodes into it.
+    // Using appendChild (move) instead of cloneNode preserves live references.
     const firstNode = nodesToWrap[0];
     element.insertBefore(span, firstNode);
     for (const node of nodesToWrap) {
-      // After inserting span before firstNode, firstNode is still in element
-      if (element.contains(node)) {
-        element.removeChild(node);
-      }
+      span.appendChild(node);
     }
 
     return span;
@@ -133,16 +126,28 @@ const PrivacyBlurEngine = (() => {
     // capture the handle from frame 0 only; subsequent frames update the closure
     // variable but the map would hold a stale handle, making cancelAnimationFrame
     // cancel the wrong frame and leave the loop running.
-    const state = { canvas, animFrameId: null };
+    const state = { canvas, animFrameId: null, originalParentPosition: parentPos };
 
     function drawFrame() {
       // Resize canvas if video dimensions changed (e.g., fullscreen, resolution switch)
-      if (
-        (canvas.width  !== videoElement.videoWidth  && videoElement.videoWidth  > 0) ||
-        (canvas.height !== videoElement.videoHeight && videoElement.videoHeight > 0)
-      ) {
-        canvas.width  = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
+      if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+        if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
+          canvas.width  = videoElement.videoWidth;
+          canvas.height = videoElement.videoHeight;
+        }
+      } else if (canvas.width === 0 || canvas.height === 0) {
+        // Video metadata not yet loaded — fall back to layout dimensions
+        const r = videoElement.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          canvas.width  = r.width;
+          canvas.height = r.height;
+        }
+      }
+
+      // Stop if video was removed from DOM (SPA navigation, dynamic content)
+      if (!videoElement.isConnected) {
+        stopVideoBlurCanvas(videoElement);
+        return;
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -176,7 +181,12 @@ const PrivacyBlurEngine = (() => {
     cancelAnimationFrame(overlay.animFrameId);
 
     if (overlay.canvas && overlay.canvas.parentNode) {
-      overlay.canvas.parentNode.removeChild(overlay.canvas);
+      const parent = overlay.canvas.parentNode;
+      parent.removeChild(overlay.canvas);
+      // Restore parent's original position if we changed it
+      if (overlay.originalParentPosition) {
+        parent.style.position = overlay.originalParentPosition;
+      }
     }
 
     videoOverlayMap.delete(videoElement);

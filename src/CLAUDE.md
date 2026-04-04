@@ -37,6 +37,7 @@ Rules:
 ## Module Load Order (enforced by manifest.json)
 
 ```
+0. constants.js        → globalThis.PrivacyBlur (message types + DEFAULTS)
 1. selector_utils.js   → window.PrivacyBlurSelectorUtils
 2. storage_manager.js  → window.PrivacyBlurStorage
 3. blur_engine.js      → window.PrivacyBlurEngine
@@ -72,7 +73,10 @@ A module may only depend on modules loaded before it.
 - DEFAULT_SETTINGS keys: `blurRadius`, `highlightColor`, `transitionDuration`, `revealOnHover`, `enabled`, `shortcuts`.
 
 ### shortcut_handler.js
-- `init(settings, callbacks)` reads **flat** settings: `settings.chordKey`, `settings.chordSecond`, `settings.chordModifier`.
+- `init(settings, callbacks)` reads **flat** settings: `settings.chordKey`, `settings.chordSecond`, `settings.chordCode1`, `settings.chordCode2`, `settings.chordModifier`.
+- **Does not apply defaults** — callers must pass complete settings. All defaults live in `constants.js → PrivacyBlur.DEFAULTS`.
+- Key matching prefers `event.code` (physical key, layout-independent) with `event.key` fallback for legacy settings without codes.
+- Early-exit guards: `event.repeat`, `event.isComposing`, `event.key === "Dead"`, `getModifierState("AltGraph")`.
 - Fires `callbacks.TOGGLE_BLUR_ALL` (uppercase, no `on` prefix).
 - Fires `callbacks.onExitPicker` only when `_isPickerActive === true`.
 - Second chord key requires NO modifiers held (`!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey`).

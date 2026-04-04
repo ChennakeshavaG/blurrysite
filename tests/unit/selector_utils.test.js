@@ -17,10 +17,11 @@ const MODULE_PATH = path.resolve(__dirname, '../../src/selector_utils.js');
 
 function loadSelectorUtils() {
   if (global.PrivacyBlurSelectorUtils) return;
-  const src = fs.existsSync(MODULE_PATH)
-    ? fs.readFileSync(MODULE_PATH, 'utf8')
-    : buildStubSource();
-  (0, eval)(src);
+  if (fs.existsSync(MODULE_PATH)) {
+    require(MODULE_PATH);
+  } else {
+    (0, eval)(buildStubSource());
+  }
 }
 
 function buildStubSource() {

@@ -15,18 +15,24 @@
 (() => {
   'use strict';
 
+  const MSG = window.PrivacyBlur;
+  const D   = window.PrivacyBlur.DEFAULTS;
+
   // ─── State ──────────────────────────────────────────────────────────────────
 
   /** @type {object} Settings loaded from background / storage */
   let settings = {
-    blurRadius: 8,
-    highlightColor: '#f59e0b',
-    transitionDuration: 200,
-    revealOnHover: false,
+    blurRadius: D.BLUR_RADIUS,
+    highlightColor: D.HIGHLIGHT_COLOR,
+    transitionDuration: D.TRANSITION_DURATION,
+    revealOnHover: D.REVEAL_ON_HOVER,
+    enabled: D.ENABLED,
     shortcuts: {
-      chordKey1: 'k',
-      chordKey2: 'v',
-      chordModifier: 'ctrl',
+      chordKey1: D.CHORD_KEY1,
+      chordKey2: D.CHORD_KEY2,
+      chordCode1: D.CHORD_CODE1,
+      chordCode2: D.CHORD_CODE2,
+      chordModifier: D.CHORD_MODIFIER,
     },
   };
 
@@ -152,6 +158,19 @@
     },
   };
 
+  // ─── Settings merge helper ────────────────────────────────────────────────────
+
+  /**
+   * Merge incoming settings into current settings, preserving nested shortcuts.
+   * A shallow spread would replace the entire shortcuts sub-object if the
+   * incoming object has a partial shortcuts key.
+   */
+  function mergeSettings(incoming) {
+    const merged = { ...settings, ...incoming };
+    merged.shortcuts = { ...settings.shortcuts, ...(incoming.shortcuts || {}) };
+    return merged;
+  }
+
   // ─── Shortcut settings helper ────────────────────────────────────────────────
 
   /**
@@ -161,9 +180,11 @@
   function shortcutSettings() {
     const s = settings.shortcuts || {};
     return {
-      chordKey:      s.chordKey1      || 'k',
-      chordSecond:   s.chordKey2      || 'v',
-      chordModifier: s.chordModifier  || 'ctrl',
+      chordKey:      s.chordKey1,
+      chordSecond:   s.chordKey2,
+      chordCode1:    s.chordCode1,
+      chordCode2:    s.chordCode2,
+      chordModifier: s.chordModifier,
     };
   }
 
@@ -186,7 +207,7 @@
 
   const shortcutActionMap = {
     TOGGLE_BLUR_ALL() {
-      handleMessage({ type: 'TOGGLE_BLUR_ALL' }, null, () => {});
+      handleMessage({ type: MSG.TOGGLE_BLUR_ALL }, null, () => {});
     },
     onExitPicker() {
       if (isPickerActive) {
@@ -206,7 +227,7 @@
 
     // Allow settings, status, and restore messages through even when disabled.
     // Block blur/picker/context actions when the extension is disabled.
-    const alwaysAllowed = ['UPDATE_SETTINGS', 'GET_STATUS', 'RESTORE'];
+    const alwaysAllowed = [MSG.UPDATE_SETTINGS, MSG.GET_STATUS, MSG.RESTORE];
     if (settings.enabled === false && !alwaysAllowed.includes(type)) {
       if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
       return false;
@@ -214,7 +235,7 @@
 
     switch (type) {
       // ── Toggle blur-all mode ──────────────────────────────────────────────
-      case 'TOGGLE_BLUR_ALL': {
+      case MSG.TOGGLE_BLUR_ALL: {
         if (isPageBlurred) {
           Engine.unblurAll();
           isPageBlurred = false;
@@ -232,7 +253,7 @@
       }
 
       // ── Toggle element picker ─────────────────────────────────────────────
-      case 'TOGGLE_PICKER': {
+      case MSG.TOGGLE_PICKER: {
         if (isPickerActive) {
           Picker.deactivate();
           isPickerActive = false;
@@ -247,7 +268,7 @@
       }
 
       // ── Clear all blur on this page ───────────────────────────────────────
-      case 'CLEAR_ALL_BLUR': {
+      case MSG.CLEAR_ALL_BLUR: {
         document.querySelectorAll('.pb-reveal-on-hover').forEach((el) => {
           el.classList.remove('pb-reveal-on-hover');
         });
@@ -259,7 +280,7 @@
       }
 
       // ── Re-apply persisted blur selectors ────────────────────────────────
-      case 'RESTORE': {
+      case MSG.RESTORE: {
         restoreBlurredElements().then(() => {
           if (sendResponse) sendResponse({ ok: true });
         });
@@ -267,16 +288,16 @@
       }
 
       // ── Status query ──────────────────────────────────────────────────────
-      case 'GET_STATUS': {
+      case MSG.GET_STATUS: {
         const blurredCount = document.querySelectorAll('.pb-blurred').length;
         if (sendResponse) sendResponse({ isPageBlurred, isPickerActive, blurredCount });
         break;
       }
 
       // ── Update settings ───────────────────────────────────────────────────
-      case 'UPDATE_SETTINGS': {
+      case MSG.UPDATE_SETTINGS: {
         if (message.settings) {
-          settings = { ...settings, ...message.settings };
+          settings = mergeSettings(message.settings);
           applySettingsToDom();
 
           if (settings.enabled === false) {
@@ -300,7 +321,7 @@
       }
 
       // ── Context menu: blur the right-clicked element ─────────────────────
-      case 'CONTEXT_BLUR': {
+      case MSG.CONTEXT_BLUR: {
         const target = lastContextMenuTarget;
         if (target && target instanceof Element) {
           Engine.applyBlur(target, settings.blurRadius);
@@ -318,7 +339,7 @@
       }
 
       // ── Context menu: unblur the right-clicked element ────────────────────
-      case 'CONTEXT_UNBLUR': {
+      case MSG.CONTEXT_UNBLUR: {
         const target = lastContextMenuTarget;
         const unblurTarget = findBlurredAncestor(target);
         if (unblurTarget) {
@@ -335,7 +356,7 @@
       }
 
       // ── Unblur a specific selector (from popup remove button) ────────────
-      case 'UNBLUR_SELECTOR': {
+      case MSG.UNBLUR_SELECTOR: {
         if (message.selector) {
           const el = document.querySelector(message.selector);
           if (el) {
@@ -363,11 +384,11 @@
     );
     document.documentElement.style.setProperty(
       '--pb-highlight-color',
-      settings.highlightColor || '#f59e0b'
+      settings.highlightColor || D.HIGHLIGHT_COLOR
     );
     document.documentElement.style.setProperty(
       '--pb-transition-duration',
-      `${settings.transitionDuration || 200}ms`
+      `${settings.transitionDuration || D.TRANSITION_DURATION}ms`
     );
 
     // Toggle reveal-on-hover class on all currently blurred elements
@@ -390,7 +411,7 @@
     try {
       const loaded = await Store.getSettings();
       if (loaded) {
-        settings = { ...settings, ...loaded };
+        settings = mergeSettings(loaded);
       }
     } catch (_e) {
       // Background not ready — use defaults.
@@ -431,7 +452,7 @@
     const newSettings = changes.settings.newValue;
     if (!newSettings) return;
 
-    settings = { ...settings, ...newSettings };
+    settings = mergeSettings(newSettings);
     applySettingsToDom();
 
     if (settings.enabled === false) {

@@ -1,5 +1,9 @@
 'use strict';
 
+importScripts('src/constants.js');
+
+const MSG = self.PrivacyBlur;
+
 /**
  * background.js — PrivacyBlur MV3 Service Worker
  *
@@ -11,18 +15,21 @@
  */
 
 // ---------------------------------------------------------------------------
-// Default settings — used when no saved value exists yet
+// Default settings — sourced from constants.js (single source of truth)
 // ---------------------------------------------------------------------------
+const D = self.PrivacyBlur.DEFAULTS;
 const DEFAULT_SETTINGS = Object.freeze({
-  blurRadius: 8,
-  transitionDuration: 200,
-  highlightColor: "#f59e0b",
-  revealOnHover: false,
-  enabled: true,
+  blurRadius: D.BLUR_RADIUS,
+  transitionDuration: D.TRANSITION_DURATION,
+  highlightColor: D.HIGHLIGHT_COLOR,
+  revealOnHover: D.REVEAL_ON_HOVER,
+  enabled: D.ENABLED,
   shortcuts: Object.freeze({
-    chordKey1: "k",
-    chordKey2: "v",
-    chordModifier: "ctrl"
+    chordKey1: D.CHORD_KEY1,
+    chordKey2: D.CHORD_KEY2,
+    chordCode1: D.CHORD_CODE1,
+    chordCode2: D.CHORD_CODE2,
+    chordModifier: D.CHORD_MODIFIER
   })
 });
 
@@ -63,11 +70,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) return;
 
   if (info.menuItemId === "pb-blur-element") {
-    chrome.tabs.sendMessage(tab.id, { type: "CONTEXT_BLUR" }).catch(() => {
+    chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_BLUR }).catch(() => {
       // Content script not yet injected — silently ignore
     });
   } else if (info.menuItemId === "pb-unblur-element") {
-    chrome.tabs.sendMessage(tab.id, { type: "CONTEXT_UNBLUR" }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_UNBLUR }).catch(() => {});
   }
 });
 
@@ -79,9 +86,9 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (!tab || !tab.id) return;
 
   const messageMap = {
-    "toggle-blur-all": { type: "TOGGLE_BLUR_ALL" },
-    "toggle-picker":   { type: "TOGGLE_PICKER" },
-    "clear-all-blur":  { type: "CLEAR_ALL_BLUR" }
+    "toggle-blur-all": { type: MSG.TOGGLE_BLUR_ALL },
+    "toggle-picker":   { type: MSG.TOGGLE_PICKER },
+    "clear-all-blur":  { type: MSG.CLEAR_ALL_BLUR }
   };
 
   const message = messageMap[command];
@@ -124,7 +131,10 @@ let writeQueue = Promise.resolve();
  * perform its own get/set, and return a Promise. Mutations execute serially.
  */
 function serialWrite(fn) {
-  writeQueue = writeQueue.then(fn, fn);
+  writeQueue = writeQueue.then(fn).catch(() => {
+    // Swallow errors so the queue self-heals. Individual operations
+    // handle their own sendResponse inside fn.
+  });
   return writeQueue;
 }
 
@@ -135,7 +145,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
 
     // ---- Read selectors for a hostname ----
-    case "GET_SELECTORS": {
+    case MSG.GET_SELECTORS: {
       if (!isValidHostname(message.hostname)) {
         sendResponse({ selectors: [] });
         return true;
@@ -148,7 +158,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // ---- Persist a newly blurred selector ----
-    case "SAVE_SELECTOR": {
+    case MSG.SAVE_SELECTOR: {
       if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
         sendResponse({ success: false, error: "invalid input" });
         return true;
@@ -181,7 +191,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // ---- Remove a single selector from a hostname ----
-    case "REMOVE_SELECTOR": {
+    case MSG.REMOVE_SELECTOR: {
       if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
         sendResponse({ success: false, error: "invalid input" });
         return true;
@@ -209,7 +219,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // ---- Wipe all selectors for a specific hostname ----
-    case "CLEAR_HOST": {
+    case MSG.CLEAR_HOST: {
       if (!isValidHostname(message.hostname)) {
         sendResponse({ success: false, error: "invalid input" });
         return true;
@@ -228,7 +238,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // ---- Wipe the entire blurred_selectors map ----
-    case "CLEAR_ALL": {
+    case MSG.CLEAR_ALL: {
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.set({ blurred_selectors: {} }, () => {
           sendResponse({ success: true });
@@ -239,7 +249,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // ---- Read settings, merged with defaults ----
-    case "GET_SETTINGS": {
+    case MSG.GET_SETTINGS: {
       chrome.storage.local.get("settings", (result) => {
         const saved = result.settings || {};
         const merged = deepMerge(DEFAULT_SETTINGS, saved);
@@ -249,7 +259,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // ---- Persist a partial settings update ----
-    case "SAVE_SETTINGS": {
+    case MSG.SAVE_SETTINGS: {
       if (!message.settings || typeof message.settings !== "object" || Array.isArray(message.settings)) {
         sendResponse({ success: false, error: "invalid settings" });
         return true;
@@ -268,8 +278,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     default:
-      // Unknown message types are silently ignored
-      break;
+      return false;
   }
 });
 
@@ -290,7 +299,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
 
-  chrome.tabs.sendMessage(tabId, { type: "RESTORE" }).catch(() => {
+  chrome.tabs.sendMessage(tabId, { type: MSG.RESTORE }).catch(() => {
     // Content script not yet ready — this is normal for some page types
   });
 });
@@ -298,7 +307,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // ---------------------------------------------------------------------------
 // Utility — deep-merge two plain objects (second wins on conflicts)
 // ---------------------------------------------------------------------------
-function deepMerge(base, override) {
+function deepMerge(base, override, depth) {
+  if (depth === undefined) depth = 0;
+  if (depth > 5) return override;
+
   const result = Object.assign({}, base);
 
   for (const key of Object.keys(override)) {
@@ -311,7 +323,7 @@ function deepMerge(base, override) {
       base[key] !== null &&
       !Array.isArray(base[key])
     ) {
-      result[key] = deepMerge(base[key], override[key]);
+      result[key] = deepMerge(base[key], override[key], depth + 1);
     } else {
       result[key] = override[key];
     }

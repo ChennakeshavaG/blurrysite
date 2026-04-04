@@ -31,20 +31,25 @@
 const PrivacyBlurStorage = (() => {
   'use strict';
 
+  const MSG = window.PrivacyBlur;
+  const D   = window.PrivacyBlur.DEFAULTS;
+
   // -------------------------------------------------------------------------
-  // Default settings — kept here as documentation / for UI defaults reference
-  // (background.js holds the authoritative copy used during merges)
+  // Default settings — sourced from constants.js (single source of truth).
+  // background.js holds the authoritative copy used during merges.
   // -------------------------------------------------------------------------
   const DEFAULT_SETTINGS = {
-    blurRadius: 8,
-    highlightColor: "#f59e0b",
-    transitionDuration: 200,
-    revealOnHover: false,
-    enabled: true,
+    blurRadius: D.BLUR_RADIUS,
+    highlightColor: D.HIGHLIGHT_COLOR,
+    transitionDuration: D.TRANSITION_DURATION,
+    revealOnHover: D.REVEAL_ON_HOVER,
+    enabled: D.ENABLED,
     shortcuts: {
-      chordKey1: "k",
-      chordKey2: "v",
-      chordModifier: "ctrl"
+      chordKey1: D.CHORD_KEY1,
+      chordKey2: D.CHORD_KEY2,
+      chordCode1: D.CHORD_CODE1,
+      chordCode2: D.CHORD_CODE2,
+      chordModifier: D.CHORD_MODIFIER
     }
   };
 
@@ -91,7 +96,7 @@ const PrivacyBlurStorage = (() => {
     if (!hostname || !selector) return;
 
     return send({
-      type: "SAVE_SELECTOR",
+      type: MSG.SAVE_SELECTOR,
       hostname,
       selector
     });
@@ -108,7 +113,7 @@ const PrivacyBlurStorage = (() => {
     if (!hostname || !selector) return;
 
     await send({
-      type: "REMOVE_SELECTOR",
+      type: MSG.REMOVE_SELECTOR,
       hostname,
       selector
     });
@@ -124,7 +129,7 @@ const PrivacyBlurStorage = (() => {
     if (!hostname) return [];
 
     const response = await send({
-      type: "GET_SELECTORS",
+      type: MSG.GET_SELECTORS,
       hostname
     });
 
@@ -142,7 +147,7 @@ const PrivacyBlurStorage = (() => {
     if (!hostname) return;
 
     await send({
-      type: "CLEAR_HOST",
+      type: MSG.CLEAR_HOST,
       hostname
     });
   }
@@ -152,7 +157,7 @@ const PrivacyBlurStorage = (() => {
    * @returns {Promise<void>}
    */
   async function clearAll() {
-    await send({ type: "CLEAR_ALL" });
+    await send({ type: MSG.CLEAR_ALL });
   }
 
   // -------------------------------------------------------------------------
@@ -166,7 +171,7 @@ const PrivacyBlurStorage = (() => {
    * @returns {Promise<object>}
    */
   async function getSettings() {
-    const response = await send({ type: "GET_SETTINGS" });
+    const response = await send({ type: MSG.GET_SETTINGS });
 
     const stored = (response && response.settings) ? response.settings : {};
     // Merge stored values over defaults so callers always get a complete object.
@@ -196,7 +201,7 @@ const PrivacyBlurStorage = (() => {
 
     // Send partial to background — background.js deep-merges with stored settings
     await send({
-      type: "SAVE_SETTINGS",
+      type: MSG.SAVE_SETTINGS,
       settings: partialSettings
     });
   }

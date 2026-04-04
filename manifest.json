@@ -22,6 +22,7 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "src/constants.js",
         "src/selector_utils.js",
         "src/storage_manager.js",
         "src/blur_engine.js",

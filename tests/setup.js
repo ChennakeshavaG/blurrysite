@@ -1,7 +1,7 @@
 /**
  * tests/setup.js
  *
- * Global test setup — runs once per test file (via setupFilesAfterFramework).
+ * Global test setup — runs once per test file (via setupFilesAfterEnv).
  * Provides a realistic mock of the chrome extension APIs so unit tests can
  * import / eval source modules without a real browser environment.
  */
@@ -14,6 +14,12 @@
 // default global. Aliasing it here makes extension IIFEs that assign to
 // `window.PrivacyBlur*` work correctly in both vm and eval contexts.
 global.window = global;
+
+// ─── Load message type constants ─────────────────────────────────────────────
+// constants.js assigns to globalThis.PrivacyBlur — must be loaded before any
+// source module that references window.PrivacyBlur.
+// Using require() so Jest's Istanbul transform instruments it for coverage.
+require('../src/constants.js');
 
 // ─── Chrome Extension API mock ────────────────────────────────────────────────
 
@@ -86,6 +92,15 @@ global.requestAnimationFrame = jest.fn(() => {
   return rafHandle;
 });
 global.cancelAnimationFrame = jest.fn();
+
+// ─── KeyboardEvent.getModifierState stub ─────────────────────────────────────
+
+// jsdom may not implement getModifierState on KeyboardEvent. Provide a default
+// that returns false so production code doesn't need a typeof guard.
+// Individual tests can mock it per-event for AltGr testing.
+if (!KeyboardEvent.prototype.getModifierState) {
+  KeyboardEvent.prototype.getModifierState = function() { return false; };
+}
 
 // ─── Reset mocks between tests ────────────────────────────────────────────────
 
