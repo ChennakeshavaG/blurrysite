@@ -323,9 +323,12 @@ const PrivacyBlurEngine = (() => {
     const tag = element.tagName.toLowerCase();
 
     // ---- VIDEO: canvas overlay approach ----
+    // No per-element --pb-radius needed — the canvas overlay reads `radius`
+    // from the closure, not from CSS. The CSS class provides a fallback
+    // filter via var(--pb-radius) from :root for the brief moment before
+    // the canvas overlay is drawn.
     if (tag === "video") {
       element.classList.add(BLURRED_CLASS);
-      element.style.setProperty("--pb-radius", `${radius}px`);
       startVideoBlurCanvas(element, radius);
       return;
     }

@@ -239,7 +239,8 @@ async function init() {
   // Fetch settings from background (already merged with defaults)
   const resp = await bgMessage({ type: MSG.GET_SETTINGS });
   if (resp && resp.settings) {
-    settings = MSG.deepMerge(MSG.DEFAULT_SETTINGS, resp.settings);
+    // Background already deep-merges with DEFAULT_SETTINGS before responding.
+    settings = resp.settings;
   }
 
   // Fetch blurred selectors for this hostname

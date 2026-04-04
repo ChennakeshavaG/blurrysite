@@ -69,7 +69,10 @@
 
   function processBlurChunk() {
     processingScheduled = false;
-    if (!isPageBlurred || pendingNodes.length === 0) {
+    // Capture state at entry — isPageBlurred may toggle mid-chunk via a
+    // message handler running between rAF callbacks.
+    const wasPageBlurred = isPageBlurred;
+    if (!wasPageBlurred || pendingNodes.length === 0) {
       pendingNodes = [];
       return;
     }
@@ -396,6 +399,7 @@
           }
 
           if (settings.ENABLED === false) {
+            dismissClickReveal();
             Shortcuts.destroy();
             if (isPickerActive) {
               Picker.deactivate();
@@ -598,6 +602,7 @@
     }
 
     if (settings.ENABLED === false) {
+      dismissClickReveal();
       Shortcuts.destroy();
       if (isPickerActive) {
         Picker.deactivate();

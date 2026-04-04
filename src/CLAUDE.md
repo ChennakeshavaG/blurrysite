@@ -73,20 +73,20 @@ A module may only depend on modules loaded before it.
 
 ### storage_manager.js
 - All methods are Promise-based. `send()` is the single internal Promise wrapper.
-- `saveSettings(partial)` sends the partial directly to background.js, which deep-merges it with stored settings. Do NOT pre-merge in storage_manager — that causes a redundant double merge.
-- `getSettings()` must merge response with `DEFAULT_SETTINGS` via `Object.assign({}, DEFAULT_SETTINGS, stored)`.
+- `saveSettings(fullSettings)` sends the complete settings object to background.js. No partial merges — caller must pass the full object.
+- `getSettings()` is a passthrough — returns what background sends (already merged with defaults). Falls back to `buildDefaultSettings()` if background is unreachable.
+- `getRules()` / `saveRules(rules)` — URL rules CRUD. Rules are an array of `{ id, name, pattern, patternType, settings }`.
 - `saveBlurredElement` must `return send(...)` (not `await send(...)` without return) so callers get the response.
-- DEFAULT_SETTINGS keys: `blurRadius`, `highlightColor`, `transitionDuration`, `revealOnHover`, `enabled`, `shortcuts`, `blurCategories`.
 
 ### shortcut_handler.js
-- `init(settings, callbacks)` reads **flat** settings: `settings.chordKey`, `settings.chordSecond`, `settings.chordCode1`, `settings.chordCode2`, `settings.chordModifier`.
-- **Does not apply defaults** — callers must pass complete settings. All defaults live in `constants.js → PrivacyBlur.DEFAULTS`.
-- Key matching prefers `event.code` (physical key, layout-independent) with `event.key` fallback for legacy settings without codes.
+- `init(shortcuts, callbacks)` accepts `{ ACTION_NAME: { primaryModifier, keys: [{ key, code }] } }`.
+- Tracks held keys via `Set<code>` on keydown/keyup. Window blur clears the Set.
+- Matches shortcuts by checking: is primaryModifier held? Are ALL keys in keys[] held simultaneously?
+- Key matching uses `event.code` (physical key, layout-independent).
 - Early-exit guards: `event.repeat`, `event.isComposing`, `event.key === "Dead"`, `getModifierState("AltGraph")`.
-- Fires `callbacks.TOGGLE_BLUR_ALL` (uppercase, no `on` prefix).
-- Fires `callbacks.onExitPicker` only when `_isPickerActive === true`.
-- Second chord key requires NO modifiers held (`!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey`).
-- Listener registered at capture phase (`addEventListener("keydown", fn, true)`).
+- Fires `callbacks[actionName]` for any matched shortcut (TOGGLE_BLUR_ALL, TOGGLE_PICKER, CLEAR_ALL).
+- Fires `callbacks.onExitPicker` on Escape when `_isPickerActive === true`.
+- Listeners registered at capture phase (`addEventListener("keydown"/"keyup", fn, true)`).
 - `_setPickerActive(v)` must be in the public return object.
 
 ### picker.js
@@ -99,10 +99,10 @@ A module may only depend on modules loaded before it.
 ### content_script.js
 - Bind module aliases inside `init()` after DOM ready, not at top level.
 - Call `Shortcuts._setPickerActive(true/false)` whenever `isPickerActive` changes.
-- Use `shortcutSettings()` helper to flatten nested `settings.shortcuts` before calling `Shortcuts.init()`.
+- Pass `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
 - `GET_STATUS` response: count blurred elements as `document.querySelectorAll('.pb-blurred').length`.
 - Async message handlers that need `sendResponse` must `return true` from `handleMessage`.
-- `settings.blurCategories` is a flat boolean map: `{ text, media, form, table, structure }`.
-- `TOGGLE_BLUR_ALL` passes `{ categories: settings.blurCategories }` to `Engine.blurAllContent`.
-- MutationObserver gates new nodes with `Engine.matchesActiveCategories(node, settings.blurCategories)` before calling `applyBlur`.
-- `UPDATE_SETTINGS` and `storage.onChanged` both invalidate the selector cache when `blurCategories` changes.
+- `settings.BLUR_CATEGORIES` is `{ TEXT, MEDIA, FORM, TABLE, STRUCTURE }` (UPPER_SNAKE_CASE).
+- `TOGGLE_BLUR_ALL` passes `{ categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR }` to `Engine.blurAllContent`.
+- MutationObserver gates new nodes with `Engine.matchesActiveCategories(node, settings.BLUR_CATEGORIES)`.
+- `UPDATE_SETTINGS` and `storage.onChanged` both invalidate selector cache and re-blur when categories or thoroughBlur change while blur-all is active.
