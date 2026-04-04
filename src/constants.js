@@ -106,7 +106,7 @@ const PrivacyBlur = (() => {
     TRANSITION_DURATION: 200,
     HIGHLIGHT_COLOR:     '#f59e0b',
     REVEAL_ON_HOVER:     false,
-    REVEAL_MODE:         'click',  // 'none' | 'click' | 'hover'
+    REVEAL_MODE:         'hover',  // 'none' | 'click' | 'hover'
     ENABLED:             true,
     THOROUGH_BLUR:       false,
     BLUR_CATEGORIES:     Object.freeze({
