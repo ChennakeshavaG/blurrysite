@@ -1,18 +1,17 @@
 /**
- * constants.js — PrivacyBlur Message Type Constants
+ * constants.js — PrivacyBlur Constants & Settings
  *
- * Single source of truth for all message type strings used across the
- * extension (background worker, content scripts, popup).
+ * Single source of truth for message types, default settings, and utility
+ * functions used across the extension (background worker, content scripts, popup).
  *
  * Usage:
  *   PrivacyBlur.STORAGE.SAVE_SELECTOR          // namespaced access
  *   PrivacyBlur.SAVE_SELECTOR                   // flat shorthand
  *   PrivacyBlur.isValid('SAVE_SELECTOR')        // true — validates a type string
  *   PrivacyBlur.categoryOf('SAVE_SELECTOR')     // 'STORAGE'
- *
- * Adding a new category:
- *   1. Define a frozen object in the categories map below.
- *   2. The build helpers (allTypes, flat spread) pick it up automatically.
+ *   PrivacyBlur.DEFAULT_SETTINGS                // frozen settings object
+ *   PrivacyBlur.buildDefaultSettings()          // mutable deep clone
+ *   PrivacyBlur.deepMerge(base, override)       // prototype-safe recursive merge
  *
  * Exposed as globalThis.PrivacyBlur (IIFE — no ES module syntax).
  * Uses globalThis so it works in both window (content scripts) and
@@ -22,10 +21,8 @@
 const PrivacyBlur = (() => {
   'use strict';
 
-  // ── Category definitions ────────────────────────────────────────────────────
+  // ── Message type categories ─────────────────────────────────────────────────
   // Each category is a frozen map of constant-name → wire-string.
-  // To add a new message type, add it to the relevant category.
-  // To add a new category, add a new entry to `categories`.
 
   const categories = {
     /** Content script / popup → background (storage I/O) */
@@ -37,6 +34,8 @@ const PrivacyBlur = (() => {
       CLEAR_ALL:       'CLEAR_ALL',
       GET_SETTINGS:    'GET_SETTINGS',
       SAVE_SETTINGS:   'SAVE_SETTINGS',
+      GET_RULES:       'GET_RULES',
+      SAVE_RULES:      'SAVE_RULES',
     }),
 
     /** Background → content script (command relay, restore, context menu) */
@@ -72,56 +71,96 @@ const PrivacyBlur = (() => {
     }
   }
 
-  /**
-   * Returns true if `type` is a known message type.
-   * Useful for guarding unknown messages in handlers.
-   * @param {string} type
-   * @returns {boolean}
-   */
   function isValid(type) {
     return allTypes.has(type);
   }
 
-  /**
-   * Returns the category name ('STORAGE', 'COMMAND', 'POPUP') for a type,
-   * or null if the type is unknown.
-   * @param {string} type
-   * @returns {string|null}
-   */
   function categoryOf(type) {
     return typeToCategory[type] || null;
   }
 
-  // ── Application defaults ─────────────────────────────────────────────────────
-  // Single source of truth for all default values. Every DEFAULT_SETTINGS
-  // object across the codebase must reference these instead of hardcoding.
+  // ── Default settings ────────────────────────────────────────────────────────
+  // Single source of truth. All UPPER_SNAKE_CASE. Every file in the codebase
+  // references this object or uses buildDefaultSettings() to get a mutable copy.
+  // No other file should define its own defaults.
 
-  const DEFAULTS = Object.freeze({
-    CHORD_KEY1:          'k',
-    CHORD_KEY2:          'v',
-    CHORD_CODE1:         null,   // null = no physical key code stored yet; fall back to event.key
-    CHORD_CODE2:         null,
-    CHORD_MODIFIER:      'ctrl',
-    BLUR_RADIUS:         8,
-    TRANSITION_DURATION: 200,
-    HIGHLIGHT_COLOR:     '#f59e0b',
-    REVEAL_ON_HOVER:     false,
-    REVEAL_MODE:         'hover',  // 'none' | 'click' | 'hover'
-    ENABLED:             true,
-    THOROUGH_BLUR:       false,
-    BLUR_CATEGORIES:     Object.freeze({
-      text:      true,
-      media:     true,
-      form:      false,
-      table:     true,
-      structure: true,
+  const DEFAULT_SETTINGS = Object.freeze({
+    BLUR_RADIUS:          8,
+    TRANSITION_DURATION:  200,
+    HIGHLIGHT_COLOR:      '#f59e0b',
+    REVEAL_MODE:          'hover',   // 'none' | 'click' | 'hover'
+    ENABLED:              true,
+    THOROUGH_BLUR:        false,
+
+    SHORTCUTS: Object.freeze({
+      TOGGLE_BLUR_ALL: Object.freeze({
+        primaryModifier: 'AltLeft',
+        keys: Object.freeze([
+          Object.freeze({ key: 'Shift', code: 'ShiftLeft' }),
+          Object.freeze({ key: 'b',     code: 'KeyB' }),
+        ]),
+      }),
+      TOGGLE_PICKER: Object.freeze({
+        primaryModifier: 'AltLeft',
+        keys: Object.freeze([
+          Object.freeze({ key: 'Shift', code: 'ShiftLeft' }),
+          Object.freeze({ key: 'p',     code: 'KeyP' }),
+        ]),
+      }),
+      CLEAR_ALL: Object.freeze({
+        primaryModifier: 'AltLeft',
+        keys: Object.freeze([
+          Object.freeze({ key: 'Shift', code: 'ShiftLeft' }),
+          Object.freeze({ key: 'u',     code: 'KeyU' }),
+        ]),
+      }),
+    }),
+
+    BLUR_CATEGORIES: Object.freeze({
+      TEXT:      true,
+      MEDIA:     true,
+      FORM:      false,
+      TABLE:     true,
+      STRUCTURE: true,
     }),
   });
 
+  // ── Utility: deep merge ─────────────────────────────────────────────────────
+  // Recursive merge with prototype pollution protection and depth limit.
+  // Used by all files for settings merging.
+
+  function deepMerge(base, override, depth) {
+    if (depth === undefined) depth = 0;
+    if (depth > 5) return override;
+
+    const result = Object.assign({}, base);
+
+    for (const key of Object.keys(override)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+      if (
+        override[key] !== null &&
+        typeof override[key] === 'object' &&
+        !Array.isArray(override[key]) &&
+        typeof base[key] === 'object' &&
+        base[key] !== null &&
+        !Array.isArray(base[key])
+      ) {
+        result[key] = deepMerge(base[key], override[key], depth + 1);
+      } else {
+        result[key] = override[key];
+      }
+    }
+
+    return result;
+  }
+
+  // ── Utility: build mutable settings clone ───────────────────────────────────
+
+  function buildDefaultSettings() {
+    return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  }
+
   // ── Build public object ─────────────────────────────────────────────────────
-  // Spread every category's constants at the top level for flat access,
-  // and also expose each category object for namespaced access.
-  // DEFAULTS is exposed as a separate namespace (not spread flat).
 
   const flat = {};
   for (const catObj of Object.values(categories)) {
@@ -129,7 +168,9 @@ const PrivacyBlur = (() => {
   }
 
   return Object.freeze(Object.assign(flat, categories, {
-    DEFAULTS,
+    DEFAULT_SETTINGS,
+    buildDefaultSettings,
+    deepMerge,
     isValid,
     categoryOf,
   }));

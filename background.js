@@ -12,35 +12,10 @@ const MSG = self.PrivacyBlur;
  *  - Centralise all chrome.storage.local reads/writes
  *  - Manage the right-click context menu entries
  *  - Re-apply persisted blur state whenever a tab finishes loading
+ *
+ * Settings and deepMerge are sourced from constants.js (PrivacyBlur.DEFAULT_SETTINGS,
+ * PrivacyBlur.deepMerge). No local copies.
  */
-
-// ---------------------------------------------------------------------------
-// Default settings — sourced from constants.js (single source of truth)
-// ---------------------------------------------------------------------------
-const D = self.PrivacyBlur.DEFAULTS;
-const DEFAULT_SETTINGS = Object.freeze({
-  blurRadius: D.BLUR_RADIUS,
-  transitionDuration: D.TRANSITION_DURATION,
-  highlightColor: D.HIGHLIGHT_COLOR,
-  revealOnHover: D.REVEAL_ON_HOVER,
-  revealMode: D.REVEAL_MODE,
-  enabled: D.ENABLED,
-  shortcuts: Object.freeze({
-    chordKey1: D.CHORD_KEY1,
-    chordKey2: D.CHORD_KEY2,
-    chordCode1: D.CHORD_CODE1,
-    chordCode2: D.CHORD_CODE2,
-    chordModifier: D.CHORD_MODIFIER
-  }),
-  thoroughBlur: D.THOROUGH_BLUR,
-  blurCategories: Object.freeze({
-    text:      D.BLUR_CATEGORIES.text,
-    media:     D.BLUR_CATEGORIES.media,
-    form:      D.BLUR_CATEGORIES.form,
-    table:     D.BLUR_CATEGORIES.table,
-    structure: D.BLUR_CATEGORIES.structure,
-  })
-});
 
 // ---------------------------------------------------------------------------
 // Context menu setup — created once on service-worker install/startup
@@ -65,9 +40,6 @@ chrome.runtime.onInstalled.addListener(() => {
   createContextMenus();
 });
 
-// Also recreate menus when the service worker wakes from suspension,
-// because chrome.contextMenus is only persistent across sessions when
-// created inside onInstalled; a second call is harmless (removeAll guards it).
 chrome.runtime.onStartup.addListener(() => {
   createContextMenus();
 });
@@ -79,9 +51,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) return;
 
   if (info.menuItemId === "pb-blur-element") {
-    chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_BLUR }).catch(() => {
-      // Content script not yet injected — silently ignore
-    });
+    chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_BLUR }).catch(() => {});
   } else if (info.menuItemId === "pb-unblur-element") {
     chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_UNBLUR }).catch(() => {});
   }
@@ -110,10 +80,6 @@ chrome.commands.onCommand.addListener(async (command) => {
 // Input validation helpers
 // ---------------------------------------------------------------------------
 
-/**
- * A valid hostname is a non-empty string ≤253 chars.
- * Blocks prototype-pollution keys like "__proto__" and "constructor".
- */
 function isValidHostname(h) {
   return (
     typeof h === "string" &&
@@ -125,7 +91,6 @@ function isValidHostname(h) {
   );
 }
 
-/** Selectors are capped at 2000 chars to prevent storage quota abuse. */
 function isValidSelector(s) {
   return typeof s === "string" && s.length > 0 && s.length <= 2000;
 }
@@ -135,25 +100,18 @@ function isValidSelector(s) {
 // ---------------------------------------------------------------------------
 let writeQueue = Promise.resolve();
 
-/**
- * Enqueue a storage mutation. Each callback receives no arguments, must
- * perform its own get/set, and return a Promise. Mutations execute serially.
- */
 function serialWrite(fn) {
-  writeQueue = writeQueue.then(fn).catch(() => {
-    // Swallow errors so the queue self-heals. Individual operations
-    // handle their own sendResponse inside fn.
-  });
+  writeQueue = writeQueue.then(fn).catch(() => {});
   return writeQueue;
 }
 
 // ---------------------------------------------------------------------------
-// Storage message handler — content scripts delegate all storage I/O here
+// Storage message handler
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
 
-    // ---- Read selectors for a hostname ----
+    // ---- Selectors (unchanged) ----
     case MSG.GET_SELECTORS: {
       if (!isValidHostname(message.hostname)) {
         sendResponse({ selectors: [] });
@@ -163,10 +121,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const map = result.blurred_selectors || {};
         sendResponse({ selectors: map[message.hostname] || [] });
       });
-      return true; // keep channel open for async sendResponse
+      return true;
     }
 
-    // ---- Persist a newly blurred selector ----
     case MSG.SAVE_SELECTOR: {
       if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
         sendResponse({ success: false, error: "invalid input" });
@@ -177,14 +134,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const map = result.blurred_selectors || {};
           const list = map[message.hostname] || [];
 
-          // Cap at 500 selectors per host to prevent quota exhaustion
           if (list.length >= 500) {
             sendResponse({ success: false, error: "per-host limit reached" });
             resolve();
             return;
           }
 
-          // Avoid storing duplicate selectors
           if (!list.includes(message.selector)) {
             list.push(message.selector);
           }
@@ -199,7 +154,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // ---- Remove a single selector from a hostname ----
     case MSG.REMOVE_SELECTOR: {
       if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
         sendResponse({ success: false, error: "invalid input" });
@@ -227,7 +181,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // ---- Wipe all selectors for a specific hostname ----
     case MSG.CLEAR_HOST: {
       if (!isValidHostname(message.hostname)) {
         sendResponse({ success: false, error: "invalid input" });
@@ -246,7 +199,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // ---- Wipe the entire blurred_selectors map ----
     case MSG.CLEAR_ALL: {
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.set({ blurred_selectors: {} }, () => {
@@ -257,30 +209,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // ---- Read settings, merged with defaults ----
+    // ---- Settings: full-object storage (no partial merges on save) ----
     case MSG.GET_SETTINGS: {
       chrome.storage.local.get("settings", (result) => {
         const saved = result.settings || {};
-        const merged = deepMerge(DEFAULT_SETTINGS, saved);
+        const merged = MSG.deepMerge(MSG.DEFAULT_SETTINGS, saved);
         sendResponse({ settings: merged });
       });
       return true;
     }
 
-    // ---- Persist a partial settings update ----
     case MSG.SAVE_SETTINGS: {
       if (!message.settings || typeof message.settings !== "object" || Array.isArray(message.settings)) {
         sendResponse({ success: false, error: "invalid settings" });
         return true;
       }
+      // Full-object storage: write the entire settings object as-is.
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.get("settings", (result) => {
-          const current = result.settings || {};
-          const updated = deepMerge(current, message.settings);
-          chrome.storage.local.set({ settings: updated }, () => {
-            sendResponse({ success: true });
-            resolve();
-          });
+        chrome.storage.local.set({ settings: message.settings }, () => {
+          sendResponse({ success: true });
+          resolve();
+        });
+      }));
+      return true;
+    }
+
+    // ---- URL Rules: array of { id, name, pattern, patternType, settings } ----
+    case MSG.GET_RULES: {
+      chrome.storage.local.get("rules", (result) => {
+        sendResponse({ rules: result.rules || [] });
+      });
+      return true;
+    }
+
+    case MSG.SAVE_RULES: {
+      if (!Array.isArray(message.rules)) {
+        sendResponse({ success: false, error: "invalid rules" });
+        return true;
+      }
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.set({ rules: message.rules }, () => {
+          sendResponse({ success: true });
+          resolve();
         });
       }));
       return true;
@@ -295,10 +265,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Tab navigation listener — re-apply persisted blur when a page finishes loading
 // ---------------------------------------------------------------------------
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  // Only act when the page has fully loaded and has a URL we can work with
   if (changeInfo.status !== "complete" || !tab.url) return;
 
-  // Skip chrome:// and extension:// URLs where content scripts cannot run
   if (
     tab.url.startsWith("chrome://") ||
     tab.url.startsWith("chrome-extension://") ||
@@ -308,35 +276,5 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
 
-  chrome.tabs.sendMessage(tabId, { type: MSG.RESTORE }).catch(() => {
-    // Content script not yet ready — this is normal for some page types
-  });
+  chrome.tabs.sendMessage(tabId, { type: MSG.RESTORE }).catch(() => {});
 });
-
-// ---------------------------------------------------------------------------
-// Utility — deep-merge two plain objects (second wins on conflicts)
-// ---------------------------------------------------------------------------
-function deepMerge(base, override, depth) {
-  if (depth === undefined) depth = 0;
-  if (depth > 5) return override;
-
-  const result = Object.assign({}, base);
-
-  for (const key of Object.keys(override)) {
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-    if (
-      override[key] !== null &&
-      typeof override[key] === "object" &&
-      !Array.isArray(override[key]) &&
-      typeof base[key] === "object" &&
-      base[key] !== null &&
-      !Array.isArray(base[key])
-    ) {
-      result[key] = deepMerge(base[key], override[key], depth + 1);
-    } else {
-      result[key] = override[key];
-    }
-  }
-
-  return result;
-}

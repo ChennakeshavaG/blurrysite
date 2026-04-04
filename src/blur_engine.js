@@ -38,7 +38,7 @@ const PrivacyBlurEngine = (() => {
   // docs/BLUR_CATEGORIES.md research.
 
   const CATEGORY_SELECTORS = Object.freeze({
-    text: Object.freeze({
+    TEXT: Object.freeze({
       alwaysBlur: Object.freeze([
         'h1','h2','h3','h4','h5','h6','p','blockquote','pre','figcaption','summary'
       ]),
@@ -48,19 +48,19 @@ const PrivacyBlurEngine = (() => {
         'data','del','ins','s','sub','sup','bdo','bdi'
       ]),
     }),
-    media: Object.freeze({
+    MEDIA: Object.freeze({
       alwaysBlur: Object.freeze(['img','video','canvas']),
       textCheck:  Object.freeze([]),
     }),
-    form: Object.freeze({
+    FORM: Object.freeze({
       alwaysBlur: Object.freeze(['input','textarea','select']),
       textCheck:  Object.freeze(['button','output','fieldset','legend']),
     }),
-    table: Object.freeze({
+    TABLE: Object.freeze({
       alwaysBlur: Object.freeze(['caption']),
       textCheck:  Object.freeze(['td','th']),
     }),
-    structure: Object.freeze({
+    STRUCTURE: Object.freeze({
       alwaysBlur: Object.freeze([]),
       textCheck:  Object.freeze([
         'div','section','article','aside','header','footer','figure','details','dialog'
@@ -68,14 +68,13 @@ const PrivacyBlurEngine = (() => {
     }),
   });
 
-  // All categories enabled — used as fallback when no options.categories provided
-  // so existing callers (blurAllContent(8)) continue to work unchanged.
+  // All categories enabled — used as fallback when no options.categories provided.
   const DEFAULT_ALL_ON = Object.freeze({
-    text: true, media: true, form: true, table: true, structure: true
+    TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true
   });
 
   // Category names in fixed order for cache key generation.
-  const CATEGORY_ORDER = Object.freeze(['text','media','form','table','structure']);
+  const CATEGORY_ORDER = Object.freeze(['TEXT','MEDIA','FORM','TABLE','STRUCTURE']);
 
   // -------------------------------------------------------------------------
   // Selector cache

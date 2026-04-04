@@ -12,31 +12,7 @@
 // popup.html must include <script src="../src/constants.js"></script> before this file.
 const MSG = window.PrivacyBlur;
 
-const D = window.PrivacyBlur.DEFAULTS;
-const DEFAULT_SETTINGS = Object.freeze({
-  enabled:            D.ENABLED,
-  blurRadius:         D.BLUR_RADIUS,
-  transitionDuration: D.TRANSITION_DURATION,
-  revealOnHover:      D.REVEAL_ON_HOVER,
-  revealMode:         D.REVEAL_MODE,
-  highlightColor:     D.HIGHLIGHT_COLOR,
-  shortcuts: Object.freeze({
-    chordKey1:     D.CHORD_KEY1,
-    chordKey2:     D.CHORD_KEY2,
-    chordCode1:    D.CHORD_CODE1,
-    chordCode2:    D.CHORD_CODE2,
-    chordModifier: D.CHORD_MODIFIER,
-  }),
-  thoroughBlur: D.THOROUGH_BLUR,
-  blurCategories: Object.freeze({
-    text:      D.BLUR_CATEGORIES.text,
-    media:     D.BLUR_CATEGORIES.media,
-    form:      D.BLUR_CATEGORIES.form,
-    table:     D.BLUR_CATEGORIES.table,
-    structure: D.BLUR_CATEGORIES.structure,
-  }),
-});
-
+// Settings sourced from constants.js — no local DEFAULT_SETTINGS copy.
 const DEBOUNCE_DELAY_MS = 300;
 const TOAST_DURATION_MS = 1800;
 
@@ -44,7 +20,7 @@ const TOAST_DURATION_MS = 1800;
 
 let currentTab    = null;
 let currentHost   = '';
-let settings      = { ...DEFAULT_SETTINGS, shortcuts: { ...DEFAULT_SETTINGS.shortcuts } };
+let settings      = MSG.buildDefaultSettings();
 let blurredItems  = [];   // string[] of CSS selectors
 let toastTimer    = null;
 
@@ -154,8 +130,8 @@ function extractHostname(url) {
 // ─── Render helpers ───────────────────────────────────────────────────────────
 
 function renderEnableToggle() {
-  ui.enableToggle.checked = settings.enabled;
-  ui.enableLabel.textContent = settings.enabled ? 'On' : 'Off';
+  ui.enableToggle.checked = settings.ENABLED;
+  ui.enableLabel.textContent = settings.ENABLED ? 'On' : 'Off';
 }
 
 function renderStatusBadge(count) {
@@ -164,21 +140,21 @@ function renderStatusBadge(count) {
 }
 
 function renderSettingsPanel() {
-  ui.blurRadius.value           = settings.blurRadius;
-  ui.blurRadiusValue.textContent = `${settings.blurRadius}px`;
-  ui.transitionToggle.checked   = (settings.transitionDuration || 0) > 0;
-  ui.revealModeSelect.value     = settings.revealMode || 'click';
-  ui.highlightColor.value       = settings.highlightColor;
+  ui.blurRadius.value           = settings.BLUR_RADIUS;
+  ui.blurRadiusValue.textContent = `${settings.BLUR_RADIUS}px`;
+  ui.transitionToggle.checked   = (settings.TRANSITION_DURATION || 0) > 0;
+  ui.revealModeSelect.value     = settings.REVEAL_MODE || 'click';
+  ui.highlightColor.value       = settings.HIGHLIGHT_COLOR;
 }
 
 function renderCategoryToggles() {
-  ui.thoroughBlur.checked = settings.thoroughBlur;
-  const cats = settings.blurCategories;
-  ui.catText.checked      = cats.text;
-  ui.catMedia.checked     = cats.media;
-  ui.catForm.checked      = cats.form;
-  ui.catTable.checked     = cats.table;
-  ui.catStructure.checked = cats.structure;
+  ui.thoroughBlur.checked = settings.THOROUGH_BLUR;
+  const cats = settings.BLUR_CATEGORIES;
+  ui.catText.checked      = cats.TEXT;
+  ui.catMedia.checked     = cats.MEDIA;
+  ui.catForm.checked      = cats.FORM;
+  ui.catTable.checked     = cats.TABLE;
+  ui.catStructure.checked = cats.STRUCTURE;
 }
 
 function renderBlurList() {
@@ -260,15 +236,10 @@ async function init() {
   ui.hostname.textContent = currentHost || '—';
   ui.hostname.title = currentHost;
 
-  // Fetch settings from background
+  // Fetch settings from background (already merged with defaults)
   const resp = await bgMessage({ type: MSG.GET_SETTINGS });
   if (resp && resp.settings) {
-    settings = {
-      ...DEFAULT_SETTINGS,
-      ...resp.settings,
-      shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...(resp.settings.shortcuts || {}) },
-      blurCategories: { ...DEFAULT_SETTINGS.blurCategories, ...(resp.settings.blurCategories || {}) },
-    };
+    settings = MSG.deepMerge(MSG.DEFAULT_SETTINGS, resp.settings);
   }
 
   // Fetch blurred selectors for this hostname
@@ -290,10 +261,10 @@ async function init() {
 function wireControls() {
   // Enable / disable toggle — save settings and notify tab via UPDATE_SETTINGS
   ui.enableToggle.addEventListener('change', async () => {
-    settings.enabled = ui.enableToggle.checked;
-    ui.enableLabel.textContent = settings.enabled ? 'On' : 'Off';
+    settings.ENABLED = ui.enableToggle.checked;
+    ui.enableLabel.textContent = settings.ENABLED ? 'On' : 'Off';
     await saveSettings(true);
-    showToast(settings.enabled ? 'PrivacyBlur enabled' : 'PrivacyBlur disabled');
+    showToast(settings.ENABLED ? 'PrivacyBlur enabled' : 'PrivacyBlur disabled');
   });
 
   // Blur All button
@@ -337,21 +308,21 @@ function wireControls() {
 
   // Thorough blur toggle
   ui.thoroughBlur.addEventListener('change', async () => {
-    settings.thoroughBlur = ui.thoroughBlur.checked;
+    settings.THOROUGH_BLUR = ui.thoroughBlur.checked;
     await saveSettings(true);
   });
 
-  // Category toggles — each updates one key in settings.blurCategories
+  // Category toggles — each updates one key in settings.BLUR_CATEGORIES
   const categoryMap = {
-    catText:      'text',
-    catMedia:     'media',
-    catForm:      'form',
-    catTable:     'table',
-    catStructure: 'structure',
+    catText:      'TEXT',
+    catMedia:     'MEDIA',
+    catForm:      'FORM',
+    catTable:     'TABLE',
+    catStructure: 'STRUCTURE',
   };
   for (const [uiKey, catName] of Object.entries(categoryMap)) {
     ui[uiKey].addEventListener('change', async () => {
-      settings.blurCategories[catName] = ui[uiKey].checked;
+      settings.BLUR_CATEGORIES[catName] = ui[uiKey].checked;
       await saveSettings(true);
     });
   }
@@ -359,28 +330,28 @@ function wireControls() {
   // Blur radius slider (debounced)
   const saveRadius = debounce(async () => {
     await saveSettings();
-    showToast(`Blur radius: ${settings.blurRadius}px`);
+    showToast(`Blur radius: ${settings.BLUR_RADIUS}px`);
   }, DEBOUNCE_DELAY_MS);
 
   ui.blurRadius.addEventListener('input', () => {
-    settings.blurRadius = Number(ui.blurRadius.value);
-    ui.blurRadiusValue.textContent = `${settings.blurRadius}px`;
+    settings.BLUR_RADIUS = Number(ui.blurRadius.value);
+    ui.blurRadiusValue.textContent = `${settings.BLUR_RADIUS}px`;
     saveRadius();
   });
 
   // Smooth transition toggle — maps to transitionDuration (0 = off, 200 = on)
   ui.transitionToggle.addEventListener('change', async () => {
-    settings.transitionDuration = ui.transitionToggle.checked ? 200 : 0;
+    settings.TRANSITION_DURATION = ui.transitionToggle.checked ? 200 : 0;
     await saveSettings();
     showToast(ui.transitionToggle.checked ? 'Smooth transition on' : 'Instant transition');
   });
 
   // Reveal mode select
   ui.revealModeSelect.addEventListener('change', async () => {
-    settings.revealMode = ui.revealModeSelect.value;
+    settings.REVEAL_MODE = ui.revealModeSelect.value;
     await saveSettings(true);
     const labels = { click: 'Click to peek', hover: 'Hover to peek', none: 'Reveal disabled' };
-    showToast(labels[settings.revealMode] || 'Reveal mode updated');
+    showToast(labels[settings.REVEAL_MODE] || 'Reveal mode updated');
   });
 
   // Highlight color (debounced)
@@ -390,7 +361,7 @@ function wireControls() {
   }, DEBOUNCE_DELAY_MS);
 
   ui.highlightColor.addEventListener('input', () => {
-    settings.highlightColor = ui.highlightColor.value;
+    settings.HIGHLIGHT_COLOR = ui.highlightColor.value;
     saveColor();
   });
 
@@ -466,7 +437,7 @@ function modifierLabel(mod) {
 function renderChordDisplay() {
   const display = document.getElementById('chordKeysDisplay');
   if (!display) return;
-  const s = settings.shortcuts || {};
+  const s = settings.SHORTCUTS || {};
   const mod = modifierLabel(s.chordModifier || 'ctrl');
   const k1  = (s.chordKey1 || 'k').toUpperCase();
   const k2  = (s.chordKey2 || 'v').toUpperCase();
@@ -571,7 +542,7 @@ function openShortcutModal() {
   // Save button
   const onSave = async () => {
     if (!pendingChord.modifier || !pendingChord.key1 || !pendingChord.key2) return;
-    settings.shortcuts = {
+    settings.SHORTCUTS = {
       chordModifier: pendingChord.modifier,
       chordKey1:     pendingChord.key1,
       chordKey2:     pendingChord.key2,
@@ -587,7 +558,7 @@ function openShortcutModal() {
 
   // Reset button — restore defaults
   const onReset = async () => {
-    settings.shortcuts = {
+    settings.SHORTCUTS = {
       chordModifier: D.CHORD_MODIFIER,
       chordKey1:     D.CHORD_KEY1,
       chordKey2:     D.CHORD_KEY2,
