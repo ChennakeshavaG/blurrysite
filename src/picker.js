@@ -36,7 +36,6 @@ window.PrivacyBlurPicker = (() => {
   // ─── Toolbar DOM references ───────────────────────────────────────────────────
 
   let toolbarEl = null;
-  let toastEl = null;
 
   // ─── Toast notification ───────────────────────────────────────────────────────
 

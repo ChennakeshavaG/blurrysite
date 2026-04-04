@@ -101,8 +101,27 @@
     }
   }
 
+  /** Combined CSS selector for observer descendant queries. Built from
+   *  CATEGORY_SELECTORS to avoid querySelectorAll('*'). Rebuilt when
+   *  categories change via buildObserverSelector(). */
+  let observerSelector = '';
+
+  function buildObserverSelector() {
+    const cats = settings.BLUR_CATEGORIES;
+    const tags = [];
+    const CS = Engine.CATEGORY_SELECTORS;
+    for (const key of CATEGORY_KEYS) {
+      if (!cats[key]) continue;
+      const cat = CS[key];
+      for (let i = 0; i < cat.alwaysBlur.length; i++) tags.push(cat.alwaysBlur[i]);
+      for (let i = 0; i < cat.textCheck.length; i++) tags.push(cat.textCheck[i]);
+    }
+    observerSelector = tags.join(',');
+  }
+
   function startDomObserver() {
     if (domObserver) return;
+    buildObserverSelector();
 
     domObserver = new MutationObserver((mutations) => {
       if (isPickerActive) return;
@@ -111,10 +130,15 @@
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          // Queue the node itself. For descendants, use the cached combined
+          // selector instead of querySelectorAll('*') to avoid quadratic
+          // complexity when large subtrees are inserted.
           pendingNodes.push(node);
-          const children = node.querySelectorAll('*');
-          for (let i = 0; i < children.length; i++) {
-            pendingNodes.push(children[i]);
+          if (observerSelector) {
+            const children = node.querySelectorAll(observerSelector);
+            for (let i = 0; i < children.length; i++) {
+              pendingNodes.push(children[i]);
+            }
           }
         }
       }
@@ -445,7 +469,7 @@
             CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
           const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
 
-          if (catsChanged) Engine.invalidateSelectorCache();
+          if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
 
           // Re-blur the page if blur-all is active and blur config changed
           if (isPageBlurred && (catsChanged || thoroughChanged)) {
@@ -640,7 +664,7 @@
     const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
     const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
 
-    if (catsChanged) Engine.invalidateSelectorCache();
+    if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
     if (isPageBlurred && (catsChanged || thoroughChanged)) {
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
@@ -670,7 +694,7 @@
       settings = resolveSettings(location.href, globalSettings, rules);
       applySettingsToDom();
       const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-      if (catsChanged) Engine.invalidateSelectorCache();
+      if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
       if (isPageBlurred && (catsChanged || oldThorough !== settings.THOROUGH_BLUR)) {
         Engine.unblurAll();
         Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR });
@@ -694,7 +718,7 @@
       CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
     const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
 
-    if (catsChanged) Engine.invalidateSelectorCache();
+    if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
 
     // Re-blur if blur-all active and config changed
     if (isPageBlurred && (catsChanged || thoroughChanged)) {
