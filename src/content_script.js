@@ -426,33 +426,40 @@
     }
   }
 
+  /** The single element currently revealed by hover */
+  let _hoverRevealedEl = null;
+
   function onRevealMouseOver(e) {
     if (settings.REVEAL_MODE !== RM.HOVER) return;
     const target = e.target;
     if (!(target instanceof Element)) return;
-
-    const blurredEl = findBlurredTarget(target);
-    if (!blurredEl) return;
+    if (!Engine.isBlurred(target)) return;
 
     if (mouseoutTimer) {
       clearTimeout(mouseoutTimer);
       mouseoutTimer = null;
     }
 
-    _revealElement(blurredEl);
-    revealAncestorChain(blurredEl);
+    // Unreveal previous if different element
+    if (_hoverRevealedEl && _hoverRevealedEl !== target) {
+      _unrevealElement(_hoverRevealedEl);
+      clearRevealedAncestors();
+    }
+
+    _revealElement(target);
+    _hoverRevealedEl = target;
+    revealAncestorChain(target);
   }
 
   function onRevealMouseOut(e) {
-    if (_revealedElements.size === 0 && revealedAncestors.length === 0) return;
-    const related = e.relatedTarget;
-    if (related && related instanceof Element && findBlurredTarget(related)) {
-      return;
-    }
+    if (!_hoverRevealedEl) return;
     if (mouseoutTimer) clearTimeout(mouseoutTimer);
     mouseoutTimer = setTimeout(() => {
       mouseoutTimer = null;
-      _unrevealAll();
+      if (_hoverRevealedEl) {
+        _unrevealElement(_hoverRevealedEl);
+        _hoverRevealedEl = null;
+      }
       clearRevealedAncestors();
     }, 50);
   }
