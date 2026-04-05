@@ -138,7 +138,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
   /**
    * Evaluate an expression in the content script's isolated world via CDP.
-   * This gives us access to window.PrivacyBlurEngine and other globals.
+   * This gives us access to pb.BlurEngine and other globals.
    */
   async function evalInContentScript(expression) {
     const client = await page.createCDPSession();
@@ -184,27 +184,27 @@ describeFn('PrivacyBlur extension — E2E', () => {
         (function() {
           var blurred = document.querySelectorAll('.pb-blurred');
           if (blurred.length > 0) {
-            window.PrivacyBlurEngine.unblurAll();
+            pb.BlurEngine.unblurAll();
           } else {
-            window.PrivacyBlurEngine.blurAllContent(8);
+            pb.BlurEngine.blurAllContent(8);
           }
         })()
       `,
       TOGGLE_PICKER: `
         (function() {
           if (document.documentElement.classList.contains('pb-picker-active')) {
-            window.PrivacyBlurPicker.deactivate();
+            pb.Picker.deactivate();
           } else {
-            window.PrivacyBlurPicker.activate(
+            pb.Picker.activate(
               { blurRadius: 8, highlightColor: '#f59e0b' },
               {
                 onBlur: function(el) {
-                  window.PrivacyBlurEngine.applyBlur(el, 8);
-                  var sel = window.PrivacyBlurSelectorUtils.getSelector(el);
-                  if (sel) window.PrivacyBlurStorage.saveBlurredElement(location.hostname, sel);
+                  pb.BlurEngine.applyBlur(el, 8);
+                  var sel = pb.SelectorUtils.getSelector(el);
+                  if (sel) pb.Storage.saveBlurredElement(location.hostname, sel);
                 },
                 onUnblur: function(el) {
-                  window.PrivacyBlurEngine.removeBlur(el);
+                  pb.BlurEngine.removeBlur(el);
                 },
                 onDeactivate: function() {}
               }
@@ -214,7 +214,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
       `,
       CLEAR_ALL_BLUR: `
         (function() {
-          window.PrivacyBlurEngine.unblurAll();
+          pb.BlurEngine.unblurAll();
         })()
       `,
     };
@@ -335,8 +335,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
   test('clear all blur removes everything', async () => {
     // Directly blur some elements to ensure there is something to clear.
     await evalInContentScript(`
-      window.PrivacyBlurEngine.applyBlur(document.querySelector('#test-img'), 8);
-      window.PrivacyBlurEngine.applyBlur(document.querySelector('#test-para'), 8);
+      pb.BlurEngine.applyBlur(document.querySelector('#test-img'), 8);
+      pb.BlurEngine.applyBlur(document.querySelector('#test-para'), 8);
     `);
     await new Promise((r) => setTimeout(r, 300));
 
@@ -375,7 +375,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
       expect(contextId).toBeTruthy();
 
       await client.send('Runtime.evaluate', {
-        expression: 'window.PrivacyBlurEngine.blurAllContent(8)',
+        expression: 'pb.BlurEngine.blurAllContent(8)',
         contextId,
         returnByValue: true,
         awaitPromise: true,
@@ -404,11 +404,11 @@ describeFn('PrivacyBlur extension — E2E', () => {
       // Activate picker via content script world.
       await client.send('Runtime.evaluate', {
         expression: `
-          window.PrivacyBlurPicker.activate(
+          pb.Picker.activate(
             { blurRadius: 8, highlightColor: '#f59e0b' },
             {
-              onBlur: function(el) { window.PrivacyBlurEngine.applyBlur(el, 8); },
-              onUnblur: function(el) { window.PrivacyBlurEngine.removeBlur(el); },
+              onBlur: function(el) { pb.BlurEngine.applyBlur(el, 8); },
+              onUnblur: function(el) { pb.BlurEngine.removeBlur(el); },
               onDeactivate: function() {}
             }
           );

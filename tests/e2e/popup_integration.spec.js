@@ -143,7 +143,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     // Trigger TOGGLE_BLUR_ALL via content script globals (simulates what
     // background.js does when relaying chrome.commands).
     await evalInContentScript(`
-      window.PrivacyBlurEngine.blurAllContent(8);
+      pb.BlurEngine.blurAllContent(8);
     `);
     await new Promise((r) => setTimeout(r, 300));
 
@@ -152,7 +152,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     expect(count).toBeGreaterThan(0);
 
     // Unblur.
-    await evalInContentScript(`window.PrivacyBlurEngine.unblurAll()`);
+    await evalInContentScript(`pb.BlurEngine.unblurAll()`);
   });
 
   test('settings change via chrome.storage.onChanged reaches content script', async () => {
@@ -249,7 +249,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     expect(hasCS).toBe(true);
 
     // Blur all via content script world.
-    await evalInContentScript(`window.PrivacyBlurEngine.blurAllContent(8)`);
+    await evalInContentScript(`pb.BlurEngine.blurAllContent(8)`);
     await new Promise((r) => setTimeout(r, 500));
 
     const count = await countBlurred();
@@ -257,7 +257,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     expect(count).toBeGreaterThan(0);
 
     // Unblur.
-    await evalInContentScript(`window.PrivacyBlurEngine.unblurAll()`);
+    await evalInContentScript(`pb.BlurEngine.unblurAll()`);
   });
 
   test('clear page works on google.com', async () => {
@@ -265,14 +265,14 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 1500));
 
     // Blur.
-    await evalInContentScript(`window.PrivacyBlurEngine.blurAllContent(8)`);
+    await evalInContentScript(`pb.BlurEngine.blurAllContent(8)`);
     await new Promise((r) => setTimeout(r, 300));
     const before = await countBlurred();
     console.log(`  → Before clear: ${before}`);
     expect(before).toBeGreaterThan(0);
 
     // Clear.
-    await evalInContentScript(`window.PrivacyBlurEngine.unblurAll()`);
+    await evalInContentScript(`pb.BlurEngine.unblurAll()`);
     await new Promise((r) => setTimeout(r, 300));
     const after = await countBlurred();
     console.log(`  → After clear: ${after}`);
@@ -284,11 +284,11 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 1500));
 
     await evalInContentScript(`
-      window.PrivacyBlurPicker.activate(
+      pb.Picker.activate(
         { blurRadius: 8, highlightColor: '#f59e0b' },
         {
-          onBlur: function(el) { window.PrivacyBlurEngine.applyBlur(el, 8); },
-          onUnblur: function(el) { window.PrivacyBlurEngine.removeBlur(el); },
+          onBlur: function(el) { pb.BlurEngine.applyBlur(el, 8); },
+          onUnblur: function(el) { pb.BlurEngine.removeBlur(el); },
           onDeactivate: function() {}
         }
       );
@@ -321,10 +321,10 @@ describeFn('Popup ↔ Content Script Integration', () => {
       (async () => {
         const el = document.querySelector('#para1');
         if (el) {
-          window.PrivacyBlurEngine.applyBlur(el, 8);
-          const sel = window.PrivacyBlurSelectorUtils.getSelector(el);
+          pb.BlurEngine.applyBlur(el, 8);
+          const sel = pb.SelectorUtils.getSelector(el);
           if (sel) {
-            await window.PrivacyBlurStorage.saveBlurredElement(location.hostname, sel);
+            await pb.Storage.saveBlurredElement(location.hostname, sel);
           }
         }
       })();
@@ -345,7 +345,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
 
     // Clean up storage.
     await evalInContentScript(`
-      window.PrivacyBlurStorage.clearHost(location.hostname);
+      pb.Storage.clearHost(location.hostname);
     `);
   });
 });
