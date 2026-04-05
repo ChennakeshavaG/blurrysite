@@ -366,12 +366,15 @@
     el.style.setProperty('transition', 'filter 100ms ease', 'important');
     el.style.setProperty('filter', 'none', 'important');
     _revealedElements.add(el);
-    // Also reveal blurred descendants — they have their own blur via
-    // data-pb-blur or CSS rules, causing double-blur and staying blurred
-    // even when the parent is revealed.
-    el.querySelectorAll('[data-pb-blur]').forEach(child => {
-      child.style.setProperty('filter', 'none', 'important');
-      _revealedElements.add(child);
+    // Reveal ALL blurred descendants — they may be blurred by:
+    // 1. data-pb-blur attribute ([data-pb-blur] CSS rule)
+    // 2. CSS tag rules (span, p, img, etc. from injected <style>)
+    // Both need inline style override to unblur.
+    el.querySelectorAll('*').forEach(child => {
+      if (Engine.isBlurred(child)) {
+        child.style.setProperty('filter', 'none', 'important');
+        _revealedElements.add(child);
+      }
     });
   }
 
