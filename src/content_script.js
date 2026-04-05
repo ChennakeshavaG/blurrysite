@@ -195,9 +195,7 @@
 
   // ─── Settings helpers ────────────────────────────────────────────────────────
 
-  function mergeSettings(incoming) {
-    return MSG.deepMerge(settings, incoming);
-  }
+  // mergeSettings removed — applyState handles all settings updates via resolveSettings.
 
   // ─── URL rule pattern matching ──────────────────────────────────────────────
 
@@ -316,9 +314,13 @@
     if (!pattern || typeof pattern !== 'string') return false;
     if (pattern.length > MAX_PATTERN_LENGTH) return false;
 
-    // Regex mode: match against URL without hash
+    // Regex mode: match against URL without hash.
+    // Reject patterns with nested quantifiers to prevent ReDoS.
     if (patternType === 'regex') {
       try {
+        if (/([+*?])\s*[)]\s*[+*?{]/.test(pattern) || /([+*?{])\s*\1/.test(pattern)) {
+          return false; // nested quantifiers — catastrophic backtracking risk
+        }
         const urlNoHash = url.replace(/#.*$/, '');
         return new RegExp(pattern, 'i').test(urlNoHash);
       } catch (_e) {
@@ -641,11 +643,13 @@
       // ── Unblur a specific selector (from popup remove button) ────────────
       case MSG.UNBLUR_SELECTOR: {
         if (message.selector) {
-          const el = document.querySelector(message.selector);
-          if (el) {
-            el.classList.remove('pb-reveal-on-hover');
-            Engine.removeBlur(el);
-          }
+          try {
+            const el = document.querySelector(message.selector);
+            if (el) {
+              el.classList.remove('pb-reveal-on-hover');
+              Engine.removeBlur(el);
+            }
+          } catch (_e) { /* invalid selector — skip */ }
         }
         if (sendResponse) sendResponse({ ok: true });
         break;
@@ -731,10 +735,9 @@
         categories: settings.BLUR_CATEGORIES,
         thoroughBlur: settings.THOROUGH_BLUR,
       });
-      applyRevealClasses();
     }
 
-    // 7. Reveal mode management
+    // 7. Reveal mode management (always runs — covers both re-blur and mode-only changes)
     applyRevealClasses();
     if (settings.REVEAL_MODE !== 'click') dismissClickReveal();
 

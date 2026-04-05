@@ -215,7 +215,8 @@ const PrivacyBlur = (() => {
           typeof binding.primaryModifier === 'string' &&
           Array.isArray(binding.keys) &&
           binding.keys.length > 0 &&
-          binding.keys.every(k => k && typeof k.code === 'string')) {
+          binding.keys.length <= 10 &&
+          binding.keys.every(k => k && typeof k.key === 'string' && typeof k.code === 'string')) {
         result.SHORTCUTS[action] = binding;
       } else {
         result.SHORTCUTS[action] = JSON.parse(JSON.stringify(defaults.SHORTCUTS[action]));

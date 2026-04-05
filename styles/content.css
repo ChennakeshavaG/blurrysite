@@ -40,16 +40,6 @@
      without GPU promotion on modern browsers. */
 }
 
-/**
- * Video-specific blur: we overlay a canvas for the blur effect because CSS
- * filter on <video> can be unreliable cross-browser, but also keep the class
- * for simple cases.
- */
-.pb-blurred-video {
-  position: relative !important;
-  /* The canvas overlay is absolutely positioned inside this wrapper */
-}
-
 /* ─── Reveal modes ─────────────────────────────────────────────────────────── */
 
 /**
@@ -90,29 +80,9 @@
   -webkit-filter: none !important;
 }
 
-/* ─── Blur animation ────────────────────────────────────────────────────────── */
-
-@keyframes pb-blur-in {
-  from {
-    filter: blur(0);
-    -webkit-filter: blur(0);
-  }
-  to {
-    filter: blur(var(--pb-radius, 8px));
-    -webkit-filter: blur(var(--pb-radius, 8px));
-  }
-}
-
-@keyframes pb-blur-out {
-  from {
-    filter: blur(var(--pb-radius, 8px));
-    -webkit-filter: blur(var(--pb-radius, 8px));
-  }
-  to {
-    filter: blur(0);
-    -webkit-filter: blur(0);
-  }
-}
+/* Keyframe animations removed — transition property handles blur-in/out smoothly.
+   The old pb-blur-in/pb-blur-out keyframes were redundant with the transition
+   and re-triggered on every class toggle. */
 
 /* ─── Picker mode ───────────────────────────────────────────────────────────── */
 

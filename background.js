@@ -238,9 +238,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid settings" });
         return true;
       }
-      // Full-object storage: write the entire settings object as-is.
+      // Validate before persisting — strips invalid values, fills missing with defaults
+      const validatedSettings = MSG.validateSettings(message.settings);
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.set({ settings: message.settings }, () => {
+        chrome.storage.local.set({ settings: validatedSettings }, () => {
           sendResponse({ success: true });
           resolve();
         });
@@ -261,13 +262,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid rules" });
         return true;
       }
-      // Cap rules at 100 and validate field lengths
       if (message.rules.length > 100) {
         sendResponse({ success: false, error: "max 100 rules" });
         return true;
       }
+      // Validate and sanitize each rule: enforce field types and size limits
+      const sanitizedRules = message.rules.filter(r => r && typeof r === 'object').map(r => ({
+        id:          (typeof r.id === 'string' && r.id.length <= 20) ? r.id : 'r_' + Math.random().toString(36).slice(2, 10),
+        name:        (typeof r.name === 'string') ? r.name.slice(0, 100) : '',
+        pattern:     (typeof r.pattern === 'string') ? r.pattern.slice(0, 500) : '',
+        patternType: (r.patternType === 'regex' || r.patternType === 'wildcard') ? r.patternType : 'wildcard',
+        settings:    (r.settings && typeof r.settings === 'object' && !Array.isArray(r.settings) && JSON.stringify(r.settings).length <= 2000) ? r.settings : {},
+      }));
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.set({ rules: message.rules }, () => {
+        chrome.storage.local.set({ rules: sanitizedRules }, () => {
           sendResponse({ success: true });
           resolve();
         });
