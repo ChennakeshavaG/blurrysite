@@ -102,9 +102,7 @@
           }
         }
       }
-      if (blurred > 0 || unblurred > 0 || window.__PB_DEBUG) {
-        _dbg(`IO #${_ioCallCount}: ${entries.length} entries, +${blurred} blurred, -${unblurred} unblurred`);
-      }
+      _dbg(`IO #${_ioCallCount}: ${entries.length} entries, +${blurred} blurred, -${unblurred} unblurred`);
     }, {
       rootMargin: '200px',
     });
@@ -125,10 +123,9 @@
     }
   }
 
-  // ── DEBUG: set window.__PB_DEBUG = true in console to enable logging ──────
-  function _dbg(...args) {
-    if (window.__PB_DEBUG) console.log('[PB]', ...args);
-  }
+  // ── DEBUG: always-on logging until crash is diagnosed ─────────────────────
+  const _dbg = (...args) => console.log('[PB]', ...args);
+  _dbg('content_script loaded, hostname:', location.hostname);
 
   // ── MutationObserver: blur new DOM elements synchronously ─────────────────
 
@@ -204,9 +201,7 @@
       }
 
       const elapsed = performance.now() - t0;
-      if (elapsed > 5 || addedCount > 50 || window.__PB_DEBUG) {
-        _dbg(`MO #${_moCallCount}: ${mutations.length} mutations, ${addedCount} added, ${charDataCount} charData, ${elapsed.toFixed(1)}ms`);
-      }
+      _dbg(`MO #${_moCallCount}: ${mutations.length} muts, ${addedCount} added, ${charDataCount} charData, ${elapsed.toFixed(1)}ms`);
     });
 
     domObserver.observe(document.body, {
@@ -487,12 +482,9 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
-    // Don't interfere with form element interactions — inputs, textareas,
-    // selects, buttons, and contenteditable need their native click behavior.
-    // Adding/removing classes on their blurred ancestor triggers style
-    // recalculation that site JS may interpret as a DOM change (closing
-    // search overlays, dropdown menus, autocomplete popups).
     const tag = target.tagName.toLowerCase();
+    _dbg('revealClick:', tag, target.id || target.className);
+
     if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
         tag === 'button' || target.isContentEditable) return;
 
@@ -576,6 +568,7 @@
 
   function handleMessage(message, _sender, sendResponse) {
     const { type } = message;
+    _dbg('handleMessage:', type);
 
     // Dedup toggle commands that fire from both manifest and JS handler
     if (type === MSG.TOGGLE_BLUR_ALL || type === MSG.TOGGLE_PICKER || type === MSG.CLEAR_ALL_BLUR) {
@@ -857,6 +850,7 @@
   // ─── Initialisation ───────────────────────────────────────────────────────────
 
   async function init() {
+    _dbg('init() starting');
     Engine    = pb.BlurEngine;
     Store     = pb.Storage;
     Selector  = pb.SelectorUtils;
