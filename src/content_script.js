@@ -132,43 +132,11 @@
 
   // ── Batched MutationObserver ────────────────────────────────────────────────
 
-  // CHUNK_SIZE read from settings (configurable, default 50)
-  let pendingNodes = [];
-  let processingScheduled = false;
+  // ── MutationObserver: blur new DOM elements synchronously ─────────────────
+  // applyBlur is just classList.add — no DOM injection, no reflow.
+  // Synchronous processing is simpler and faster than the old chunked RAF pipeline.
 
-  function processBlurChunk() {
-    processingScheduled = false;
-    const wasPageBlurred = isPageBlurred;
-    if (!wasPageBlurred || pendingNodes.length === 0) {
-      pendingNodes = [];
-      return;
-    }
-
-    const chunkSize = settings.PERFORMANCE.CHUNK_SIZE || 50;
-    const chunk = pendingNodes.splice(0, chunkSize);
-
-    for (let i = 0; i < chunk.length; i++) {
-      const node = chunk[i];
-      if (!node.isConnected) continue;
-      if (!canBlurMore()) break; // element cap reached
-
-      if (Engine.shouldBlurElement(node, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
-        Engine.applyBlur(node, settings.BLUR_RADIUS, settings.BLUR_MODE);
-        if (settings.REVEAL_MODE === RM.HOVER) node.classList.add(CLS.REVEAL_ON_HOVER);
-        blurredElementCount++;
-        observeElement(node);
-      }
-    }
-
-    if (pendingNodes.length > 0) {
-      processingScheduled = true;
-      requestAnimationFrame(processBlurChunk);
-    }
-  }
-
-  /** Combined CSS selector for observer descendant queries. Built from
-   *  CATEGORY_SELECTORS to avoid querySelectorAll('*'). Rebuilt when
-   *  categories change via buildObserverSelector(). */
+  /** CSS selector for descendant queries. Built from CATEGORY_SELECTORS. */
   let observerSelector = '';
 
   function buildObserverSelector() {
@@ -184,8 +152,32 @@
     observerSelector = tags.join(',');
   }
 
+  /** Blur a single element if it passes the category + text-check gate. */
+  function tryBlurElement(el) {
+    if (!el.isConnected) return;
+    if (Engine.isBlurred(el)) return;
+    if (!canBlurMore()) return;
+    if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
+      Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
+      if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
+      blurredElementCount++;
+      observeElement(el);
+    }
+  }
+
+  /** Blur a newly added subtree: the node itself + matching descendants. */
+  function blurNewSubtree(node) {
+    tryBlurElement(node);
+    if (observerSelector) {
+      const children = node.querySelectorAll(observerSelector);
+      for (let i = 0; i < children.length; i++) {
+        tryBlurElement(children[i]);
+      }
+    }
+  }
+
   function startDomObserver() {
-    if (domObserver) return; // Already running — use restartDomObserver() to rebuild
+    if (domObserver) return;
     buildObserverSelector();
 
     domObserver = new MutationObserver((mutations) => {
@@ -193,47 +185,17 @@
       if (!isPageBlurred) return;
 
       for (const mutation of mutations) {
-        // ── childList: new elements added to the DOM ─────────────────────
         if (mutation.type === 'childList') {
           for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            // Skip already-blurred elements (CSS filter on parent covers
-            // all descendants — no per-element refresh needed).
-            if (Engine.isBlurred(node)) continue;
-
-            pendingNodes.push(node);
-            if (observerSelector) {
-              const children = node.querySelectorAll(observerSelector);
-              for (let i = 0; i < children.length; i++) {
-                if (!Engine.isBlurred(children[i])) {
-                  pendingNodes.push(children[i]);
-                }
-              }
-            }
+            blurNewSubtree(node);
           }
         }
 
-        // ── characterData: text changed in place (SPA re-renders) ────────
-        // When a SPA updates textContent on an existing element, the parent
-        // may not be blurred yet (e.g. new text injected into an unblurred
-        // container). Queue the parent for blur evaluation.
         if (mutation.type === 'characterData') {
           const el = mutation.target.parentElement;
-          if (el && el.isConnected && !Engine.isBlurred(el)) {
-            pendingNodes.push(el);
-          }
+          if (el && el.isConnected) tryBlurElement(el);
         }
-      }
-
-      // Cap the queue to prevent OOM on infinite-scroll pages
-      const maxQueue = Math.max((settings.PERFORMANCE.MAX_BLURRED || 500) * 2, 2000);
-      if (pendingNodes.length > maxQueue) {
-        pendingNodes = pendingNodes.slice(-maxQueue);
-      }
-
-      if (!processingScheduled && pendingNodes.length > 0) {
-        processingScheduled = true;
-        requestAnimationFrame(processBlurChunk);
       }
     });
 
@@ -249,11 +211,8 @@
       domObserver.disconnect();
       domObserver = null;
     }
-    pendingNodes = [];
-    processingScheduled = false;
   }
 
-  /** Stop and restart the observer with fresh selector and config. */
   function restartDomObserver() {
     stopDomObserver();
     startDomObserver();
@@ -625,7 +584,6 @@
           stopVisibilityObserver();
           Engine.unblurAll();
           blurredElementCount = 0;
-          pendingNodes = [];
           isPageBlurred = false;
         } else {
           // Ensure observer is running to catch SPA re-renders
@@ -871,7 +829,6 @@
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
     if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
       stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
-      pendingNodes = []; // Clear stale queued nodes before re-blur
       blurredElementCount = 0;
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
