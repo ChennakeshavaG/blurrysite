@@ -385,19 +385,24 @@
 
   // ── Storage change listener ────────────────────────────────────────────────
 
+  let _processingStorageChange = false;
+
   function setupStorageListener() {
     chrome.storage.onChanged.addListener(async (changes, area) => {
       if (area !== 'local') return;
+      if (_processingStorageChange) return; // Prevent re-entrant saves
+      _processingStorageChange = true;
 
-      if (changes.settings) {
-        const resp = await bgMessage({ type: MSG.GET_SETTINGS });
-        if (resp && resp.settings) {
-          settings = resp.settings;
-          renderHeader();
-          Renderer.updateAll(settings);
-          document.documentElement.style.setProperty('--pb-bg-blur-radius', settings.BLUR_RADIUS + 'px');
+      try {
+        if (changes.settings) {
+          const resp = await bgMessage({ type: MSG.GET_SETTINGS });
+          if (resp && resp.settings) {
+            settings = resp.settings;
+            renderHeader();
+            Renderer.updateAll(settings);
+            document.documentElement.style.setProperty('--pb-bg-blur-radius', settings.BLUR_RADIUS + 'px');
+          }
         }
-      }
 
       if (changes.rules) {
         const resp = await bgMessage({ type: MSG.GET_RULES });
@@ -407,11 +412,14 @@
         }
       }
 
-      if (changes.blurred_selectors) {
-        blurredItems = await fetchBlurredSelectors();
-        blurredCount = blurredItems.length;
-        renderBlurCount();
-        renderBlurList();
+        if (changes.blurred_selectors) {
+          blurredItems = await fetchBlurredSelectors();
+          blurredCount = blurredItems.length;
+          renderBlurCount();
+          renderBlurList();
+        }
+      } finally {
+        _processingStorageChange = false;
       }
     });
   }
@@ -481,29 +489,35 @@
     document.addEventListener('keydown', scKeydownHandler, true);
 
     const onSave = async () => {
-      if (!scPrimaryMod || scKeys.length === 0) return;
-      const shortcutKey = 'SHORTCUTS.' + scAction;
-      Renderer.setByPath(settings, shortcutKey, {
-        primaryModifier: scPrimaryMod,
-        keys: scKeys.map(k => ({ key: k.key, code: k.code })),
-      });
-      await saveSettings(true, true);
-      Renderer.updateAll(settings);
-      closeShortcutModal();
-      showToast(I18n.t('shortcut_saved'));
-      cleanup();
+      try {
+        if (!scPrimaryMod || scKeys.length === 0) return;
+        const shortcutKey = 'SHORTCUTS.' + scAction;
+        Renderer.setByPath(settings, shortcutKey, {
+          primaryModifier: scPrimaryMod,
+          keys: scKeys.map(k => ({ key: k.key, code: k.code })),
+        });
+        await saveSettings(true, true);
+        Renderer.updateAll(settings);
+        closeShortcutModal();
+        showToast(I18n.t('shortcut_saved'));
+      } finally {
+        cleanup();
+      }
     };
 
     const onReset = async () => {
-      const defaults = MSG.DEFAULT_SETTINGS.SHORTCUTS[scAction];
-      if (defaults) {
-        Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, JSON.parse(JSON.stringify(defaults)));
-        await saveSettings(true, true);
-        Renderer.updateAll(settings);
+      try {
+        const defaults = MSG.DEFAULT_SETTINGS.SHORTCUTS[scAction];
+        if (defaults) {
+          Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, JSON.parse(JSON.stringify(defaults)));
+          await saveSettings(true, true);
+          Renderer.updateAll(settings);
+        }
+        closeShortcutModal();
+        showToast(I18n.t('shortcut_reset_done'));
+      } finally {
+        cleanup();
       }
-      closeShortcutModal();
-      showToast(I18n.t('shortcut_reset_done'));
-      cleanup();
     };
 
     const onCancel = () => { closeShortcutModal(); cleanup(); };

@@ -420,13 +420,15 @@ const PrivacyBlurSettingsRenderer = (() => {
       let display = null;
 
       if (config.type === 'range') {
-        const r = _createRange(config, value || config.options.min, (key, val) => {
+        const defaultVal = (value !== null && value !== undefined) ? value : config.options.min;
+        const r = _createRange(config, defaultVal, (key, val) => {
           onChange(key, val);
         });
         innerControl = r.wrapper;
         display = r.display;
       } else {
-        const n = _createNumber(config, value || config.options.min, (key, val) => {
+        const defaultVal = (value !== null && value !== undefined) ? value : config.options.min;
+        const n = _createNumber(config, defaultVal, (key, val) => {
           onChange(key, val);
         });
         innerControl = n.wrapper;

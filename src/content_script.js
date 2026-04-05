@@ -291,6 +291,12 @@
         }
       }
 
+      // Cap the queue to prevent OOM on infinite-scroll pages
+      const maxQueue = Math.max((settings.PERFORMANCE.MAX_BLURRED || 500) * 2, 2000);
+      if (pendingNodes.length > maxQueue) {
+        pendingNodes = pendingNodes.slice(-maxQueue); // Keep newest entries
+      }
+
       if (!processingScheduled && (pendingNodes.length > 0 || pendingRefresh.size > 0)) {
         processingScheduled = true;
         requestAnimationFrame(processBlurChunk);
@@ -957,8 +963,13 @@
     applyRevealClasses();
     if (settings.REVEAL_MODE !== RM.CLICK) dismissClickReveal();
 
-    // 8. Disable cleanup
-    if (!settings.ENABLED) dismissClickReveal();
+    // 8. Disable cleanup — reset all state so re-enable starts fresh
+    if (!settings.ENABLED) {
+      dismissClickReveal();
+      blurredElementCount = 0;
+      offscreenElements.clear();
+      isPageBlurred = false;
+    }
   }
 
   // ─── Initialisation ───────────────────────────────────────────────────────────
@@ -1056,6 +1067,21 @@
 
   window.addEventListener('popstate', onUrlChange);
   window.addEventListener('hashchange', onUrlChange);
+
+  // Wrap history.pushState/replaceState for SPA frameworks (YouTube, React Router, etc.)
+  // that navigate without firing popstate.
+  const _origPushState = history.pushState;
+  const _origReplaceState = history.replaceState;
+  history.pushState = function() {
+    const result = _origPushState.apply(this, arguments);
+    onUrlChange();
+    return result;
+  };
+  history.replaceState = function() {
+    const result = _origReplaceState.apply(this, arguments);
+    onUrlChange();
+    return result;
+  };
 
   // ─── Storage change listener (cross-tab sync) ──────────────────────────────
 

@@ -266,11 +266,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "max 100 rules" });
         return true;
       }
-      // Validate and sanitize each rule: enforce field types and size limits
-      const sanitizedRules = message.rules.filter(r => r && typeof r === 'object').map(r => ({
+      // Validate and sanitize each rule: enforce field types and size limits.
+      // Filter out rules with empty patterns — an empty pattern would match ALL pages.
+      const sanitizedRules = message.rules.filter(r => r && typeof r === 'object' &&
+        typeof r.pattern === 'string' && r.pattern.trim().length > 0
+      ).map(r => ({
         id:          (typeof r.id === 'string' && r.id.length <= 20) ? r.id : 'r_' + Math.random().toString(36).slice(2, 10),
         name:        (typeof r.name === 'string') ? r.name.slice(0, 100) : '',
-        pattern:     (typeof r.pattern === 'string') ? r.pattern.slice(0, 500) : '',
+        pattern:     r.pattern.trim().slice(0, 500),
         patternType: (r.patternType === MSG.PATTERN_TYPES.REGEX || r.patternType === MSG.PATTERN_TYPES.WILDCARD) ? r.patternType : MSG.PATTERN_TYPES.WILDCARD,
         settings:    (r.settings && typeof r.settings === 'object' && !Array.isArray(r.settings) && JSON.stringify(r.settings).length <= 2000) ? r.settings : {},
       }));

@@ -38,6 +38,9 @@ const PrivacyBlurI18n = (() => {
    */
   async function init() {
     _fallback = await _loadJSON('en');
+    if (Object.keys(_fallback).length === 0) {
+      console.warn('[PrivacyBlur i18n] Failed to load English fallback — UI will show raw keys');
+    }
 
     const lang = (navigator.language || 'en').split('-')[0].toLowerCase();
     if (lang !== 'en') {
