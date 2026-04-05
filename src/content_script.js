@@ -150,33 +150,17 @@
 
   // CHUNK_SIZE read from settings (configurable, default 50)
   let pendingNodes = [];
-  /** Set of already-blurred elements whose content changed and need text-wrapper refresh. */
-  let pendingRefresh = new Set();
   let processingScheduled = false;
 
   function processBlurChunk() {
     processingScheduled = false;
     const wasPageBlurred = isPageBlurred;
-    if (!wasPageBlurred || (pendingNodes.length === 0 && pendingRefresh.size === 0)) {
+    if (!wasPageBlurred || pendingNodes.length === 0) {
       pendingNodes = [];
-      pendingRefresh.clear();
       return;
     }
 
     const chunkSize = settings.PERFORMANCE.CHUNK_SIZE || 50;
-
-    // 1. Process refresh queue first — already-blurred elements with changed content
-    if (pendingRefresh.size > 0) {
-      let refreshCount = 0;
-      for (const el of pendingRefresh) {
-        if (refreshCount >= chunkSize) break;
-        if (el.isConnected) Engine.refreshBlur(el);
-        pendingRefresh.delete(el);
-        refreshCount++;
-      }
-    }
-
-    // 2. Process new nodes queue
     const chunk = pendingNodes.splice(0, chunkSize);
 
     for (let i = 0; i < chunk.length; i++) {
@@ -192,7 +176,7 @@
       }
     }
 
-    if (pendingNodes.length > 0 || pendingRefresh.size > 0) {
+    if (pendingNodes.length > 0) {
       processingScheduled = true;
       requestAnimationFrame(processBlurChunk);
     }
@@ -225,67 +209,33 @@
       if (!isPageBlurred) return;
 
       for (const mutation of mutations) {
-        // ── childList: new elements added or children replaced ────────────
+        // ── childList: new elements added to the DOM ─────────────────────
         if (mutation.type === 'childList') {
-          // New elements: queue for blur
           for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            // Skip our own text wrappers to prevent infinite loop
-            if (node.classList && node.classList.contains(CLS.TEXT_WRAPPER)) continue;
+            // Skip already-blurred elements (CSS filter on parent covers
+            // all descendants — no per-element refresh needed).
+            if (Engine.isBlurred(node)) continue;
 
-            if (Engine.isBlurred(node)) {
-              // Element re-inserted with blur class still on — refresh text wrappers
-              pendingRefresh.add(node);
-            } else {
-              pendingNodes.push(node);
-            }
+            pendingNodes.push(node);
             if (observerSelector) {
               const children = node.querySelectorAll(observerSelector);
               for (let i = 0; i < children.length; i++) {
-                const child = children[i];
-                if (Engine.isBlurred(child)) {
-                  pendingRefresh.add(child);
-                } else {
-                  pendingNodes.push(child);
+                if (!Engine.isBlurred(children[i])) {
+                  pendingNodes.push(children[i]);
                 }
               }
             }
           }
-
-          // If a blurred parent had children replaced (innerHTML swap),
-          // its text wrappers are now stale — queue for refresh.
-          // The mutation.target is the parent whose children changed.
-          if (mutation.removedNodes.length > 0) {
-            const parent = mutation.target;
-            if (parent && parent.nodeType === Node.ELEMENT_NODE &&
-                parent.isConnected && Engine.isBlurred(parent)) {
-              pendingRefresh.add(parent);
-            }
-          }
         }
 
-        // ── characterData: text content changed in place ─────────────────
-        // SPA frameworks often update textContent/innerText on existing nodes.
-        // Walk up to the nearest blurred ancestor and refresh its wrappers.
+        // ── characterData: text changed in place (SPA re-renders) ────────
+        // When a SPA updates textContent on an existing element, the parent
+        // may not be blurred yet (e.g. new text injected into an unblurred
+        // container). Queue the parent for blur evaluation.
         if (mutation.type === 'characterData') {
-          let el = mutation.target.parentElement;
-          // Skip our own text wrapper — go to its parent
-          if (el && el.classList && el.classList.contains(CLS.TEXT_WRAPPER)) {
-            el = el.parentElement;
-          }
-          if (el && el.isConnected) {
-            if (Engine.isBlurred(el)) {
-              pendingRefresh.add(el);
-            } else {
-              pendingNodes.push(el);
-            }
-          }
-        }
-
-        // ── attributes: SPA framework re-render indicators ───────────────
-        if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
-          const el = mutation.target;
-          if (el.isConnected && !Engine.isBlurred(el)) {
+          const el = mutation.target.parentElement;
+          if (el && el.isConnected && !Engine.isBlurred(el)) {
             pendingNodes.push(el);
           }
         }
@@ -294,10 +244,10 @@
       // Cap the queue to prevent OOM on infinite-scroll pages
       const maxQueue = Math.max((settings.PERFORMANCE.MAX_BLURRED || 500) * 2, 2000);
       if (pendingNodes.length > maxQueue) {
-        pendingNodes = pendingNodes.slice(-maxQueue); // Keep newest entries
+        pendingNodes = pendingNodes.slice(-maxQueue);
       }
 
-      if (!processingScheduled && (pendingNodes.length > 0 || pendingRefresh.size > 0)) {
+      if (!processingScheduled && pendingNodes.length > 0) {
         processingScheduled = true;
         requestAnimationFrame(processBlurChunk);
       }
@@ -307,7 +257,6 @@
       childList: true,
       subtree: true,
       characterData: true,
-      characterDataOldValue: false,
     });
   }
 

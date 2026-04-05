@@ -30,7 +30,6 @@ const PrivacyBlurEngine = (() => {
   const BLURRED_CLASS      = _CSS.BLURRED;
   const FROSTED_CLASS      = _CSS.FROSTED;
   const CANVAS_CLASS       = _CSS.CANVAS_OVERLAY;
-  const TEXT_WRAPPER_CLASS = _CSS.TEXT_WRAPPER;
   const SVG_FILTER_ID      = _IDS.SVG_FILTERS;
 
   // Map from video element -> { canvas, animFrameId } for cleanup
@@ -150,37 +149,6 @@ const PrivacyBlurEngine = (() => {
   }
 
   /**
-   * Wraps a bare text-node inside a <span> so the CSS blur filter can target
-   * a block-level or inline element rather than trying to filter a text node
-   * directly (which is not supported).
-   * Returns the wrapper span, or null if there was nothing to wrap.
-   */
-  function wrapTextNodes(element) {
-    const nodesToWrap = [];
-
-    for (const node of element.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
-        nodesToWrap.push(node);
-      }
-    }
-
-    if (nodesToWrap.length === 0) return null;
-
-    const span = document.createElement("span");
-    span.classList.add(TEXT_WRAPPER_CLASS);
-
-    // Insert wrapper before the first text node, then move all text nodes into it.
-    // Using appendChild (move) instead of cloneNode preserves live references.
-    const firstNode = nodesToWrap[0];
-    element.insertBefore(span, firstNode);
-    for (const node of nodesToWrap) {
-      span.appendChild(node);
-    }
-
-    return span;
-  }
-
-  /**
    * Creates a <canvas> overlay on top of a video element and starts a
    * requestAnimationFrame loop that draws blurred video frames onto it.
    * This works for DRM-protected video because we are not reading pixel data —
@@ -218,11 +186,6 @@ const PrivacyBlurEngine = (() => {
       return;
     }
 
-    const parentPos = window.getComputedStyle(videoParent).position;
-    if (parentPos === "static") {
-      videoParent.style.position = "relative";
-    }
-
     videoParent.insertBefore(canvas, videoElement.nextSibling);
 
     const ctx = canvas.getContext("2d");
@@ -232,7 +195,7 @@ const PrivacyBlurEngine = (() => {
     // capture the handle from frame 0 only; subsequent frames update the closure
     // variable but the map would hold a stale handle, making cancelAnimationFrame
     // cancel the wrong frame and leave the loop running.
-    const state = { canvas, animFrameId: null, originalParentPosition: parentPos };
+    const state = { canvas, animFrameId: null };
 
     function drawFrame() {
       // Resize canvas if video dimensions changed (e.g., fullscreen, resolution switch)
@@ -356,13 +319,8 @@ const PrivacyBlurEngine = (() => {
     if (!element || !(element instanceof Element)) return;
     if (isBlurred(element)) return; // idempotent
 
-    // Never blur elements created by the blur engine itself.
-    // TEXT_WRAPPER_CLASS guard is critical: without it, a MutationObserver
-    // watching for new nodes creates an infinite loop (wrapTextNodes inserts
-    // a span → observer fires → applyBlur wraps again → observer fires → …).
-    // CANVAS_CLASS guard prevents double-blurring video overlay canvases.
-    if (element.classList.contains(TEXT_WRAPPER_CLASS) ||
-        element.classList.contains(CANVAS_CLASS)) {
+    // Never blur video overlay canvases created by the blur engine.
+    if (element.classList.contains(CANVAS_CLASS)) {
       return;
     }
 
@@ -403,23 +361,9 @@ const PrivacyBlurEngine = (() => {
       return;
     }
 
-    // ---- Text-containing elements: wrap bare text nodes if needed ----
-    // Check text content BEFORE background-image so we only call
-    // getComputedStyle (which forces a synchronous reflow) on elements
-    // that actually have text to wrap. Elements without text get the
-    // blur class either way — the background-image check only matters
-    // to decide whether to skip wrapTextNodes.
-    if (hasMeaningfulTextContent(element)) {
-      // If the element has a background-image, CSS filter handles the blur
-      // via the class alone — don't wrap text nodes (the background is the
-      // primary visual content, not the text overlay).
-      const bgImage = window.getComputedStyle(element).backgroundImage;
-      if (!(bgImage && bgImage !== "none" && tag !== "body" && tag !== "html")) {
-        wrapTextNodes(element);
-      }
-    }
-
     // ---- Generic element: class only ----
+    // CSS filter: blur() on the parent blurs all descendants (text, child
+    // elements, backgrounds) — no need to wrap individual text nodes.
     // CSS .pb-blurred uses var(--pb-radius) from :root, set by applySettingsToDom().
     // No per-element --pb-radius — this lets radius changes propagate instantly.
     element.classList.add(BLURRED_CLASS);
@@ -454,56 +398,6 @@ const PrivacyBlurEngine = (() => {
     // ---- Generic element ----
     element.classList.remove(BLURRED_CLASS);
     element.classList.remove(FROSTED_CLASS);
-
-    // Clean up any text-node wrappers this engine introduced
-    const textWrappers = element.querySelectorAll(`.${TEXT_WRAPPER_CLASS}`);
-    textWrappers.forEach((wrapper) => {
-      // Unwrap: replace wrapper with its children
-      const parent = wrapper.parentNode;
-      while (wrapper.firstChild) {
-        parent.insertBefore(wrapper.firstChild, wrapper);
-      }
-      parent.removeChild(wrapper);
-    });
-  }
-
-  /**
-   * Refreshes blur on an already-blurred element whose content has changed.
-   * Called when SPA frameworks (YouTube, React, etc.) re-render content inside
-   * a blurred element — the blur class is still there but text wrappers are stale.
-   *
-   * Unlike applyBlur (which is idempotent and skips blurred elements), this:
-   * 1. Cleans up old text wrappers
-   * 2. Re-wraps any new text nodes
-   * 3. Leaves the blur class and other state intact
-   *
-   * @param {Element} element - The already-blurred DOM element to refresh
-   */
-  function refreshBlur(element) {
-    if (!element || !(element instanceof Element)) return;
-    if (!isBlurred(element)) return; // Only refresh already-blurred elements
-
-    const tag = element.tagName.toLowerCase();
-    // Video and img don't use text wrappers — nothing to refresh
-    if (tag === 'video' || tag === 'img') return;
-
-    // Clean up stale text wrappers
-    const oldWrappers = element.querySelectorAll('.' + TEXT_WRAPPER_CLASS);
-    oldWrappers.forEach((wrapper) => {
-      const parent = wrapper.parentNode;
-      while (wrapper.firstChild) {
-        parent.insertBefore(wrapper.firstChild, wrapper);
-      }
-      parent.removeChild(wrapper);
-    });
-
-    // Re-wrap if there is now meaningful text
-    if (hasMeaningfulTextContent(element)) {
-      const bgImage = window.getComputedStyle(element).backgroundImage;
-      if (!(bgImage && bgImage !== 'none' && tag !== 'body' && tag !== 'html')) {
-        wrapTextNodes(element);
-      }
-    }
   }
 
   /**
@@ -589,16 +483,6 @@ const PrivacyBlurEngine = (() => {
       removeBlur(el);
     });
 
-    // Clean up any orphaned text-node wrappers
-    document.querySelectorAll(`.${TEXT_WRAPPER_CLASS}`).forEach((wrapper) => {
-      const parent = wrapper.parentNode;
-      if (!parent) return;
-      while (wrapper.firstChild) {
-        parent.insertBefore(wrapper.firstChild, wrapper);
-      }
-      parent.removeChild(wrapper);
-    });
-
     // Remove any orphaned canvas overlays
     document.querySelectorAll(`.${CANVAS_CLASS}`).forEach((canvas) => {
       canvas.parentNode && canvas.parentNode.removeChild(canvas);
@@ -681,7 +565,6 @@ const PrivacyBlurEngine = (() => {
   // -------------------------------------------------------------------------
   return {
     applyBlur,
-    refreshBlur,
     removeBlur,
     toggleBlur,
     blurAllContent,

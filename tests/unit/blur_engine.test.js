@@ -619,57 +619,30 @@ describe('PrivacyBlurEngine', () => {
       expect(document.querySelector('.pb-canvas-overlay')).toBeNull();
     });
 
-    /**
-     * Verifies that unblurAll cleans up orphaned text-node wrappers.
-     * Why: If a container element is removed from the DOM while its text was
-     * wrapped, the wrapper <span> may persist as a top-level orphan. unblurAll
-     * must unwrap these to prevent layout shifts and font style changes.
-     * Reproduce: Insert a span with the wrapper class, call unblurAll.
-     */
-    test('cleans up orphaned text-node wrappers', () => {
-      const wrapper = document.createElement('span');
-      wrapper.className = 'pb-text-node-wrapper';
-      wrapper.textContent = 'orphaned';
-      document.body.appendChild(wrapper);
-
-      PrivacyBlurEngine.unblurAll();
-
-      expect(document.querySelector('.pb-text-node-wrapper')).toBeNull();
+    test('unblurAll is safe to call on clean DOM', () => {
+      expect(() => PrivacyBlurEngine.unblurAll()).not.toThrow();
     });
   });
 
   // ── Text content handling ─────────────────────────────────────────────────
+  // CSS filter: blur() on a parent blurs ALL descendants including text nodes.
+  // No text-node wrapping is needed — the class alone is sufficient.
 
   describe('text content handling', () => {
-    /**
-     * Verifies that bare text nodes are wrapped in a <span> when blurring.
-     * Why: CSS filter cannot target text nodes directly — only elements.
-     * Without wrapping, text inside a <div> would remain visible even when
-     * the container is "blurred", because the filter applies to child
-     * elements but not to direct text-node children.
-     * Reproduce: Create a <div> with text content only, apply blur,
-     * check for .pb-text-node-wrapper span containing the text.
-     */
-    test('wraps bare text nodes in a span when blurring a container', () => {
+    test('blurs text container via class only (no text wrapper spans)', () => {
       const div = document.createElement('div');
       div.textContent = 'Sensitive text';
       document.body.appendChild(div);
 
       PrivacyBlurEngine.applyBlur(div, 8);
 
-      const wrapper = div.querySelector('.pb-text-node-wrapper');
-      expect(wrapper).not.toBeNull();
-      expect(wrapper.textContent).toBe('Sensitive text');
+      expect(div.classList.contains('pb-blurred')).toBe(true);
+      // No wrapper spans — CSS blur on parent covers all text
+      expect(div.querySelector('.pb-text-node-wrapper')).toBeNull();
+      expect(div.textContent).toBe('Sensitive text');
     });
 
-    /**
-     * Verifies that text node wrappers are removed when unblurring.
-     * Why: Leaving wrapper <span>s in the DOM after unblurring would change
-     * the page's DOM structure, potentially breaking site JavaScript that
-     * relies on specific child element counts or text node positions.
-     * Reproduce: Blur then unblur a text container, verify no wrapper remains.
-     */
-    test('unwraps text nodes when removing blur from container', () => {
+    test('unblur preserves text content without DOM changes', () => {
       const div = document.createElement('div');
       div.textContent = 'Private data';
       document.body.appendChild(div);
@@ -677,26 +650,8 @@ describe('PrivacyBlurEngine', () => {
       PrivacyBlurEngine.applyBlur(div, 8);
       PrivacyBlurEngine.removeBlur(div);
 
-      expect(div.querySelector('.pb-text-node-wrapper')).toBeNull();
+      expect(div.classList.contains('pb-blurred')).toBe(false);
       expect(div.textContent).toBe('Private data');
-    });
-
-    /**
-     * Verifies that whitespace-only text nodes are NOT wrapped.
-     * Why: Many HTML elements contain whitespace text nodes for formatting
-     * (indentation, newlines between tags). Wrapping these would create
-     * unnecessary DOM nodes and could cause layout shifts.
-     * Reproduce: Create a <div> with only whitespace content, apply blur,
-     * verify no wrapper was created.
-     */
-    test('does not wrap whitespace-only text nodes', () => {
-      const div = document.createElement('div');
-      div.innerHTML = '   \n\t  ';
-      document.body.appendChild(div);
-
-      PrivacyBlurEngine.applyBlur(div, 8);
-
-      expect(div.querySelector('.pb-text-node-wrapper')).toBeNull();
     });
   });
 
@@ -1125,77 +1080,6 @@ describe('PrivacyBlurEngine', () => {
         expect(Array.isArray(cat.alwaysBlur)).toBe(true);
         expect(Array.isArray(cat.textCheck)).toBe(true);
       }
-    });
-  });
-
-  // ── refreshBlur ─────────────────────────────────────────────────────────────
-
-  describe('refreshBlur', () => {
-    test('re-wraps new text nodes in already-blurred element', () => {
-      const div = document.createElement('div');
-      div.textContent = 'original text';
-      document.body.appendChild(div);
-      PrivacyBlurEngine.applyBlur(div, 10);
-      expect(div.classList.contains('pb-blurred')).toBe(true);
-      expect(div.querySelector('.pb-text-node-wrapper')).not.toBeNull();
-
-      // Simulate SPA re-render: replace text content
-      div.textContent = 'new SPA content';
-      PrivacyBlurEngine.refreshBlur(div);
-
-      // Should have a fresh wrapper with new text
-      const wrapper = div.querySelector('.pb-text-node-wrapper');
-      expect(wrapper).not.toBeNull();
-      expect(wrapper.textContent).toBe('new SPA content');
-    });
-
-    test('no-op on non-blurred elements', () => {
-      const div = document.createElement('div');
-      div.textContent = 'not blurred';
-      document.body.appendChild(div);
-      PrivacyBlurEngine.refreshBlur(div);
-      expect(div.querySelector('.pb-text-node-wrapper')).toBeNull();
-    });
-
-    test('skips video elements', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-      PrivacyBlurEngine.applyBlur(video, 10);
-      PrivacyBlurEngine.refreshBlur(video);
-      // Should not throw and should not add text wrappers
-      expect(video.querySelector('.pb-text-node-wrapper')).toBeNull();
-    });
-
-    test('skips img elements', () => {
-      const img = document.createElement('img');
-      document.body.appendChild(img);
-      PrivacyBlurEngine.applyBlur(img, 10);
-      PrivacyBlurEngine.refreshBlur(img);
-      expect(img.querySelector('.pb-text-node-wrapper')).toBeNull();
-    });
-
-    test('cleans up stale wrappers before re-wrapping', () => {
-      const p = document.createElement('p');
-      p.textContent = 'text one';
-      document.body.appendChild(p);
-      PrivacyBlurEngine.applyBlur(p, 10);
-
-      // Add a second wrapper manually (simulating stale state)
-      const staleSpan = document.createElement('span');
-      staleSpan.className = 'pb-text-node-wrapper';
-      staleSpan.textContent = 'stale';
-      p.appendChild(staleSpan);
-      expect(p.querySelectorAll('.pb-text-node-wrapper').length).toBe(2);
-
-      PrivacyBlurEngine.refreshBlur(p);
-      // Should have exactly one wrapper after refresh
-      expect(p.querySelectorAll('.pb-text-node-wrapper').length).toBe(1);
-    });
-
-    test('handles null and non-element inputs', () => {
-      expect(() => PrivacyBlurEngine.refreshBlur(null)).not.toThrow();
-      expect(() => PrivacyBlurEngine.refreshBlur(undefined)).not.toThrow();
-      expect(() => PrivacyBlurEngine.refreshBlur('string')).not.toThrow();
     });
   });
 
