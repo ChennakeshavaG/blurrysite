@@ -364,25 +364,27 @@
 
   function _revealElement(el) {
     el.style.setProperty('transition', 'filter 100ms ease', 'important');
-    el.style.setProperty('filter', 'blur(0px)', 'important');
+    el.style.setProperty('filter', 'none', 'important');
     _revealedElements.add(el);
+    // Also reveal blurred descendants — they have their own blur via
+    // data-pb-blur or CSS rules, causing double-blur and staying blurred
+    // even when the parent is revealed.
+    el.querySelectorAll('[data-pb-blur]').forEach(child => {
+      child.style.setProperty('filter', 'none', 'important');
+      _revealedElements.add(child);
+    });
   }
 
   function _unrevealElement(el) {
-    // Keep transition so blur fades back in smoothly, then clean up
     el.style.removeProperty('filter');
-    setTimeout(() => {
-      el.style.removeProperty('transition');
-    }, 120);
+    setTimeout(() => el.style.removeProperty('transition'), 120);
     _revealedElements.delete(el);
   }
 
   function _unrevealAll() {
     for (const el of _revealedElements) {
       el.style.removeProperty('filter');
-      setTimeout(() => {
-        el.style.removeProperty('transition');
-      }, 120);
+      el.style.removeProperty('transition');
     }
     _revealedElements.clear();
   }
