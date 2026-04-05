@@ -102,7 +102,7 @@
           }
         }
       }
-      _dbg(`IO #${_ioCallCount}: ${entries.length} entries, +${blurred} blurred, -${unblurred} unblurred`);
+      log.log(`IO #${_ioCallCount}: ${entries.length} entries, +${blurred} blurred, -${unblurred} unblurred`);
     }, {
       rootMargin: '200px',
     });
@@ -123,9 +123,8 @@
     }
   }
 
-  // ── DEBUG: always-on logging until crash is diagnosed ─────────────────────
-  const _dbg = (...args) => console.log('[PB]', ...args);
-  _dbg('content_script loaded, hostname:', location.hostname);
+  // ── Logger alias ──────────────────────────────────────────────────────────
+  const log = pb.Logger;
 
   // ── MutationObserver: blur new DOM elements synchronously ─────────────────
 
@@ -199,7 +198,7 @@
             // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 30s
             const backoff = Math.min(LOOP_WINDOW_MS * Math.pow(2, guard.count - LOOP_THRESHOLD), LOOP_MAX_BACKOFF);
             guard.backoffUntil = now + backoff;
-            _dbg('loop guard: throttled', sig, 'for', (backoff / 1000).toFixed(1) + 's');
+            log.warn('loop guard: throttled', sig, 'for', (backoff / 1000).toFixed(1) + 's');
             return;
           }
         } else {
@@ -212,7 +211,7 @@
         _loopGuard.set(sig, { count: 1, lastHit: now, backoffUntil: 0 });
       }
 
-      _dbg('tryBlur:', el.tagName, el.id || el.className);
+      log.log('tryBlur:', el.tagName, el.id || el.className);
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
       observeElement(el);
@@ -263,7 +262,7 @@
       }
 
       const elapsed = performance.now() - t0;
-      _dbg(`MO #${_moCallCount}: ${mutations.length} muts, ${addedCount} added, ${charDataCount} charData, ${elapsed.toFixed(1)}ms`);
+      log.log(`MO #${_moCallCount}: ${mutations.length} muts, ${addedCount} added, ${charDataCount} charData, ${elapsed.toFixed(1)}ms`);
     });
 
     domObserver.observe(document.body, {
@@ -545,7 +544,7 @@
     if (!(target instanceof Element)) return;
 
     const tag = target.tagName.toLowerCase();
-    _dbg('revealClick:', tag, target.id || target.className);
+    log.log('revealClick:', tag, target.id || target.className);
 
     if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
         tag === 'button' || target.isContentEditable) return;
@@ -630,7 +629,7 @@
 
   function handleMessage(message, _sender, sendResponse) {
     const { type } = message;
-    _dbg('handleMessage:', type);
+    log.log('handleMessage:', type);
 
     // Dedup toggle commands that fire from both manifest and JS handler
     if (type === MSG.TOGGLE_BLUR_ALL || type === MSG.TOGGLE_PICKER || type === MSG.CLEAR_ALL_BLUR) {
@@ -912,7 +911,7 @@
   // ─── Initialisation ───────────────────────────────────────────────────────────
 
   async function init() {
-    _dbg('init() starting');
+    log.log('init() starting');
     Engine    = pb.BlurEngine;
     Store     = pb.Storage;
     Selector  = pb.SelectorUtils;
@@ -993,7 +992,7 @@
     if (!Engine) return;
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
-    _dbg('URL change:', lastUrl, '→', currentUrl);
+    log.log('URL change:', lastUrl, '→', currentUrl);
     lastUrl = currentUrl;
 
     try {

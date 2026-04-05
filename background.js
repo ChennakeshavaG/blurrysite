@@ -1,8 +1,9 @@
 'use strict';
 
-importScripts('src/constants.js');
+importScripts('src/constants.js', 'src/logger.js');
 
 const MSG = self.pb;
+const log = pb.Logger;
 
 /**
  * background.js — PrivacyBlur MV3 Service Worker
@@ -121,6 +122,7 @@ function serialWrite(fn) {
 // Storage message handler
 // ---------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  log.log('msg:', message.type, sender.tab ? 'tab:' + sender.tab.id : 'popup');
   switch (message.type) {
 
     // ---- Selectors (unchanged) ----
