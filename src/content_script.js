@@ -363,18 +363,26 @@
   const _revealedElements = new Set();
 
   function _revealElement(el) {
+    el.style.setProperty('transition', 'filter 100ms ease', 'important');
     el.style.setProperty('filter', 'blur(0px)', 'important');
     _revealedElements.add(el);
   }
 
   function _unrevealElement(el) {
+    // Keep transition so blur fades back in smoothly, then clean up
     el.style.removeProperty('filter');
+    setTimeout(() => {
+      el.style.removeProperty('transition');
+    }, 120);
     _revealedElements.delete(el);
   }
 
   function _unrevealAll() {
     for (const el of _revealedElements) {
       el.style.removeProperty('filter');
+      setTimeout(() => {
+        el.style.removeProperty('transition');
+      }, 120);
     }
     _revealedElements.clear();
   }
@@ -446,7 +454,7 @@
       mouseoutTimer = null;
       _unrevealAll();
       clearRevealedAncestors();
-    }, 150);
+    }, 50);
   }
 
   // ─── Keyboard shortcut action map ────────────────────────────────────────────
