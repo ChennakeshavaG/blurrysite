@@ -322,10 +322,10 @@
       showToast(I18n.t('toast_cleared'));
     });
 
-    // Picker
-    ui.pickerBtn.addEventListener('click', async () => {
+    // Picker — fire-and-forget since popup may close before response arrives
+    ui.pickerBtn.addEventListener('click', () => {
       if (!currentTab) return;
-      await tabMessage(currentTab.id, { type: MSG.TOGGLE_PICKER });
+      chrome.tabs.sendMessage(currentTab.id, { type: MSG.TOGGLE_PICKER }).catch(() => {});
       isPickerActive = !isPickerActive;
       ui.pickerBtn.dataset.active = String(isPickerActive);
     });
