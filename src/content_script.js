@@ -315,13 +315,15 @@
 
   // ─── DOM helpers ─────────────────────────────────────────────────────────────
 
+  /** Find the topmost blurred ancestor (walks all the way up) */
   function findBlurredAncestor(el) {
-    let node = el;
+    let topmost = null;
+    let node = el.parentElement;
     while (node && node !== document.documentElement) {
-      if (node instanceof Element && Engine.isBlurred(node)) return node;
+      if (node instanceof Element && Engine.isBlurred(node)) topmost = node;
       node = node.parentElement;
     }
-    return null;
+    return topmost;
   }
 
   // ─── Reveal management (click + hover modes) ──────────────────────────────────
@@ -438,22 +440,28 @@
     if (settings.REVEAL_MODE !== RM.HOVER) return;
     const target = e.target;
     if (!(target instanceof Element)) return;
-    if (!Engine.isBlurred(target)) return;
+
+    // Walk up to find the topmost blurred ancestor — reveal the whole subtree
+    const blurredRoot = findBlurredAncestor(target) || (Engine.isBlurred(target) ? target : null);
+    if (!blurredRoot) return;
 
     if (mouseoutTimer) {
       clearTimeout(mouseoutTimer);
       mouseoutTimer = null;
     }
 
-    // Unreveal previous if different element
-    if (_hoverRevealedEl && _hoverRevealedEl !== target) {
-      _unrevealElement(_hoverRevealedEl);
+    // Already revealing this root — skip
+    if (_hoverRevealedEl === blurredRoot) return;
+
+    // Unreveal previous
+    if (_hoverRevealedEl) {
+      _unrevealAll();
       clearRevealedAncestors();
     }
 
-    _revealElement(target);
-    _hoverRevealedEl = target;
-    revealAncestorChain(target);
+    _revealElement(blurredRoot);
+    _hoverRevealedEl = blurredRoot;
+    revealAncestorChain(blurredRoot);
   }
 
   function onRevealMouseOut(e) {
