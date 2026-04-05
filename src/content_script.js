@@ -149,15 +149,27 @@
     }
   }
 
-  /** Blur a newly added subtree: the node itself + matching descendants. */
-  function blurNewSubtree(node) {
+  /** Max elements to process per mutation batch. Prevents freezing on large
+   *  SPA re-renders (React replacing entire view = one addedNode with 10k descendants). */
+  const MAX_BLUR_PER_MUTATION = 200;
+
+  /** Blur a newly added subtree: the node itself + matching descendants.
+   *  Returns the number of elements processed (for budget tracking). */
+  function blurNewSubtree(node, budget) {
+    let count = 0;
+    if (count >= budget) return count;
     tryBlurElement(node);
-    if (observerSelector) {
+    count++;
+
+    if (observerSelector && count < budget) {
       const children = node.querySelectorAll(observerSelector);
-      for (let i = 0; i < children.length; i++) {
+      const limit = Math.min(children.length, budget - count);
+      for (let i = 0; i < limit; i++) {
         tryBlurElement(children[i]);
+        count++;
       }
     }
+    return count;
   }
 
   function startDomObserver() {
@@ -169,17 +181,25 @@
       if (isPickerActive) return;
       if (!isPageBlurred) return;
 
+      let budget = MAX_BLUR_PER_MUTATION;
+
       for (const mutation of mutations) {
+        if (budget <= 0) break;
+
         if (mutation.type === 'childList') {
           for (const node of mutation.addedNodes) {
+            if (budget <= 0) break;
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            blurNewSubtree(node);
+            budget -= blurNewSubtree(node, budget);
           }
         }
 
         if (mutation.type === 'characterData') {
           const el = mutation.target.parentElement;
-          if (el && el.isConnected) tryBlurElement(el);
+          if (el && el.isConnected) {
+            tryBlurElement(el);
+            budget--;
+          }
         }
       }
     });
