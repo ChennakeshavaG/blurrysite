@@ -463,19 +463,23 @@
         if (message.settings) {
           const oldCategories = settings.BLUR_CATEGORIES;
           const oldThorough = settings.THOROUGH_BLUR;
+          const oldEnabled = settings.ENABLED;
+          const oldRadius = settings.BLUR_RADIUS;
           globalSettings = MSG.deepMerge(globalSettings, message.settings);
           settings = resolveSettings(location.href, globalSettings, rules);
           applySettingsToDom();
 
-          // Detect if blur configuration changed (categories or thoroughBlur)
-          const catsChanged = message.settings.BLUR_CATEGORIES &&
-            CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
+          // Detect if blur configuration changed
+          const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
           const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
+          const radiusChanged = oldRadius !== settings.BLUR_RADIUS;
 
           if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
 
-          // Re-blur the page if blur-all is active and blur config changed
-          if (isPageBlurred && (catsChanged || thoroughChanged)) {
+          // Re-blur when config changes while blur-all is active.
+          // Radius changes need re-blur for video elements (canvas overlay
+          // captures radius in closure — CSS variable cascade doesn't reach it).
+          if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged)) {
             Engine.unblurAll();
             Engine.blurAllContent(settings.BLUR_RADIUS, {
               categories: settings.BLUR_CATEGORIES,
@@ -503,6 +507,22 @@
               });
             }
             startDomObserver();
+
+            // Restore blur-all when re-enabled (if it was active before disable)
+            if (!oldEnabled && settings.ENABLED) {
+              Store.getBlurState(hostname).then((wasBlurAll) => {
+                if (wasBlurAll && !isPageBlurred) {
+                  Engine.blurAllContent(settings.BLUR_RADIUS, {
+                    categories: settings.BLUR_CATEGORIES,
+                    thoroughBlur: settings.THOROUGH_BLUR,
+                  });
+                  if (settings.REVEAL_MODE === 'hover') {
+                    document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
+                  }
+                  isPageBlurred = true;
+                }
+              }).catch(() => {});
+            }
           }
         }
         if (sendResponse) sendResponse({ ok: true });
