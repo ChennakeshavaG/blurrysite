@@ -1121,4 +1121,144 @@ describe('PrivacyBlurEngine', () => {
       }
     });
   });
+
+  // ── refreshBlur ─────────────────────────────────────────────────────────────
+
+  describe('refreshBlur', () => {
+    test('re-wraps new text nodes in already-blurred element', () => {
+      const div = document.createElement('div');
+      div.textContent = 'original text';
+      document.body.appendChild(div);
+      PrivacyBlurEngine.applyBlur(div, 10);
+      expect(div.classList.contains('pb-blurred')).toBe(true);
+      expect(div.querySelector('.pb-text-node-wrapper')).not.toBeNull();
+
+      // Simulate SPA re-render: replace text content
+      div.textContent = 'new SPA content';
+      PrivacyBlurEngine.refreshBlur(div);
+
+      // Should have a fresh wrapper with new text
+      const wrapper = div.querySelector('.pb-text-node-wrapper');
+      expect(wrapper).not.toBeNull();
+      expect(wrapper.textContent).toBe('new SPA content');
+    });
+
+    test('no-op on non-blurred elements', () => {
+      const div = document.createElement('div');
+      div.textContent = 'not blurred';
+      document.body.appendChild(div);
+      PrivacyBlurEngine.refreshBlur(div);
+      expect(div.querySelector('.pb-text-node-wrapper')).toBeNull();
+    });
+
+    test('skips video elements', () => {
+      const video = document.createElement('video');
+      document.body.appendChild(video);
+      PrivacyBlurEngine.applyBlur(video, 10);
+      PrivacyBlurEngine.refreshBlur(video);
+      // Should not throw and should not add text wrappers
+      expect(video.querySelector('.pb-text-node-wrapper')).toBeNull();
+    });
+
+    test('skips img elements', () => {
+      const img = document.createElement('img');
+      document.body.appendChild(img);
+      PrivacyBlurEngine.applyBlur(img, 10);
+      PrivacyBlurEngine.refreshBlur(img);
+      expect(img.querySelector('.pb-text-node-wrapper')).toBeNull();
+    });
+
+    test('cleans up stale wrappers before re-wrapping', () => {
+      const p = document.createElement('p');
+      p.textContent = 'text one';
+      document.body.appendChild(p);
+      PrivacyBlurEngine.applyBlur(p, 10);
+
+      // Add a second wrapper manually (simulating stale state)
+      const staleSpan = document.createElement('span');
+      staleSpan.className = 'pb-text-node-wrapper';
+      staleSpan.textContent = 'stale';
+      p.appendChild(staleSpan);
+      expect(p.querySelectorAll('.pb-text-node-wrapper').length).toBe(2);
+
+      PrivacyBlurEngine.refreshBlur(p);
+      // Should have exactly one wrapper after refresh
+      expect(p.querySelectorAll('.pb-text-node-wrapper').length).toBe(1);
+    });
+
+    test('handles null and non-element inputs', () => {
+      expect(() => PrivacyBlurEngine.refreshBlur(null)).not.toThrow();
+      expect(() => PrivacyBlurEngine.refreshBlur(undefined)).not.toThrow();
+      expect(() => PrivacyBlurEngine.refreshBlur('string')).not.toThrow();
+    });
+  });
+
+  // ── shouldBlurElement ───────────────────────────────────────────────────────
+
+  describe('shouldBlurElement', () => {
+    const ALL_ON = { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true };
+    const TEXT_ONLY = { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false };
+
+    test('returns true for always-blur elements in enabled category', () => {
+      const p = document.createElement('p');
+      p.textContent = 'hello';
+      document.body.appendChild(p);
+      expect(PrivacyBlurEngine.shouldBlurElement(p, ALL_ON, false)).toBe(true);
+    });
+
+    test('returns false for disabled category', () => {
+      const img = document.createElement('img');
+      document.body.appendChild(img);
+      expect(PrivacyBlurEngine.shouldBlurElement(img, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false }, false)).toBe(false);
+    });
+
+    test('text-check gate: returns false for empty div without thorough', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      expect(PrivacyBlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(false);
+    });
+
+    test('text-check gate: returns true for div with text', () => {
+      const div = document.createElement('div');
+      div.textContent = 'has text';
+      document.body.appendChild(div);
+      expect(PrivacyBlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(true);
+    });
+
+    test('thorough mode bypasses text-check gate', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      expect(PrivacyBlurEngine.shouldBlurElement(div, ALL_ON, true)).toBe(true);
+    });
+
+    test('returns false for unknown tags', () => {
+      const el = document.createElement('my-component');
+      el.textContent = 'hello';
+      document.body.appendChild(el);
+      expect(PrivacyBlurEngine.shouldBlurElement(el, ALL_ON, false)).toBe(false);
+    });
+
+    test('returns false for null input', () => {
+      expect(PrivacyBlurEngine.shouldBlurElement(null, ALL_ON, false)).toBe(false);
+    });
+
+    test('returns true for form elements when form category on', () => {
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      expect(PrivacyBlurEngine.shouldBlurElement(input, ALL_ON, false)).toBe(true);
+    });
+
+    test('returns false for form elements when form category off', () => {
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      expect(PrivacyBlurEngine.shouldBlurElement(input, TEXT_ONLY, false)).toBe(false);
+    });
+
+    test('returns true for table cells with text', () => {
+      const td = document.createElement('td');
+      td.textContent = 'cell data';
+      document.body.appendChild(td);
+      expect(PrivacyBlurEngine.shouldBlurElement(td, ALL_ON, false)).toBe(true);
+    });
+  });
 });

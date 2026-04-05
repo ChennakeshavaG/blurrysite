@@ -479,4 +479,40 @@ describe('PrivacyBlurStorage', () => {
       expect(saveCall[0].rules).toEqual(rules);
     });
   });
+
+  // ── getBlurState / saveBlurState ──────────────────────────────────────────
+
+  describe('getBlurState', () => {
+    test('returns blur state from background', async () => {
+      chrome.runtime.sendMessage.mockImplementation((_msg, cb) => {
+        if (cb) cb({ blurAll: true });
+      });
+
+      const result = await PrivacyBlurStorage.getBlurState('example.com');
+      expect(result).toBeDefined();
+
+      const call = chrome.runtime.sendMessage.mock.calls.find(
+        ([msg]) => msg.type === 'GET_BLUR_STATE'
+      );
+      expect(call).toBeDefined();
+      expect(call[0].hostname).toBe('example.com');
+    });
+  });
+
+  describe('saveBlurState', () => {
+    test('sends SAVE_BLUR_STATE message', async () => {
+      chrome.runtime.sendMessage.mockImplementation((_msg, cb) => {
+        if (cb) cb({ success: true });
+      });
+
+      await PrivacyBlurStorage.saveBlurState('example.com', true);
+
+      const call = chrome.runtime.sendMessage.mock.calls.find(
+        ([msg]) => msg.type === 'SAVE_BLUR_STATE'
+      );
+      expect(call).toBeDefined();
+      expect(call[0].hostname).toBe('example.com');
+      expect(call[0].blurAll).toBe(true);
+    });
+  });
 });

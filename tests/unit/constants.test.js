@@ -282,4 +282,91 @@ describe('PrivacyBlur constants', () => {
       expect(Object.isFrozen(PB.POPUP)).toBe(true);
     });
   });
+
+  // ── validateSettings boundary values ──────────────────────────────────────
+
+  describe('validateSettings boundary values', () => {
+    test('BLUR_RADIUS accepts min boundary (2)', () => {
+      const s = PB.validateSettings({ BLUR_RADIUS: 2 });
+      expect(s.BLUR_RADIUS).toBe(2);
+    });
+
+    test('BLUR_RADIUS accepts max boundary (30)', () => {
+      const s = PB.validateSettings({ BLUR_RADIUS: 30 });
+      expect(s.BLUR_RADIUS).toBe(30);
+    });
+
+    test('BLUR_RADIUS rejects below min (1)', () => {
+      const s = PB.validateSettings({ BLUR_RADIUS: 1 });
+      expect(s.BLUR_RADIUS).toBe(PB.DEFAULT_SETTINGS.BLUR_RADIUS);
+    });
+
+    test('BLUR_RADIUS rejects above max (31)', () => {
+      const s = PB.validateSettings({ BLUR_RADIUS: 31 });
+      expect(s.BLUR_RADIUS).toBe(PB.DEFAULT_SETTINGS.BLUR_RADIUS);
+    });
+
+    test('MAX_BLURRED accepts 0 (unlimited)', () => {
+      const s = PB.validateSettings({ PERFORMANCE: { MAX_BLURRED: 0 } });
+      expect(s.PERFORMANCE.MAX_BLURRED).toBe(0);
+    });
+
+    test('MAX_BLURRED accepts 5000 (max)', () => {
+      const s = PB.validateSettings({ PERFORMANCE: { MAX_BLURRED: 5000 } });
+      expect(s.PERFORMANCE.MAX_BLURRED).toBe(5000);
+    });
+
+    test('MAX_BLURRED rejects negative', () => {
+      const s = PB.validateSettings({ PERFORMANCE: { MAX_BLURRED: -1 } });
+      expect(s.PERFORMANCE.MAX_BLURRED).toBe(PB.DEFAULT_SETTINGS.PERFORMANCE.MAX_BLURRED);
+    });
+
+    test('CHUNK_SIZE accepts min boundary (10)', () => {
+      const s = PB.validateSettings({ PERFORMANCE: { CHUNK_SIZE: 10 } });
+      expect(s.PERFORMANCE.CHUNK_SIZE).toBe(10);
+    });
+
+    test('CHUNK_SIZE accepts max boundary (200)', () => {
+      const s = PB.validateSettings({ PERFORMANCE: { CHUNK_SIZE: 200 } });
+      expect(s.PERFORMANCE.CHUNK_SIZE).toBe(200);
+    });
+
+    test('CHUNK_SIZE rejects below min (9)', () => {
+      const s = PB.validateSettings({ PERFORMANCE: { CHUNK_SIZE: 9 } });
+      expect(s.PERFORMANCE.CHUNK_SIZE).toBe(PB.DEFAULT_SETTINGS.PERFORMANCE.CHUNK_SIZE);
+    });
+
+    test('SHORTCUTS rejects empty keys array', () => {
+      const s = PB.validateSettings({
+        SHORTCUTS: { TOGGLE_BLUR_ALL: { primaryModifier: 'AltLeft', keys: [] } }
+      });
+      // Should fall back to default since keys.length === 0
+      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.keys.length).toBeGreaterThan(0);
+    });
+
+    test('SHORTCUTS rejects keys exceeding limit (11)', () => {
+      const keys = Array.from({ length: 11 }, (_, i) => ({ key: 'k', code: 'Key' + i }));
+      const s = PB.validateSettings({
+        SHORTCUTS: { TOGGLE_BLUR_ALL: { primaryModifier: 'AltLeft', keys } }
+      });
+      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.keys.length).toBeLessThanOrEqual(10);
+    });
+
+    test('deepMerge stops at depth limit', () => {
+      const deep = { a: { b: { c: { d: { e: { f: { g: 'deep' } } } } } } };
+      const base = { a: { b: { c: { d: { e: { f: { g: 'base' } } } } } } };
+      const result = PB.deepMerge(base, deep);
+      // At depth 6, override should be returned directly instead of recursing
+      expect(result.a.b.c.d.e.f).toEqual({ g: 'deep' });
+    });
+
+    test('BLUR_MODE validates against enum', () => {
+      const s1 = PB.validateSettings({ BLUR_MODE: 'gaussian' });
+      expect(s1.BLUR_MODE).toBe('gaussian');
+      const s2 = PB.validateSettings({ BLUR_MODE: 'frosted' });
+      expect(s2.BLUR_MODE).toBe('frosted');
+      const s3 = PB.validateSettings({ BLUR_MODE: 'invalid' });
+      expect(s3.BLUR_MODE).toBe(PB.DEFAULT_SETTINGS.BLUR_MODE);
+    });
+  });
 });
