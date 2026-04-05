@@ -222,14 +222,20 @@
    */
   function matchesPattern(url, pattern, patternType) {
     if (!pattern || typeof pattern !== 'string') return false;
-    // Reject excessively long patterns to prevent ReDoS
     if (pattern.length > MAX_PATTERN_LENGTH) return false;
 
     try {
       if (patternType === 'regex') {
         return new RegExp(pattern, 'i').test(url);
       }
-      return wildcardToRegex(pattern).test(url);
+      // For wildcard: if the pattern doesn't start with a protocol or *,
+      // prepend * so "cliq.zoho.in/*" matches "https://cliq.zoho.in/page".
+      // Users naturally type domain patterns without the protocol prefix.
+      let wp = pattern;
+      if (!/^(\*|https?:\/\/)/.test(wp)) {
+        wp = '*' + wp;
+      }
+      return wildcardToRegex(wp).test(url);
     } catch (_e) {
       return false;
     }
