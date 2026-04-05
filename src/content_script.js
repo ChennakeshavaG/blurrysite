@@ -165,7 +165,7 @@
     // signature and legitimate content gets throttled.
     let anchor = el.parentElement;
     let depth = 0;
-    while (anchor && !anchor.id && depth < 3) {
+    while (anchor && !anchor.id && depth < 5) {
       anchor = anchor.parentElement;
       depth++;
     }
