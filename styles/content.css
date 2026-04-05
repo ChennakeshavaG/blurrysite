@@ -13,7 +13,7 @@
 /* ─── Custom property defaults ─────────────────────────────────────────────── */
 
 :root {
-  --pb-radius: 8px;
+  --pb-radius: 10px;
   --pb-highlight-color: #f59e0b;
   --pb-transition-duration: 200ms;
 }
@@ -26,18 +26,13 @@
  * re-querying every blurred element.
  */
 .pb-blurred {
-  filter: blur(var(--pb-radius, 8px)) !important;
-  -webkit-filter: blur(var(--pb-radius, 8px)) !important;
-  transition:
-    filter var(--pb-transition-duration, 200ms) ease,
-    -webkit-filter var(--pb-transition-duration, 200ms) ease !important;
-  /* animation removed — transition handles the blur-in smoothly.
-     animation + transition both animating filter was redundant and
-     re-triggered the animation on every class toggle. */
-  /* will-change: filter removed — it creates a permanent stacking context that
-     breaks position:fixed/sticky children, z-index hover elevation, and clips
-     overflow for dropdowns/tooltips. The blur transition is smooth enough
-     without GPU promotion on modern browsers. */
+  filter: blur(var(--pb-radius, 10px)) !important;
+  transition: filter var(--pb-transition-duration, 200ms) ease !important;
+  /* Prevent casual text selection/copy of blurred content */
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  /* Reduce repaint invalidation when other page content changes */
+  contain: paint;
 }
 
 /* ─── Reveal modes ─────────────────────────────────────────────────────────── */
@@ -48,10 +43,8 @@
  */
 .pb-revealed {
   filter: none !important;
-  -webkit-filter: none !important;
   transition:
     filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
-    -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
   /* Indicate revealed state with a subtle outline */
   outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
   outline-offset: 2px !important;
@@ -63,10 +56,8 @@
  */
 .pb-reveal-on-hover:hover {
   filter: none !important;
-  -webkit-filter: none !important;
   transition:
     filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
-    -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
 }
 
 /**
@@ -77,7 +68,6 @@
  */
 .pb-ancestor-reveal {
   filter: none !important;
-  -webkit-filter: none !important;
 }
 
 /* Keyframe animations removed — transition property handles blur-in/out smoothly.

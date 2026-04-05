@@ -293,7 +293,7 @@ describe('PrivacyBlurStorage', () => {
       const settings = await PrivacyBlurStorage.getSettings();
 
       // buildDefaultSettings() returns a full default object
-      expect(settings.BLUR_RADIUS).toBe(8);
+      expect(settings.BLUR_RADIUS).toBe(10);
       expect(settings.HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(settings.TRANSITION_DURATION).toBe(200);
     });
@@ -303,7 +303,7 @@ describe('PrivacyBlurStorage', () => {
 
       const settings = await PrivacyBlurStorage.getSettings();
 
-      expect(settings.BLUR_RADIUS).toBe(8);
+      expect(settings.BLUR_RADIUS).toBe(10);
     });
   });
 

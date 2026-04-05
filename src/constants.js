@@ -87,7 +87,7 @@ const PrivacyBlur = (() => {
   // No other file should define its own defaults.
 
   const DEFAULT_SETTINGS = Object.freeze({
-    BLUR_RADIUS:          8,
+    BLUR_RADIUS:          10,
     TRANSITION_DURATION:  200,
     HIGHLIGHT_COLOR:      '#f59e0b',
     REVEAL_MODE:          'hover',   // 'none' | 'click' | 'hover'
