@@ -364,25 +364,20 @@
 
   function _revealElement(el) {
     el.style.setProperty('transition', 'filter 100ms ease', 'important');
-    el.style.setProperty('filter', 'blur(0px)', 'important');
+    el.style.setProperty('filter', 'none', 'important');
     _revealedElements.add(el);
   }
 
   function _unrevealElement(el) {
-    // Keep transition so blur fades back in smoothly, then clean up
     el.style.removeProperty('filter');
-    setTimeout(() => {
-      el.style.removeProperty('transition');
-    }, 120);
+    setTimeout(() => el.style.removeProperty('transition'), 120);
     _revealedElements.delete(el);
   }
 
   function _unrevealAll() {
     for (const el of _revealedElements) {
       el.style.removeProperty('filter');
-      setTimeout(() => {
-        el.style.removeProperty('transition');
-      }, 120);
+      setTimeout(() => el.style.removeProperty('transition'), 120);
     }
     _revealedElements.clear();
   }
