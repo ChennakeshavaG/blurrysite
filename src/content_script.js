@@ -145,40 +145,49 @@
   }
 
   /**
-   * Loop guard: prevents infinite MO cycles caused by sites that re-create
-   * elements when we blur them (rich text editors, chat apps, SPAs).
-   *
-   * Uses a parent-scoped signature (parent + tag + class) so two identical
-   * elements in different containers are tracked independently. Exponential
-   * backoff: after THRESHOLD hits in WINDOW_MS, skip for WINDOW_MS * 2^n
-   * (capped at 30s). Stale entries auto-cleaned every 60s.
+   * Loop guard: detects runaway MO loops at the observer level, not per-element.
+   * When MO fires too rapidly (>LOOP_THRESHOLD callbacks in LOOP_WINDOW_MS),
+   * we pause the observer for a backoff period. This catches ALL loop patterns
+   * regardless of element signatures — the signal is callback frequency, not
+   * element identity. Legitimate bulk renders (page load, search results) fire
+   * MO in bursts but don't sustain high frequency across multiple windows.
    */
-  const _loopGuard = new Map(); // signature → { count, lastHit, backoffUntil }
-  const LOOP_THRESHOLD = 5;
-  const LOOP_WINDOW_MS = 500;
-  const LOOP_MAX_BACKOFF = 30000;
-  let _lastCleanup = performance.now();
+  const LOOP_THRESHOLD = 50;  // MO callbacks per window
+  const LOOP_WINDOW_MS = 1000;
+  const LOOP_PAUSE_MS  = 2000; // pause duration when loop detected
+  let _moHits = 0;
+  let _moWindowStart = 0;
+  let _moPaused = false;
 
-  function _getSignature(el) {
-    // Walk up to find the nearest ancestor with an ID for precise scoping.
-    // Without this, all <span class="ellips"> under any <div> share one
-    // signature and legitimate content gets throttled.
-    let anchor = el.parentElement;
-    let depth = 0;
-    while (anchor && !anchor.id && depth < 5) {
-      anchor = anchor.parentElement;
-      depth++;
+  function _checkLoopGuard() {
+    const now = performance.now();
+    if (now - _moWindowStart > LOOP_WINDOW_MS) {
+      // Window expired — reset
+      _moHits = 0;
+      _moWindowStart = now;
     }
-    const anchorKey = anchor ? (anchor.id || anchor.tagName) : '_';
-    return anchorKey + '>' + el.tagName + '.' + (el.className || '');
-  }
-
-  function _cleanLoopGuard(now) {
-    if (now - _lastCleanup < 60000) return;
-    _lastCleanup = now;
-    for (const [sig, g] of _loopGuard) {
-      if (now - g.lastHit > LOOP_MAX_BACKOFF) _loopGuard.delete(sig);
+    _moHits++;
+    if (_moHits > LOOP_THRESHOLD) {
+      // Too many MO callbacks — pause observer to break the loop
+      log.warn('loop guard: MO paused for', LOOP_PAUSE_MS + 'ms (' + _moHits + ' callbacks in ' + LOOP_WINDOW_MS + 'ms)');
+      _moPaused = true;
+      if (domObserver) domObserver.disconnect();
+      setTimeout(() => {
+        _moPaused = false;
+        _moHits = 0;
+        _moWindowStart = performance.now();
+        if (domObserver && isPageBlurred) {
+          domObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        }
+        log.log('loop guard: MO resumed');
+      }, LOOP_PAUSE_MS);
+      return true; // loop detected
     }
+    return false;
   }
 
   /** Blur a single element if it passes the category + text-check gate. */
@@ -187,36 +196,6 @@
     if (Engine.isBlurred(el)) return;
 
     if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
-      const sig = _getSignature(el);
-      const now = performance.now();
-      _cleanLoopGuard(now);
-
-      const guard = _loopGuard.get(sig);
-      if (guard) {
-        // Currently in backoff — skip
-        if (guard.backoffUntil && now < guard.backoffUntil) return;
-
-        // Check rate within window
-        if (now - guard.lastHit < LOOP_WINDOW_MS) {
-          guard.count++;
-          guard.lastHit = now;
-          if (guard.count > LOOP_THRESHOLD) {
-            // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 30s
-            const backoff = Math.min(LOOP_WINDOW_MS * Math.pow(2, guard.count - LOOP_THRESHOLD), LOOP_MAX_BACKOFF);
-            guard.backoffUntil = now + backoff;
-            log.warn('loop guard: throttled', sig, 'for', (backoff / 1000).toFixed(1) + 's');
-            return;
-          }
-        } else {
-          // Window expired — reset counter
-          guard.count = 1;
-          guard.lastHit = now;
-          guard.backoffUntil = 0;
-        }
-      } else {
-        _loopGuard.set(sig, { count: 1, lastHit: now, backoffUntil: 0 });
-      }
-
       log.log('tryBlur:', el.tagName, el.id || el.className);
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
@@ -245,6 +224,8 @@
     domObserver = new MutationObserver((mutations) => {
       if (isPickerActive) return;
       if (!isPageBlurred) return;
+      if (_moPaused) return;
+      if (_checkLoopGuard()) return; // runaway loop detected — observer paused
 
       _moCallCount++;
       const t0 = performance.now();
