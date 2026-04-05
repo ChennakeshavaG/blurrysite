@@ -148,7 +148,7 @@ describe('PrivacyBlur constants', () => {
       expect(bc.MEDIA).toBe(true);
       expect(bc.FORM).toBe(false);
       expect(bc.TABLE).toBe(true);
-      expect(bc.STRUCTURE).toBe(true);
+      expect(bc.STRUCTURE).toBe(false);
     });
 
     test('has exactly 5 keys', () => {

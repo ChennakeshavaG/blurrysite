@@ -57,13 +57,14 @@ const BlurEngine = (() => {
       alwaysBlur: Object.freeze(['caption']),
       textCheck:  Object.freeze(['td','th']),
     }),
-    // STRUCTURE: text-bearing containers. CSS filter creates a containing block
-    // that breaks position:fixed/sticky descendants, so we only blur these when
-    // they pass the text-check gate (have visible text content). Layout-only
-    // containers (empty divs, nav wrappers) are skipped.
+    // STRUCTURE: intentionally empty. CSS filter on containers (div, section,
+    // header, etc.) creates a containing block that breaks position:fixed/sticky
+    // descendants and page layout. TEXT category (42 elements) + MEDIA cover
+    // all readable content. Plain text directly in a div without semantic tags
+    // is an acceptable gap — layout stability is more important.
     STRUCTURE: Object.freeze({
       alwaysBlur: Object.freeze([]),
-      textCheck:  Object.freeze(['div', 'article', 'figure', 'details', 'dialog']),
+      textCheck:  Object.freeze([]),
     }),
   });
 
