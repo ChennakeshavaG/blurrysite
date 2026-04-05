@@ -487,19 +487,40 @@ button { cursor: pointer; font-family: inherit; }
 }
 
 .pb-setting__label {
+  position: relative;
   font-size: var(--pb-font-size-sm);
   color: var(--pb-text);
   flex: 1;
   min-width: 0;
 }
 
+/* Tooltip: hidden by default, shown on hover of the parent label */
 .pb-setting__hint {
-  display: block;
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  max-width: 220px;
+  padding: 6px 10px;
   font-size: var(--pb-font-size-xs);
   font-weight: 400;
-  color: var(--pb-text-muted);
-  margin-top: 1px;
+  color: var(--pb-text);
+  background: var(--pb-frost-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--pb-frost-border);
+  border-radius: var(--pb-radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  white-space: normal;
+  line-height: 1.4;
   letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+/* Show tooltip on label hover */
+.pb-setting__label:hover .pb-setting__hint {
+  display: block;
 }
 
 .pb-setting__value {
