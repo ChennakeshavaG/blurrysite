@@ -3,6 +3,7 @@
   "name": "PrivacyBlur",
   "version": "1.0.0",
   "description": "Blur sensitive text, images, and videos on any webpage with keyboard shortcuts or an element picker.",
+  "default_locale": "en",
 
   "permissions": [
     "storage",
