@@ -55,8 +55,10 @@
 
       for (const selector of selectors) {
         const el = Selector.restoreSelector(selector);
-        if (el) {
+        if (el && canBlurMore()) {
           Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
+          blurredElementCount++;
+          observeElement(el);
           if (settings.REVEAL_MODE === 'hover') {
             el.classList.add('pb-reveal-on-hover');
           }
@@ -114,6 +116,7 @@
       if (el.isConnected) {
         el.classList.add('pb-blurred');
         if (settings.BLUR_MODE === 'frosted') el.classList.add('pb-frosted');
+        if (settings.REVEAL_MODE === 'hover') el.classList.add('pb-reveal-on-hover');
       }
     }
     offscreenElements.clear();
@@ -242,7 +245,10 @@
 
   const pickerCallbacks = {
     onBlur(el) {
+      if (!canBlurMore()) return;
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
+      blurredElementCount++;
+      observeElement(el);
       if (settings.REVEAL_MODE === 'hover') {
         el.classList.add('pb-reveal-on-hover');
       }
@@ -255,6 +261,7 @@
     onUnblur(el) {
       el.classList.remove('pb-reveal-on-hover');
       Engine.removeBlur(el);
+      if (blurredElementCount > 0) blurredElementCount--;
       const selector = Selector.getSelector(el);
       if (selector) {
         Store.removeBlurredElement(hostname, selector).catch(() => {});
@@ -707,8 +714,10 @@
       // ── Context menu: blur the right-clicked element ─────────────────────
       case MSG.CONTEXT_BLUR: {
         const target = lastContextMenuTarget;
-        if (target && target instanceof Element) {
+        if (target && target instanceof Element && canBlurMore()) {
           Engine.applyBlur(target, settings.BLUR_RADIUS, settings.BLUR_MODE);
+          blurredElementCount++;
+          observeElement(target);
           if (settings.REVEAL_MODE === 'hover') {
             target.classList.add('pb-reveal-on-hover');
           }
@@ -729,6 +738,7 @@
         if (unblurTarget) {
           unblurTarget.classList.remove('pb-reveal-on-hover');
           Engine.removeBlur(unblurTarget);
+          if (blurredElementCount > 0) blurredElementCount--;
           const sel = Selector.getSelector(unblurTarget);
           if (sel) {
             Store.removeBlurredElement(hostname, sel).catch(() => {});
@@ -747,6 +757,7 @@
             if (el) {
               el.classList.remove('pb-reveal-on-hover');
               Engine.removeBlur(el);
+              if (blurredElementCount > 0) blurredElementCount--;
             }
           } catch (_e) { /* invalid selector — skip */ }
         }
@@ -915,6 +926,13 @@
         });
         applyRevealClasses();
         isPageBlurred = true;
+        // Count and observe all blurred elements
+        blurredElementCount = 0;
+        document.querySelectorAll('.pb-blurred').forEach(el => {
+          blurredElementCount++;
+          observeElement(el);
+        });
+        if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
       }
     } catch (_e) {
       // Storage unavailable — skip restore

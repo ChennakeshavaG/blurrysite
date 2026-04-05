@@ -354,7 +354,7 @@ const PrivacyBlurEngine = (() => {
    * @param {number}  radius  - Blur radius in pixels (default 8)
    * @param {string}  [mode]  - Blur mode: 'gaussian' (default) or 'frosted'
    */
-  function applyBlur(element, radius = 8, mode) {
+  function applyBlur(element, radius = 10, mode) {
     if (!element || !(element instanceof Element)) return;
     if (isBlurred(element)) return; // idempotent
 
@@ -383,6 +383,7 @@ const PrivacyBlurEngine = (() => {
     // filter via var(--pb-radius) from :root for the brief moment before
     // the canvas overlay is drawn.
     const isFrosted = mode === 'frosted';
+    if (isFrosted) ensureSvgFilter();
 
     if (tag === "video") {
       element.classList.add(BLURRED_CLASS);
@@ -471,7 +472,7 @@ const PrivacyBlurEngine = (() => {
    * @param {number}  radius
    * @param {string}  [mode] - Blur mode: 'gaussian' (default) or 'frosted'
    */
-  function toggleBlur(element, radius = 8, mode) {
+  function toggleBlur(element, radius = 10, mode) {
     if (!element || !(element instanceof Element)) return;
 
     if (isBlurred(element)) {
@@ -500,7 +501,7 @@ const PrivacyBlurEngine = (() => {
    *   'frosted'. When 'frosted', elements get the pb-frosted class in addition
    *   to pb-blurred, applying an SVG displacement + Gaussian blur filter.
    */
-  function blurAllContent(radius = 8, options) {
+  function blurAllContent(radius = 10, options) {
     const cats = (options && options.categories) ? options.categories : DEFAULT_CATS;
     const thorough = !!(options && options.thoroughBlur);
     const mode = (options && options.blurMode) || 'gaussian';
