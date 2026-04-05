@@ -177,13 +177,20 @@
         _moHits = 0;
         _moWindowStart = performance.now();
         if (domObserver && isPageBlurred) {
+          // Re-blur everything that was added during the pause
+          Engine.blurAllContent(settings.BLUR_RADIUS, {
+            categories: settings.BLUR_CATEGORIES,
+            thoroughBlur: settings.THOROUGH_BLUR,
+            blurMode: settings.BLUR_MODE,
+          });
+          // Re-connect observer for future mutations
           domObserver.observe(document.body, {
             childList: true,
             subtree: true,
             characterData: true,
           });
         }
-        log.log('loop guard: MO resumed');
+        log.log('loop guard: MO resumed + re-blurred');
       }, LOOP_PAUSE_MS);
       return true; // loop detected
     }
