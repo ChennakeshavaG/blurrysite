@@ -175,7 +175,7 @@ const Picker = (() => {
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    const alreadyBlurred = target.classList.contains('pb-blurred');
+    const alreadyBlurred = pb.BlurEngine.isBlurred(target);
 
     if (alreadyBlurred) {
       if (typeof activeCallbacks.onUnblur === 'function') {

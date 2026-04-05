@@ -1,20 +1,7 @@
 /**
  * tests/unit/blur_engine.test.js
  *
- * Unit tests for src/blur_engine.js — the core DOM manipulation module that
- * handles blurring and unblurring elements on the page.
- *
- * The module exposes pb.BlurEngine and uses no ES-module syntax,
- * so we load it by reading the file and running it via (0, eval)() inside
- * the jsdom environment provided by Jest.
- *
- * Key behaviors tested:
- *  - IMG elements: direct CSS filter applied on the element
- *  - VIDEO elements: CSS class only (CSS filter works on DRM video)
- *  - Text containers: bare text nodes wrapped in <span> for CSS filter targeting
- *  - Background-image elements: CSS class only (filter via stylesheet)
- *  - Generic elements: class + CSS custom property approach
- *  - Bulk operations: blurAllContent and unblurAll across all element types
+ * Unit tests for src/blur_engine.js — hybrid CSS + data-attribute blur engine.
  */
 
 'use strict';
@@ -22,1075 +9,247 @@
 const fs = require('fs');
 const path = require('path');
 
-// ─── Load module into jsdom global scope ──────────────────────────────────────
-
 const MODULE_PATH = path.resolve(__dirname, '../../src/blur_engine.js');
 
 function loadBlurEngine() {
-  // Each test file gets a fresh jsdom environment, so we load once per suite.
   if (pb.BlurEngine) return;
   if (fs.existsSync(MODULE_PATH)) {
-    require(MODULE_PATH); // require() lets Jest instrument for coverage
+    require(MODULE_PATH);
   } else {
-    (0, eval)(buildStubSource()); // fallback stub so tests run even without real src
+    throw new Error('blur_engine.js not found');
   }
 }
 
-/**
- * Minimal stub that satisfies the contract so tests can assert against it.
- * This will be replaced by the real implementation when src/blur_engine.js exists.
- */
-function buildStubSource() {
-  return `
-  (function() {
-    'use strict';
-    const BLUR_CLASS = 'pb-blurred';
-    const CANVAS_CLASS = 'pb-canvas-overlay';
+beforeAll(() => { loadBlurEngine(); });
 
-    function applyBlur(el, radius) {
-      if (!el || !el.style) return;
-      radius = radius || 8;
-      el.classList.add(BLUR_CLASS);
-      el.style.setProperty('--pb-radius', radius + 'px');
-      const tag = el.tagName ? el.tagName.toLowerCase() : '';
-      if (tag === 'img') {
-        el.style.filter = 'blur(' + radius + 'px)';
-      } else if (tag === 'video') {
-        let canvas = el._pbCanvas;
-        if (!canvas) {
-          canvas = document.createElement('canvas');
-          canvas.className = CANVAS_CLASS;
-          el._pbCanvas = canvas;
-          if (el.parentNode) el.parentNode.insertBefore(canvas, el.nextSibling);
-        }
-        el._pbRafId = requestAnimationFrame(function loop() {
-          el._pbRafId = requestAnimationFrame(loop);
-        });
-      }
-    }
+beforeEach(() => {
+  document.body.innerHTML = '';
+  document.head.querySelectorAll('#pb-blur-styles').forEach(el => el.remove());
+  document.querySelectorAll('[data-pb-blur]').forEach(el => delete el.dataset.pbBlur);
+  jest.clearAllMocks();
+});
 
-    function removeBlur(el) {
-      if (!el || !el.style) return;
-      el.classList.remove(BLUR_CLASS);
-      el.style.removeProperty('--pb-radius');
-      el.style.filter = '';
-      if (el._pbCanvas) {
-        if (el._pbCanvas.parentNode) el._pbCanvas.parentNode.removeChild(el._pbCanvas);
-        el._pbCanvas = null;
-      }
-      if (el._pbRafId) {
-        cancelAnimationFrame(el._pbRafId);
-        el._pbRafId = null;
-      }
-    }
-
-    function isBlurred(el) {
-      if (!el || !el.classList) return false;
-      return el.classList.contains(BLUR_CLASS);
-    }
-
-    function toggleBlur(el, radius) {
-      if (isBlurred(el)) { removeBlur(el); } else { applyBlur(el, radius); }
-    }
-
-    function blurAllContent(radius, revealOnHover) {
-      var selectors = ['img', 'video', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
-      selectors.forEach(function(s) {
-        document.querySelectorAll(s).forEach(function(el) { applyBlur(el, radius); });
-      });
-    }
-
-    function unblurAll() {
-      document.querySelectorAll('.' + BLUR_CLASS).forEach(function(el) { removeBlur(el); });
-    }
-
-    function invalidateSelectorCache() {}
-    function matchesActiveCategories(el, cats) {
-      if (!el || !el.tagName) return false;
-      return true; // stub always matches
-    }
-
-    pb.BlurEngine = { applyBlur: applyBlur, removeBlur: removeBlur, toggleBlur: toggleBlur,
-      blurAllContent: blurAllContent, unblurAll: unblurAll, isBlurred: isBlurred,
-      invalidateSelectorCache: invalidateSelectorCache, matchesActiveCategories: matchesActiveCategories,
-      CATEGORY_SELECTORS: {} };
-  })();
-  `;
-}
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
+afterEach(() => { pb.BlurEngine.unblurAll(); });
 
 describe('pb.BlurEngine', () => {
-  beforeAll(() => {
-    loadBlurEngine();
-  });
 
-  beforeEach(() => {
-    // Clean DOM before every test to prevent cross-test contamination
-    // of blurred elements, canvas overlays, or text wrappers.
-    document.body.innerHTML = '';
-  });
-
-  // ── applyBlur ──────────────────────────────────────────────────────────────
-
-  describe('applyBlur', () => {
-    /**
-     * Verifies that applyBlur adds the 'pb-blurred' CSS class to any element.
-     * Why: The CSS stylesheet (content.css) targets .pb-blurred to apply the
-     * blur filter via CSS custom properties. Without this class, no visual
-     * blur effect is visible.
-     * Reproduce: Create a <div>, call applyBlur, check classList.
-     */
-    test('adds pb-blurred class to element', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-
-      pb.BlurEngine.applyBlur(div, 8);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
+  describe('injectBlurRules', () => {
+    test('creates style element in head', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      expect(document.getElementById('pb-blur-styles')).not.toBeNull();
     });
 
-    /**
-     * Verifies that applyBlur sets the --pb-radius CSS custom property.
-     * Why: content.css reads --pb-radius to control the blur filter intensity.
-     * The custom property approach lets JS set the value once and CSS applies it
-     * across transitions and animations without further JS involvement.
-     * Reproduce: Create a <div>, call applyBlur(div, 12), read custom property.
-     */
-    test('does not set per-element --pb-radius (uses :root cascade)', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-
-      pb.BlurEngine.applyBlur(div, 12);
-
-      // Non-video elements rely on :root --pb-radius from applySettingsToDom()
-      expect(div.style.getPropertyValue('--pb-radius')).toBe('');
+    test('style contains always-blur tag selectors', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: false, STRUCTURE: false });
+      const css = document.getElementById('pb-blur-styles').textContent;
+      expect(css).toContain('h1');
+      expect(css).toContain('img');
+      expect(css).not.toContain('input');
     });
 
-    /**
-     * Verifies the default blur radius when none is specified.
-     * Why: Users who call applyBlur without a radius (e.g. from keyboard shortcut)
-     * should get a sensible default. The default of 8px is defined in both
-     * blur_engine.js and DEFAULT_SETTINGS in storage_manager.js.
-     * Reproduce: Create a <div>, call applyBlur(div) with no radius argument.
-     */
-    test('adds pb-blurred class when no radius specified', () => {
+    test('includes data-pb-blur rule', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      expect(document.getElementById('pb-blur-styles').textContent).toContain('[data-pb-blur]');
+    });
+
+    test('frosted mode uses SVG filter URL', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false }, 'frosted');
+      expect(document.getElementById('pb-blur-styles').textContent).toContain('url(#pb-frosted-filter)');
+    });
+
+    test('calling twice replaces previous', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      pb.BlurEngine.injectBlurRules({ TEXT: false, MEDIA: true, FORM: false, TABLE: false, STRUCTURE: false });
+      expect(document.querySelectorAll('#pb-blur-styles').length).toBe(1);
+    });
+
+    test('removeBlurRules removes style', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      pb.BlurEngine.removeBlurRules();
+      expect(document.getElementById('pb-blur-styles')).toBeNull();
+    });
+
+    test('isBlurAllActive reflects state', () => {
+      expect(pb.BlurEngine.isBlurAllActive()).toBe(false);
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      expect(pb.BlurEngine.isBlurAllActive()).toBe(true);
+      pb.BlurEngine.removeBlurRules();
+      expect(pb.BlurEngine.isBlurAllActive()).toBe(false);
+    });
+
+    test('excludes extension UI', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      const css = document.getElementById('pb-blur-styles').textContent;
+      expect(css).toContain(':not(#pb-picker-toolbar)');
+    });
+
+    test('includes revealed override', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      expect(document.getElementById('pb-blur-styles').textContent).toContain('[data-pb-revealed]');
+    });
+  });
+
+  describe('blurTextCheckElements', () => {
+    test('stamps text-check elements with direct text', () => {
+      document.body.innerHTML = '<div>text</div><div></div>';
+      pb.BlurEngine.injectBlurRules({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true });
+      pb.BlurEngine.blurTextCheckElements({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true }, false);
+      const divs = document.querySelectorAll('div');
+      expect(divs[0].dataset.pbBlur).toBe('1');
+      expect(divs[1].dataset.pbBlur).toBeUndefined();
+    });
+
+    test('thorough stamps all', () => {
+      document.body.innerHTML = '<div></div>';
+      pb.BlurEngine.blurTextCheckElements({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true }, true);
+      expect(document.querySelector('div').dataset.pbBlur).toBe('1');
+    });
+  });
+
+  describe('tryBlurTextCheck', () => {
+    test('stamps text-check with text', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true });
+      const div = document.createElement('div');
+      div.textContent = 'hello';
+      document.body.appendChild(div);
+      pb.BlurEngine.tryBlurTextCheck(div, false);
+      expect(div.dataset.pbBlur).toBe('1');
+    });
+
+    test('skips empty', () => {
+      pb.BlurEngine.injectBlurRules({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true });
       const div = document.createElement('div');
       document.body.appendChild(div);
+      pb.BlurEngine.tryBlurTextCheck(div, false);
+      expect(div.dataset.pbBlur).toBeUndefined();
+    });
+  });
 
+  describe('applyBlur (picker)', () => {
+    test('sets data-pb-blur', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
       pb.BlurEngine.applyBlur(div);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
+      expect(div.dataset.pbBlur).toBe('1');
     });
 
-    /**
-     * Verifies that <img> elements get a direct style.filter applied.
-     * Why: Images need an inline filter in addition to the CSS class because
-     * some sites override filter on img elements. The inline style has higher
-     * specificity than the stylesheet rule.
-     * Reproduce: Create an <img>, call applyBlur(img, 10), check style.filter.
-     */
-    test('applies blur class on img without inline filter', () => {
-      const img = document.createElement('img');
-      document.body.appendChild(img);
-
-      pb.BlurEngine.applyBlur(img, 10);
-
-      expect(img.classList.contains('pb-blurred')).toBe(true);
-      // No inline style.filter — CSS class handles it via var(--pb-radius)
-      expect(img.style.filter).toBe('');
+    test('idempotent', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      pb.BlurEngine.applyBlur(div);
+      pb.BlurEngine.applyBlur(div);
+      expect(div.dataset.pbBlur).toBe('1');
     });
 
-    /**
-     * Verifies that <video> elements are blurred via CSS class only.
-     * CSS filter: blur() works on video elements including DRM content.
-     * No canvas overlay needed.
-     */
-    test('blurs video via CSS class (no canvas overlay)', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-
-      pb.BlurEngine.applyBlur(video, 8);
-
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-      // No canvas overlay injected
-      expect(document.querySelector('canvas')).toBeNull();
-      // No RAF loop started
-      expect(global.requestAnimationFrame).not.toHaveBeenCalled();
-    });
-
-    /**
-     * Verifies null safety of applyBlur.
-     * Why: content_script.js may call applyBlur with elements that have been
-     * removed from the DOM between selection and application (race condition
-     * in dynamic SPAs). Must not throw.
-     * Reproduce: Call applyBlur(null).
-     */
-    test('does not throw on null element', () => {
+    test('null safe', () => {
       expect(() => pb.BlurEngine.applyBlur(null)).not.toThrow();
     });
-
-    /**
-     * Verifies applyBlur works on detached elements (not in DOM).
-     * Why: An element can be created and blurred before being appended to the
-     * page. This is an edge case from the picker where element references
-     * may become detached during SPA navigation.
-     * Reproduce: Create a <div> without appendChild, call applyBlur.
-     */
-    test('does not throw on element not in DOM', () => {
-      const div = document.createElement('div');
-      expect(() => pb.BlurEngine.applyBlur(div, 8)).not.toThrow();
-    });
-
-    /**
-     * Verifies that calling applyBlur twice is idempotent.
-     * Why: The picker's onBlur callback and the MutationObserver in
-     * content_script.js can both attempt to blur the same element. Double-blur
-     * must not create duplicate canvas overlays, duplicate classes, or
-     * double-wrap text nodes.
-     * Reproduce: Call applyBlur twice on the same element, verify class count.
-     */
-    test('calling applyBlur twice on same element is idempotent (class present once)', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-
-      pb.BlurEngine.applyBlur(div, 8);
-      pb.BlurEngine.applyBlur(div, 8);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
-    });
   });
-
-  // ── removeBlur ─────────────────────────────────────────────────────────────
 
   describe('removeBlur', () => {
-    /**
-     * Verifies that removeBlur strips the pb-blurred class.
-     * Why: Without removing the class, the CSS filter from content.css would
-     * keep the element visually blurred even after the user unblurs it.
-     * Reproduce: Apply blur, then removeBlur, check class is gone.
-     */
-    test('removes pb-blurred class', () => {
+    test('removes data-pb-blur', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      pb.BlurEngine.applyBlur(div, 8);
-
+      pb.BlurEngine.applyBlur(div);
       pb.BlurEngine.removeBlur(div);
-
-      expect(div.classList.contains('pb-blurred')).toBe(false);
+      expect(div.dataset.pbBlur).toBeUndefined();
     });
 
-    /**
-     * Verifies that removeBlur clears the --pb-radius custom property.
-     * Why: Stale custom properties can cause visual artifacts if the element
-     * is later re-blurred with a different radius. Clean state is important.
-     * Reproduce: Apply blur with radius 12, removeBlur, check property is empty.
-     */
-    test('clears --pb-radius custom property', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      pb.BlurEngine.applyBlur(div, 12);
-
-      pb.BlurEngine.removeBlur(div);
-
-      expect(div.style.getPropertyValue('--pb-radius')).toBe('');
-    });
-
-    /**
-     * Verifies that removeBlur on a video removes the canvas overlay from DOM.
-     * Why: Leaving orphaned canvases wastes memory and GPU resources. Each
-     * canvas runs a rAF loop that consumes CPU even when not visible.
-     * Reproduce: Blur a video, verify canvas exists, removeBlur, verify gone.
-     */
-    test('removes blur class from video', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-      pb.BlurEngine.applyBlur(video, 8);
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-
-      pb.BlurEngine.removeBlur(video);
-
-      expect(video.classList.contains('pb-blurred')).toBe(false);
-    });
-
-    /**
-     * Verifies null safety of removeBlur.
-     * Why: Same rationale as applyBlur — elements can be GC'd or detached
-     * between the time a selector is stored and the time unblur is attempted.
-     * Reproduce: Call removeBlur(null).
-     */
-    test('does not throw on null element', () => {
+    test('null safe', () => {
       expect(() => pb.BlurEngine.removeBlur(null)).not.toThrow();
     });
-
-    /**
-     * Verifies that removeBlur on a never-blurred element is safe.
-     * Why: The "Clear Page" button in the popup calls removeBlur on all
-     * elements matching a selector, but the element may never have been
-     * blurred (stale selector from a previous page load).
-     * Reproduce: Create element, call removeBlur without prior applyBlur.
-     */
-    test('does not throw if removeBlur called on non-blurred element', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      expect(() => pb.BlurEngine.removeBlur(div)).not.toThrow();
-    });
   });
-
-  // ── toggleBlur ─────────────────────────────────────────────────────────────
 
   describe('toggleBlur', () => {
-    /**
-     * Verifies that toggleBlur applies blur when element is not yet blurred.
-     * Why: The keyboard shortcut (Alt+Shift+B) and chord (Ctrl+K, V) both
-     * trigger toggleBlur, which must apply blur on first use.
-     * Reproduce: Create clean element, call toggleBlur, verify class added.
-     */
-    test('applies blur when element is not yet blurred', () => {
+    test('toggles on/off', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-
-      pb.BlurEngine.toggleBlur(div, 8);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that toggleBlur removes blur when element is already blurred.
-     * Why: The same shortcut key should work as both blur and unblur,
-     * providing a single-action toggle for screen sharing scenarios.
-     * Reproduce: Apply blur, then toggleBlur, verify class removed.
-     */
-    test('removes blur when element is already blurred', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      pb.BlurEngine.applyBlur(div, 8);
-
-      pb.BlurEngine.toggleBlur(div, 8);
-
-      expect(div.classList.contains('pb-blurred')).toBe(false);
-    });
-
-    /**
-     * Verifies that toggle cycles correctly through on/off/on states.
-     * Why: Users frequently toggle blur multiple times during a presentation
-     * to reveal then re-hide content. The third toggle must re-apply blur.
-     * Reproduce: Toggle three times, verify final state is blurred.
-     */
-    test('second toggle re-applies blur', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-
-      pb.BlurEngine.toggleBlur(div, 8); // on
-      pb.BlurEngine.toggleBlur(div, 8); // off
-      pb.BlurEngine.toggleBlur(div, 8); // on again
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
+      pb.BlurEngine.toggleBlur(div);
+      expect(pb.BlurEngine.isBlurred(div)).toBe(true);
+      pb.BlurEngine.toggleBlur(div);
+      expect(pb.BlurEngine.isBlurred(div)).toBe(false);
     });
   });
 
-  // ── isBlurred ──────────────────────────────────────────────────────────────
-
   describe('isBlurred', () => {
-    /**
-     * Verifies that isBlurred returns false for a clean element.
-     * Why: The picker uses isBlurred to decide whether a click should blur
-     * or unblur. A false positive would invert the user's action.
-     * Reproduce: Create element without blur class, call isBlurred.
-     */
-    test('returns false for element without pb-blurred class', () => {
-      const div = document.createElement('div');
-      expect(pb.BlurEngine.isBlurred(div)).toBe(false);
-    });
-
-    /**
-     * Verifies that isBlurred returns true for a blurred element.
-     * Why: Confirms the class check matches what applyBlur sets.
-     * Reproduce: Apply blur, then call isBlurred.
-     */
-    test('returns true for element with pb-blurred class', () => {
+    test('true for data-pb-blur', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      pb.BlurEngine.applyBlur(div, 8);
-
+      pb.BlurEngine.applyBlur(div);
       expect(pb.BlurEngine.isBlurred(div)).toBe(true);
     });
 
-    /**
-     * Verifies that isBlurred returns false after blur is removed.
-     * Why: After unblurring, the element should not be detected as blurred.
-     * Ensures removeBlur fully cleans up the class.
-     * Reproduce: Apply, remove, check isBlurred.
-     */
-    test('returns false after blur is removed', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      pb.BlurEngine.applyBlur(div, 8);
-      pb.BlurEngine.removeBlur(div);
-
-      expect(pb.BlurEngine.isBlurred(div)).toBe(false);
+    test('true for always-blur tag when rules active', () => {
+      const p = document.createElement('p');
+      document.body.appendChild(p);
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      expect(pb.BlurEngine.isBlurred(p)).toBe(true);
     });
 
-    /**
-     * Verifies null safety of isBlurred.
-     * Why: applyBlur calls isBlurred internally as an idempotency guard.
-     * If isBlurred throws on null, applyBlur would also throw.
-     * Reproduce: Call isBlurred(null).
-     */
-    test('returns false for null', () => {
+    test('false for non-blurred', () => {
+      expect(pb.BlurEngine.isBlurred(document.createElement('div'))).toBe(false);
+    });
+
+    test('false for null', () => {
       expect(pb.BlurEngine.isBlurred(null)).toBe(false);
     });
   });
 
-  // ── blurAllContent ─────────────────────────────────────────────────────────
-
-  describe('blurAllContent', () => {
-    /**
-     * Verifies that blurAllContent blurs all <img> elements.
-     * Why: Images are the most common privacy-sensitive content on pages
-     * (profile photos, screenshots, documents). The "Blur All" feature
-     * must catch every image during screen sharing.
-     * Reproduce: Add two images, call blurAllContent, check both are blurred.
-     */
-    test('applies blur to all img elements in the DOM', () => {
-      document.body.innerHTML = '<img src="a.png"><img src="b.png">';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const imgs = document.querySelectorAll('img');
-      imgs.forEach((img) => {
-        expect(img.classList.contains('pb-blurred')).toBe(true);
-      });
-    });
-
-    /**
-     * Verifies that blurAllContent blurs all <p> elements.
-     * Why: Paragraphs contain the bulk of text content — email bodies,
-     * chat messages, financial details — that users need to hide.
-     * Reproduce: Add two paragraphs, call blurAllContent, check both blurred.
-     */
-    test('applies blur to all p elements in the DOM', () => {
-      document.body.innerHTML = '<p>Hello</p><p>World</p>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const ps = document.querySelectorAll('p');
-      ps.forEach((p) => {
-        expect(p.classList.contains('pb-blurred')).toBe(true);
-      });
-    });
-
-    /**
-     * Verifies that blurAllContent blurs all heading levels h1-h6.
-     * Why: Headings often contain page titles, account names, or section
-     * labels that reveal the context of what's being viewed.
-     * Reproduce: Add all 6 heading levels, call blurAllContent, check all blurred.
-     */
-    test('applies blur to all heading elements h1-h6', () => {
-      document.body.innerHTML = '<h1>H1</h1><h2>H2</h2><h3>H3</h3><h4>H4</h4><h5>H5</h5><h6>H6</h6>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].forEach((tag) => {
-        const el = document.querySelector(tag);
-        expect(el.classList.contains('pb-blurred')).toBe(true);
-      });
-    });
-
-    /**
-     * Verifies that blurAllContent blurs <video> elements.
-     * Why: Video content (meetings, recordings, media players) can contain
-     * sensitive information that must be hidden during screen shares.
-     * Reproduce: Add a video element, call blurAllContent, check blurred.
-     */
-    test('applies blur to video elements', () => {
-      document.body.innerHTML = '<video src="clip.mp4"></video>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const video = document.querySelector('video');
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that blurAllContent handles an empty page without errors.
-     * Why: The extension runs on every page, including blank tabs, error
-     * pages, and pages that haven't finished loading content yet.
-     * Reproduce: Set empty body, call blurAllContent.
-     */
-    test('does not throw on empty DOM', () => {
-      document.body.innerHTML = '';
-      expect(() => pb.BlurEngine.blurAllContent(8)).not.toThrow();
-    });
-  });
-
-  // ── unblurAll ──────────────────────────────────────────────────────────────
-
   describe('unblurAll', () => {
-    /**
-     * Verifies that unblurAll removes blur from every blurred element.
-     * Why: The "Clear Page" action (Alt+Shift+U) must instantly reveal all
-     * content — the user expects zero blurred elements after this action.
-     * Reproduce: Blur multiple element types, call unblurAll, check none remain.
-     */
-    test('removes blur from all blurred elements', () => {
-      document.body.innerHTML = '<p>A</p><p>B</p><img src="x.png">';
-      pb.BlurEngine.blurAllContent(8);
-
+    test('removes rules and data attrs', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
+      pb.BlurEngine.applyBlur(div);
       pb.BlurEngine.unblurAll();
-
-      const blurred = document.querySelectorAll('.pb-blurred');
-      expect(blurred.length).toBe(0);
-    });
-
-    /**
-     * Verifies that unblurAll does not modify non-blurred elements.
-     * Why: unblurAll uses querySelectorAll('.pb-blurred') — it must not
-     * strip classes or styles from elements that were never blurred.
-     * Reproduce: Create element with unrelated class, call unblurAll, verify class intact.
-     */
-    test('does not affect elements that were never blurred', () => {
-      document.body.innerHTML = '<div class="some-class">Text</div>';
-
-      pb.BlurEngine.unblurAll();
-
-      const div = document.querySelector('div');
-      expect(div.classList.contains('some-class')).toBe(true);
-      expect(div.classList.contains('pb-blurred')).toBe(false);
-    });
-
-    /**
-     * Verifies that unblurAll handles an empty page without errors.
-     * Why: Same as blurAllContent — extension runs on all pages.
-     * Reproduce: Set empty body, call unblurAll.
-     */
-    test('does not throw on empty DOM', () => {
-      document.body.innerHTML = '';
-      expect(() => pb.BlurEngine.unblurAll()).not.toThrow();
-    });
-
-    test('unblurAll is safe to call on clean DOM', () => {
-      expect(() => pb.BlurEngine.unblurAll()).not.toThrow();
+      expect(pb.BlurEngine.isBlurAllActive()).toBe(false);
+      expect(div.dataset.pbBlur).toBeUndefined();
     });
   });
 
-  // ── Text content handling ─────────────────────────────────────────────────
-  // CSS filter: blur() on a parent blurs ALL descendants including text nodes.
-  // No text-node wrapping is needed — the class alone is sufficient.
+  describe('shouldBlurElement', () => {
+    const ALL = { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true };
 
-  describe('text content handling', () => {
-    test('blurs text container via class only (no text wrapper spans)', () => {
-      const div = document.createElement('div');
-      div.textContent = 'Sensitive text';
-      document.body.appendChild(div);
-
-      pb.BlurEngine.applyBlur(div, 8);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
-      // No wrapper spans — CSS blur on parent covers all text
-      expect(div.querySelector('.pb-text-node-wrapper')).toBeNull();
-      expect(div.textContent).toBe('Sensitive text');
+    test('true for always-blur', () => {
+      const p = document.createElement('p');
+      p.textContent = 'x';
+      document.body.appendChild(p);
+      expect(pb.BlurEngine.shouldBlurElement(p, ALL, false)).toBe(true);
     });
 
-    test('unblur preserves text content without DOM changes', () => {
-      const div = document.createElement('div');
-      div.textContent = 'Private data';
-      document.body.appendChild(div);
+    test('false for empty text-check', () => {
+      const td = document.createElement('td');
+      document.body.appendChild(td);
+      expect(pb.BlurEngine.shouldBlurElement(td, ALL, false)).toBe(false);
+    });
 
-      pb.BlurEngine.applyBlur(div, 8);
-      pb.BlurEngine.removeBlur(div);
+    test('thorough bypasses gate', () => {
+      const td = document.createElement('td');
+      document.body.appendChild(td);
+      expect(pb.BlurEngine.shouldBlurElement(td, ALL, true)).toBe(true);
+    });
 
-      expect(div.classList.contains('pb-blurred')).toBe(false);
-      expect(div.textContent).toBe('Private data');
+    test('false for null', () => {
+      expect(pb.BlurEngine.shouldBlurElement(null, ALL, false)).toBe(false);
     });
   });
 
-  // ── Background-image elements ─────────────────────────────────────────────
-
-  describe('background-image elements', () => {
-    /**
-     * Verifies that elements with CSS background-image get the blur class.
-     * Why: Many sites use background-image for avatars, hero banners, and
-     * card thumbnails. These must be caught by the blur engine even though
-     * they are not <img> elements.
-     * Reproduce: Create a <div> with background-image style, apply blur,
-     * check class and custom property are set.
-     */
-    test('applies blur class to elements with background-image', () => {
-      const div = document.createElement('div');
-      div.style.backgroundImage = 'url(test.png)';
-      document.body.appendChild(div);
-
-      pb.BlurEngine.applyBlur(div, 10);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that background-image elements do NOT get inline style.filter.
-     * Why: Background-image elements rely on the CSS stylesheet (.pb-blurred
-     * class) to apply the filter. Adding an inline filter would double-blur
-     * them — once via inline style, once via the class rule.
-     * Reproduce: Create a <div> with background-image, apply blur,
-     * verify style.filter is empty.
-     */
-    test('does not apply direct style.filter on background-image elements', () => {
-      const div = document.createElement('div');
-      div.style.backgroundImage = 'url(test.png)';
-      document.body.appendChild(div);
-
-      pb.BlurEngine.applyBlur(div, 10);
-
-      expect(div.style.filter).toBeFalsy();
+  describe('CATEGORY_SELECTORS', () => {
+    test('frozen with 5 categories', () => {
+      expect(Object.isFrozen(pb.BlurEngine.CATEGORY_SELECTORS)).toBe(true);
+      expect(Object.keys(pb.BlurEngine.CATEGORY_SELECTORS)).toHaveLength(5);
     });
   });
-
-  // ── Video blur edge cases ─────────────────────────────────────────────────
-
-  describe('video and media blur', () => {
-    test('video is blurred via CSS class only (no canvas)', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-
-      pb.BlurEngine.applyBlur(video, 8);
-
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('canvas')).toBeNull();
-    });
-
-    test('detached video blurs without error', () => {
-      const video = document.createElement('video');
-      expect(() => pb.BlurEngine.applyBlur(video, 8)).not.toThrow();
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('double blur on video is idempotent', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-
-      pb.BlurEngine.applyBlur(video, 8);
-      pb.BlurEngine.applyBlur(video, 8);
-
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('removeBlur on img removes class', () => {
-      const img = document.createElement('img');
-      document.body.appendChild(img);
-
-      pb.BlurEngine.applyBlur(img, 12);
-      expect(img.classList.contains('pb-blurred')).toBe(true);
-
-      pb.BlurEngine.removeBlur(img);
-      expect(img.classList.contains('pb-blurred')).toBe(false);
-    });
-  });
-
-  // ── blurAllContent advanced ───────────────────────────────────────────────
-
-  describe('blurAllContent advanced', () => {
-    /**
-     * Verifies that blurAllContent blurs <span> elements with direct text.
-     * Why: Spans are used for inline labels, badges, and data values
-     * (e.g. "Balance: $1,234"). The engine only blurs spans that contain
-     * meaningful text content — not empty or icon-only spans which would
-     * break site navigation.
-     * Reproduce: Add a <span> with text, call blurAllContent, check blurred.
-     */
-    test('blurs span elements that contain direct text', () => {
-      document.body.innerHTML = '<span>Account: 12345</span>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const span = document.querySelector('span');
-      expect(span.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that blurAllContent blurs <a> elements with text.
-     * Why: Links often contain email addresses, usernames, or URLs that
-     * are sensitive during screen sharing (e.g. "john.doe@company.com").
-     * Reproduce: Add an anchor with text, call blurAllContent, check blurred.
-     */
-    test('blurs link elements that contain text', () => {
-      document.body.innerHTML = '<a href="#">john@example.com</a>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const link = document.querySelector('a');
-      expect(link.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that blurAllContent blurs <button> elements with text.
-     * Why: Buttons can contain action labels that reveal what the user
-     * is about to do (e.g. "Submit Payment", "Delete Account").
-     * Reproduce: Add a button with text, call blurAllContent, check blurred.
-     */
-    test('does not blur button with default categories (FORM off)', () => {
-      document.body.innerHTML = '<button>Submit Payment</button>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const btn = document.querySelector('button');
-      // Button is in FORM category, which is OFF by default
-      expect(btn.classList.contains('pb-blurred')).toBe(false);
-    });
-
-    /**
-     * Verifies that blurAllContent does not double-blur already-blurred elements.
-     * Why: If the user blurs individual elements via the picker, then triggers
-     * "Blur All", those elements must not be processed again. Double-processing
-     * could create duplicate text wrappers or canvas overlays.
-     * Reproduce: Manually add pb-blurred class to a <p>, call blurAllContent,
-     * verify the element is still blurred (not double-processed).
-     */
-    test('does not double-blur elements already blurred', () => {
-      document.body.innerHTML = '<p>Secret</p>';
-      const p = document.querySelector('p');
-      p.classList.add('pb-blurred');
-
-      pb.BlurEngine.blurAllContent(8);
-
-      expect(p.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that blurAllContent blurs <canvas> elements.
-     * Why: Canvas elements can contain rendered charts, graphs, or drawings
-     * with sensitive data (financial dashboards, analytics). They are in the
-     * MEDIA_SELECTORS list and always blurred regardless of content.
-     * Reproduce: Add a <canvas>, call blurAllContent, check blurred.
-     */
-    test('blurs canvas elements', () => {
-      document.body.innerHTML = '<canvas width="100" height="100"></canvas>';
-
-      pb.BlurEngine.blurAllContent(8);
-
-      const canvas = document.querySelector('canvas');
-      expect(canvas.classList.contains('pb-blurred')).toBe(true);
-    });
-  });
-
-  // ── toggleBlur edge cases ─────────────────────────────────────────────────
-
-  describe('toggleBlur edge cases', () => {
-    /**
-     * Verifies null safety of toggleBlur.
-     * Why: The keyboard shortcut handler calls toggleBlur which may receive
-     * null if no target element was captured (e.g. right-click on empty area).
-     * Reproduce: Call toggleBlur(null).
-     */
-    test('does not throw on null element', () => {
-      expect(() => pb.BlurEngine.toggleBlur(null)).not.toThrow();
-    });
-
-    /**
-     * Verifies type safety of toggleBlur with non-Element argument.
-     * Why: Message passing from background.js could theoretically deliver
-     * malformed data. The function must guard against non-Element types.
-     * Reproduce: Call toggleBlur with a string argument.
-     */
-    test('does not throw on non-Element', () => {
-      expect(() => pb.BlurEngine.toggleBlur('not an element')).not.toThrow();
-    });
-
-    /**
-     * Verifies that toggleBlur passes the custom radius to applyBlur.
-     * Why: Users can configure blur radius in settings (2-20px). When toggling
-     * on, the configured radius must be applied, not the hardcoded default.
-     * Reproduce: Toggle with radius 15, check --pb-radius custom property.
-     */
-    test('adds pb-blurred class when toggling on', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-
-      pb.BlurEngine.toggleBlur(div, 15);
-
-      expect(div.classList.contains('pb-blurred')).toBe(true);
-    });
-  });
-
-  // ── blurAllContent with categories ────────────────────────────────────────
-
-  describe('blurAllContent with categories', () => {
-    beforeEach(() => {
-      document.body.innerHTML = '';
-    });
-
-    const ONLY = (cat) => ({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false, [cat]: true });
-    const ALL_ON = { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true };
-    const ALL_OFF = { TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false };
-
-    test('blurs only media elements when only media category enabled', () => {
-      document.body.innerHTML = '<img src="#" /><p>text</p><input value="secret">';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('MEDIA') });
-      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(false);
-      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
-    });
-
-    test('blurs only text elements when only text category enabled', () => {
-      document.body.innerHTML = '<p>text</p><img src="#" /><input value="secret">';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TEXT') });
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(false);
-      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
-    });
-
-    test('blurs form elements when form category enabled', () => {
-      document.body.innerHTML = '<input value="a"><textarea>b</textarea><select><option>c</option></select>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('FORM') });
-      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('textarea').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('select').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('does not blur form elements when form category off (default-like)', () => {
-      document.body.innerHTML = '<input value="secret"><p>visible</p>';
-      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: false };
-      pb.BlurEngine.blurAllContent(8, { categories: defaults });
-      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('blurs table cells when table category enabled', () => {
-      document.body.innerHTML = '<table><tr><td>Secret</td></tr></table>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE') });
-      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('blurs structure elements with direct text when structure enabled', () => {
-      document.body.innerHTML = '<div>plain text</div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('does not blur empty structure elements', () => {
-      document.body.innerHTML = '<div></div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
-    });
-
-    test('backward compatible: no options defaults to all categories on', () => {
-      document.body.innerHTML = '<p>text</p><img src="#" >';
-      pb.BlurEngine.blurAllContent(8);
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('backward compatible: empty options defaults to all categories on', () => {
-      document.body.innerHTML = '<p>text</p><img src="#" >';
-      pb.BlurEngine.blurAllContent(8, {});
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('img').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('does not throw when all categories off', () => {
-      document.body.innerHTML = '<p>text</p><img src="#" >';
-      expect(() => pb.BlurEngine.blurAllContent(8, { categories: ALL_OFF })).not.toThrow();
-      expect(document.querySelectorAll('.pb-blurred').length).toBe(0);
-    });
-
-    test('text-check elements only blurred with meaningful text', () => {
-      document.body.innerHTML = '<span>Visible</span><span></span><span>   </span>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TEXT') });
-      const spans = document.querySelectorAll('span');
-      expect(spans[0].classList.contains('pb-blurred')).toBe(true);
-      expect(spans[1].classList.contains('pb-blurred')).toBe(false);
-      expect(spans[2].classList.contains('pb-blurred')).toBe(false);
-    });
-
-    test('new text elements (strong, em, code) blurred when text on', () => {
-      document.body.innerHTML = '<strong>bold</strong><em>italic</em><code>secret</code>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TEXT') });
-      expect(document.querySelector('strong').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('em').classList.contains('pb-blurred')).toBe(true);
-      expect(document.querySelector('code').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('button is in form category, not structure', () => {
-      document.body.innerHTML = '<button>Click</button>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      expect(document.querySelector('button').classList.contains('pb-blurred')).toBe(false);
-
-      pb.BlurEngine.unblurAll();
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('FORM') });
-      expect(document.querySelector('button').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('thoroughBlur blurs text-check elements without direct text', () => {
-      // td has only element children, no direct text nodes
-      document.body.innerHTML = '<table><tr><td><span>inner</span></td></tr></table>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE'), thoroughBlur: true });
-      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('thoroughBlur off skips truly empty text-check elements', () => {
-      document.body.innerHTML = '<table><tr><td></td></tr></table>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE'), thoroughBlur: false });
-      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(false);
-    });
-
-    test('thoroughBlur does not affect always-blur elements', () => {
-      document.body.innerHTML = '<p>text</p>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TEXT'), thoroughBlur: false });
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('thoroughBlur defaults to false when not specified', () => {
-      document.body.innerHTML = '<table><tr><td></td></tr></table>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE') });
-      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(false);
-    });
-  });
-
-  // ── invalidateSelectorCache ───────────────────────────────────────────────
-
-  describe('invalidateSelectorCache', () => {
-    test('causes rebuild on next blurAllContent call', () => {
-      document.body.innerHTML = '<input value="a"><p>text</p>';
-      // First call with form ON
-      pb.BlurEngine.blurAllContent(8, { categories: { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true } });
-      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(true);
-
-      pb.BlurEngine.unblurAll();
-      pb.BlurEngine.invalidateSelectorCache();
-
-      // Second call with form OFF — cached selectors must be gone
-      pb.BlurEngine.blurAllContent(8, { categories: { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true } });
-      expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
-      expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
-    });
-  });
-
-  // ── matchesActiveCategories ───────────────────────────────────────────────
 
   describe('matchesActiveCategories', () => {
-    test('returns true for img when media is on', () => {
+    test('true for img when media on', () => {
       const img = document.createElement('img');
       expect(pb.BlurEngine.matchesActiveCategories(img, { TEXT: false, MEDIA: true, FORM: false, TABLE: false, STRUCTURE: false })).toBe(true);
     });
 
-    test('returns false for img when media is off', () => {
+    test('false for img when media off', () => {
       const img = document.createElement('img');
       expect(pb.BlurEngine.matchesActiveCategories(img, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false })).toBe(false);
-    });
-
-    test('returns false for unknown tags', () => {
-      const el = document.createElement('custom-widget');
-      expect(pb.BlurEngine.matchesActiveCategories(el, { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true })).toBe(false);
-    });
-
-    test('returns false for null', () => {
-      expect(pb.BlurEngine.matchesActiveCategories(null, { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true })).toBe(false);
-    });
-
-    test('defaults to all categories when no categories argument', () => {
-      const p = document.createElement('p');
-      expect(pb.BlurEngine.matchesActiveCategories(p)).toBe(true);
-    });
-  });
-
-  // ── CATEGORY_SELECTORS export ─────────────────────────────────────────────
-
-  describe('CATEGORY_SELECTORS', () => {
-    test('exposes frozen category definitions', () => {
-      expect(pb.BlurEngine.CATEGORY_SELECTORS).toBeDefined();
-      expect(Object.isFrozen(pb.BlurEngine.CATEGORY_SELECTORS)).toBe(true);
-    });
-
-    test('has exactly 5 categories', () => {
-      expect(Object.keys(pb.BlurEngine.CATEGORY_SELECTORS)).toHaveLength(5);
-    });
-
-    test('each category has alwaysBlur and textCheck arrays', () => {
-      for (const cat of Object.values(pb.BlurEngine.CATEGORY_SELECTORS)) {
-        expect(Array.isArray(cat.alwaysBlur)).toBe(true);
-        expect(Array.isArray(cat.textCheck)).toBe(true);
-      }
-    });
-  });
-
-  // ── shouldBlurElement ───────────────────────────────────────────────────────
-
-  describe('shouldBlurElement', () => {
-    const ALL_ON = { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true };
-    const TEXT_ONLY = { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false };
-
-    test('returns true for always-blur elements in enabled category', () => {
-      const p = document.createElement('p');
-      p.textContent = 'hello';
-      document.body.appendChild(p);
-      expect(pb.BlurEngine.shouldBlurElement(p, ALL_ON, false)).toBe(true);
-    });
-
-    test('returns false for disabled category', () => {
-      const img = document.createElement('img');
-      document.body.appendChild(img);
-      expect(pb.BlurEngine.shouldBlurElement(img, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false }, false)).toBe(false);
-    });
-
-    test('text-check gate: returns false for empty td without thorough', () => {
-      const td = document.createElement('td');
-      document.body.appendChild(td);
-      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, false)).toBe(false);
-    });
-
-    test('text-check gate: returns true for td with direct text', () => {
-      const td = document.createElement('td');
-      td.appendChild(document.createTextNode('cell data'));
-      document.body.appendChild(td);
-      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, false)).toBe(true);
-    });
-
-    test('thorough mode bypasses text-check gate', () => {
-      const td = document.createElement('td');
-      document.body.appendChild(td);
-      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, true)).toBe(true);
-    });
-
-    test('div with direct text matched by STRUCTURE', () => {
-      const div = document.createElement('div');
-      div.appendChild(document.createTextNode('text'));
-      document.body.appendChild(div);
-      expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(true);
-    });
-
-    test('empty div not matched', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(false);
-    });
-
-    test('returns false for unknown tags', () => {
-      const el = document.createElement('my-component');
-      el.textContent = 'hello';
-      document.body.appendChild(el);
-      expect(pb.BlurEngine.shouldBlurElement(el, ALL_ON, false)).toBe(false);
-    });
-
-    test('returns false for null input', () => {
-      expect(pb.BlurEngine.shouldBlurElement(null, ALL_ON, false)).toBe(false);
-    });
-
-    test('returns true for form elements when form category on', () => {
-      const input = document.createElement('input');
-      document.body.appendChild(input);
-      expect(pb.BlurEngine.shouldBlurElement(input, ALL_ON, false)).toBe(true);
-    });
-
-    test('returns false for form elements when form category off', () => {
-      const input = document.createElement('input');
-      document.body.appendChild(input);
-      expect(pb.BlurEngine.shouldBlurElement(input, TEXT_ONLY, false)).toBe(false);
-    });
-
-    test('returns true for table cells with text', () => {
-      const td = document.createElement('td');
-      td.textContent = 'cell data';
-      document.body.appendChild(td);
-      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, false)).toBe(true);
     });
   });
 });

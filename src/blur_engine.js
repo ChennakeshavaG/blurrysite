@@ -1,38 +1,25 @@
 /**
  * blur_engine.js — PrivacyBlur Core Blur Engine
  *
- * Handles all DOM manipulation for blurring/unblurring elements.
+ * Hybrid CSS + data-attribute blur system:
+ *  - Always-blur tags (h1, p, img, etc.) → injected <style> with tag selectors
+ *  - Text-check tags (div, span, li, etc.) → data-pb-blur attribute after text gate
+ *  - Picker/context menu → data-pb-blur on individual elements
+ *
+ * CSS auto-applies to always-blur elements (present + future). No per-element
+ * DOM mutations for those tags. Text-check elements use data-pb-blur attribute
+ * which doesn't trigger framework re-render loops (unlike classList).
+ *
  * Exposed as pb.BlurEngine (IIFE — no ES module syntax).
- *
- * Special handling:
- *  - All elements: CSS class (pb-blurred) + optional frosted class (pb-frosted)
- *  - CSS filter: blur() on parent blurs all descendants — no DOM injection needed
- *  - Video: CSS filter works on DRM video (DRM blocks pixel extraction, not rendering)
- *
- * Category-based blurring:
- *  - blurAllContent accepts an options.categories object to control which
- *    element groups are blurred (text, media, form, table, structure).
- *  - Selector strings are cached and rebuilt only when categories change.
  */
 
 const BlurEngine = (() => {
   'use strict';
 
-  // -------------------------------------------------------------------------
-  // Constants from shared definitions
-  // -------------------------------------------------------------------------
-  const BLUR_RADIUS        = pb.DEFAULT_SETTINGS.BLUR_RADIUS;
-  const BLURRED_CLASS      = pb.CSS.BLURRED;
-  const FROSTED_CLASS      = pb.CSS.FROSTED;
-  const SVG_FILTER_ID      = pb.IDS.SVG_FILTERS;
+  const SVG_FILTER_ID = pb.IDS.SVG_FILTERS;
+  const STYLE_ID      = 'pb-blur-styles';
 
-  // -------------------------------------------------------------------------
-  // Category selector definitions
-  // -------------------------------------------------------------------------
-  // Each category maps to two arrays: alwaysBlur (blurred unconditionally)
-  // and textCheck (blurred only when hasMeaningfulTextContent returns true).
-  // Frozen to prevent accidental mutation. Element lists sourced from
-  // docs/BLUR_CATEGORIES.md research.
+  // ── Category selector definitions ──────────────────────────────────────────
 
   const CATEGORY_SELECTORS = Object.freeze({
     TEXT: Object.freeze({
@@ -65,26 +52,13 @@ const BlurEngine = (() => {
     }),
   });
 
-  // Fallback: all categories enabled. Used when options.categories is omitted.
-  // Reads from pb.DEFAULT_SETTINGS to avoid duplicating values.
   const DEFAULT_CATS = pb.DEFAULT_SETTINGS.BLUR_CATEGORIES;
-
-  // Category names in fixed order for cache key generation.
   const CATEGORY_ORDER = Object.freeze(['TEXT','MEDIA','FORM','TABLE','STRUCTURE']);
 
-  // -------------------------------------------------------------------------
-  // Selector cache
-  // -------------------------------------------------------------------------
-  // Stores pre-joined selector strings and a Set of active tag names.
-  // Rebuilt only when the category toggles change (invalidated explicitly
-  // or when the cache key no longer matches).
+  // ── Selector cache ─────────────────────────────────────────────────────────
+
   let selectorCache = null;
 
-  /**
-   * Builds selector strings and a tag Set from the given category toggles.
-   * @param {object} categories - { text: bool, media: bool, form: bool, table: bool, structure: bool }
-   * @returns {{ key: string, alwaysBlurSelector: string, textCheckSelector: string, tagSet: Set<string> }}
-   */
   function buildSelectors(categories) {
     const alwaysBlurTags = [];
     const textCheckTags  = [];
@@ -92,33 +66,25 @@ const BlurEngine = (() => {
     for (const name of CATEGORY_ORDER) {
       if (!categories[name]) continue;
       const cat = CATEGORY_SELECTORS[name];
-      // Push is faster than spread for known-length frozen arrays.
       for (let i = 0; i < cat.alwaysBlur.length; i++) alwaysBlurTags.push(cat.alwaysBlur[i]);
       for (let i = 0; i < cat.textCheck.length; i++)  textCheckTags.push(cat.textCheck[i]);
     }
 
-    // Build a Set of all active tags for O(1) membership checks in
-    // matchesActiveCategories. Both always-blur and text-check tags are
-    // included because the MutationObserver needs to know if a newly
-    // added element belongs to ANY active selector.
     const tagSet = new Set(alwaysBlurTags);
     for (let i = 0; i < textCheckTags.length; i++) tagSet.add(textCheckTags[i]);
 
-    // Pre-join into comma-separated selector strings. A single compound
-    // querySelectorAll("a,b,c") does one DOM walk — faster than N separate calls.
     const key = CATEGORY_ORDER.map(n => categories[n] ? '1' : '0').join('');
 
     return {
       key,
       alwaysBlurSelector: alwaysBlurTags.join(','),
       textCheckSelector:  textCheckTags.join(','),
+      alwaysBlurTags,
+      textCheckTags,
       tagSet,
     };
   }
 
-  /**
-   * Returns cached selectors if the category toggles match, else rebuilds.
-   */
   function getSelectors(categories) {
     const key = CATEGORY_ORDER.map(n => categories[n] ? '1' : '0').join('');
     if (selectorCache && selectorCache.key === key) return selectorCache;
@@ -126,17 +92,8 @@ const BlurEngine = (() => {
     return selectorCache;
   }
 
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
+  // ── Private helpers ────────────────────────────────────────────────────────
 
-  /**
-   * Checks whether `element` has direct text-node children with visible text.
-   * Only checks immediate children — NOT descendant elements' text.
-   * This is critical for STRUCTURE elements: a <div> with <p>text</p> should
-   * NOT be blurred (the <p> is already handled by TEXT category). But a
-   * <div>Plain text here</div> with direct text SHOULD be blurred.
-   */
   function hasMeaningfulTextContent(element) {
     for (const node of element.childNodes) {
       if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
@@ -146,15 +103,21 @@ const BlurEngine = (() => {
     return false;
   }
 
-  // -------------------------------------------------------------------------
-  // SVG filter injection (frosted glass mode)
-  // -------------------------------------------------------------------------
+  /** Set of text-check tag names for O(1) lookup in MO callback */
+  let _textCheckSet = new Set();
 
-  /**
-   * Injects an inline SVG element containing the frosted-glass filter into the
-   * document body. The filter combines feTurbulence displacement with Gaussian
-   * blur for AI-resistant obfuscation. Idempotent — only injects once.
-   */
+  function _rebuildTextCheckSet(categories) {
+    _textCheckSet = new Set();
+    const cats = categories || DEFAULT_CATS;
+    for (const name of CATEGORY_ORDER) {
+      if (!cats[name]) continue;
+      const cat = CATEGORY_SELECTORS[name];
+      for (let i = 0; i < cat.textCheck.length; i++) _textCheckSet.add(cat.textCheck[i]);
+    }
+  }
+
+  // ── SVG filter injection (frosted glass mode) ──────────────────────────────
+
   function ensureSvgFilter() {
     if (document.getElementById(SVG_FILTER_ID)) return;
 
@@ -190,156 +153,161 @@ const BlurEngine = (() => {
     document.body.appendChild(svg);
   }
 
-  // -------------------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------------------
+  // ── CSS Rule Injection (always-blur tags) ──────────────────────────────────
+
+  let _styleEl = null;
+
+  // Extension UI exclusion — prevents our own toolbar/toast from being blurred
+  const EXCLUDE = ':not(#pb-picker-toolbar):not(#pb-picker-toolbar *)' +
+                  ':not(.pb-toast):not(.pb-toast *)' +
+                  ':not(.pb-toolbar):not(.pb-toolbar *)';
 
   /**
-   * Applies blur to an element.
-   * @param {Element} element - The DOM element to blur
-   * @param {number}  radius  - Blur radius in pixels (default 8)
-   * @param {string}  [mode]  - Blur mode: 'gaussian' (default) or 'frosted'
+   * Inject CSS rules for blur-all mode.
+   * Always-blur tags get tag-based CSS selectors.
+   * Text-check elements are handled by blurTextCheckElements() via data attribute.
+   * Also injects the [data-pb-blur] rule for text-check and picker elements.
    */
-  function applyBlur(element, radius = BLUR_RADIUS, mode) {
-    if (!element || !(element instanceof Element)) return;
-    if (isBlurred(element)) return; // idempotent
+  function injectBlurRules(categories, mode) {
+    removeBlurRules();
 
-    // Never blur extension UI elements (picker toolbar, toast notifications).
-    const toolbarId = pb.IDS.PICKER_TOOLBAR;
-    const toastClass = pb.CSS.TOAST;
-    const toolbarClass = pb.CSS.TOOLBAR;
-    if (element.id === toolbarId || element.closest('#' + toolbarId) ||
-        element.classList.contains(toastClass) || element.closest('.' + toastClass) ||
-        element.classList.contains(toolbarClass)) {
-      return;
-    }
+    if (mode === pb.BLUR_MODES.FROSTED) ensureSvgFilter();
 
-    // ---- All elements: CSS class only ----
-    // pb-blurred provides: filter blur, user-select none, contain paint.
-    // pb-frosted adds: SVG displacement filter override (AI-resistant).
-    // Both classes needed for frosted mode — pb-blurred is the base.
-    element.classList.add(BLURRED_CLASS);
-    if (mode === pb.BLUR_MODES.FROSTED) {
-      ensureSvgFilter();
-      element.classList.add(FROSTED_CLASS);
-    }
-  }
+    const cats = categories || DEFAULT_CATS;
+    const { alwaysBlurSelector } = getSelectors(cats);
+    _rebuildTextCheckSet(cats);
 
-  /**
-   * Removes blur from an element.
-   * @param {Element} element - The DOM element to unblur
-   */
-  function removeBlur(element) {
-    if (!element || !(element instanceof Element)) return;
-    element.classList.remove(BLURRED_CLASS);
-    element.classList.remove(FROSTED_CLASS);
-  }
+    const filterValue = mode === pb.BLUR_MODES.FROSTED
+      ? 'url(#pb-frosted-filter)'
+      : 'blur(var(--pb-radius, 10px))';
 
-  /**
-   * Toggles blur on an element: applies if not blurred, removes if blurred.
-   * @param {Element} element
-   * @param {number}  radius
-   * @param {string}  [mode] - Blur mode: 'gaussian' (default) or 'frosted'
-   */
-  function toggleBlur(element, radius = BLUR_RADIUS, mode) {
-    if (!element || !(element instanceof Element)) return;
+    const blurDecl = `filter: ${filterValue} !important; user-select: none !important;`;
 
-    if (isBlurred(element)) {
-      removeBlur(element);
-    } else {
-      applyBlur(element, radius, mode);
-    }
-  }
+    const rules = [];
 
-  /**
-   * Blurs all meaningful content elements on the page.
-   * Uses a two-pass model: always-blur elements are blurred unconditionally,
-   * text-check elements are blurred only when they have direct text content.
-   *
-   * @param {number} radius  - Blur radius in pixels (default 8)
-   * @param {object} [options] - Configuration object
-   * @param {object} [options.categories] - Category toggles: { text, media, form, table, structure }.
-   *   Each key is a boolean. Omitted keys default to true. If options.categories
-   *   is not provided, all categories are enabled (backward compatible).
-   * @param {boolean} [options.thoroughBlur] - When true, skips the
-   *   hasMeaningfulTextContent gate on text-check elements, blurring them
-   *   unconditionally. Catches containers where text lives entirely in child
-   *   elements, at the cost of also blurring empty layout wrappers and
-   *   icon-only elements.
-   * @param {string} [options.blurMode] - Blur mode: 'gaussian' (default) or
-   *   'frosted'. When 'frosted', elements get the pb-frosted class in addition
-   *   to pb-blurred, applying an SVG displacement + Gaussian blur filter.
-   */
-  function blurAllContent(radius = BLUR_RADIUS, options) {
-    const cats = (options && options.categories) ? options.categories : DEFAULT_CATS;
-    const thorough = !!(options && options.thoroughBlur);
-    const mode = (options && options.blurMode) || pb.BLUR_MODES.GAUSSIAN; // Defaults to Gaussian
-
-    // Inject SVG filter element when frosted mode is active
-    if (mode === pb.BLUR_MODES.FROSTED) {
-      ensureSvgFilter();
-    }
-
-    const { alwaysBlurSelector, textCheckSelector } = getSelectors(cats);
-
-    // Pass 1: always-blur elements — blurred unconditionally.
-    // Guard against empty selector (all categories off) which would throw.
+    // Always-blur tags via CSS — auto-applies to present + future elements
     if (alwaysBlurSelector) {
-      document.querySelectorAll(alwaysBlurSelector).forEach((el) => {
-        applyBlur(el, radius, mode);
-      });
+      const excluded = alwaysBlurSelector.split(',').map(t => t.trim() + EXCLUDE).join(',');
+      rules.push(`${excluded} { ${blurDecl} }`);
     }
 
-    // Pass 2: text-check elements.
-    // Normal mode: blurred only when they have direct text-node children.
-    // Thorough mode: blurred unconditionally (skips the text-check gate).
-    if (textCheckSelector) {
-      document.querySelectorAll(textCheckSelector).forEach((el) => {
-        if (isBlurred(el)) return;
-        if (thorough || hasMeaningfulTextContent(el)) {
-          applyBlur(el, radius, mode);
-        }
-      });
-    }
+    // Data attribute rule — for text-check elements and individual picker blurs
+    rules.push(`[data-pb-blur] { ${blurDecl} }`);
+
+    // Revealed override — higher specificity
+    rules.push(`[data-pb-revealed] { filter: blur(0px) !important; outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important; outline-offset: 2px !important; }`);
+
+    if (rules.length === 0) return;
+
+    _styleEl = document.createElement('style');
+    _styleEl.id = STYLE_ID;
+    _styleEl.textContent = rules.join('\n');
+    document.head.appendChild(_styleEl);
   }
 
+  function removeBlurRules() {
+    if (_styleEl && _styleEl.parentNode) {
+      _styleEl.parentNode.removeChild(_styleEl);
+    }
+    _styleEl = null;
+  }
+
+  function isBlurAllActive() {
+    return _styleEl !== null && _styleEl.parentNode !== null;
+  }
+
+  // ── Text-check element blur (one-time scan + MO for new ones) ──────────────
+
   /**
-   * Removes blur from every element on the page.
+   * One-time scan: find all text-check elements with meaningful text and
+   * stamp data-pb-blur on them. Called once on blur-all toggle.
    */
-  function unblurAll() {
-    document.querySelectorAll(`.${BLURRED_CLASS}, .${FROSTED_CLASS}`).forEach((el) => {
-      removeBlur(el);
+  function blurTextCheckElements(categories, thorough) {
+    const { textCheckSelector } = getSelectors(categories || DEFAULT_CATS);
+    if (!textCheckSelector) return;
+
+    document.querySelectorAll(textCheckSelector).forEach(el => {
+      if (el.dataset.pbBlur) return; // already stamped
+      if (_isExtensionUI(el)) return;
+      if (thorough || hasMeaningfulTextContent(el)) {
+        el.dataset.pbBlur = '1';
+      }
     });
   }
 
   /**
-   * Returns true if the element currently has blur applied.
-   * @param {Element} element
-   * @returns {boolean}
+   * Check if a single text-check element should be blurred and stamp it.
+   * Used by MutationObserver for dynamically added elements.
    */
-  function isBlurred(element) {
-    if (!element || !(element instanceof Element)) return false;
-
-    return element.classList.contains(BLURRED_CLASS) || element.classList.contains(FROSTED_CLASS);
+  function tryBlurTextCheck(element, thorough) {
+    if (!element || !(element instanceof Element)) return;
+    if (element.dataset.pbBlur) return;
+    if (_isExtensionUI(element)) return;
+    const tag = element.tagName.toLowerCase();
+    if (!_textCheckSet.has(tag)) return;
+    if (thorough || hasMeaningfulTextContent(element)) {
+      element.dataset.pbBlur = '1';
+    }
   }
 
-  /**
-   * Drops the cached selector strings so the next blurAllContent call
-   * rebuilds them. Call this when category settings change.
-   */
+  function _isExtensionUI(element) {
+    const toolbarId = pb.IDS.PICKER_TOOLBAR;
+    return element.id === toolbarId || element.closest('#' + toolbarId) ||
+           element.classList.contains(pb.CSS.TOAST) || element.closest('.' + pb.CSS.TOAST) ||
+           element.classList.contains(pb.CSS.TOOLBAR);
+  }
+
+  // ── Individual element blur (picker / context menu) ────────────────────────
+
+  function applyBlur(element) {
+    if (!element || !(element instanceof Element)) return;
+    if (element.dataset.pbBlur) return;
+    if (_isExtensionUI(element)) return;
+    element.dataset.pbBlur = '1';
+  }
+
+  function removeBlur(element) {
+    if (!element || !(element instanceof Element)) return;
+    delete element.dataset.pbBlur;
+    delete element.dataset.pbRevealed;
+  }
+
+  function toggleBlur(element) {
+    if (!element || !(element instanceof Element)) return;
+    if (isBlurred(element)) {
+      removeBlur(element);
+    } else {
+      applyBlur(element);
+    }
+  }
+
+  function isBlurred(element) {
+    if (!element || !(element instanceof Element)) return false;
+    // Individual data attribute blur
+    if (element.dataset.pbBlur) return true;
+    // Blur-all CSS rule: check if tag matches an always-blur selector
+    if (isBlurAllActive() && selectorCache) {
+      const tag = element.tagName.toLowerCase();
+      // Only always-blur tags are covered by CSS. Text-check tags need data attr.
+      for (let i = 0; i < selectorCache.alwaysBlurTags.length; i++) {
+        if (selectorCache.alwaysBlurTags[i] === tag) return true;
+      }
+    }
+    return false;
+  }
+
+  function unblurAll() {
+    removeBlurRules();
+    document.querySelectorAll('[data-pb-blur]').forEach(el => {
+      delete el.dataset.pbBlur;
+      delete el.dataset.pbRevealed;
+    });
+  }
+
   function invalidateSelectorCache() {
     selectorCache = null;
   }
 
-  /**
-   * Returns true if the element's tag belongs to any enabled category.
-   * Used by the MutationObserver to decide whether a dynamically added
-   * node should be blurred in blur-all mode.
-   *
-   * @param {Element} element    - The DOM element to check
-   * @param {object}  categories - Category toggles (same shape as options.categories)
-   * @returns {boolean}
-   */
   function matchesActiveCategories(element, categories) {
     if (!element || !(element instanceof Element)) return false;
     const cats = categories || DEFAULT_CATS;
@@ -347,54 +315,48 @@ const BlurEngine = (() => {
     return tagSet.has(element.tagName.toLowerCase());
   }
 
-  /**
-   * Returns true if the element should be blurred in blur-all mode,
-   * applying the same two-pass logic as blurAllContent:
-   * - Always-blur elements → true unconditionally
-   * - Text-check elements → true only if hasMeaningfulTextContent
-   *
-   * This is what the MutationObserver should use instead of
-   * matchesActiveCategories (which skips the text-check gate).
-   */
   function shouldBlurElement(element, categories, thorough) {
     if (!element || !(element instanceof Element)) return false;
     const cats = categories || DEFAULT_CATS;
     const tag = element.tagName.toLowerCase();
 
-    // Check each enabled category
     for (const name of CATEGORY_ORDER) {
       if (!cats[name]) continue;
       const cat = CATEGORY_SELECTORS[name];
-
-      // Always-blur: unconditional
       if (cat.alwaysBlur.indexOf(tag) >= 0) return true;
-
-      // Text-check: only if element has meaningful text (or thorough mode)
       if (cat.textCheck.indexOf(tag) >= 0) {
         return thorough || hasMeaningfulTextContent(element);
       }
     }
-
     return false;
   }
 
-  // -------------------------------------------------------------------------
-  // Expose public API
-  // -------------------------------------------------------------------------
+  // ── Public API ─────────────────────────────────────────────────────────────
+
   return {
+    // Blur-all
+    injectBlurRules,
+    removeBlurRules,
+    isBlurAllActive,
+    blurTextCheckElements,
+    tryBlurTextCheck,
+
+    // Individual element
     applyBlur,
     removeBlur,
     toggleBlur,
-    blurAllContent,
     unblurAll,
+
+    // Queries
     isBlurred,
-    invalidateSelectorCache,
     matchesActiveCategories,
     shouldBlurElement,
+
+    // Utilities
+    invalidateSelectorCache,
     ensureSvgFilter,
     CATEGORY_SELECTORS,
   };
 })();
 
-// Attach to window so content_script.js and other injected scripts can access it
 pb.BlurEngine = BlurEngine;

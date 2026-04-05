@@ -18,76 +18,32 @@
   --pb-transition-duration: 200ms;
 }
 
-/* ─── Blurred state ─────────────────────────────────────────────────────────── */
+/* ─── Blur: always-blur tags are handled by injected <style> in blur_engine.
+     Text-check elements and picker blurs use data-pb-blur attribute. ────────── */
 
 /**
- * Applied to any element the extension has blurred.
- * Uses the CSS custom property so JS can update it globally without
- * re-querying every blurred element.
+ * data-pb-blur: stamped on text-check elements (div, span, etc.) that pass
+ * the hasMeaningfulTextContent gate, and on individual picker/context blurs.
+ * The injected <style> also includes this rule, but this static version
+ * provides a fallback and handles picker blurs when blur-all is off.
  */
-.pb-blurred {
+[data-pb-blur] {
   filter: blur(var(--pb-radius, 10px)) !important;
-  transition: filter var(--pb-transition-duration, 200ms) ease !important;
-  /* Prevent casual text selection/copy of blurred content */
   user-select: none !important;
-  /* No contain:paint — it clips overflow children (search overlays,
-     dropdowns, autocomplete popups). filter already creates a
-     stacking context so the perf benefit is redundant. */
 }
 
-/* ─── Off-screen suspension (IntersectionObserver GPU optimization) ─────────── */
+/* ─── Reveal: click-to-reveal via data attribute ───────────────────────────── */
 
-/**
- * IO adds pb-suspended to off-screen elements to free GPU compositing layers.
- * pb-blurred stays on the element (site frameworks don't see a class removal).
- * When the element scrolls back into view, IO removes pb-suspended and the
- * blur re-activates from the still-present pb-blurred filter rule.
- */
-.pb-blurred.pb-suspended {
-  filter: none !important;
-  transition: none !important;
-}
-
-/* ─── Frosted glass mode (AI-resistant SVG displacement + blur) ────────────── */
-
-/**
- * Applied in addition to .pb-blurred when blur mode is 'frosted'.
- * Overrides the standard Gaussian blur with an SVG filter that combines
- * feTurbulence displacement with Gaussian blur for AI-resistant obfuscation.
- * The SVG filter element is injected into the DOM by blur_engine.js.
- */
-.pb-frosted {
-  filter: url(#pb-frosted-filter) !important;
-}
-
-/* ─── Reveal modes ─────────────────────────────────────────────────────────── */
-
-/**
- * Click-to-reveal (default): JS adds pb-revealed on click, removes on
- * second click or Escape. Explicit user intent — no hover conflicts.
- */
-.pb-revealed {
+[data-pb-revealed] {
   filter: blur(0px) !important;
-  transition: filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
-  /* Indicate revealed state with a subtle outline */
   outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
   outline-offset: 2px !important;
 }
 
 /**
- * Hover-to-reveal (optional): CSS hover removes filter.
- * Only active when content_script adds pb-reveal-on-hover class.
- */
-.pb-reveal-on-hover:hover {
-  filter: blur(0px) !important;
-  transition: filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
-}
-
-/**
  * Ancestor unblur: JS adds pb-ancestor-reveal to blurred ancestors
- * when a descendant is revealed (click or hover). Removes the ancestor's
- * filter so the revealed content is visible through the ancestor chain.
- * Used by both click and hover reveal modes.
+ * when a descendant is revealed. Removes the ancestor's filter so
+ * the revealed content is visible through the ancestor chain.
  */
 .pb-ancestor-reveal {
   filter: blur(0px) !important;

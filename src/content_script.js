@@ -59,11 +59,7 @@
       for (const selector of selectors) {
         const el = Selector.restoreSelector(selector);
         if (el) {
-          Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
-          observeElement(el);
-          if (settings.REVEAL_MODE === RM.HOVER) {
-            el.classList.add(CLS.REVEAL_ON_HOVER);
-          }
+          Engine.applyBlur(el);
         }
       }
     } catch (err) {
@@ -71,198 +67,40 @@
     }
   }
 
-  // ── Performance: off-screen unblur via IntersectionObserver ─────────────────
-  // When enabled, elements scrolled off-screen lose their blur (compositing
-  // layer freed). When they scroll back, blur is re-applied. This keeps the
-  // active compositing layer count bounded on infinite-scroll pages.
-
-  let visibilityObserver = null;
-
-  function startVisibilityObserver() {
-    if (visibilityObserver) return;
-
-    let _ioCallCount = 0;
-
-    visibilityObserver = new IntersectionObserver((entries) => {
-      _ioCallCount++;
-      let suspended = 0, resumed = 0;
-      for (const entry of entries) {
-        const el = entry.target;
-        if (entry.isIntersecting) {
-          // Back on screen — remove suspend override, blur re-activates via pb-blurred
-          if (el.classList.contains(CLS.SUSPENDED)) {
-            el.classList.remove(CLS.SUSPENDED);
-            resumed++;
-          }
-        } else {
-          // Off screen — suspend blur to free GPU layer. pb-blurred stays.
-          if (Engine.isBlurred(el) && !el.classList.contains(CLS.SUSPENDED)) {
-            el.classList.add(CLS.SUSPENDED);
-            suspended++;
-          }
-        }
-      }
-      log.log(`IO #${_ioCallCount}: ${entries.length} entries, +${resumed} resumed, -${suspended} suspended`);
-    }, {
-      rootMargin: '200px',
-    });
-  }
-
-  function stopVisibilityObserver() {
-    if (visibilityObserver) {
-      visibilityObserver.disconnect();
-      visibilityObserver = null;
-    }
-    // Callers (unblurAll, blurAllContent) handle element state reset.
-  }
-
-  /** Register a blurred element with the visibility observer for GPU optimization */
-  function observeElement(el) {
-    if (visibilityObserver && el instanceof Element) {
-      visibilityObserver.observe(el);
-    }
-  }
-
   // ── Logger alias ──────────────────────────────────────────────────────────
   const log = pb.Logger;
 
-  // ── MutationObserver: blur new DOM elements synchronously ─────────────────
-
-  /** CSS selector for descendant queries. Built from CATEGORY_SELECTORS. */
-  let observerSelector = '';
-
-  function buildObserverSelector() {
-    const cats = settings.BLUR_CATEGORIES;
-    const tags = [];
-    const CS = Engine.CATEGORY_SELECTORS;
-    for (const key of CATEGORY_KEYS) {
-      if (!cats[key]) continue;
-      const cat = CS[key];
-      for (let i = 0; i < cat.alwaysBlur.length; i++) tags.push(cat.alwaysBlur[i]);
-      for (let i = 0; i < cat.textCheck.length; i++) tags.push(cat.textCheck[i]);
-    }
-    observerSelector = tags.join(',');
-  }
-
-  /**
-   * Loop guard: detects runaway MO loops at the observer level, not per-element.
-   * When MO fires too rapidly (>LOOP_THRESHOLD callbacks in LOOP_WINDOW_MS),
-   * we pause the observer for a backoff period. This catches ALL loop patterns
-   * regardless of element signatures — the signal is callback frequency, not
-   * element identity. Legitimate bulk renders (page load, search results) fire
-   * MO in bursts but don't sustain high frequency across multiple windows.
-   */
-  const LOOP_THRESHOLD = 1000; // MO callbacks per window — high enough for any framework
-  const LOOP_WINDOW_MS = 1000;
-  const LOOP_PAUSE_MS  = 1000; // symmetric: 1s measure, 1s pause
-  let _moHits = 0;
-  let _moWindowStart = 0;
-  let _moPaused = false;
-
-  function _checkLoopGuard() {
-    const now = performance.now();
-    if (now - _moWindowStart > LOOP_WINDOW_MS) {
-      // Window expired — reset
-      _moHits = 0;
-      _moWindowStart = now;
-    }
-    _moHits++;
-    if (_moHits > LOOP_THRESHOLD) {
-      // Too many MO callbacks — pause observer to break the loop
-      log.warn('loop guard: MO paused for', LOOP_PAUSE_MS + 'ms (' + _moHits + ' callbacks in ' + LOOP_WINDOW_MS + 'ms)');
-      _moPaused = true;
-      if (domObserver) domObserver.disconnect();
-      setTimeout(() => {
-        _moPaused = false;
-        _moHits = 0;
-        _moWindowStart = performance.now();
-        if (domObserver && isPageBlurred) {
-          // Re-blur everything that was added during the pause
-          Engine.blurAllContent(settings.BLUR_RADIUS, {
-            categories: settings.BLUR_CATEGORIES,
-            thoroughBlur: settings.THOROUGH_BLUR,
-            blurMode: settings.BLUR_MODE,
-          });
-          // Re-connect observer for future mutations
-          domObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-            characterData: true,
-          });
-        }
-        log.log('loop guard: MO resumed + re-blurred');
-      }, LOOP_PAUSE_MS);
-      return true; // loop detected
-    }
-    return false;
-  }
-
-  /** Blur a single element if it passes the category + text-check gate. */
-  function tryBlurElement(el) {
-    if (!el.isConnected) return;
-    if (Engine.isBlurred(el)) return;
-
-    if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
-      log.log('tryBlur:', el.tagName, el.id || el.className);
-      Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
-      if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
-      observeElement(el);
-    }
-  }
-
-  /** Blur a newly added subtree: the node itself + matching descendants. */
-  function blurNewSubtree(node) {
-    tryBlurElement(node);
-    if (observerSelector) {
-      const children = node.querySelectorAll(observerSelector);
-      for (let i = 0; i < children.length; i++) {
-        tryBlurElement(children[i]);
-      }
-    }
-  }
+  // ── MutationObserver: stamp data-pb-blur on new text-check elements ──────
+  // Always-blur tags are handled by CSS rules (auto-apply, no JS needed).
+  // Text-check tags need the hasMeaningfulTextContent gate, so MO watches
+  // for new ones and stamps data-pb-blur. Uses data attribute instead of
+  // classList to avoid triggering site framework re-render loops.
 
   function startDomObserver() {
     if (domObserver) return;
-    buildObserverSelector();
-    startVisibilityObserver();
-
-    let _moCallCount = 0;
 
     domObserver = new MutationObserver((mutations) => {
       if (isPickerActive) return;
       if (!isPageBlurred) return;
-      if (_moPaused) return;
-      if (_checkLoopGuard()) return; // runaway loop detected — observer paused
-
-      _moCallCount++;
-      const t0 = performance.now();
-      let addedCount = 0;
-      let charDataCount = 0;
 
       for (const mutation of mutations) {
-        if (mutation.type === 'childList') {
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            addedCount++;
-            blurNewSubtree(node);
+        if (mutation.type !== 'childList') continue;
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          // Stamp the node itself if it's a text-check element with text
+          Engine.tryBlurTextCheck(node, settings.THOROUGH_BLUR);
+          // Also check descendants
+          const children = node.querySelectorAll('*');
+          for (let i = 0; i < children.length; i++) {
+            Engine.tryBlurTextCheck(children[i], settings.THOROUGH_BLUR);
           }
         }
-
-        if (mutation.type === 'characterData') {
-          charDataCount++;
-          const el = mutation.target.parentElement;
-          if (el && el.isConnected) tryBlurElement(el);
-        }
       }
-
-      const elapsed = performance.now() - t0;
-      log.log(`MO #${_moCallCount}: ${mutations.length} muts, ${addedCount} added, ${charDataCount} charData, ${elapsed.toFixed(1)}ms`);
     });
 
     domObserver.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
   }
 
@@ -271,23 +109,13 @@
       domObserver.disconnect();
       domObserver = null;
     }
-    stopVisibilityObserver();
-  }
-
-  function restartDomObserver() {
-    stopDomObserver();
-    startDomObserver();
   }
 
   // ─── Picker callbacks ─────────────────────────────────────────────────────────
 
   const pickerCallbacks = {
     onBlur(el) {
-      Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
-      observeElement(el);
-      if (settings.REVEAL_MODE === RM.HOVER) {
-        el.classList.add(CLS.REVEAL_ON_HOVER);
-      }
+      Engine.applyBlur(el);
       const selector = Selector.getSelector(el);
       if (selector) {
         Store.saveBlurredElement(hostname, selector).catch(() => {});
@@ -295,7 +123,6 @@
     },
 
     onUnblur(el) {
-      el.classList.remove(CLS.REVEAL_ON_HOVER);
       Engine.removeBlur(el);
       const selector = Selector.getSelector(el);
       if (selector) {
@@ -646,23 +473,13 @@
       case MSG.TOGGLE_BLUR_ALL: {
         if (isPageBlurred) {
           dismissClickReveal();
-          stopDomObserver(); // stops both MO and IO
+          stopDomObserver();
           Engine.unblurAll();
           isPageBlurred = false;
         } else {
-          // Ensure observer is running to catch SPA re-renders
-          buildObserverSelector();
+          Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
+          Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
           startDomObserver();
-          Engine.blurAllContent(settings.BLUR_RADIUS, {
-            categories: settings.BLUR_CATEGORIES,
-            thoroughBlur: settings.THOROUGH_BLUR,
-            blurMode: settings.BLUR_MODE,
-          });
-          // Track and observe all blurred elements
-          document.querySelectorAll('.pb-blurred').forEach((el) => {
-            if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
-            observeElement(el);
-          });
           isPageBlurred = true;
         }
         // Persist blur-all state for this hostname so it survives page reload
@@ -691,11 +508,8 @@
 
       // ── Clear all blur on this page ───────────────────────────────────────
       case MSG.CLEAR_ALL_BLUR: {
-        document.querySelectorAll('.pb-reveal-on-hover').forEach((el) => {
-          el.classList.remove(CLS.REVEAL_ON_HOVER);
-        });
         dismissClickReveal();
-        stopDomObserver(); // stops both MO and IO
+        stopDomObserver();
         Engine.unblurAll();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
@@ -737,8 +551,9 @@
                 const wasBlurAll = await Store.getBlurState(hostname);
                 if (wasBlurAll && !isPageBlurred) {
                   isPageBlurred = true;
-                  Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR, blurMode: settings.BLUR_MODE });
-                  applyRevealClasses();
+                  Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
+                  Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
+                  startDomObserver();
                 }
               } catch (_e) {}
             }
@@ -753,11 +568,7 @@
       case MSG.CONTEXT_BLUR: {
         const target = lastContextMenuTarget;
         if (target) {
-          Engine.applyBlur(target, settings.BLUR_RADIUS, settings.BLUR_MODE);
-          observeElement(target);
-          if (settings.REVEAL_MODE === RM.HOVER) {
-            target.classList.add(CLS.REVEAL_ON_HOVER);
-          }
+          Engine.applyBlur(target);
           const sel = Selector.getSelector(target);
           if (sel) {
             Store.saveBlurredElement(hostname, sel).catch(() => {});
@@ -773,7 +584,6 @@
         const target = lastContextMenuTarget;
         const unblurTarget = findBlurredAncestor(target);
         if (unblurTarget) {
-          unblurTarget.classList.remove(CLS.REVEAL_ON_HOVER);
           Engine.removeBlur(unblurTarget);
           const sel = Selector.getSelector(unblurTarget);
           if (sel) {
@@ -791,7 +601,6 @@
           try {
             const el = document.querySelector(message.selector);
             if (el) {
-              el.classList.remove(CLS.REVEAL_ON_HOVER);
               Engine.removeBlur(el);
             }
           } catch (_e) { /* invalid selector — skip */ }
@@ -815,14 +624,6 @@
     document.documentElement.style.setProperty('--pb-transition-duration', `${settings.TRANSITION_DURATION}ms`);
   }
 
-  /** Apply reveal-on-hover class to all blurred elements based on current reveal mode. */
-  function applyRevealClasses() {
-    const isHover = settings.REVEAL_MODE === RM.HOVER;
-    document.querySelectorAll('.pb-blurred').forEach(el => {
-      el.classList.toggle(CLS.REVEAL_ON_HOVER, isHover);
-    });
-  }
-
   // ─── Idempotent state application ─────────────────────────────────────────────
   // Single function that configures every component from resolved settings.
   // All propagation paths (UPDATE_SETTINGS, storage.onChanged, SPA navigation,
@@ -840,9 +641,6 @@
     const catsChanged = CATEGORY_KEYS.some(k => old.BLUR_CATEGORIES[k] !== settings.BLUR_CATEGORIES[k]);
     if (catsChanged) {
       Engine.invalidateSelectorCache();
-      // Restart observer so it uses the new selector for descendant queries
-      if (domObserver) restartDomObserver();
-      else buildObserverSelector();
     }
 
     // 3. Shortcuts (init is already idempotent — destroy + re-create)
@@ -866,38 +664,27 @@
       }
     }
 
-    // 5. DOM observer + visibility observer (always paired)
-    if (settings.ENABLED) {
-      startDomObserver(); // also starts visibility observer
-    } else {
-      stopDomObserver(); // also stops visibility observer
-    }
-
-    // 6. Re-blur when config changed while blur-all is active
-    const thoroughChanged = old.THOROUGH_BLUR !== settings.THOROUGH_BLUR;
-    const radiusChanged = old.BLUR_RADIUS !== settings.BLUR_RADIUS;
+    // 5. Re-inject blur rules when config changed while blur-all is active
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
-    if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
-      stopDomObserver(); // disconnect both before re-blur to avoid thrashing
+    if (isPageBlurred && (catsChanged || modeChanged)) {
       Engine.unblurAll();
-      Engine.blurAllContent(settings.BLUR_RADIUS, {
-        categories: settings.BLUR_CATEGORIES,
-        thoroughBlur: settings.THOROUGH_BLUR,
-        blurMode: settings.BLUR_MODE,
-      });
-      startDomObserver(); // restart both — IO re-observes fresh elements
-      document.querySelectorAll('.pb-blurred').forEach(el => {
-        observeElement(el);
-      });
+      Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
+      Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
+      stopDomObserver();
+      startDomObserver();
     }
 
-    // 7. Reveal mode management (always runs — covers both re-blur and mode-only changes)
-    applyRevealClasses();
-    if (settings.REVEAL_MODE !== RM.CLICK) dismissClickReveal();
+    // 6. DOM observer
+    if (settings.ENABLED && isPageBlurred) {
+      startDomObserver();
+    } else if (!settings.ENABLED) {
+      stopDomObserver();
+    }
 
-    // 8. Disable cleanup — reset all state so re-enable starts fresh
+    // 7. Disable cleanup
     if (!settings.ENABLED) {
       dismissClickReveal();
+      Engine.unblurAll();
       isPageBlurred = false;
     }
   }
@@ -950,17 +737,9 @@
     try {
       const wasBlurAll = await Store.getBlurState(hostname);
       if (wasBlurAll && !isPageBlurred) {
-        Engine.blurAllContent(settings.BLUR_RADIUS, {
-          categories: settings.BLUR_CATEGORIES,
-          thoroughBlur: settings.THOROUGH_BLUR,
-          blurMode: settings.BLUR_MODE,
-        });
-        applyRevealClasses();
+        Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
+        Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
         isPageBlurred = true;
-        // Register blurred elements with visibility observer
-        document.querySelectorAll('.pb-blurred').forEach(el => {
-          observeElement(el);
-        });
       }
     } catch (_e) {
       // Storage unavailable — skip restore
