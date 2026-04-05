@@ -973,10 +973,16 @@ describe('PrivacyBlurEngine', () => {
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
     });
 
-    test('does not blur empty structure elements (text-check gate)', () => {
+    test('blurs structure elements with descendant text (text-check gate)', () => {
       document.body.innerHTML = '<div><span>inner</span></div>';
       PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      // div has no direct text node, only a child element
+      // div has visible text via descendant span — should be blurred
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('does not blur truly empty structure elements', () => {
+      document.body.innerHTML = '<div></div>';
+      PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
     });
 
@@ -1034,8 +1040,8 @@ describe('PrivacyBlurEngine', () => {
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
     });
 
-    test('thoroughBlur off skips text-check elements without direct text', () => {
-      document.body.innerHTML = '<div><span>inner text</span></div>';
+    test('thoroughBlur off skips truly empty text-check elements', () => {
+      document.body.innerHTML = '<div></div>';
       PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE'), thoroughBlur: false });
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
     });
@@ -1048,9 +1054,9 @@ describe('PrivacyBlurEngine', () => {
     });
 
     test('thoroughBlur defaults to false when not specified', () => {
-      document.body.innerHTML = '<div><span>inner</span></div>';
+      document.body.innerHTML = '<div></div>';
       PrivacyBlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      // Should NOT blur because thoroughBlur defaults to false
+      // Empty div should NOT blur because thoroughBlur defaults to false
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
     });
   });

@@ -27,11 +27,11 @@ const PrivacyBlurEngine = (() => {
   const _IDS = (PB.IDS) || {};
   const _BLUR_MODES = (PB.BLUR_MODES) || {};
 
-  const BLURRED_CLASS      = _CSS.BLURRED       || "pb-blurred";
-  const FROSTED_CLASS      = _CSS.FROSTED        || "pb-frosted";
-  const CANVAS_CLASS       = _CSS.CANVAS_OVERLAY || "pb-canvas-overlay";
-  const TEXT_WRAPPER_CLASS = _CSS.TEXT_WRAPPER    || "pb-text-node-wrapper";
-  const SVG_FILTER_ID      = _IDS.SVG_FILTERS    || "pb-svg-filters";
+  const BLURRED_CLASS      = _CSS.BLURRED;
+  const FROSTED_CLASS      = _CSS.FROSTED;
+  const CANVAS_CLASS       = _CSS.CANVAS_OVERLAY;
+  const TEXT_WRAPPER_CLASS = _CSS.TEXT_WRAPPER;
+  const SVG_FILTER_ID      = _IDS.SVG_FILTERS;
 
   // Map from video element -> { canvas, animFrameId } for cleanup
   const videoOverlayMap = new WeakMap();
@@ -77,9 +77,7 @@ const PrivacyBlurEngine = (() => {
 
   // Fallback: all categories enabled. Used when options.categories is omitted.
   // Reads from PrivacyBlur.DEFAULT_SETTINGS to avoid duplicating values.
-  const DEFAULT_CATS = (typeof globalThis !== 'undefined' && globalThis.PrivacyBlur && globalThis.PrivacyBlur.DEFAULT_SETTINGS)
-    ? globalThis.PrivacyBlur.DEFAULT_SETTINGS.BLUR_CATEGORIES
-    : Object.freeze({ TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true });
+  const DEFAULT_CATS = globalThis.PrivacyBlur.DEFAULT_SETTINGS.BLUR_CATEGORIES;
 
   // Category names in fixed order for cache key generation.
   const CATEGORY_ORDER = Object.freeze(['TEXT','MEDIA','FORM','TABLE','STRUCTURE']);
@@ -143,17 +141,12 @@ const PrivacyBlurEngine = (() => {
   // -------------------------------------------------------------------------
 
   /**
-   * Checks whether `element` is a bare text node container that should be
-   * treated as text content (i.e. has at least one direct text-node child
-   * with non-whitespace content, but no meaningful child elements).
+   * Checks whether `element` contains any visible text — either as direct
+   * text-node children or nested inside descendant elements.
+   * Used as the text-check gate for structure/text-check category elements.
    */
   function hasMeaningfulTextContent(element) {
-    for (const node of element.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
-        return true;
-      }
-    }
-    return false;
+    return element.textContent.trim().length > 0;
   }
 
   /**
