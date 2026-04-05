@@ -10,7 +10,7 @@
  *
  * Key behaviors tested:
  *  - IMG elements: direct CSS filter applied on the element
- *  - VIDEO elements: canvas overlay with requestAnimationFrame loop
+ *  - VIDEO elements: CSS class only (CSS filter works on DRM video)
  *  - Text containers: bare text nodes wrapped in <span> for CSS filter targeting
  *  - Background-image elements: CSS class only (filter via stylesheet)
  *  - Generic elements: class + CSS custom property approach
@@ -202,37 +202,21 @@ describe('PrivacyBlurEngine', () => {
     });
 
     /**
-     * Verifies that <video> elements get a <canvas> overlay for blur.
-     * Why: CSS filter on <video> is unreliable cross-browser and does not work
-     * on DRM-protected content. The canvas overlay draws blurred frames via
-     * requestAnimationFrame, bypassing these limitations.
-     * Reproduce: Create a <video> in the DOM, call applyBlur, query for canvas.
+     * Verifies that <video> elements are blurred via CSS class only.
+     * CSS filter: blur() works on video elements including DRM content.
+     * No canvas overlay needed.
      */
-    test('creates canvas overlay for video elements', () => {
+    test('blurs video via CSS class (no canvas overlay)', () => {
       const video = document.createElement('video');
       document.body.appendChild(video);
 
       PrivacyBlurEngine.applyBlur(video, 8);
 
-      const canvas = document.querySelector('canvas.pb-canvas-overlay');
-      expect(canvas).not.toBeNull();
       expect(video.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that video blur starts a requestAnimationFrame loop.
-     * Why: The blur effect on video requires continuous frame-by-frame redrawing
-     * onto the canvas overlay. Without rAF, the canvas would show a single
-     * frozen frame instead of tracking the playing video.
-     * Reproduce: Create a <video>, call applyBlur, check rAF was called.
-     */
-    test('starts RAF animation loop for video elements', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-
-      PrivacyBlurEngine.applyBlur(video, 8);
-
-      expect(global.requestAnimationFrame).toHaveBeenCalled();
+      // No canvas overlay injected
+      expect(document.querySelector('canvas')).toBeNull();
+      // No RAF loop started
+      expect(global.requestAnimationFrame).not.toHaveBeenCalled();
     });
 
     /**
@@ -318,32 +302,15 @@ describe('PrivacyBlurEngine', () => {
      * canvas runs a rAF loop that consumes CPU even when not visible.
      * Reproduce: Blur a video, verify canvas exists, removeBlur, verify gone.
      */
-    test('removes canvas overlay from DOM when removing blur on video', () => {
+    test('removes blur class from video', () => {
       const video = document.createElement('video');
       document.body.appendChild(video);
       PrivacyBlurEngine.applyBlur(video, 8);
-      expect(document.querySelector('canvas.pb-canvas-overlay')).not.toBeNull();
+      expect(video.classList.contains('pb-blurred')).toBe(true);
 
       PrivacyBlurEngine.removeBlur(video);
 
-      expect(document.querySelector('canvas.pb-canvas-overlay')).toBeNull();
-    });
-
-    /**
-     * Verifies that removeBlur cancels the requestAnimationFrame loop.
-     * Why: An uncancelled rAF loop continues running indefinitely, consuming
-     * CPU and potentially causing memory leaks. This was a real OOM issue
-     * discovered during development (see tests/CLAUDE.md).
-     * Reproduce: Blur a video (starts rAF), removeBlur, verify cancelAnimationFrame called.
-     */
-    test('cancels rAF loop on video removeBlur', () => {
-      const video = document.createElement('video');
-      document.body.appendChild(video);
-      PrivacyBlurEngine.applyBlur(video, 8);
-
-      PrivacyBlurEngine.removeBlur(video);
-
-      expect(global.cancelAnimationFrame).toHaveBeenCalled();
+      expect(video.classList.contains('pb-blurred')).toBe(false);
     });
 
     /**
@@ -602,23 +569,6 @@ describe('PrivacyBlurEngine', () => {
       expect(() => PrivacyBlurEngine.unblurAll()).not.toThrow();
     });
 
-    /**
-     * Verifies that unblurAll cleans up orphaned canvas overlays.
-     * Why: If a video element is removed from the DOM (e.g. SPA navigation)
-     * while its canvas overlay remains, unblurAll must still find and remove
-     * the orphaned canvas. Otherwise it leaks DOM nodes and GPU memory.
-     * Reproduce: Manually insert a canvas with the overlay class, call unblurAll.
-     */
-    test('cleans up orphaned canvas overlays', () => {
-      const canvas = document.createElement('canvas');
-      canvas.className = 'pb-canvas-overlay';
-      document.body.appendChild(canvas);
-
-      PrivacyBlurEngine.unblurAll();
-
-      expect(document.querySelector('.pb-canvas-overlay')).toBeNull();
-    });
-
     test('unblurAll is safe to call on clean DOM', () => {
       expect(() => PrivacyBlurEngine.unblurAll()).not.toThrow();
     });
@@ -697,46 +647,34 @@ describe('PrivacyBlurEngine', () => {
 
   // ── Video blur edge cases ─────────────────────────────────────────────────
 
-  describe('video blur edge cases', () => {
-    /**
-     * Verifies that applyBlur handles a detached video (no parentElement).
-     * Why: In SPAs like YouTube, video elements can be created in memory
-     * before insertion into the DOM. If the user triggers blur-all at that
-     * moment, applyBlur must not throw when it cannot find a parent to
-     * insert the canvas overlay into. Instead it falls back to CSS-only blur.
-     * Reproduce: Create a <video> without appending to DOM, apply blur.
-     */
-    test('handles detached video element (no parent) gracefully', () => {
-      const video = document.createElement('video');
-
-      expect(() => PrivacyBlurEngine.applyBlur(video, 8)).not.toThrow();
-      expect(video.classList.contains('pb-blurred')).toBe(true);
-    });
-
-    /**
-     * Verifies that the idempotency guard prevents duplicate canvases.
-     * Why: If applyBlur is called twice (e.g. by MutationObserver + restore),
-     * two canvases would stack on top of each other, doubling GPU usage and
-     * causing visual artifacts when one is removed but the other remains.
-     * Reproduce: Apply blur to a video, count canvas overlays — must be 1.
-     */
-    test('re-applying blur to same video does not create duplicate canvases', () => {
+  describe('video and media blur', () => {
+    test('video is blurred via CSS class only (no canvas)', () => {
       const video = document.createElement('video');
       document.body.appendChild(video);
 
       PrivacyBlurEngine.applyBlur(video, 8);
-      const canvasCount = document.querySelectorAll('.pb-canvas-overlay').length;
-      expect(canvasCount).toBe(1);
+
+      expect(video.classList.contains('pb-blurred')).toBe(true);
+      expect(document.querySelector('canvas')).toBeNull();
     });
 
-    /**
-     * Verifies that removeBlur on <img> clears the inline filter style.
-     * Why: Images get a direct style.filter (unlike generic elements). If
-     * removeBlur doesn't clear it, the image stays visually blurred even
-     * though the pb-blurred class is gone, causing user confusion.
-     * Reproduce: Blur an image (sets style.filter), removeBlur, check filter is empty.
-     */
-    test('removeBlur on img removes pb-blurred class', () => {
+    test('detached video blurs without error', () => {
+      const video = document.createElement('video');
+      expect(() => PrivacyBlurEngine.applyBlur(video, 8)).not.toThrow();
+      expect(video.classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('double blur on video is idempotent', () => {
+      const video = document.createElement('video');
+      document.body.appendChild(video);
+
+      PrivacyBlurEngine.applyBlur(video, 8);
+      PrivacyBlurEngine.applyBlur(video, 8);
+
+      expect(video.classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('removeBlur on img removes class', () => {
       const img = document.createElement('img');
       document.body.appendChild(img);
 

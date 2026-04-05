@@ -139,11 +139,12 @@ window.PrivacyBlurXxx = PrivacyBlurXxx;
 ### No ES module syntax
 No `import`, `export`, `import()`, or `require()` in any file under `src/`, `background.js`, or `popup/`. The extension has no build step.
 
-### Blur engine element handling — dispatch order
-1. `<video>` → canvas overlay + RAF loop (`pb-canvas-overlay` class)
-2. `<img>` → CSS class only (`pb-blurred`), no inline filter
-3. Background-image elements → `pb-blurred` class only (CSS handles it)
-4. Everything else → wrap text nodes if needed, then `pb-blurred` class
+### Blur engine element handling
+All elements (video, img, text containers, generic) are blurred via CSS class only (`pb-blurred`). CSS `filter: blur()` on a parent blurs all descendants — no canvas overlays, no text-node wrapping, no DOM injection. This means:
+- No `position: relative` injection on parent elements (was breaking layouts)
+- No `requestAnimationFrame` loops for video (CSS blur works on DRM video too)
+- No text-node wrapper spans (CSS blur covers text nodes via parent filter)
+- Live radius updates propagate instantly via `var(--pb-radius)` from `:root`
 
 ### CSS class constants (do not invent new names)
 | Constant | Value |
@@ -236,7 +237,7 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 
 | Issue | Root cause | Status |
 |---|---|---|
-| DRM video shows dark overlay instead of blurred video | `ctx.drawImage()` throws on DRM content; caught and filled with dark rect | By design |
+| ~~DRM video shows dark overlay~~ | Fixed — CSS `filter: blur()` works on DRM video (DRM blocks pixel extraction, not CSS rendering) | Resolved |
 | SPA selector staleness | `data-pb-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/CROSS_BROWSER.md §6.3` |
 | Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/CROSS_BROWSER.md §6.6` |
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |

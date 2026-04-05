@@ -6,7 +6,7 @@
  *
  * Special handling:
  *  - IMG / background-image: CSS filter (fast, no artefacts)
- *  - VIDEO: canvas overlay with requestAnimationFrame (bypasses DRM filter restriction)
+ *  - VIDEO: CSS class only (CSS filter works on DRM video — no canvas needed)
  *  - Text nodes: wrapped in <span> so CSS filter can target them
  *  - Generic elements: CSS class + custom property approach
  *
@@ -29,11 +29,7 @@ const PrivacyBlurEngine = (() => {
 
   const BLURRED_CLASS      = _CSS.BLURRED;
   const FROSTED_CLASS      = _CSS.FROSTED;
-  const CANVAS_CLASS       = _CSS.CANVAS_OVERLAY;
   const SVG_FILTER_ID      = _IDS.SVG_FILTERS;
-
-  // Map from video element -> { canvas, animFrameId } for cleanup
-  const videoOverlayMap = new WeakMap();
 
   // -------------------------------------------------------------------------
   // Category selector definitions
@@ -148,119 +144,6 @@ const PrivacyBlurEngine = (() => {
     return element.textContent.trim().length > 0;
   }
 
-  /**
-   * Creates a <canvas> overlay on top of a video element and starts a
-   * requestAnimationFrame loop that draws blurred video frames onto it.
-   * This works for DRM-protected video because we are not reading pixel data —
-   * we are re-rendering using the CSS filter on the canvas context.
-   */
-  function startVideoBlurCanvas(videoElement, radius) {
-    // If an overlay already exists, stop old one first
-    stopVideoBlurCanvas(videoElement);
-
-    const canvas = document.createElement("canvas");
-    canvas.classList.add(CANVAS_CLASS);
-
-    // Position canvas exactly over the video
-    const rect = videoElement.getBoundingClientRect();
-    canvas.width  = videoElement.videoWidth  || rect.width;
-    canvas.height = videoElement.videoHeight || rect.height;
-
-    Object.assign(canvas.style, {
-      position:      "absolute",
-      top:           "0",
-      left:          "0",
-      width:         "100%",
-      height:        "100%",
-      pointerEvents: "none",  // clicks pass through to video controls
-      zIndex:        "9999"
-    });
-
-    // The video container must be positioned so the canvas can overlay it
-    const videoParent = videoElement.parentElement;
-
-    // Guard: if video has no parent (detached from DOM) we cannot overlay a canvas.
-    if (!videoParent) {
-      videoElement.classList.add(BLURRED_CLASS);
-      videoElement.style.setProperty("--pb-radius", `${radius}px`);
-      return;
-    }
-
-    videoParent.insertBefore(canvas, videoElement.nextSibling);
-
-    const ctx = canvas.getContext("2d");
-
-    // Use an object so drawFrame always writes the latest handle into the same
-    // reference that videoOverlayMap holds. Storing animFrameId by value would
-    // capture the handle from frame 0 only; subsequent frames update the closure
-    // variable but the map would hold a stale handle, making cancelAnimationFrame
-    // cancel the wrong frame and leave the loop running.
-    const state = { canvas, animFrameId: null };
-
-    function drawFrame() {
-      // Resize canvas if video dimensions changed (e.g., fullscreen, resolution switch)
-      if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-        if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
-          canvas.width  = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
-        }
-      } else if (canvas.width === 0 || canvas.height === 0) {
-        // Video metadata not yet loaded — fall back to layout dimensions
-        const r = videoElement.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) {
-          canvas.width  = r.width;
-          canvas.height = r.height;
-        }
-      }
-
-      // Stop if video was removed from DOM (SPA navigation, dynamic content)
-      if (!videoElement.isConnected) {
-        stopVideoBlurCanvas(videoElement);
-        return;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Apply blur filter via the canvas 2D context (not CSS), then draw frame
-      ctx.filter = `blur(${radius}px)`;
-      try {
-        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-      } catch {
-        // drawImage can throw for cross-origin or DRM videos — keep looping
-        // so the solid-colour canvas remains visible as a visual mask
-        ctx.fillStyle = "rgba(30, 30, 30, 0.85)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-
-      state.animFrameId = requestAnimationFrame(drawFrame);
-    }
-
-    drawFrame();
-
-    videoOverlayMap.set(videoElement, state);
-  }
-
-  /**
-   * Stops the canvas overlay loop and removes the canvas from the DOM.
-   */
-  function stopVideoBlurCanvas(videoElement) {
-    const overlay = videoOverlayMap.get(videoElement);
-    if (!overlay) return;
-
-    cancelAnimationFrame(overlay.animFrameId);
-
-    if (overlay.canvas && overlay.canvas.parentNode) {
-      const parent = overlay.canvas.parentNode;
-      parent.removeChild(overlay.canvas);
-      // Restore parent's original position if we changed it
-      if (overlay.originalParentPosition) {
-        parent.style.position = overlay.originalParentPosition;
-      }
-    }
-
-    videoOverlayMap.delete(videoElement);
-  }
-
   // -------------------------------------------------------------------------
   // SVG filter injection (frosted glass mode)
   // -------------------------------------------------------------------------
@@ -319,10 +202,6 @@ const PrivacyBlurEngine = (() => {
     if (!element || !(element instanceof Element)) return;
     if (isBlurred(element)) return; // idempotent
 
-    // Never blur video overlay canvases created by the blur engine.
-    if (element.classList.contains(CANVAS_CLASS)) {
-      return;
-    }
 
     // Never blur extension UI elements (picker toolbar, toast notifications).
     const toolbarId = _IDS.PICKER_TOOLBAR || 'pb-picker-toolbar';
@@ -336,36 +215,14 @@ const PrivacyBlurEngine = (() => {
 
     const tag = element.tagName.toLowerCase();
 
-    // ---- VIDEO: canvas overlay approach ----
-    // No per-element --pb-radius needed — the canvas overlay reads `radius`
-    // from the closure, not from CSS. The CSS class provides a fallback
-    // filter via var(--pb-radius) from :root for the brief moment before
-    // the canvas overlay is drawn.
+    // ---- All elements (video, img, text, generic): CSS class only ----
+    // CSS filter: blur() on the element blurs it and all descendants visually.
+    // Works for DRM video too — DRM blocks pixel extraction (canvas API), not
+    // CSS rendering. No canvas overlay, no position injection, no DOM changes
+    // beyond the class. Uses var(--pb-radius) from :root for live radius updates.
     const isFrosted = mode === (_BLUR_MODES.FROSTED || 'frosted');
     if (isFrosted) ensureSvgFilter();
 
-    if (tag === "video") {
-      element.classList.add(BLURRED_CLASS);
-      if (isFrosted) element.classList.add(FROSTED_CLASS);
-      startVideoBlurCanvas(element, radius);
-      return;
-    }
-
-    // ---- IMG: CSS class only (no inline filter) ----
-    // The .pb-blurred CSS rule applies filter via var(--pb-radius) from :root.
-    // No inline style.filter — it would override the CSS variable and prevent
-    // live radius updates from propagating without a page reload.
-    if (tag === "img") {
-      element.classList.add(BLURRED_CLASS);
-      if (isFrosted) element.classList.add(FROSTED_CLASS);
-      return;
-    }
-
-    // ---- Generic element: class only ----
-    // CSS filter: blur() on the parent blurs all descendants (text, child
-    // elements, backgrounds) — no need to wrap individual text nodes.
-    // CSS .pb-blurred uses var(--pb-radius) from :root, set by applySettingsToDom().
-    // No per-element --pb-radius — this lets radius changes propagate instantly.
     element.classList.add(BLURRED_CLASS);
     if (isFrosted) element.classList.add(FROSTED_CLASS);
   }
@@ -376,26 +233,6 @@ const PrivacyBlurEngine = (() => {
    */
   function removeBlur(element) {
     if (!element || !(element instanceof Element)) return;
-
-    const tag = element.tagName.toLowerCase();
-
-    // ---- VIDEO: stop canvas overlay ----
-    if (tag === "video") {
-      element.classList.remove(BLURRED_CLASS);
-      element.classList.remove(FROSTED_CLASS);
-      element.style.removeProperty("--pb-radius");
-      stopVideoBlurCanvas(element);
-      return;
-    }
-
-    // ---- IMG: remove class only ----
-    if (tag === "img") {
-      element.classList.remove(BLURRED_CLASS);
-      element.classList.remove(FROSTED_CLASS);
-      return;
-    }
-
-    // ---- Generic element ----
     element.classList.remove(BLURRED_CLASS);
     element.classList.remove(FROSTED_CLASS);
   }
@@ -481,11 +318,6 @@ const PrivacyBlurEngine = (() => {
     // Handle all remaining blurred elements
     document.querySelectorAll(`.${BLURRED_CLASS}`).forEach((el) => {
       removeBlur(el);
-    });
-
-    // Remove any orphaned canvas overlays
-    document.querySelectorAll(`.${CANVAS_CLASS}`).forEach((canvas) => {
-      canvas.parentNode && canvas.parentNode.removeChild(canvas);
     });
 
     // Clean up any frosted class remnants
