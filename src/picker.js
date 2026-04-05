@@ -175,7 +175,9 @@ const Picker = (() => {
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    const alreadyBlurred = pb.BlurEngine.isBlurred(target);
+    // Check only individual blur (data attribute), not CSS-rule blur.
+    // Picker toggles per-element blur independently of blur-all mode.
+    const alreadyBlurred = !!target.dataset.pbBlur;
 
     if (alreadyBlurred) {
       if (typeof activeCallbacks.onUnblur === 'function') {

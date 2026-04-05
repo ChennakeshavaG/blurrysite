@@ -331,10 +331,10 @@ describe('pb.Picker', () => {
      * The check uses classList.contains('pb-blurred'), not Engine.isBlurred().
      * Reproduce: Add pb-blurred class to element, activate, click it.
      */
-    test('calls onUnblur callback when element already blurred', () => {
+    test('calls onUnblur callback when element has data-pb-blur', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
-      pb.BlurEngine.isBlurred.mockImplementation((e) => e === el);
+      el.dataset.pbBlur = '1'; // Simulate individual picker blur
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
       pb.Picker.activate({}, callbacks);
