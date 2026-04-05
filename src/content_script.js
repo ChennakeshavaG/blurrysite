@@ -78,8 +78,6 @@
   // active compositing layer count bounded on infinite-scroll pages.
 
   let visibilityObserver = null;
-  /** Set of elements currently unblurred because they're off-screen */
-  const offscreenElements = new Set();
 
   function startVisibilityObserver() {
     if (visibilityObserver || !settings.PERFORMANCE.OFFSCREEN_UNBLUR) return;
@@ -88,25 +86,20 @@
       for (const entry of entries) {
         const el = entry.target;
         if (entry.isIntersecting) {
-          // Back on screen — re-apply blur + refresh text wrappers
-          // (content may have changed while off-screen via SPA re-renders)
-          if (offscreenElements.has(el)) {
-            offscreenElements.delete(el);
-            el.classList.add(CLS.BLURRED);
-            if (settings.BLUR_MODE === BM.FROSTED) el.classList.add(CLS.FROSTED);
+          // Entering viewport — re-apply blur if not already blurred
+          if (!Engine.isBlurred(el)) {
+            Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
             if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
-            Engine.refreshBlur(el);
           }
         } else {
-          // Off screen — remove blur to free compositing layer
-          if (el.classList.contains(CLS.BLURRED)) {
-            offscreenElements.add(el);
-            el.classList.remove(CLS.BLURRED, CLS.FROSTED, CLS.REVEAL_ON_HOVER);
+          // Leaving viewport — remove blur to free GPU compositing layer
+          if (Engine.isBlurred(el)) {
+            Engine.removeBlur(el);
+            el.classList.remove(CLS.REVEAL_ON_HOVER);
           }
         }
       }
     }, {
-      // rootMargin: observe slightly beyond viewport to pre-blur before visible
       rootMargin: '200px',
     });
   }
@@ -116,18 +109,10 @@
       visibilityObserver.disconnect();
       visibilityObserver = null;
     }
-    // Re-blur any elements that were temporarily unblurred
-    for (const el of offscreenElements) {
-      if (el.isConnected) {
-        el.classList.add(CLS.BLURRED);
-        if (settings.BLUR_MODE === BM.FROSTED) el.classList.add(CLS.FROSTED);
-        if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
-      }
-    }
-    offscreenElements.clear();
+    // Callers (unblurAll, blurAllContent) handle element state reset.
   }
 
-  /** Track a blurred element with the visibility observer */
+  /** Register a blurred element with the visibility observer for GPU optimization */
   function observeElement(el) {
     if (visibilityObserver && el instanceof Element) {
       visibilityObserver.observe(el);
@@ -265,7 +250,6 @@
       domObserver = null;
     }
     pendingNodes = [];
-    pendingRefresh.clear();
     processingScheduled = false;
   }
 
@@ -641,9 +625,7 @@
           stopVisibilityObserver();
           Engine.unblurAll();
           blurredElementCount = 0;
-          offscreenElements.clear();
           pendingNodes = [];
-          pendingRefresh.clear();
           isPageBlurred = false;
         } else {
           // Ensure observer is running to catch SPA re-renders
@@ -889,9 +871,7 @@
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
     if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
       stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
-      offscreenElements.clear();
       pendingNodes = []; // Clear stale queued nodes before re-blur
-      pendingRefresh.clear();
       blurredElementCount = 0;
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
