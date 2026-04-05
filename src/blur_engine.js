@@ -57,13 +57,13 @@ const BlurEngine = (() => {
       alwaysBlur: Object.freeze(['caption']),
       textCheck:  Object.freeze(['td','th']),
     }),
-    // STRUCTURE category removed — blurring layout containers (div, section,
-    // header, footer, etc.) breaks position:fixed/sticky children because CSS
-    // filter creates a new containing block. TEXT + MEDIA categories already
-    // cover all readable content inside these containers.
+    // STRUCTURE: text-bearing containers. CSS filter creates a containing block
+    // that breaks position:fixed/sticky descendants, so we only blur these when
+    // they pass the text-check gate (have visible text content). Layout-only
+    // containers (empty divs, nav wrappers) are skipped.
     STRUCTURE: Object.freeze({
       alwaysBlur: Object.freeze([]),
-      textCheck:  Object.freeze([]),
+      textCheck:  Object.freeze(['div', 'article', 'figure', 'details', 'dialog']),
     }),
   });
 
@@ -133,12 +133,19 @@ const BlurEngine = (() => {
   // -------------------------------------------------------------------------
 
   /**
-   * Checks whether `element` contains any visible text — either as direct
-   * text-node children or nested inside descendant elements.
-   * Used as the text-check gate for structure/text-check category elements.
+   * Checks whether `element` has direct text-node children with visible text.
+   * Only checks immediate children — NOT descendant elements' text.
+   * This is critical for STRUCTURE elements: a <div> with <p>text</p> should
+   * NOT be blurred (the <p> is already handled by TEXT category). But a
+   * <div>Plain text here</div> with direct text SHOULD be blurred.
    */
   function hasMeaningfulTextContent(element) {
-    return element.textContent.trim().length > 0;
+    for (const node of element.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // -------------------------------------------------------------------------

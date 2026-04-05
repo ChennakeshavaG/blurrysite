@@ -914,9 +914,14 @@
     if (currentUrl === lastUrl) return;
     lastUrl = currentUrl;
 
-    const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
-    const resolved = resolveSettings(currentUrl, globalSettings, rules);
-    applyState(resolved, prev);
+    try {
+      const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
+      const resolved = resolveSettings(currentUrl, globalSettings, rules);
+      applyState(resolved, prev);
+    } catch (err) {
+      // SPA navigation can fire during teardown — fail silently
+      console.warn('[PrivacyBlur] URL change handler error:', err.message);
+    }
   }
 
   window.addEventListener('popstate', onUrlChange);
@@ -924,16 +929,18 @@
 
   // Wrap history.pushState/replaceState for SPA frameworks (YouTube, React Router, etc.)
   // that navigate without firing popstate.
+  // Wrap history methods for SPA detection. Use try-catch so a bug in our
+  // handler never breaks the page's own navigation.
   const _origPushState = history.pushState;
   const _origReplaceState = history.replaceState;
   history.pushState = function() {
     const result = _origPushState.apply(this, arguments);
-    onUrlChange();
+    try { onUrlChange(); } catch (_) {}
     return result;
   };
   history.replaceState = function() {
     const result = _origReplaceState.apply(this, arguments);
-    onUrlChange();
+    try { onUrlChange(); } catch (_) {}
     return result;
   };
 
