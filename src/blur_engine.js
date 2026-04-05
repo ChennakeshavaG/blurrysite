@@ -526,6 +526,37 @@ const PrivacyBlurEngine = (() => {
     return tagSet.has(element.tagName.toLowerCase());
   }
 
+  /**
+   * Returns true if the element should be blurred in blur-all mode,
+   * applying the same two-pass logic as blurAllContent:
+   * - Always-blur elements → true unconditionally
+   * - Text-check elements → true only if hasMeaningfulTextContent
+   *
+   * This is what the MutationObserver should use instead of
+   * matchesActiveCategories (which skips the text-check gate).
+   */
+  function shouldBlurElement(element, categories, thorough) {
+    if (!element || !(element instanceof Element)) return false;
+    const cats = categories || DEFAULT_CATS;
+    const tag = element.tagName.toLowerCase();
+
+    // Check each enabled category
+    for (const name of CATEGORY_ORDER) {
+      if (!cats[name]) continue;
+      const cat = CATEGORY_SELECTORS[name];
+
+      // Always-blur: unconditional
+      if (cat.alwaysBlur.indexOf(tag) >= 0) return true;
+
+      // Text-check: only if element has meaningful text (or thorough mode)
+      if (cat.textCheck.indexOf(tag) >= 0) {
+        return thorough || hasMeaningfulTextContent(element);
+      }
+    }
+
+    return false;
+  }
+
   // -------------------------------------------------------------------------
   // Expose public API
   // -------------------------------------------------------------------------
@@ -538,6 +569,7 @@ const PrivacyBlurEngine = (() => {
     isBlurred,
     invalidateSelectorCache,
     matchesActiveCategories,
+    shouldBlurElement,
     CATEGORY_SELECTORS,
   };
 })();

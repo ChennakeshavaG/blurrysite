@@ -89,7 +89,7 @@
       const node = chunk[i];
       if (!node.isConnected) continue;
 
-      if (Engine.matchesActiveCategories(node, settings.BLUR_CATEGORIES)) {
+      if (Engine.shouldBlurElement(node, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
         Engine.applyBlur(node, settings.BLUR_RADIUS);
         if (settings.REVEAL_MODE === 'hover') node.classList.add('pb-reveal-on-hover');
       }
