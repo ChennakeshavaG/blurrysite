@@ -476,6 +476,7 @@ button { cursor: pointer; font-family: inherit; }
   max-height: 800px;
   opacity: 1;
   padding: var(--pb-spacing-sm);
+  overflow: visible; /* Allow dropdowns and tooltips to render outside */
 }
 
 /* ---------- Setting Row ---------- */
