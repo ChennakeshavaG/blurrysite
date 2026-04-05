@@ -462,6 +462,15 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
+    // Don't interfere with form element interactions — inputs, textareas,
+    // selects, buttons, and contenteditable need their native click behavior.
+    // Adding/removing classes on their blurred ancestor triggers style
+    // recalculation that site JS may interpret as a DOM change (closing
+    // search overlays, dropdown menus, autocomplete popups).
+    const tag = target.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
+        tag === 'button' || target.isContentEditable) return;
+
     const blurredEl = target.closest('.pb-blurred');
     if (!blurredEl) return;
 

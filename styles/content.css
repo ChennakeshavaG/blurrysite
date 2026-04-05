@@ -30,8 +30,9 @@
   transition: filter var(--pb-transition-duration, 200ms) ease !important;
   /* Prevent casual text selection/copy of blurred content */
   user-select: none !important;
-  /* Reduce repaint invalidation when other page content changes */
-  contain: paint;
+  /* No contain:paint — it clips overflow children (search overlays,
+     dropdowns, autocomplete popups). filter already creates a
+     stacking context so the perf benefit is redundant. */
 }
 
 /* ─── Frosted glass mode (AI-resistant SVG displacement + blur) ────────────── */
