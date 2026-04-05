@@ -38,6 +38,18 @@ function createContextMenus() {
 
 chrome.runtime.onInstalled.addListener(() => {
   createContextMenus();
+
+  // Seed default settings to storage if not present. This ensures the popup
+  // shows correct toggle states on first load (instead of all-unchecked).
+  chrome.storage.local.get("settings", (result) => {
+    if (!result.settings) {
+      chrome.storage.local.set({ settings: MSG.buildDefaultSettings() });
+    } else {
+      // Validate existing settings — repair any broken/missing values
+      const validated = MSG.validateSettings(result.settings);
+      chrome.storage.local.set({ settings: validated });
+    }
+  });
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -214,7 +226,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.local.get("settings", (result) => {
         const saved = result.settings || {};
         const merged = MSG.deepMerge(MSG.DEFAULT_SETTINGS, saved);
-        sendResponse({ settings: merged });
+        // Validate and repair — strips invalid values, fills missing with defaults
+        const validated = MSG.validateSettings(merged);
+        sendResponse({ settings: validated });
       });
       return true;
     }

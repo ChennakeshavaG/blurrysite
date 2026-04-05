@@ -206,6 +206,69 @@ describe('PrivacyBlur constants', () => {
     });
   });
 
+  // ── validateSettings ──────────────────────────────────────────────────────
+
+  describe('validateSettings', () => {
+    test('returns full defaults for null input', () => {
+      const result = PB.validateSettings(null);
+      expect(result.BLUR_RADIUS).toBe(8);
+      expect(result.ENABLED).toBe(true);
+      expect(result.BLUR_CATEGORIES.TEXT).toBe(true);
+      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL).toBeDefined();
+    });
+
+    test('preserves valid values', () => {
+      const input = PB.buildDefaultSettings();
+      input.BLUR_RADIUS = 15;
+      input.ENABLED = false;
+      input.BLUR_CATEGORIES.FORM = true;
+      const result = PB.validateSettings(input);
+      expect(result.BLUR_RADIUS).toBe(15);
+      expect(result.ENABLED).toBe(false);
+      expect(result.BLUR_CATEGORIES.FORM).toBe(true);
+    });
+
+    test('replaces out-of-range BLUR_RADIUS with default', () => {
+      expect(PB.validateSettings({ BLUR_RADIUS: 999 }).BLUR_RADIUS).toBe(8);
+      expect(PB.validateSettings({ BLUR_RADIUS: -1 }).BLUR_RADIUS).toBe(8);
+      expect(PB.validateSettings({ BLUR_RADIUS: 'abc' }).BLUR_RADIUS).toBe(8);
+    });
+
+    test('replaces invalid REVEAL_MODE with default', () => {
+      expect(PB.validateSettings({ REVEAL_MODE: 'invalid' }).REVEAL_MODE).toBe('hover');
+      expect(PB.validateSettings({ REVEAL_MODE: 42 }).REVEAL_MODE).toBe('hover');
+    });
+
+    test('replaces invalid HIGHLIGHT_COLOR with default', () => {
+      expect(PB.validateSettings({ HIGHLIGHT_COLOR: 'red' }).HIGHLIGHT_COLOR).toBe('#f59e0b');
+      expect(PB.validateSettings({ HIGHLIGHT_COLOR: '#fff' }).HIGHLIGHT_COLOR).toBe('#f59e0b');
+    });
+
+    test('replaces non-boolean category values with defaults', () => {
+      const result = PB.validateSettings({ BLUR_CATEGORIES: { TEXT: 'yes', MEDIA: 1 } });
+      expect(result.BLUR_CATEGORIES.TEXT).toBe(true); // default
+      expect(result.BLUR_CATEGORIES.MEDIA).toBe(true); // default
+    });
+
+    test('replaces broken shortcut binding with default', () => {
+      const result = PB.validateSettings({ SHORTCUTS: { TOGGLE_BLUR_ALL: { bad: true } } });
+      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.primaryModifier).toBe('AltLeft');
+      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.keys).toHaveLength(2);
+    });
+
+    test('fills missing keys with defaults', () => {
+      const result = PB.validateSettings({});
+      expect(result.BLUR_RADIUS).toBe(8);
+      expect(result.TRANSITION_DURATION).toBe(200);
+      expect(result.HIGHLIGHT_COLOR).toBe('#f59e0b');
+      expect(result.REVEAL_MODE).toBe('hover');
+      expect(result.ENABLED).toBe(true);
+      expect(result.THOROUGH_BLUR).toBe(false);
+      expect(Object.keys(result.BLUR_CATEGORIES)).toHaveLength(5);
+      expect(Object.keys(result.SHORTCUTS)).toHaveLength(3);
+    });
+  });
+
   // ── Immutability ──────────────────────────────────────────────────────────
 
   describe('immutability', () => {

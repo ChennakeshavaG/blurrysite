@@ -160,6 +160,69 @@ const PrivacyBlur = (() => {
     return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   }
 
+  // ── Utility: validate and repair settings ──────────────────────────────────
+  // Checks every key against DEFAULT_SETTINGS. Replaces missing, wrong-type,
+  // or out-of-range values with defaults. Returns a clean, complete object.
+
+  function validateSettings(settings) {
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      return buildDefaultSettings();
+    }
+
+    const defaults = buildDefaultSettings();
+    const result = {};
+
+    // Top-level scalars: type-check and range-check
+    result.BLUR_RADIUS = (typeof settings.BLUR_RADIUS === 'number' &&
+      settings.BLUR_RADIUS >= 2 && settings.BLUR_RADIUS <= 20)
+      ? settings.BLUR_RADIUS : defaults.BLUR_RADIUS;
+
+    result.TRANSITION_DURATION = (typeof settings.TRANSITION_DURATION === 'number' &&
+      settings.TRANSITION_DURATION >= 0 && settings.TRANSITION_DURATION <= 2000)
+      ? settings.TRANSITION_DURATION : defaults.TRANSITION_DURATION;
+
+    result.HIGHLIGHT_COLOR = (typeof settings.HIGHLIGHT_COLOR === 'string' &&
+      /^#[0-9a-fA-F]{6}$/.test(settings.HIGHLIGHT_COLOR))
+      ? settings.HIGHLIGHT_COLOR : defaults.HIGHLIGHT_COLOR;
+
+    result.REVEAL_MODE = (['none', 'click', 'hover'].includes(settings.REVEAL_MODE))
+      ? settings.REVEAL_MODE : defaults.REVEAL_MODE;
+
+    result.ENABLED = (typeof settings.ENABLED === 'boolean')
+      ? settings.ENABLED : defaults.ENABLED;
+
+    result.THOROUGH_BLUR = (typeof settings.THOROUGH_BLUR === 'boolean')
+      ? settings.THOROUGH_BLUR : defaults.THOROUGH_BLUR;
+
+    // BLUR_CATEGORIES: each key must be boolean
+    result.BLUR_CATEGORIES = {};
+    const cats = (settings.BLUR_CATEGORIES && typeof settings.BLUR_CATEGORIES === 'object')
+      ? settings.BLUR_CATEGORIES : {};
+    for (const key of Object.keys(defaults.BLUR_CATEGORIES)) {
+      result.BLUR_CATEGORIES[key] = (typeof cats[key] === 'boolean')
+        ? cats[key] : defaults.BLUR_CATEGORIES[key];
+    }
+
+    // SHORTCUTS: each action must have primaryModifier (string) and keys (array)
+    result.SHORTCUTS = {};
+    const sc = (settings.SHORTCUTS && typeof settings.SHORTCUTS === 'object')
+      ? settings.SHORTCUTS : {};
+    for (const action of Object.keys(defaults.SHORTCUTS)) {
+      const binding = sc[action];
+      if (binding &&
+          typeof binding.primaryModifier === 'string' &&
+          Array.isArray(binding.keys) &&
+          binding.keys.length > 0 &&
+          binding.keys.every(k => k && typeof k.code === 'string')) {
+        result.SHORTCUTS[action] = binding;
+      } else {
+        result.SHORTCUTS[action] = JSON.parse(JSON.stringify(defaults.SHORTCUTS[action]));
+      }
+    }
+
+    return result;
+  }
+
   // ── Build public object ─────────────────────────────────────────────────────
 
   const flat = {};
@@ -170,6 +233,7 @@ const PrivacyBlur = (() => {
   return Object.freeze(Object.assign(flat, categories, {
     DEFAULT_SETTINGS,
     buildDefaultSettings,
+    validateSettings,
     deepMerge,
     isValid,
     categoryOf,
