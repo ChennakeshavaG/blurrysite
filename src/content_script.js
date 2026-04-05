@@ -160,11 +160,17 @@
   let _lastCleanup = performance.now();
 
   function _getSignature(el) {
-    // Include parent identity for scoping — same <p class="x"> under
-    // different parents are tracked separately
-    const parent = el.parentElement;
-    const parentId = parent ? (parent.id || parent.tagName) : '_';
-    return parentId + '>' + el.tagName + '.' + (el.className || '');
+    // Walk up to find the nearest ancestor with an ID for precise scoping.
+    // Without this, all <span class="ellips"> under any <div> share one
+    // signature and legitimate content gets throttled.
+    let anchor = el.parentElement;
+    let depth = 0;
+    while (anchor && !anchor.id && depth < 3) {
+      anchor = anchor.parentElement;
+      depth++;
+    }
+    const anchorKey = anchor ? (anchor.id || anchor.tagName) : '_';
+    return anchorKey + '>' + el.tagName + '.' + (el.className || '');
   }
 
   function _cleanLoopGuard(now) {
