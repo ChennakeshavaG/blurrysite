@@ -146,17 +146,34 @@
   }
 
   /**
-   * Break infinite MO loops caused by sites that re-create elements when we
-   * blur them (rich text editors, chat apps). Tracks a signature (tag+class)
-   * with a hit count per cooldown window. If the same signature fires too
-   * many times, skip it until the window resets.
+   * Loop guard: prevents infinite MO cycles caused by sites that re-create
+   * elements when we blur them (rich text editors, chat apps, SPAs).
+   *
+   * Uses a parent-scoped signature (parent + tag + class) so two identical
+   * elements in different containers are tracked independently. Exponential
+   * backoff: after THRESHOLD hits in WINDOW_MS, skip for WINDOW_MS * 2^n
+   * (capped at 30s). Stale entries auto-cleaned every 60s.
    */
-  const _loopGuard = new Map(); // signature → { count, resetTime }
-  const LOOP_THRESHOLD = 10;    // max blurs of same signature per window
-  const LOOP_WINDOW_MS = 1000;  // cooldown window
+  const _loopGuard = new Map(); // signature → { count, lastHit, backoffUntil }
+  const LOOP_THRESHOLD = 5;
+  const LOOP_WINDOW_MS = 500;
+  const LOOP_MAX_BACKOFF = 30000;
+  let _lastCleanup = performance.now();
 
   function _getSignature(el) {
-    return el.tagName + '|' + (el.className || '');
+    // Include parent identity for scoping — same <p class="x"> under
+    // different parents are tracked separately
+    const parent = el.parentElement;
+    const parentId = parent ? (parent.id || parent.tagName) : '_';
+    return parentId + '>' + el.tagName + '.' + (el.className || '');
+  }
+
+  function _cleanLoopGuard(now) {
+    if (now - _lastCleanup < 60000) return;
+    _lastCleanup = now;
+    for (const [sig, g] of _loopGuard) {
+      if (now - g.lastHit > LOOP_MAX_BACKOFF) _loopGuard.delete(sig);
+    }
   }
 
   /** Blur a single element if it passes the category + text-check gate. */
@@ -165,20 +182,34 @@
     if (Engine.isBlurred(el)) return;
 
     if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
-      // Loop guard: skip if same tag+class has been blurred too many times recently
       const sig = _getSignature(el);
       const now = performance.now();
+      _cleanLoopGuard(now);
+
       const guard = _loopGuard.get(sig);
       if (guard) {
-        if (now - guard.resetTime < LOOP_WINDOW_MS) {
+        // Currently in backoff — skip
+        if (guard.backoffUntil && now < guard.backoffUntil) return;
+
+        // Check rate within window
+        if (now - guard.lastHit < LOOP_WINDOW_MS) {
           guard.count++;
-          if (guard.count > LOOP_THRESHOLD) return; // skip — likely infinite loop
+          guard.lastHit = now;
+          if (guard.count > LOOP_THRESHOLD) {
+            // Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 30s
+            const backoff = Math.min(LOOP_WINDOW_MS * Math.pow(2, guard.count - LOOP_THRESHOLD), LOOP_MAX_BACKOFF);
+            guard.backoffUntil = now + backoff;
+            _dbg('loop guard: throttled', sig, 'for', (backoff / 1000).toFixed(1) + 's');
+            return;
+          }
         } else {
+          // Window expired — reset counter
           guard.count = 1;
-          guard.resetTime = now;
+          guard.lastHit = now;
+          guard.backoffUntil = 0;
         }
       } else {
-        _loopGuard.set(sig, { count: 1, resetTime: now });
+        _loopGuard.set(sig, { count: 1, lastHit: now, backoffUntil: 0 });
       }
 
       _dbg('tryBlur:', el.tagName, el.id || el.className);
