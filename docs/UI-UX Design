@@ -1,0 +1,47 @@
+If its an bug or feature related to popup. Forget, you are wirting one from scratch.
+
+Brand Icon - Just a blur, (frosted if just blur is not possible)
+
+UI - An entirely blurred background. Goes well with product theme. Any user options reflects in popup itself (radius / other cases / excpet frosted., dont render that). frosted buttons and other elements acts as UI.
+1 Buttons over layed on frosted glass. Text color must be black or its shades, that goes well with frosted / blur. 2. We provide dark / light mode
+
+2.1 If incase of user preferring dark mode, we must switch to Dark Blur shade, with with dark frosted buttons. (White text)
+2.2 If incase of user preferring light mode, we must switch to full blur / frost mode, text color that goes well with light mode.
+
+3. Font research must be done and ask me for options, it should work like drop in, so i can replace in future.
+
+4. Title should be Privacy Blur
+
+5. Toast should follow same theme, depending on mode user prefers.
+
+UX - This requires some rewrite again, by looks of it. In popup as well as backend. 0. The UI must contain 3 planes . general / advanced / experminetal. All should have a dropdown toggle in one page, but page works on toggle. Do some research on important option and we will order them. Blur / UnBlur must be one Button with some color feedback (green on Blue / white on unblur). Clear All must be White button (When runnning greyed out and rever to original color). Picker must have an icon to show it is active. (i.e. when user clicks on it, it should show a cross icon, and when user clicks on it again, it should show the picker icon).
+
+1. There are going to 3 modes (General / Advanced / Experimental). For listing settings, we will only have one reusable component build on POJO. This will be used in all places, even in rule based places. Easy for extensibility.
+   1.0 We have to do some groundwork to classify all options in UI into constants object. Like every tiny bit of config. We will save the entire object at all times for user, no partial updates. We will configure it in a way, that we can easily add more options in future. And General / Advanced are just labels, we will use them to control visibility of options. So have a plan for it. like storign jsons somewhere with some generalconfigs.json / advancedconfigs.json / experimentalconfigs.json
+   1.1 General mode, enough for most, basic blur / unblur all / pickup blur. More performance oriented settings. No frosted / AI Bypass here. Must cause least issues and breakages. It shouldnt affect anything other than visually. This helps
+   1.2 Advanced mode, for power users, with some of the configured settings. Frosted / AI Bypass enable must be here, not above. We should also find a way to fit a tool tip to provide info on performacne aspect in laymen terms. PERFORMANCE Settings in Advanced only.
+   1.3 Then there is experimental. (It gonna be mental, throw all options at them) 7. Strealine, all features / settings/ sub features / options into a proper model. as defined in 6.0, this will be POJO where we pass everything across. From popup to background to blur engine or anywhere. We will pass all props everywhere. Ensure the POJO model have strong typing, and is easily extendable.
+2. I liked the UX improvements doc, throw them here.
+3. Do code polish after youre done.
+
+Others -
+We currently dont have any plans for translated stuff. But, we will never know, plan accordingly. Use a new js file that does this job. The js file loads jsons that have different languages. And content will be present as keys. Use english as default json for fall back and every element must use this js for content rendering.
+
+Follow most researched UX patterns.
+
+To conclude.
+UI should be like this
+
+---
+
+Privacy Blur (On / Off toggle)
+
+[Blur All] [Clear All] [Picker Mode]
+list shortcuts and link to customise for individual ones above
+
+[Clear site name or rule list applied.]
+Checkboxes for General / Advanced / Expermimental
+
+Advanced and experminetal will have gear icons that opens another page, that lists extensively.
+
+---
