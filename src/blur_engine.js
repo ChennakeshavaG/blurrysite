@@ -5,10 +5,9 @@
  * Exposed as window.PrivacyBlurEngine (IIFE — no ES module syntax).
  *
  * Special handling:
- *  - IMG / background-image: CSS filter (fast, no artefacts)
- *  - VIDEO: CSS class only (CSS filter works on DRM video — no canvas needed)
- *  - Text nodes: wrapped in <span> so CSS filter can target them
- *  - Generic elements: CSS class + custom property approach
+ *  - All elements: CSS class (pb-blurred) + optional frosted class (pb-frosted)
+ *  - CSS filter: blur() on parent blurs all descendants — no DOM injection needed
+ *  - Video: CSS filter works on DRM video (DRM blocks pixel extraction, not rendering)
  *
  * Category-based blurring:
  *  - blurAllContent accepts an options.categories object to control which
@@ -22,14 +21,11 @@ const PrivacyBlurEngine = (() => {
   // -------------------------------------------------------------------------
   // Constants from shared definitions
   // -------------------------------------------------------------------------
-  const PB = globalThis.PrivacyBlur || {};
-  const _CSS = (PB.CSS) || {};
-  const _IDS = (PB.IDS) || {};
-  const _BLUR_MODES = (PB.BLUR_MODES) || {};
-
-  const BLURRED_CLASS      = _CSS.BLURRED;
-  const FROSTED_CLASS      = _CSS.FROSTED;
-  const SVG_FILTER_ID      = _IDS.SVG_FILTERS;
+  const PB = globalThis.PrivacyBlur;
+  const BLUR_RADIUS        = PB.DEFAULT_SETTINGS.BLUR_RADIUS;
+  const BLURRED_CLASS      = PB.CSS.BLURRED;
+  const FROSTED_CLASS      = PB.CSS.FROSTED;
+  const SVG_FILTER_ID      = PB.IDS.SVG_FILTERS;
 
   // -------------------------------------------------------------------------
   // Category selector definitions
@@ -198,33 +194,29 @@ const PrivacyBlurEngine = (() => {
    * @param {number}  radius  - Blur radius in pixels (default 8)
    * @param {string}  [mode]  - Blur mode: 'gaussian' (default) or 'frosted'
    */
-  function applyBlur(element, radius = 10, mode) {
+  function applyBlur(element, radius = BLUR_RADIUS, mode) {
     if (!element || !(element instanceof Element)) return;
     if (isBlurred(element)) return; // idempotent
 
-
     // Never blur extension UI elements (picker toolbar, toast notifications).
-    const toolbarId = _IDS.PICKER_TOOLBAR || 'pb-picker-toolbar';
-    const toastClass = _CSS.TOAST || 'pb-toast';
-    const toolbarClass = _CSS.TOOLBAR || 'pb-toolbar';
+    const toolbarId = PB.IDS.PICKER_TOOLBAR;
+    const toastClass = PB.CSS.TOAST;
+    const toolbarClass = PB.CSS.TOOLBAR;
     if (element.id === toolbarId || element.closest('#' + toolbarId) ||
         element.classList.contains(toastClass) || element.closest('.' + toastClass) ||
         element.classList.contains(toolbarClass)) {
       return;
     }
 
-    const tag = element.tagName.toLowerCase();
-
-    // ---- All elements (video, img, text, generic): CSS class only ----
-    // CSS filter: blur() on the element blurs it and all descendants visually.
-    // Works for DRM video too — DRM blocks pixel extraction (canvas API), not
-    // CSS rendering. No canvas overlay, no position injection, no DOM changes
-    // beyond the class. Uses var(--pb-radius) from :root for live radius updates.
-    const isFrosted = mode === (_BLUR_MODES.FROSTED || 'frosted');
-    if (isFrosted) ensureSvgFilter();
-
+    // ---- All elements: CSS class only ----
+    // pb-blurred provides: filter blur, user-select none, contain paint.
+    // pb-frosted adds: SVG displacement filter override (AI-resistant).
+    // Both classes needed for frosted mode — pb-blurred is the base.
     element.classList.add(BLURRED_CLASS);
-    if (isFrosted) element.classList.add(FROSTED_CLASS);
+    if (mode === PB.BLUR_MODES.FROSTED) {
+      ensureSvgFilter();
+      element.classList.add(FROSTED_CLASS);
+    }
   }
 
   /**
@@ -243,7 +235,7 @@ const PrivacyBlurEngine = (() => {
    * @param {number}  radius
    * @param {string}  [mode] - Blur mode: 'gaussian' (default) or 'frosted'
    */
-  function toggleBlur(element, radius = 10, mode) {
+  function toggleBlur(element, radius = BLUR_RADIUS, mode) {
     if (!element || !(element instanceof Element)) return;
 
     if (isBlurred(element)) {
@@ -272,13 +264,13 @@ const PrivacyBlurEngine = (() => {
    *   'frosted'. When 'frosted', elements get the pb-frosted class in addition
    *   to pb-blurred, applying an SVG displacement + Gaussian blur filter.
    */
-  function blurAllContent(radius = 10, options) {
+  function blurAllContent(radius = BLUR_RADIUS, options) {
     const cats = (options && options.categories) ? options.categories : DEFAULT_CATS;
     const thorough = !!(options && options.thoroughBlur);
-    const mode = (options && options.blurMode) || 'gaussian';
+    const mode = (options && options.blurMode) || PB.BLUR_MODES.GAUSSIAN; // Defaults to Gaussian
 
     // Inject SVG filter element when frosted mode is active
-    if (mode === (_BLUR_MODES.FROSTED || 'frosted')) {
+    if (mode === PB.BLUR_MODES.FROSTED) {
       ensureSvgFilter();
     }
 
@@ -297,7 +289,7 @@ const PrivacyBlurEngine = (() => {
     // Thorough mode: blurred unconditionally (skips the text-check gate).
     if (textCheckSelector) {
       document.querySelectorAll(textCheckSelector).forEach((el) => {
-        if (el.classList.contains(BLURRED_CLASS)) return;
+        if (isBlurred(el)) return;
         if (thorough || hasMeaningfulTextContent(el)) {
           applyBlur(el, radius, mode);
         }
@@ -306,23 +298,11 @@ const PrivacyBlurEngine = (() => {
   }
 
   /**
-   * Removes blur from every element on the page that has the blur class,
-   * including any canvas overlays and img wrappers.
+   * Removes blur from every element on the page.
    */
   function unblurAll() {
-    // Handle video elements first to cancel rAF loops
-    document.querySelectorAll(`video.${BLURRED_CLASS}`).forEach((el) => {
+    document.querySelectorAll(`.${BLURRED_CLASS}, .${FROSTED_CLASS}`).forEach((el) => {
       removeBlur(el);
-    });
-
-    // Handle all remaining blurred elements
-    document.querySelectorAll(`.${BLURRED_CLASS}`).forEach((el) => {
-      removeBlur(el);
-    });
-
-    // Clean up any frosted class remnants
-    document.querySelectorAll(`.${FROSTED_CLASS}`).forEach((el) => {
-      el.classList.remove(FROSTED_CLASS);
     });
   }
 
@@ -334,7 +314,7 @@ const PrivacyBlurEngine = (() => {
   function isBlurred(element) {
     if (!element || !(element instanceof Element)) return false;
 
-    return element.classList.contains(BLURRED_CLASS);
+    return element.classList.contains(BLURRED_CLASS) || element.classList.contains(FROSTED_CLASS);
   }
 
   /**
