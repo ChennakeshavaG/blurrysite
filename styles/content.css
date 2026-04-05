@@ -273,13 +273,6 @@
   animation: pb-toast-out 200ms ease forwards !important;
 }
 
-.pb-toast__icon {
-  all: initial;
-  font-size: 15px !important;
-  line-height: 1 !important;
-  flex-shrink: 0 !important;
-}
-
 .pb-toast__message {
   all: initial;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;

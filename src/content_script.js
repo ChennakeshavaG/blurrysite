@@ -195,7 +195,6 @@
 
   // ─── Settings helpers ────────────────────────────────────────────────────────
 
-  // mergeSettings removed — applyState handles all settings updates via resolveSettings.
 
   // ─── URL rule pattern matching ──────────────────────────────────────────────
 
@@ -370,7 +369,6 @@
     return resolved;
   }
 
-  // shortcutSettings() helper removed — SHORTCUTS shape matches handler API directly.
 
   // ─── DOM helpers ─────────────────────────────────────────────────────────────
 
@@ -494,8 +492,25 @@
 
   // ─── Message handler ──────────────────────────────────────────────────────────
 
+  // Debounce guard for toggle commands. Manifest commands (Alt+Shift+B) and JS
+  // shortcut handler both fire TOGGLE_BLUR_ALL for the same keypress — the JS
+  // handler fires synchronously, then background relays the manifest command
+  // asynchronously. Without dedup, the toggle fires twice (ON then OFF = no-op).
+  const lastToggleTime = {};
+  const TOGGLE_DEDUP_MS = 300;
+
   function handleMessage(message, _sender, sendResponse) {
     const { type } = message;
+
+    // Dedup toggle commands that fire from both manifest and JS handler
+    if (type === MSG.TOGGLE_BLUR_ALL || type === MSG.TOGGLE_PICKER || type === MSG.CLEAR_ALL_BLUR) {
+      const now = Date.now();
+      if (lastToggleTime[type] && now - lastToggleTime[type] < TOGGLE_DEDUP_MS) {
+        if (sendResponse) sendResponse({ ok: true, deduped: true });
+        return false;
+      }
+      lastToggleTime[type] = now;
+    }
 
     const alwaysAllowed = [MSG.UPDATE_SETTINGS, MSG.GET_STATUS, MSG.RESTORE];
     if (settings.ENABLED === false && !alwaysAllowed.includes(type)) {
@@ -796,9 +811,7 @@
           categories: settings.BLUR_CATEGORIES,
           thoroughBlur: settings.THOROUGH_BLUR,
         });
-        if (settings.REVEAL_MODE === 'hover') {
-          document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
-        }
+        applyRevealClasses();
         isPageBlurred = true;
       }
     } catch (_e) {

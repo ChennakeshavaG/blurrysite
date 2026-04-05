@@ -321,6 +321,13 @@ const PrivacyBlurEngine = (() => {
       return;
     }
 
+    // Never blur extension UI elements (picker toolbar, toast notifications).
+    if (element.id === 'pb-picker-toolbar' || element.closest('#pb-picker-toolbar') ||
+        element.classList.contains('pb-toast') || element.closest('.pb-toast') ||
+        element.classList.contains('pb-toolbar')) {
+      return;
+    }
+
     const tag = element.tagName.toLowerCase();
 
     // ---- VIDEO: canvas overlay approach ----
