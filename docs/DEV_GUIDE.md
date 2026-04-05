@@ -70,16 +70,41 @@ Runs as a stateless MV3 service worker. Responsibilities:
 
 ### 3. Popup UI
 
-**Files:** `popup/popup.html`, `popup/popup.js`, `popup/popup.css`
+**Files:**
+```
+popup/
+  popup.html                    ← Layout skeleton (frosted glass UI)
+  popup.css                     ← CSS custom properties, dark/light theme, frosted glass
+  popup.js                      ← Orchestrator IIFE (no window global)
+  popup_i18n.js                 ← i18n loader (window.PrivacyBlurI18n)
+  popup_configs.js              ← Settings classification: General/Advanced/Experimental (window.PrivacyBlurPopupConfigs)
+  popup_settings_renderer.js    ← Reusable POJO-driven settings component (window.PrivacyBlurSettingsRenderer)
+  fonts/
+    Inter-Regular.woff2         ← Inter font (3 weights)
+    Inter-SemiBold.woff2
+    Inter-Bold.woff2
+_locales/en/popup.json          ← English strings for i18n
+```
+
+**Architecture:** Settings are defined as POJO config arrays in `popup_configs.js`, classified into 3 tiers (General, Advanced, Experimental). The `popup_settings_renderer.js` takes these configs + a settings object and builds DOM dynamically. Same renderer is reused for URL rule overrides.
+
+**Script load order** (in popup.html):
+```
+src/constants.js → popup_i18n.js → popup_configs.js → popup_settings_renderer.js → popup.js
+```
 
 Opened when the user clicks the toolbar icon. Flow:
 ```
 popup.js init()
+├── initTheme() — apply dark/light mode from storage or prefers-color-scheme
+├── I18n.init() — load English strings (+ browser locale if available)
 ├── chrome.tabs.query() — find the active http/https tab
 ├── bgMessage(GET_SETTINGS) — load settings from background
-├── bgMessage(GET_SELECTORS) — load blur list for this hostname
-├── Render UI (settings, category toggles, blur list)
-└── wireControls() — attach click/change listeners to all buttons
+├── bgMessage(GET_RULES) — load URL rules
+├── wireControls() — attach event listeners
+├── Renderer.renderSection() — build General/Advanced/Experimental from config POJOs
+├── tabMessage(GET_STATUS) — query actual blur count from tab
+└── chrome.storage.onChanged listener — keep UI in sync with external changes
 ```
 
 Popup communicates via:
@@ -369,9 +394,14 @@ privacyblur/
 │   ├── picker.js           ← Interactive hover-and-click element picker
 │   └── content_script.js   ← Orchestrator: binds modules, handles messages, batched observer
 ├── popup/
-│   ├── popup.html          ← Popup UI markup (settings + category toggles)
-│   ├── popup.js            ← Popup controller: settings, categories, blur list
-│   └── popup.css           ← Dark theme styles
+│   ├── popup.html                  ← Popup layout (frosted glass UI)
+│   ├── popup.js                    ← Popup orchestrator IIFE
+│   ├── popup.css                   ← CSS custom properties, dark/light theme
+│   ├── popup_i18n.js               ← i18n loader IIFE
+│   ├── popup_configs.js            ← Settings classification (General/Advanced/Experimental)
+│   ├── popup_settings_renderer.js  ← Reusable POJO-driven settings component
+│   └── fonts/                      ← Inter font woff2 files
+├── _locales/en/popup.json          ← English strings for i18n
 ├── styles/
 │   └── content.css         ← Injected page styles (pb-blurred, pb-ancestor-reveal, etc.)
 ├── tests/

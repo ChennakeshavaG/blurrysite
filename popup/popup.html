@@ -1,287 +1,212 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PrivacyBlur</title>
+  <title>Privacy Blur</title>
   <link rel="stylesheet" href="popup.css" />
   <script src="../src/constants.js" defer></script>
+  <script src="popup_i18n.js" defer></script>
+  <script src="popup_configs.js" defer></script>
+  <script src="popup_settings_renderer.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
 <body>
+  <!-- ===== DYNAMIC BLUR BACKGROUND ===== -->
+  <div class="pb-bg" id="pbBg" aria-hidden="true"></div>
+
   <!-- ===== HEADER ===== -->
-  <header class="header">
-    <div class="header__brand">
-      <svg class="header__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z" fill="#f59e0b" opacity="0.9"/>
-        <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="#1a1a2e"/>
-        <circle cx="12" cy="12" r="2" fill="#1a1a2e"/>
-        <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+  <header class="pb-header pb-frost">
+    <div class="pb-header__brand">
+      <svg class="pb-header__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" fill="#f59e0b" opacity="0.3"/>
+        <circle cx="12" cy="12" r="6" fill="#f59e0b" opacity="0.5"/>
+        <circle cx="12" cy="12" r="3" fill="#f59e0b" opacity="0.8"/>
       </svg>
-      <span class="header__title">PrivacyBlur</span>
+      <span class="pb-header__title" data-i18n="popup_title">Privacy Blur</span>
     </div>
-    <label class="toggle" title="Enable or disable PrivacyBlur">
-      <input type="checkbox" id="enableToggle" />
-      <span class="toggle__track">
-        <span class="toggle__thumb"></span>
-      </span>
-      <span class="toggle__label" id="enableLabel">On</span>
-    </label>
+    <div class="pb-header__controls">
+      <button class="pb-header__theme-btn" id="themeToggle" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
+      <label class="pb-toggle pb-toggle--master" title="Enable or disable Privacy Blur">
+        <input type="checkbox" id="enableToggle" />
+        <span class="pb-toggle__track"><span class="pb-toggle__thumb"></span></span>
+      </label>
+      <span class="pb-toggle__label" id="enableLabel">On</span>
+    </div>
   </header>
 
+  <!-- ===== ACTION BAR ===== -->
+  <section class="pb-actions">
+    <button class="pb-actions__btn pb-frost pb-actions__btn--blur" id="blurAllBtn" data-active="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      <span data-i18n="btn_blur_all">Blur All</span>
+    </button>
+    <button class="pb-actions__btn pb-frost pb-actions__btn--clear" id="clearAllBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+      <span data-i18n="btn_clear_all">Clear All</span>
+    </button>
+    <button class="pb-actions__btn pb-frost pb-actions__btn--picker" id="pickerBtn" data-active="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span data-i18n="btn_picker">Picker</span>
+    </button>
+  </section>
+
+  <!-- ===== SITE INFO ===== -->
+  <section class="pb-site-info">
+    <span class="pb-site-info__host" id="hostname">--</span>
+    <span class="pb-site-info__count pb-site-info__count--zero" id="blurCount">0</span>
+    <span class="pb-site-info__rule" id="activeRule"></span>
+  </section>
+
+  <!-- ===== GENERAL (expanded by default) ===== -->
+  <section class="pb-section" id="sectionGeneral">
+    <button class="pb-section__header pb-frost" id="generalToggle" aria-expanded="true" aria-controls="bodyGeneral">
+      <span data-i18n="section_general">General</span>
+      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="pb-section__body is-open" id="bodyGeneral">
+      <!-- Populated by Renderer.renderSection() -->
+    </div>
+  </section>
+
+  <!-- ===== ADVANCED (collapsed) ===== -->
+  <section class="pb-section" id="sectionAdvanced">
+    <button class="pb-section__header pb-frost" id="advancedToggle" aria-expanded="false" aria-controls="bodyAdvanced">
+      <div class="pb-section__header-left">
+        <span data-i18n="section_advanced">Advanced</span>
+        <svg class="pb-section__gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </div>
+      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="pb-section__body" id="bodyAdvanced">
+      <!-- Populated by Renderer.renderSection() -->
+    </div>
+  </section>
+
+  <!-- ===== EXPERIMENTAL (collapsed) ===== -->
+  <section class="pb-section" id="sectionExperimental">
+    <button class="pb-section__header pb-frost" id="experimentalToggle" aria-expanded="false" aria-controls="bodyExperimental">
+      <div class="pb-section__header-left">
+        <span data-i18n="section_experimental">Experimental</span>
+        <svg class="pb-section__gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </div>
+      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="pb-section__body" id="bodyExperimental">
+      <!-- Populated by Renderer.renderSection() -->
+    </div>
+  </section>
+
+  <!-- ===== URL RULES (in General section conceptually, separate accordion) ===== -->
+  <section class="pb-section" id="sectionRules">
+    <button class="pb-section__header pb-frost" id="rulesToggle" aria-expanded="false" aria-controls="bodyRules">
+      <span>URL Rules</span>
+      <span class="pb-list-count" id="rulesCount">0</span>
+      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="pb-section__body" id="bodyRules">
+      <p class="pb-rules-hint" style="font-size:10px;color:var(--pb-text-dim);margin-bottom:6px" data-i18n="rule_hint">Per-URL settings overrides. First matching rule wins.</p>
+      <ul class="pb-rules-list" id="rulesList"></ul>
+      <p class="pb-rules-empty" id="rulesEmpty" data-i18n="rule_no_rules">No URL rules configured.</p>
+      <button class="pb-btn pb-btn--ghost pb-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add">+ Add Rule</button>
+    </div>
+  </section>
+
+  <!-- ===== BLURRED ELEMENTS ===== -->
+  <section class="pb-section" id="sectionBlurred">
+    <div class="pb-section__header" style="cursor:default;padding:var(--pb-spacing-sm) var(--pb-spacing-md)">
+      <span>Blurred Elements</span>
+      <span class="pb-list-count" id="blurListCount">0</span>
+    </div>
+    <div class="pb-blur-list-wrapper">
+      <ul class="pb-blur-list" id="blurList"></ul>
+      <p class="pb-blur-empty" id="blurEmpty">No blurred elements on this page.</p>
+    </div>
+  </section>
+
   <!-- ===== TOAST ===== -->
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-  <!-- ===== PAGE STATUS ===== -->
-  <section class="card" id="statusCard">
-    <div class="status-row">
-      <div class="status-info">
-        <span class="status-hostname" id="hostname">—</span>
-        <span class="status-badge" id="blurCount" title="Blurred elements on this page">0</span>
-      </div>
-      <div class="status-actions">
-        <button class="btn btn--primary" id="blurAllBtn" title="Blur all visible text on the page">Blur All</button>
-        <button class="btn btn--ghost" id="clearPageBtn" title="Remove all blurs on this page">Clear Page</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== SHORTCUTS ===== -->
-  <section class="card">
-    <div class="card__header" id="shortcutsHeader">
-      <span class="card__title">Keyboard Shortcuts</span>
-    </div>
-    <ul class="shortcuts-list">
-      <li class="shortcut-item">
-        <span class="shortcut-label">Blur all</span>
-        <span class="shortcut-keys" id="shortcutDisplay-TOGGLE_BLUR_ALL"></span>
-        <button class="shortcut-customize" data-shortcut="TOGGLE_BLUR_ALL" title="Customize shortcut">customize</button>
-      </li>
-      <li class="shortcut-item">
-        <span class="shortcut-label">Picker mode</span>
-        <span class="shortcut-keys" id="shortcutDisplay-TOGGLE_PICKER"></span>
-        <button class="shortcut-customize" data-shortcut="TOGGLE_PICKER" title="Customize shortcut">customize</button>
-      </li>
-      <li class="shortcut-item">
-        <span class="shortcut-label">Clear page</span>
-        <span class="shortcut-keys" id="shortcutDisplay-CLEAR_ALL"></span>
-        <button class="shortcut-customize" data-shortcut="CLEAR_ALL" title="Customize shortcut">customize</button>
-      </li>
-    </ul>
-  </section>
+  <div class="pb-toast pb-frost" id="toast" role="status" aria-live="polite"></div>
 
   <!-- ===== SHORTCUT CAPTURE MODAL ===== -->
-  <div class="modal-overlay" id="shortcutModal" hidden>
-    <div class="modal">
-      <div class="modal__header">Customize Shortcut</div>
-      <div class="modal__body">
-        <p class="modal__step">
-          Hold your <strong>primary modifier</strong>, then press additional keys
-        </p>
-        <div class="modal__capture" id="captureDisplay">Press a key combo...</div>
+  <div class="pb-modal-overlay" id="shortcutModal" hidden>
+    <div class="pb-modal pb-frost">
+      <div class="pb-modal__header" data-i18n="shortcut_modal_title">Customize Shortcut</div>
+      <div class="pb-modal__body">
+        <p style="font-size:11px;color:var(--pb-text);margin-bottom:6px" data-i18n="shortcut_modal_prompt">Hold a modifier, then press additional keys</p>
+        <div class="pb-capture pb-capture--listening" id="captureDisplay" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
       </div>
-      <div class="modal__footer">
-        <button class="btn btn--ghost btn--sm" id="modalCancel">Cancel</button>
-        <button class="btn btn--ghost btn--sm" id="modalReset">Reset default</button>
-        <button class="btn btn--primary btn--sm" id="modalSave" disabled>Save</button>
+      <div class="pb-modal__footer">
+        <button class="pb-btn pb-btn--ghost pb-btn--sm" id="scModalCancel">Cancel</button>
+        <button class="pb-btn pb-btn--ghost pb-btn--sm" id="scModalReset" data-i18n="shortcut_reset">Reset default</button>
+        <button class="pb-btn pb-btn--primary pb-btn--sm" id="scModalSave" disabled>Save</button>
       </div>
     </div>
   </div>
 
-  <!-- ===== SETTINGS (COLLAPSIBLE) ===== -->
-  <section class="card card--collapsible" id="settingsCard">
-    <button class="card__header card__header--toggle" id="settingsToggle" aria-expanded="false" aria-controls="settingsBody">
-      <span class="card__title">Settings</span>
-      <svg class="card__chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
-    <div class="card__body" id="settingsBody">
-      <div class="setting-row">
-        <label class="setting-label" for="blurRadius">
-          Blur radius
-          <span class="setting-value" id="blurRadiusValue">8px</span>
-        </label>
-        <input
-          class="slider"
-          type="range"
-          id="blurRadius"
-          min="2"
-          max="20"
-          step="1"
-          value="8"
-          aria-label="Blur radius in pixels"
-        />
-      </div>
-
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="transitionToggle">Smooth transition</label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="transitionToggle" />
-          <span class="toggle__track">
-            <span class="toggle__thumb"></span>
-          </span>
-        </label>
-      </div>
-
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="revealModeSelect">Reveal mode</label>
-        <select class="select-sm" id="revealModeSelect" aria-label="How to reveal blurred content">
-          <option value="click">Click to peek</option>
-          <option value="hover">Hover to peek</option>
-          <option value="none">Disabled</option>
-        </select>
-      </div>
-
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="highlightColor">Picker highlight</label>
-        <input type="color" id="highlightColor" class="color-picker" value="#f59e0b" aria-label="Picker highlight color" />
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== BLUR CATEGORIES (COLLAPSIBLE) ===== -->
-  <section class="card card--collapsible" id="categoriesCard">
-    <button class="card__header card__header--toggle" id="categoriesToggle" aria-expanded="false" aria-controls="categoriesBody">
-      <span class="card__title">Blur Categories</span>
-      <svg class="card__chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
-    <div class="card__body" id="categoriesBody">
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="thoroughBlur">Thorough blur <span class="setting-hint">Blur all matched elements, even empty ones</span></label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="thoroughBlur" />
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </label>
-      </div>
-      <hr class="setting-divider" />
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="catText">Text <span class="setting-hint">Headings, paragraphs, links</span></label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="catText" />
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </label>
-      </div>
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="catMedia">Media <span class="setting-hint">Images, video, canvas</span></label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="catMedia" />
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </label>
-      </div>
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="catForm">Form <span class="setting-hint">Inputs, textareas, buttons</span></label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="catForm" />
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </label>
-      </div>
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="catTable">Table <span class="setting-hint">Cells and captions</span></label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="catTable" />
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </label>
-      </div>
-      <div class="setting-row setting-row--inline">
-        <label class="setting-label" for="catStructure">Structure <span class="setting-hint">Sections, articles, containers</span></label>
-        <label class="toggle toggle--sm">
-          <input type="checkbox" id="catStructure" />
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </label>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== URL RULES (COLLAPSIBLE) ===== -->
-  <section class="card card--collapsible" id="rulesCard">
-    <button class="card__header card__header--toggle" id="rulesToggle" aria-expanded="false" aria-controls="rulesBody">
-      <span class="card__title">URL Rules</span>
-      <span class="list-count" id="rulesCount">0</span>
-      <svg class="card__chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
-    <div class="card__body" id="rulesBody">
-      <p class="setting-hint" style="margin-bottom:8px">Per-URL settings overrides. First matching rule wins.</p>
-      <ul class="rules-list" id="rulesList" aria-label="URL-based blur rules">
-        <!-- Populated by popup.js -->
-      </ul>
-      <p class="rules-list-empty" id="rulesListEmpty">No URL rules configured.</p>
-      <button class="btn btn--ghost btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%">+ Add Rule</button>
-    </div>
-  </section>
-
   <!-- ===== RULE EDITOR MODAL ===== -->
-  <div class="modal-overlay" id="ruleModal" hidden>
-    <div class="modal">
-      <div class="modal__header" id="ruleModalTitle">Add URL Rule</div>
-      <div class="modal__body">
-        <div class="setting-row">
-          <label class="setting-label" for="ruleName">Name</label>
-          <input type="text" class="input-sm" id="ruleName" placeholder="e.g. Banking sites" />
+  <div class="pb-modal-overlay" id="ruleModal" hidden>
+    <div class="pb-modal pb-frost">
+      <div class="pb-modal__header" id="ruleModalTitle" data-i18n="rule_add_title">Add URL Rule</div>
+      <div class="pb-modal__body">
+        <div class="pb-setting" style="flex-wrap:wrap">
+          <label class="pb-setting__label" for="ruleName" data-i18n="rule_name">Name</label>
+          <input type="text" class="pb-input" id="ruleName" placeholder="e.g. Banking sites" style="margin-top:4px" />
         </div>
-        <div class="setting-row">
-          <label class="setting-label" for="rulePattern">URL Pattern</label>
-          <input type="text" class="input-sm" id="rulePattern" placeholder="*.bank.com/*" />
+        <div class="pb-setting" style="flex-wrap:wrap;margin-top:8px">
+          <label class="pb-setting__label" for="rulePattern" data-i18n="rule_pattern">URL Pattern</label>
+          <input type="text" class="pb-input" id="rulePattern" placeholder="*.bank.com/*" style="margin-top:4px" />
         </div>
-        <div class="setting-row setting-row--inline">
-          <label class="setting-label" for="rulePatternType">Pattern type</label>
-          <select class="select-sm" id="rulePatternType">
+        <div class="pb-setting" style="margin-top:8px">
+          <label class="pb-setting__label" for="rulePatternType" data-i18n="rule_pattern_type">Pattern type</label>
+          <select class="pb-select" id="rulePatternType">
             <option value="wildcard">Wildcard</option>
             <option value="regex">Regex</option>
           </select>
         </div>
-        <hr class="setting-divider" />
-        <p class="setting-hint" style="margin-bottom:6px">Settings overrides for matching URLs:</p>
-        <div class="setting-row setting-row--inline">
-          <label class="setting-label" for="ruleFormToggle">Blur forms</label>
-          <label class="toggle toggle--sm">
-            <input type="checkbox" id="ruleFormToggle" />
-            <span class="toggle__track"><span class="toggle__thumb"></span></span>
-          </label>
-        </div>
-        <div class="setting-row setting-row--inline">
-          <label class="setting-label" for="ruleThoroughToggle">Thorough blur</label>
-          <label class="toggle toggle--sm">
-            <input type="checkbox" id="ruleThoroughToggle" />
-            <span class="toggle__track"><span class="toggle__thumb"></span></span>
-          </label>
-        </div>
-        <div class="setting-row">
-          <label class="setting-label" for="ruleBlurRadius">
-            Blur radius <span class="setting-value" id="ruleBlurRadiusValue">8px</span>
-          </label>
-          <input class="slider" type="range" id="ruleBlurRadius" min="2" max="20" step="1" value="8" />
+        <hr style="border:none;border-top:1px solid var(--pb-border);margin:8px 0" />
+        <p style="font-size:10px;color:var(--pb-text-dim);margin-bottom:6px" data-i18n="rule_overrides">Settings overrides for matching URLs</p>
+        <div id="ruleOverridesContainer">
+          <!-- Populated by Renderer.renderSection() in ruleMode -->
         </div>
       </div>
-      <div class="modal__footer">
-        <button class="btn btn--ghost btn--sm" id="ruleModalCancel">Cancel</button>
-        <button class="btn btn--primary btn--sm" id="ruleModalSave">Save</button>
+      <div class="pb-modal__footer">
+        <button class="pb-btn pb-btn--ghost pb-btn--sm" id="ruleModalCancel">Cancel</button>
+        <button class="pb-btn pb-btn--primary pb-btn--sm" id="ruleModalSave">Save</button>
       </div>
     </div>
   </div>
 
-  <!-- ===== BLURRED ELEMENTS LIST ===== -->
-  <section class="card">
-    <div class="card__header">
-      <span class="card__title">Blurred Elements</span>
-      <span class="list-count" id="listCount">0</span>
-    </div>
-    <div class="blur-list-wrapper">
-      <ul class="blur-list" id="blurList" aria-label="Blurred elements on current page">
-        <!-- Populated by popup.js -->
-      </ul>
-      <p class="blur-list-empty" id="blurListEmpty">No blurred elements on this page.</p>
-    </div>
-  </section>
-
   <!-- ===== FOOTER ===== -->
-  <footer class="footer">
-    <button class="footer__link" id="clearAllSitesBtn">Clear all sites</button>
-    <span class="footer__version" id="extVersion">v1.0.0</span>
+  <footer class="pb-footer pb-frost">
+    <button class="pb-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all">Clear all sites</button>
+    <span class="pb-footer__version" id="extVersion">v1.0.0</span>
   </footer>
 </body>
 </html>

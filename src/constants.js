@@ -239,7 +239,7 @@ const PrivacyBlur = (() => {
 
     // Top-level scalars: type-check and range-check
     result.BLUR_RADIUS = (typeof settings.BLUR_RADIUS === 'number' &&
-      settings.BLUR_RADIUS >= 2 && settings.BLUR_RADIUS <= 20)
+      settings.BLUR_RADIUS >= 2 && settings.BLUR_RADIUS <= 30)
       ? settings.BLUR_RADIUS : defaults.BLUR_RADIUS;
 
     result.TRANSITION_DURATION = (typeof settings.TRANSITION_DURATION === 'number' &&
