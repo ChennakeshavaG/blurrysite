@@ -26,7 +26,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/constants.js` | `globalThis.PrivacyBlur` | Message types (`STORAGE.*`, `COMMAND.*`, `POPUP.*`), `DEFAULTS`, `isValid()`, `categoryOf()` |
 | `src/selector_utils.js` | `window.PrivacyBlurSelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
-| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `CATEGORY_SELECTORS` |
+| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `refreshBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `CATEGORY_SELECTORS` |
 | `src/shortcut_handler.js` | `window.PrivacyBlurShortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
 | `src/picker.js` | `window.PrivacyBlurPicker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all globals via aliases after DOM ready |

@@ -89,12 +89,14 @@
       for (const entry of entries) {
         const el = entry.target;
         if (entry.isIntersecting) {
-          // Back on screen — re-apply blur
+          // Back on screen — re-apply blur + refresh text wrappers
+          // (content may have changed while off-screen via SPA re-renders)
           if (offscreenElements.has(el)) {
             offscreenElements.delete(el);
             el.classList.add(CLS.BLURRED);
             if (settings.BLUR_MODE === BM.FROSTED) el.classList.add(CLS.FROSTED);
             if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
+            Engine.refreshBlur(el);
           }
         } else {
           // Off screen — remove blur to free compositing layer
@@ -148,19 +150,33 @@
 
   // CHUNK_SIZE read from settings (configurable, default 50)
   let pendingNodes = [];
+  /** Set of already-blurred elements whose content changed and need text-wrapper refresh. */
+  let pendingRefresh = new Set();
   let processingScheduled = false;
 
   function processBlurChunk() {
     processingScheduled = false;
-    // Capture state at entry — isPageBlurred may toggle mid-chunk via a
-    // message handler running between rAF callbacks.
     const wasPageBlurred = isPageBlurred;
-    if (!wasPageBlurred || pendingNodes.length === 0) {
+    if (!wasPageBlurred || (pendingNodes.length === 0 && pendingRefresh.size === 0)) {
       pendingNodes = [];
+      pendingRefresh.clear();
       return;
     }
 
     const chunkSize = settings.PERFORMANCE.CHUNK_SIZE || 50;
+
+    // 1. Process refresh queue first — already-blurred elements with changed content
+    if (pendingRefresh.size > 0) {
+      let refreshCount = 0;
+      for (const el of pendingRefresh) {
+        if (refreshCount >= chunkSize) break;
+        if (el.isConnected) Engine.refreshBlur(el);
+        pendingRefresh.delete(el);
+        refreshCount++;
+      }
+    }
+
+    // 2. Process new nodes queue
     const chunk = pendingNodes.splice(0, chunkSize);
 
     for (let i = 0; i < chunk.length; i++) {
@@ -176,7 +192,7 @@
       }
     }
 
-    if (pendingNodes.length > 0) {
+    if (pendingNodes.length > 0 || pendingRefresh.size > 0) {
       processingScheduled = true;
       requestAnimationFrame(processBlurChunk);
     }
@@ -209,35 +225,64 @@
       if (!isPageBlurred) return;
 
       for (const mutation of mutations) {
-        // Handle new nodes added to the DOM
+        // ── childList: new elements added or children replaced ────────────
         if (mutation.type === 'childList') {
+          // New elements: queue for blur
           for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            // Queue the node itself. For descendants, use the cached combined
-            // selector instead of querySelectorAll('*') to avoid quadratic
-            // complexity when large subtrees are inserted.
-            pendingNodes.push(node);
+            // Skip our own text wrappers to prevent infinite loop
+            if (node.classList && node.classList.contains(CLS.TEXT_WRAPPER)) continue;
+
+            if (Engine.isBlurred(node)) {
+              // Element re-inserted with blur class still on — refresh text wrappers
+              pendingRefresh.add(node);
+            } else {
+              pendingNodes.push(node);
+            }
             if (observerSelector) {
               const children = node.querySelectorAll(observerSelector);
               for (let i = 0; i < children.length; i++) {
-                pendingNodes.push(children[i]);
+                const child = children[i];
+                if (Engine.isBlurred(child)) {
+                  pendingRefresh.add(child);
+                } else {
+                  pendingNodes.push(child);
+                }
               }
+            }
+          }
+
+          // If a blurred parent had children replaced (innerHTML swap),
+          // its text wrappers are now stale — queue for refresh.
+          // The mutation.target is the parent whose children changed.
+          if (mutation.removedNodes.length > 0) {
+            const parent = mutation.target;
+            if (parent && parent.nodeType === Node.ELEMENT_NODE &&
+                parent.isConnected && Engine.isBlurred(parent)) {
+              pendingRefresh.add(parent);
             }
           }
         }
 
-        // Handle text content changes in existing elements (SPA re-renders)
-        // When a SPA like YouTube updates text in place, the parent element
-        // may already exist but now has new content that should be blurred.
+        // ── characterData: text content changed in place ─────────────────
+        // SPA frameworks often update textContent/innerText on existing nodes.
+        // Walk up to the nearest blurred ancestor and refresh its wrappers.
         if (mutation.type === 'characterData') {
-          const parent = mutation.target.parentElement;
-          if (parent && parent.isConnected && !Engine.isBlurred(parent)) {
-            pendingNodes.push(parent);
+          let el = mutation.target.parentElement;
+          // Skip our own text wrapper — go to its parent
+          if (el && el.classList && el.classList.contains(CLS.TEXT_WRAPPER)) {
+            el = el.parentElement;
+          }
+          if (el && el.isConnected) {
+            if (Engine.isBlurred(el)) {
+              pendingRefresh.add(el);
+            } else {
+              pendingNodes.push(el);
+            }
           }
         }
 
-        // Handle attribute changes that may indicate re-rendered content
-        // (e.g. SPA frameworks swapping aria-label, title, or data attributes)
+        // ── attributes: SPA framework re-render indicators ───────────────
         if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
           const el = mutation.target;
           if (el.isConnected && !Engine.isBlurred(el)) {
@@ -246,7 +291,7 @@
         }
       }
 
-      if (!processingScheduled && pendingNodes.length > 0) {
+      if (!processingScheduled && (pendingNodes.length > 0 || pendingRefresh.size > 0)) {
         processingScheduled = true;
         requestAnimationFrame(processBlurChunk);
       }
@@ -256,8 +301,7 @@
       childList: true,
       subtree: true,
       characterData: true,
-      attributes: true,
-      attributeFilter: ['title', 'aria-label', 'alt', 'placeholder', 'value'],
+      characterDataOldValue: false,
     });
   }
 
@@ -267,6 +311,7 @@
       domObserver = null;
     }
     pendingNodes = [];
+    pendingRefresh.clear();
     processingScheduled = false;
   }
 
@@ -644,6 +689,7 @@
           blurredElementCount = 0;
           offscreenElements.clear();
           pendingNodes = [];
+          pendingRefresh.clear();
           isPageBlurred = false;
         } else {
           // Ensure observer is running to catch SPA re-renders
@@ -891,6 +937,7 @@
       stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
       offscreenElements.clear();
       pendingNodes = []; // Clear stale queued nodes before re-blur
+      pendingRefresh.clear();
       blurredElementCount = 0;
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {

@@ -475,6 +475,45 @@ const PrivacyBlurEngine = (() => {
   }
 
   /**
+   * Refreshes blur on an already-blurred element whose content has changed.
+   * Called when SPA frameworks (YouTube, React, etc.) re-render content inside
+   * a blurred element — the blur class is still there but text wrappers are stale.
+   *
+   * Unlike applyBlur (which is idempotent and skips blurred elements), this:
+   * 1. Cleans up old text wrappers
+   * 2. Re-wraps any new text nodes
+   * 3. Leaves the blur class and other state intact
+   *
+   * @param {Element} element - The already-blurred DOM element to refresh
+   */
+  function refreshBlur(element) {
+    if (!element || !(element instanceof Element)) return;
+    if (!isBlurred(element)) return; // Only refresh already-blurred elements
+
+    const tag = element.tagName.toLowerCase();
+    // Video and img don't use text wrappers — nothing to refresh
+    if (tag === 'video' || tag === 'img') return;
+
+    // Clean up stale text wrappers
+    const oldWrappers = element.querySelectorAll('.' + TEXT_WRAPPER_CLASS);
+    oldWrappers.forEach((wrapper) => {
+      const parent = wrapper.parentNode;
+      while (wrapper.firstChild) {
+        parent.insertBefore(wrapper.firstChild, wrapper);
+      }
+      parent.removeChild(wrapper);
+    });
+
+    // Re-wrap if there is now meaningful text
+    if (hasMeaningfulTextContent(element)) {
+      const bgImage = window.getComputedStyle(element).backgroundImage;
+      if (!(bgImage && bgImage !== 'none' && tag !== 'body' && tag !== 'html')) {
+        wrapTextNodes(element);
+      }
+    }
+  }
+
+  /**
    * Toggles blur on an element: applies if not blurred, removes if blurred.
    * @param {Element} element
    * @param {number}  radius
@@ -649,6 +688,7 @@ const PrivacyBlurEngine = (() => {
   // -------------------------------------------------------------------------
   return {
     applyBlur,
+    refreshBlur,
     removeBlur,
     toggleBlur,
     blurAllContent,
