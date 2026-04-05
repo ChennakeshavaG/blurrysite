@@ -108,6 +108,7 @@ const Constants = (() => {
   const CSS = Object.freeze({
     BLURRED:          'pb-blurred',
     FROSTED:          'pb-frosted',
+    SUSPENDED:        'pb-suspended',
     CANVAS_OVERLAY:   'pb-canvas-overlay',
     TEXT_WRAPPER:     'pb-text-node-wrapper',
     REVEAL_ON_HOVER:  'pb-reveal-on-hover',

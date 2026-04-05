@@ -35,6 +35,19 @@
      stacking context so the perf benefit is redundant. */
 }
 
+/* ─── Off-screen suspension (IntersectionObserver GPU optimization) ─────────── */
+
+/**
+ * IO adds pb-suspended to off-screen elements to free GPU compositing layers.
+ * pb-blurred stays on the element (site frameworks don't see a class removal).
+ * When the element scrolls back into view, IO removes pb-suspended and the
+ * blur re-activates from the still-present pb-blurred filter rule.
+ */
+.pb-blurred.pb-suspended {
+  filter: none !important;
+  transition: none !important;
+}
+
 /* ─── Frosted glass mode (AI-resistant SVG displacement + blur) ────────────── */
 
 /**

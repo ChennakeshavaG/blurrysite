@@ -85,24 +85,24 @@
 
     visibilityObserver = new IntersectionObserver((entries) => {
       _ioCallCount++;
-      let blurred = 0, unblurred = 0;
+      let suspended = 0, resumed = 0;
       for (const entry of entries) {
         const el = entry.target;
         if (entry.isIntersecting) {
-          if (!Engine.isBlurred(el)) {
-            Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
-            if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
-            blurred++;
+          // Back on screen — remove suspend override, blur re-activates via pb-blurred
+          if (el.classList.contains(CLS.SUSPENDED)) {
+            el.classList.remove(CLS.SUSPENDED);
+            resumed++;
           }
         } else {
-          if (Engine.isBlurred(el)) {
-            Engine.removeBlur(el);
-            el.classList.remove(CLS.REVEAL_ON_HOVER);
-            unblurred++;
+          // Off screen — suspend blur to free GPU layer. pb-blurred stays.
+          if (Engine.isBlurred(el) && !el.classList.contains(CLS.SUSPENDED)) {
+            el.classList.add(CLS.SUSPENDED);
+            suspended++;
           }
         }
       }
-      log.log(`IO #${_ioCallCount}: ${entries.length} entries, +${blurred} blurred, -${unblurred} unblurred`);
+      log.log(`IO #${_ioCallCount}: ${entries.length} entries, +${resumed} resumed, -${suspended} suspended`);
     }, {
       rootMargin: '200px',
     });
