@@ -204,19 +204,111 @@
   /** Max pattern string length to prevent ReDoS and storage abuse. */
   const MAX_PATTERN_LENGTH = 500;
 
+  // ─── URL pattern matching (parse-then-match) ──────────────────────────────
+  // Decomposes both the page URL and the user's pattern into parts
+  // (hostname, path, protocol, port) and matches each with domain-boundary
+  // awareness. Prevents "notexample.com" matching a pattern for "example.com".
+  //
+  // User input heuristics:
+  //   "example.com"          → hostname match (includes subdomains), any path
+  //   "example.com/app*"     → hostname + path prefix with wildcard
+  //   "*.example.com"        → subdomains only, any path
+  //   "example.com:8080"     → hostname + specific port
+  //   "https://example.com"  → scheme + hostname
+  //   Full URL with path     → each component matched separately
+  //
+  // Hash (#fragment) is always excluded from matching.
+  // Query string (?key=val) is excluded unless explicitly in the pattern.
+
   /**
-   * Convert a wildcard pattern (* = any chars) to a RegExp.
-   * Escapes all regex special chars (including ?), then replaces * with .*.
+   * Parse a user-entered pattern into structured parts.
+   * @returns {{ scheme: string|null, hostname: string, port: string|null, path: string|null, subdomainWildcard: boolean }}
    */
-  function wildcardToRegex(pattern) {
-    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('^' + escaped.replace(/\*/g, '.*') + '$', 'i');
+  function parsePattern(pattern) {
+    let scheme = null;
+    let rest = pattern;
+
+    // Extract scheme if present
+    const schemeMatch = rest.match(/^(https?):\/\//i);
+    if (schemeMatch) {
+      scheme = schemeMatch[1].toLowerCase();
+      rest = rest.slice(schemeMatch[0].length);
+    } else if (rest.startsWith('*://')) {
+      rest = rest.slice(4); // explicit any-scheme
+    }
+
+    // Check for subdomain wildcard: *.example.com
+    let subdomainWildcard = false;
+    if (rest.startsWith('*.')) {
+      subdomainWildcard = true;
+      rest = rest.slice(2);
+    }
+
+    // Split hostname from path at the first /
+    let hostPart, pathPart = null;
+    const slashIdx = rest.indexOf('/');
+    if (slashIdx >= 0) {
+      hostPart = rest.slice(0, slashIdx);
+      pathPart = rest.slice(slashIdx); // includes leading /
+    } else {
+      hostPart = rest;
+    }
+
+    // Extract port from hostname
+    let port = null;
+    const colonIdx = hostPart.lastIndexOf(':');
+    if (colonIdx >= 0) {
+      const maybPort = hostPart.slice(colonIdx + 1);
+      if (/^\d+$/.test(maybPort)) {
+        port = maybPort;
+        hostPart = hostPart.slice(0, colonIdx);
+      }
+    }
+
+    return {
+      scheme,
+      hostname: hostPart.toLowerCase(),
+      port,
+      path: pathPart,
+      subdomainWildcard,
+    };
+  }
+
+  /**
+   * Check if pageHostname matches a pattern hostname with domain-boundary awareness.
+   * "example.com" matches "example.com" and "sub.example.com" (includes subdomains).
+   * Subdomain wildcard "*.example.com" matches "sub.example.com" but NOT "example.com".
+   */
+  function hostnameMatches(pageHost, patternHost, subdomainWildcard) {
+    if (subdomainWildcard) {
+      // *.example.com → must be a subdomain, not the root
+      return pageHost.endsWith('.' + patternHost);
+    }
+    // example.com → matches exact OR any subdomain
+    return pageHost === patternHost || pageHost.endsWith('.' + patternHost);
+  }
+
+  /**
+   * Check if pagePath matches a pattern path with wildcard support.
+   * "/*" or null → any path. "/app*" → starts with /app.
+   */
+  function pathMatches(pagePath, patternPath) {
+    if (!patternPath || patternPath === '/' || patternPath === '/*') return true;
+
+    // Remove trailing * for prefix matching
+    if (patternPath.endsWith('*')) {
+      const prefix = patternPath.slice(0, -1);
+      return pagePath.startsWith(prefix);
+    }
+
+    // Exact path match (with or without trailing slash tolerance)
+    return pagePath === patternPath || pagePath === patternPath + '/';
   }
 
   /**
    * Tests whether a URL matches a rule's pattern.
-   * @param {string} url         - Full page URL
-   * @param {string} pattern     - Wildcard or regex string
+   * @param {string} url         - Full page URL (location.href)
+   * @param {string} pattern     - User-entered pattern string
    * @param {string} patternType - 'wildcard' | 'regex'
    * @returns {boolean}
    */
@@ -224,18 +316,35 @@
     if (!pattern || typeof pattern !== 'string') return false;
     if (pattern.length > MAX_PATTERN_LENGTH) return false;
 
+    // Regex mode: match against URL without hash
+    if (patternType === 'regex') {
+      try {
+        const urlNoHash = url.replace(/#.*$/, '');
+        return new RegExp(pattern, 'i').test(urlNoHash);
+      } catch (_e) {
+        return false;
+      }
+    }
+
+    // Wildcard mode: parse-then-match
     try {
-      if (patternType === 'regex') {
-        return new RegExp(pattern, 'i').test(url);
-      }
-      // For wildcard: if the pattern doesn't start with a protocol or *,
-      // prepend * so "cliq.zoho.in/*" matches "https://cliq.zoho.in/page".
-      // Users naturally type domain patterns without the protocol prefix.
-      let wp = pattern;
-      if (!/^(\*|https?:\/\/)/.test(wp)) {
-        wp = '*' + wp;
-      }
-      return wildcardToRegex(wp).test(url);
+      const parsed = new URL(url);
+      const pat = parsePattern(pattern);
+
+      // Scheme check (only if user specified a protocol)
+      if (pat.scheme && parsed.protocol !== pat.scheme + ':') return false;
+
+      // Hostname check with domain boundary awareness
+      if (!hostnameMatches(parsed.hostname, pat.hostname, pat.subdomainWildcard)) return false;
+
+      // Port check (only if user specified a port)
+      // new URL() normalizes default ports to "" so https://x.com:443 == https://x.com
+      if (pat.port && parsed.port !== pat.port) return false;
+
+      // Path check
+      if (!pathMatches(parsed.pathname, pat.path)) return false;
+
+      return true;
     } catch (_e) {
       return false;
     }
