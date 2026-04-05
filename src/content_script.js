@@ -359,9 +359,29 @@
     return null;
   }
 
+  /** Set of elements currently revealed via inline style */
+  const _revealedElements = new Set();
+
+  function _revealElement(el) {
+    el.style.setProperty('filter', 'blur(0px)', 'important');
+    _revealedElements.add(el);
+  }
+
+  function _unrevealElement(el) {
+    el.style.removeProperty('filter');
+    _revealedElements.delete(el);
+  }
+
+  function _unrevealAll() {
+    for (const el of _revealedElements) {
+      el.style.removeProperty('filter');
+    }
+    _revealedElements.clear();
+  }
+
   function dismissClickReveal() {
     if (clickRevealedEl) {
-      delete clickRevealedEl.dataset.pbRevealed;
+      _unrevealElement(clickRevealedEl);
       clickRevealedEl = null;
     }
     clearRevealedAncestors();
@@ -374,7 +394,6 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
-    // Don't interfere with form element interactions
     const tag = target.tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
         tag === 'button' || target.isContentEditable) return;
@@ -388,7 +407,7 @@
     }
 
     dismissClickReveal();
-    blurredEl.dataset.pbRevealed = '1';
+    _revealElement(blurredEl);
     clickRevealedEl = blurredEl;
     revealAncestorChain(blurredEl);
   }
@@ -412,24 +431,20 @@
       mouseoutTimer = null;
     }
 
-    // Temporarily reveal via data attribute
-    blurredEl.dataset.pbRevealed = '1';
+    _revealElement(blurredEl);
     revealAncestorChain(blurredEl);
   }
 
   function onRevealMouseOut(e) {
-    if (revealedAncestors.length === 0) return;
+    if (_revealedElements.size === 0 && revealedAncestors.length === 0) return;
     const related = e.relatedTarget;
     if (related && related instanceof Element && findBlurredTarget(related)) {
-      return; // Still inside a blurred element
+      return;
     }
     if (mouseoutTimer) clearTimeout(mouseoutTimer);
     mouseoutTimer = setTimeout(() => {
       mouseoutTimer = null;
-      // Remove reveal from all data-pb-revealed elements
-      document.querySelectorAll('[data-pb-revealed]').forEach(el => {
-        delete el.dataset.pbRevealed;
-      });
+      _unrevealAll();
       clearRevealedAncestors();
     }, 150);
   }
