@@ -145,11 +145,42 @@
     observerSelector = tags.join(',');
   }
 
+  /**
+   * Break infinite MO loops caused by sites that re-create elements when we
+   * blur them (rich text editors, chat apps). Tracks a signature (tag+class)
+   * with a hit count per cooldown window. If the same signature fires too
+   * many times, skip it until the window resets.
+   */
+  const _loopGuard = new Map(); // signature → { count, resetTime }
+  const LOOP_THRESHOLD = 10;    // max blurs of same signature per window
+  const LOOP_WINDOW_MS = 1000;  // cooldown window
+
+  function _getSignature(el) {
+    return el.tagName + '|' + (el.className || '');
+  }
+
   /** Blur a single element if it passes the category + text-check gate. */
   function tryBlurElement(el) {
     if (!el.isConnected) return;
     if (Engine.isBlurred(el)) return;
+
     if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
+      // Loop guard: skip if same tag+class has been blurred too many times recently
+      const sig = _getSignature(el);
+      const now = performance.now();
+      const guard = _loopGuard.get(sig);
+      if (guard) {
+        if (now - guard.resetTime < LOOP_WINDOW_MS) {
+          guard.count++;
+          if (guard.count > LOOP_THRESHOLD) return; // skip — likely infinite loop
+        } else {
+          guard.count = 1;
+          guard.resetTime = now;
+        }
+      } else {
+        _loopGuard.set(sig, { count: 1, resetTime: now });
+      }
+
       _dbg('tryBlur:', el.tagName, el.id || el.className);
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
