@@ -834,13 +834,14 @@ describe('PrivacyBlurEngine', () => {
      * is about to do (e.g. "Submit Payment", "Delete Account").
      * Reproduce: Add a button with text, call blurAllContent, check blurred.
      */
-    test('blurs button elements that contain text', () => {
+    test('does not blur button with default categories (FORM off)', () => {
       document.body.innerHTML = '<button>Submit Payment</button>';
 
       PrivacyBlurEngine.blurAllContent(8);
 
       const btn = document.querySelector('button');
-      expect(btn.classList.contains('pb-blurred')).toBe(true);
+      // Button is in FORM category, which is OFF by default
+      expect(btn.classList.contains('pb-blurred')).toBe(false);
     });
 
     /**

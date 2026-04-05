@@ -26,8 +26,10 @@ window.PrivacyBlurPicker = (() => {
 
   /** Active settings snapshot: { blurRadius, highlightColor, … } */
   let activeSettings = {
-    blurRadius: 8,
-    highlightColor: '#f59e0b',
+    blurRadius: (globalThis.PrivacyBlur && globalThis.PrivacyBlur.DEFAULT_SETTINGS)
+      ? globalThis.PrivacyBlur.DEFAULT_SETTINGS.BLUR_RADIUS : 8,
+    highlightColor: (globalThis.PrivacyBlur && globalThis.PrivacyBlur.DEFAULT_SETTINGS)
+      ? globalThis.PrivacyBlur.DEFAULT_SETTINGS.HIGHLIGHT_COLOR : '#f59e0b',
   };
 
   /** Callbacks provided by content_script: { onBlur, onUnblur, onDeactivate } */

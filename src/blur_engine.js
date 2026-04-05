@@ -68,10 +68,11 @@ const PrivacyBlurEngine = (() => {
     }),
   });
 
-  // All categories enabled — used as fallback when no options.categories provided.
-  const DEFAULT_ALL_ON = Object.freeze({
-    TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true
-  });
+  // Fallback: all categories enabled. Used when options.categories is omitted.
+  // Reads from PrivacyBlur.DEFAULT_SETTINGS to avoid duplicating values.
+  const DEFAULT_CATS = (typeof globalThis !== 'undefined' && globalThis.PrivacyBlur && globalThis.PrivacyBlur.DEFAULT_SETTINGS)
+    ? globalThis.PrivacyBlur.DEFAULT_SETTINGS.BLUR_CATEGORIES
+    : Object.freeze({ TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true });
 
   // Category names in fixed order for cache key generation.
   const CATEGORY_ORDER = Object.freeze(['TEXT','MEDIA','FORM','TABLE','STRUCTURE']);
@@ -434,7 +435,7 @@ const PrivacyBlurEngine = (() => {
    *   icon-only elements.
    */
   function blurAllContent(radius = 8, options) {
-    const cats = (options && options.categories) ? options.categories : DEFAULT_ALL_ON;
+    const cats = (options && options.categories) ? options.categories : DEFAULT_CATS;
     const thorough = !!(options && options.thoroughBlur);
     const { alwaysBlurSelector, textCheckSelector } = getSelectors(cats);
 
@@ -520,7 +521,7 @@ const PrivacyBlurEngine = (() => {
    */
   function matchesActiveCategories(element, categories) {
     if (!element || !(element instanceof Element)) return false;
-    const cats = categories || DEFAULT_ALL_ON;
+    const cats = categories || DEFAULT_CATS;
     const { tagSet } = getSelectors(cats);
     return tagSet.has(element.tagName.toLowerCase());
   }

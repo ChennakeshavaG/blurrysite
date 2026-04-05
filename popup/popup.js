@@ -511,8 +511,8 @@ function openRuleModal(existingRule) {
     const s = existingRule.settings || {};
     formTgl.checked = !!(s.BLUR_CATEGORIES && s.BLUR_CATEGORIES.FORM);
     thorTgl.checked = !!s.THOROUGH_BLUR;
-    radSlider.value = s.BLUR_RADIUS || 8;
-    radValue.textContent = (s.BLUR_RADIUS || 8) + 'px';
+    radSlider.value = s.BLUR_RADIUS || MSG.DEFAULT_SETTINGS.BLUR_RADIUS;
+    radValue.textContent = (s.BLUR_RADIUS || MSG.DEFAULT_SETTINGS.BLUR_RADIUS) + 'px';
   } else {
     editingRuleId = null;
     title.textContent = 'Add URL Rule';

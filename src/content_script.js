@@ -576,75 +576,26 @@
       // ── Update settings ───────────────────────────────────────────────────
       case MSG.UPDATE_SETTINGS: {
         if (message.settings) {
-          // Async handler — reload rules then re-resolve settings
           (async () => {
-            const oldCategories = settings.BLUR_CATEGORIES;
-            const oldThorough = settings.THOROUGH_BLUR;
-            const oldEnabled = settings.ENABLED;
-            const oldRadius = settings.BLUR_RADIUS;
+            const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
+            const wasEnabled = settings.ENABLED;
             globalSettings = MSG.deepMerge(globalSettings, message.settings);
-
             // Reload rules — popup may have saved new rules before this message
             try { const r = await Store.getRules(); if (r) rules = r; } catch (_e) {}
+            const resolved = resolveSettings(location.href, globalSettings, rules);
+            applyState(resolved, prev);
 
-            settings = resolveSettings(location.href, globalSettings, rules);
-            applySettingsToDom();
-
-          // Detect if blur configuration changed
-          const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-          const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
-          const radiusChanged = oldRadius !== settings.BLUR_RADIUS;
-
-          if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
-
-          // Re-blur when config changes while blur-all is active.
-          // Radius changes need re-blur for video elements (canvas overlay
-          // captures radius in closure — CSS variable cascade doesn't reach it).
-          if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged)) {
-            Engine.unblurAll();
-            Engine.blurAllContent(settings.BLUR_RADIUS, {
-              categories: settings.BLUR_CATEGORIES,
-              thoroughBlur: settings.THOROUGH_BLUR,
-            });
-            if (settings.REVEAL_MODE === 'hover') {
-              document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
-            }
-          }
-
-          if (settings.ENABLED === false) {
-            dismissClickReveal();
-            Shortcuts.destroy();
-            if (isPickerActive) {
-              Picker.deactivate();
-              isPickerActive = false;
-            }
-            stopDomObserver();
-          } else {
-            Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
-            if (isPickerActive) {
-              Picker.setSettings({
-                blurRadius: settings.BLUR_RADIUS,
-                highlightColor: settings.HIGHLIGHT_COLOR,
-              });
-            }
-            startDomObserver();
-
-            // Restore blur-all when re-enabled (if it was active before disable)
-            if (!oldEnabled && settings.ENABLED) {
-              Store.getBlurState(hostname).then((wasBlurAll) => {
+            // Restore blur-all when re-enabled
+            if (!wasEnabled && settings.ENABLED) {
+              try {
+                const wasBlurAll = await Store.getBlurState(hostname);
                 if (wasBlurAll && !isPageBlurred) {
-                  Engine.blurAllContent(settings.BLUR_RADIUS, {
-                    categories: settings.BLUR_CATEGORIES,
-                    thoroughBlur: settings.THOROUGH_BLUR,
-                  });
-                  if (settings.REVEAL_MODE === 'hover') {
-                    document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
-                  }
                   isPageBlurred = true;
+                  Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR });
+                  applyRevealClasses();
                 }
-              }).catch(() => {});
+              } catch (_e) {}
             }
-          }
 
             if (sendResponse) sendResponse({ ok: true });
           })();
@@ -710,27 +661,85 @@
   // ─── Apply CSS custom properties ─────────────────────────────────────────────
 
   function applySettingsToDom() {
-    document.documentElement.style.setProperty(
-      '--pb-radius',
-      `${settings.BLUR_RADIUS}px`
-    );
-    document.documentElement.style.setProperty(
-      '--pb-highlight-color',
-      settings.HIGHLIGHT_COLOR || MSG.DEFAULT_SETTINGS.HIGHLIGHT_COLOR
-    );
-    document.documentElement.style.setProperty(
-      '--pb-transition-duration',
-      `${settings.TRANSITION_DURATION || MSG.DEFAULT_SETTINGS.TRANSITION_DURATION}ms`
-    );
+    document.documentElement.style.setProperty('--pb-radius', `${settings.BLUR_RADIUS}px`);
+    document.documentElement.style.setProperty('--pb-highlight-color', settings.HIGHLIGHT_COLOR);
+    document.documentElement.style.setProperty('--pb-transition-duration', `${settings.TRANSITION_DURATION}ms`);
+  }
 
-    // Update reveal classes based on REVEAL_MODE
-    const isHoverMode = settings.REVEAL_MODE === 'hover';
-    document.querySelectorAll('.pb-blurred').forEach((el) => {
-      el.classList.toggle('pb-reveal-on-hover', isHoverMode);
+  /** Apply reveal-on-hover class to all blurred elements based on current reveal mode. */
+  function applyRevealClasses() {
+    const isHover = settings.REVEAL_MODE === 'hover';
+    document.querySelectorAll('.pb-blurred').forEach(el => {
+      el.classList.toggle('pb-reveal-on-hover', isHover);
     });
-    if (settings.REVEAL_MODE !== 'click') {
-      dismissClickReveal();
+  }
+
+  // ─── Idempotent state application ─────────────────────────────────────────────
+  // Single function that configures every component from resolved settings.
+  // All propagation paths (UPDATE_SETTINGS, storage.onChanged, SPA navigation,
+  // init) collapse to: resolveSettings() → applyState().
+  // Calling applyState twice with the same data produces the same result.
+
+  function applyState(newSettings, prev) {
+    const old = prev || settings;
+    settings = newSettings;
+
+    // 1. CSS custom properties (cheap, idempotent)
+    applySettingsToDom();
+
+    // 2. Category / selector cache
+    const catsChanged = CATEGORY_KEYS.some(k => old.BLUR_CATEGORIES[k] !== settings.BLUR_CATEGORIES[k]);
+    if (catsChanged) {
+      Engine.invalidateSelectorCache();
+      buildObserverSelector();
     }
+
+    // 3. Shortcuts (init is already idempotent — destroy + re-create)
+    if (settings.ENABLED) {
+      Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
+    } else {
+      Shortcuts.destroy();
+    }
+
+    // 4. Picker settings (if active)
+    if (isPickerActive) {
+      if (!settings.ENABLED) {
+        Picker.deactivate();
+        isPickerActive = false;
+        Shortcuts._setPickerActive(false);
+      } else {
+        Picker.setSettings({
+          blurRadius: settings.BLUR_RADIUS,
+          highlightColor: settings.HIGHLIGHT_COLOR,
+        });
+      }
+    }
+
+    // 5. DOM observer
+    if (settings.ENABLED) {
+      startDomObserver();
+    } else {
+      stopDomObserver();
+    }
+
+    // 6. Re-blur when config changed while blur-all is active
+    const thoroughChanged = old.THOROUGH_BLUR !== settings.THOROUGH_BLUR;
+    const radiusChanged = old.BLUR_RADIUS !== settings.BLUR_RADIUS;
+    if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged)) {
+      Engine.unblurAll();
+      Engine.blurAllContent(settings.BLUR_RADIUS, {
+        categories: settings.BLUR_CATEGORIES,
+        thoroughBlur: settings.THOROUGH_BLUR,
+      });
+      applyRevealClasses();
+    }
+
+    // 7. Reveal mode management
+    applyRevealClasses();
+    if (settings.REVEAL_MODE !== 'click') dismissClickReveal();
+
+    // 8. Disable cleanup
+    if (!settings.ENABLED) dismissClickReveal();
   }
 
   // ─── Initialisation ───────────────────────────────────────────────────────────
@@ -810,105 +819,41 @@
   let lastUrl = location.href;
 
   function onUrlChange() {
-    if (!Engine) return; // init not complete yet
+    if (!Engine) return;
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
     lastUrl = currentUrl;
 
-    // Re-resolve from globalSettings (not `settings` which has rule overrides baked in)
-    const oldCategories = settings.BLUR_CATEGORIES;
-    const oldThorough = settings.THOROUGH_BLUR;
-    settings = resolveSettings(currentUrl, globalSettings, rules);
-    applySettingsToDom();
-
-    // Re-blur if needed
-    const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-    const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
-
-    if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
-    if (isPageBlurred && (catsChanged || thoroughChanged)) {
-      Engine.unblurAll();
-      Engine.blurAllContent(settings.BLUR_RADIUS, {
-        categories: settings.BLUR_CATEGORIES,
-        thoroughBlur: settings.THOROUGH_BLUR,
-      });
-      if (settings.REVEAL_MODE === 'hover') {
-        document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
-      }
-    }
+    const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
+    const resolved = resolveSettings(currentUrl, globalSettings, rules);
+    applyState(resolved, prev);
   }
 
   window.addEventListener('popstate', onUrlChange);
   window.addEventListener('hashchange', onUrlChange);
 
-  // ─── Storage change listener ──────────────────────────────────────────────────
+  // ─── Storage change listener (cross-tab sync) ──────────────────────────────
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (!Engine) return; // init not complete yet
+    if (!Engine) return;
 
-    // Rules changed — re-resolve settings for current URL
+    let needsResolve = false;
+    const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
+
     if (changes.rules) {
       rules = changes.rules.newValue || [];
-      const oldCategories = settings.BLUR_CATEGORIES;
-      const oldThorough = settings.THOROUGH_BLUR;
-      settings = resolveSettings(location.href, globalSettings, rules);
-      applySettingsToDom();
-      const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-      if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
-      if (isPageBlurred && (catsChanged || oldThorough !== settings.THOROUGH_BLUR)) {
-        Engine.unblurAll();
-        Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR });
-        if (settings.REVEAL_MODE === 'hover') {
-          document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
-        }
-      }
+      needsResolve = true;
     }
 
-    if (!changes.settings) return;
-    const newSettings = changes.settings.newValue;
-    if (!newSettings) return;
-
-    const oldCategories = settings.BLUR_CATEGORIES;
-    const oldThorough = settings.THOROUGH_BLUR;
-    globalSettings = MSG.deepMerge(globalSettings, newSettings);
-    settings = resolveSettings(location.href, globalSettings, rules);
-    applySettingsToDom();
-
-    const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
-    const thoroughChanged = oldThorough !== settings.THOROUGH_BLUR;
-
-    if (catsChanged) { Engine.invalidateSelectorCache(); buildObserverSelector(); }
-
-    // Re-blur if blur-all active and config changed
-    if (isPageBlurred && (catsChanged || thoroughChanged)) {
-      Engine.unblurAll();
-      Engine.blurAllContent(settings.BLUR_RADIUS, {
-        categories: settings.BLUR_CATEGORIES,
-        thoroughBlur: settings.THOROUGH_BLUR,
-      });
-      if (settings.REVEAL_MODE === 'hover') {
-        document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
-      }
+    if (changes.settings && changes.settings.newValue) {
+      globalSettings = MSG.deepMerge(globalSettings, changes.settings.newValue);
+      needsResolve = true;
     }
 
-    if (settings.ENABLED === false) {
-      dismissClickReveal();
-      Shortcuts.destroy();
-      if (isPickerActive) {
-        Picker.deactivate();
-        isPickerActive = false;
-      }
-      stopDomObserver();
-    } else {
-      Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
-      if (isPickerActive) {
-        Picker.setSettings({
-          blurRadius: settings.BLUR_RADIUS,
-          highlightColor: settings.HIGHLIGHT_COLOR,
-        });
-      }
-      startDomObserver();
+    if (needsResolve) {
+      const resolved = resolveSettings(location.href, globalSettings, rules);
+      applyState(resolved, prev);
     }
   });
 
