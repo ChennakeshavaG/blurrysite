@@ -535,11 +535,13 @@ button { cursor: pointer; font-family: inherit; }
 .pb-setting--range,
 .pb-setting--number {
   flex-wrap: wrap;
+  overflow: hidden;
 }
 
 .pb-setting--range .pb-range-wrapper,
 .pb-setting--number .pb-number-wrapper {
   width: 100%;
+  min-width: 0;
   margin-top: var(--pb-spacing-xs);
 }
 
@@ -576,6 +578,8 @@ button { cursor: pointer; font-family: inherit; }
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
+  min-width: 0; /* Prevent flex overflow */
+  max-width: 100%;
   height: 4px;
   background: rgba(148, 163, 184, 0.2);
   border-radius: 4px;
