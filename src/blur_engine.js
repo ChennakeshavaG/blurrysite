@@ -160,7 +160,8 @@ const BlurEngine = (() => {
   // Extension UI exclusion — prevents our own toolbar/toast from being blurred
   const EXCLUDE = ':not(#pb-picker-toolbar):not(#pb-picker-toolbar *)' +
                   ':not(.pb-toast):not(.pb-toast *)' +
-                  ':not(.pb-toolbar):not(.pb-toolbar *)';
+                  ':not(.pb-toolbar):not(.pb-toolbar *)' +
+                  ':not([data-pb-revealed])';
 
   /**
    * Inject CSS rules for blur-all mode.
@@ -194,8 +195,9 @@ const BlurEngine = (() => {
     // Data attribute rule — for text-check elements and individual picker blurs
     rules.push(`[data-pb-blur] { ${blurDecl} }`);
 
-    // Revealed override — higher specificity
-    rules.push(`[data-pb-revealed] { filter: blur(0px) !important; outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important; outline-offset: 2px !important; }`);
+    // Revealed override — doubled attribute selector for higher specificity
+    // than the tag:not():not()... selectors above
+    rules.push(`[data-pb-revealed][data-pb-revealed] { filter: blur(0px) !important; outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important; outline-offset: 2px !important; }`);
 
     if (rules.length === 0) return;
 
