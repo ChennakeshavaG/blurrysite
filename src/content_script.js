@@ -318,7 +318,7 @@
   function findBlurredAncestor(el) {
     let node = el;
     while (node && node !== document.documentElement) {
-      if (node instanceof Element && node.classList.contains(CLS.BLURRED)) return node;
+      if (node instanceof Element && Engine.isBlurred(node)) return node;
       node = node.parentElement;
     }
     return null;
@@ -341,7 +341,7 @@
     clearRevealedAncestors();
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
-      if (node.classList.contains(CLS.BLURRED)) {
+      if (Engine.isBlurred(node)) {
         node.classList.add(CLS.ANCESTOR_REVEAL);
         revealedAncestors.push(node);
       }
@@ -349,9 +349,19 @@
     }
   }
 
+  /** Find the nearest blurred element (data-pb-blur or CSS-rule-blurred tag) */
+  function findBlurredTarget(el) {
+    let node = el;
+    while (node && node !== document.documentElement) {
+      if (node instanceof Element && Engine.isBlurred(node)) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   function dismissClickReveal() {
     if (clickRevealedEl) {
-      clickRevealedEl.classList.remove(CLS.REVEALED);
+      delete clickRevealedEl.dataset.pbRevealed;
       clickRevealedEl = null;
     }
     clearRevealedAncestors();
@@ -364,13 +374,12 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
+    // Don't interfere with form element interactions
     const tag = target.tagName.toLowerCase();
-    log.log('revealClick:', tag, target.id || target.className);
-
     if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
         tag === 'button' || target.isContentEditable) return;
 
-    const blurredEl = target.closest('.pb-blurred');
+    const blurredEl = findBlurredTarget(target);
     if (!blurredEl) return;
 
     if (blurredEl === clickRevealedEl) {
@@ -379,7 +388,7 @@
     }
 
     dismissClickReveal();
-    blurredEl.classList.add(CLS.REVEALED);
+    blurredEl.dataset.pbRevealed = '1';
     clickRevealedEl = blurredEl;
     revealAncestorChain(blurredEl);
   }
@@ -395,26 +404,32 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
-    const revealTarget = target.closest('.pb-reveal-on-hover');
-    if (!revealTarget) return;
+    const blurredEl = findBlurredTarget(target);
+    if (!blurredEl) return;
 
     if (mouseoutTimer) {
       clearTimeout(mouseoutTimer);
       mouseoutTimer = null;
     }
 
-    revealAncestorChain(revealTarget);
+    // Temporarily reveal via data attribute
+    blurredEl.dataset.pbRevealed = '1';
+    revealAncestorChain(blurredEl);
   }
 
   function onRevealMouseOut(e) {
     if (revealedAncestors.length === 0) return;
     const related = e.relatedTarget;
-    if (related && related instanceof Element && related.closest('.pb-reveal-on-hover')) {
-      return;
+    if (related && related instanceof Element && findBlurredTarget(related)) {
+      return; // Still inside a blurred element
     }
     if (mouseoutTimer) clearTimeout(mouseoutTimer);
     mouseoutTimer = setTimeout(() => {
       mouseoutTimer = null;
+      // Remove reveal from all data-pb-revealed elements
+      document.querySelectorAll('[data-pb-revealed]').forEach(el => {
+        delete el.dataset.pbRevealed;
+      });
       clearRevealedAncestors();
     }, 150);
   }
