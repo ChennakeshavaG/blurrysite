@@ -56,7 +56,7 @@
       for (const selector of selectors) {
         const el = Selector.restoreSelector(selector);
         if (el) {
-          Engine.applyBlur(el, settings.BLUR_RADIUS);
+          Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
           if (settings.REVEAL_MODE === 'hover') {
             el.classList.add('pb-reveal-on-hover');
           }
@@ -90,7 +90,7 @@
       if (!node.isConnected) continue;
 
       if (Engine.shouldBlurElement(node, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
-        Engine.applyBlur(node, settings.BLUR_RADIUS);
+        Engine.applyBlur(node, settings.BLUR_RADIUS, settings.BLUR_MODE);
         if (settings.REVEAL_MODE === 'hover') node.classList.add('pb-reveal-on-hover');
       }
     }
@@ -168,7 +168,7 @@
 
   const pickerCallbacks = {
     onBlur(el) {
-      Engine.applyBlur(el, settings.BLUR_RADIUS);
+      Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       if (settings.REVEAL_MODE === 'hover') {
         el.classList.add('pb-reveal-on-hover');
       }
@@ -529,6 +529,7 @@
           Engine.blurAllContent(settings.BLUR_RADIUS, {
             categories: settings.BLUR_CATEGORIES,
             thoroughBlur: settings.THOROUGH_BLUR,
+            blurMode: settings.BLUR_MODE,
           });
           if (settings.REVEAL_MODE === 'hover') {
             document.querySelectorAll('.pb-blurred').forEach((el) => {
@@ -608,7 +609,7 @@
                 const wasBlurAll = await Store.getBlurState(hostname);
                 if (wasBlurAll && !isPageBlurred) {
                   isPageBlurred = true;
-                  Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR });
+                  Engine.blurAllContent(settings.BLUR_RADIUS, { categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR, blurMode: settings.BLUR_MODE });
                   applyRevealClasses();
                 }
               } catch (_e) {}
@@ -624,7 +625,7 @@
       case MSG.CONTEXT_BLUR: {
         const target = lastContextMenuTarget;
         if (target && target instanceof Element) {
-          Engine.applyBlur(target, settings.BLUR_RADIUS);
+          Engine.applyBlur(target, settings.BLUR_RADIUS, settings.BLUR_MODE);
           if (settings.REVEAL_MODE === 'hover') {
             target.classList.add('pb-reveal-on-hover');
           }
@@ -744,11 +745,13 @@
     // 6. Re-blur when config changed while blur-all is active
     const thoroughChanged = old.THOROUGH_BLUR !== settings.THOROUGH_BLUR;
     const radiusChanged = old.BLUR_RADIUS !== settings.BLUR_RADIUS;
-    if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged)) {
+    const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
+    if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
         categories: settings.BLUR_CATEGORIES,
         thoroughBlur: settings.THOROUGH_BLUR,
+        blurMode: settings.BLUR_MODE,
       });
     }
 
@@ -810,6 +813,7 @@
         Engine.blurAllContent(settings.BLUR_RADIUS, {
           categories: settings.BLUR_CATEGORIES,
           thoroughBlur: settings.THOROUGH_BLUR,
+          blurMode: settings.BLUR_MODE,
         });
         applyRevealClasses();
         isPageBlurred = true;

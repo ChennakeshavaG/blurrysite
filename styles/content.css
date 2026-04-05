@@ -30,9 +30,20 @@
   transition: filter var(--pb-transition-duration, 200ms) ease !important;
   /* Prevent casual text selection/copy of blurred content */
   user-select: none !important;
-  -webkit-user-select: none !important;
   /* Reduce repaint invalidation when other page content changes */
   contain: paint;
+}
+
+/* ─── Frosted glass mode (AI-resistant SVG displacement + blur) ────────────── */
+
+/**
+ * Applied in addition to .pb-blurred when blur mode is 'frosted'.
+ * Overrides the standard Gaussian blur with an SVG filter that combines
+ * feTurbulence displacement with Gaussian blur for AI-resistant obfuscation.
+ * The SVG filter element is injected into the DOM by blur_engine.js.
+ */
+.pb-frosted {
+  filter: url(#pb-frosted-filter) !important;
 }
 
 /* ─── Reveal modes ─────────────────────────────────────────────────────────── */
@@ -42,9 +53,8 @@
  * second click or Escape. Explicit user intent — no hover conflicts.
  */
 .pb-revealed {
-  filter: none !important;
-  transition:
-    filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
+  filter: blur(0px) !important;
+  transition: filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
   /* Indicate revealed state with a subtle outline */
   outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
   outline-offset: 2px !important;
@@ -55,9 +65,8 @@
  * Only active when content_script adds pb-reveal-on-hover class.
  */
 .pb-reveal-on-hover:hover {
-  filter: none !important;
-  transition:
-    filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
+  filter: blur(0px) !important;
+  transition: filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
 }
 
 /**
@@ -67,23 +76,27 @@
  * Used by both click and hover reveal modes.
  */
 .pb-ancestor-reveal {
-  filter: none !important;
+  filter: blur(0px) !important;
 }
-
-/* Keyframe animations removed — transition property handles blur-in/out smoothly.
-   The old pb-blur-in/pb-blur-out keyframes were redundant with the transition
-   and re-triggered on every class toggle. */
 
 /* ─── Picker mode ───────────────────────────────────────────────────────────── */
 
 /**
- * When the picker is active, override every element's cursor with a crosshair
- * so the user clearly understands they are selecting.
- * `!important` is intentional — page styles must not override this.
+ * When the picker is active, set crosshair on the root element and rely on
+ * CSS cursor inheritance. Only elements that explicitly set their own cursor
+ * (buttons, links, inputs) need the override via the child selector below.
  */
-.pb-picker-active *,
-.pb-picker-active *::before,
-.pb-picker-active *::after {
+.pb-picker-active {
+  cursor: crosshair !important;
+}
+
+.pb-picker-active a,
+.pb-picker-active button,
+.pb-picker-active input,
+.pb-picker-active select,
+.pb-picker-active textarea,
+.pb-picker-active [role="button"],
+.pb-picker-active [style*="cursor"] {
   cursor: crosshair !important;
 }
 
@@ -126,7 +139,6 @@
   padding: 8px 16px !important;
   background: rgba(15, 15, 15, 0.93) !important;
   backdrop-filter: blur(6px) !important;
-  -webkit-backdrop-filter: blur(6px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
   box-sizing: border-box !important;
@@ -243,7 +255,6 @@
   padding: 10px 16px !important;
   background: rgba(15, 15, 15, 0.92) !important;
   backdrop-filter: blur(6px) !important;
-  -webkit-backdrop-filter: blur(6px) !important;
   color: #f3f4f6 !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 13px !important;
@@ -290,5 +301,25 @@
   to {
     opacity: 0;
     transform: translateY(6px) scale(0.96);
+  }
+}
+
+/* ─── Print ────────────────────────────────────────────────────────────────── */
+
+/**
+ * Intentionally preserve blur in print output. Privacy-sensitive content
+ * should remain blurred when the user prints the page, since unblurring
+ * on print would defeat the purpose of the extension.
+ */
+@media print {
+  .pb-blurred {
+    filter: blur(var(--pb-radius, 10px)) !important;
+    user-select: none !important;
+  }
+
+  /* Hide picker UI and toasts — they are transient and not relevant in print */
+  .pb-toolbar,
+  .pb-toast {
+    display: none !important;
   }
 }

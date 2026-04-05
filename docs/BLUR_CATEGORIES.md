@@ -251,6 +251,7 @@ state only.
 | Form field values accessible via DevTools/JS | CSS blur is visual only | Low |
 | Blurred `<input>` still focusable and typeable | CSS filter has no interaction side effects | Low |
 | Web Components with closed shadow DOM | Cannot pierce closed shadow roots | Low |
+| `position: sticky` stops sticking inside blurred containers | CSS `filter` creates new containing block — browser spec behaviour | Medium |
 
 ---
 

@@ -93,6 +93,7 @@ const PrivacyBlur = (() => {
     REVEAL_MODE:          'hover',   // 'none' | 'click' | 'hover'
     ENABLED:              true,
     THOROUGH_BLUR:        false,
+    BLUR_MODE:            'gaussian',  // 'gaussian' | 'frosted'
 
     SHORTCUTS: Object.freeze({
       TOGGLE_BLUR_ALL: Object.freeze({
@@ -195,6 +196,9 @@ const PrivacyBlur = (() => {
 
     result.THOROUGH_BLUR = (typeof settings.THOROUGH_BLUR === 'boolean')
       ? settings.THOROUGH_BLUR : defaults.THOROUGH_BLUR;
+
+    result.BLUR_MODE = (['gaussian', 'frosted'].includes(settings.BLUR_MODE))
+      ? settings.BLUR_MODE : defaults.BLUR_MODE;
 
     // BLUR_CATEGORIES: each key must be boolean
     result.BLUR_CATEGORIES = {};

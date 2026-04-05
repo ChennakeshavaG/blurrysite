@@ -38,24 +38,28 @@ type BlurCategories = {
   structure: boolean;
 };
 
+type BlurMode = 'gaussian' | 'frosted';
+
 interface PrivacyBlurEngine {
-  applyBlur(element: Element, radius?: number): void;
+  applyBlur(element: Element, radius?: number, mode?: BlurMode): void;
   removeBlur(element: Element): void;
-  toggleBlur(element: Element, radius?: number): void;
-  blurAllContent(radius?: number, options?: { categories?: BlurCategories }): void;
+  toggleBlur(element: Element, radius?: number, mode?: BlurMode): void;
+  blurAllContent(radius?: number, options?: { categories?: BlurCategories, thoroughBlur?: boolean, blurMode?: BlurMode }): void;
   unblurAll(): void;
   isBlurred(element: Element): boolean;
   invalidateSelectorCache(): void;
   matchesActiveCategories(element: Element, categories?: BlurCategories): boolean;
+  ensureSvgFilter(): void;
 }
 ```
 
 ### applyBlur — element dispatch
 
 ```
-applyBlur(el, radius = 8)
+applyBlur(el, radius = 8, mode)
   if el is null or not Element → return
   if isBlurred(el) → return (idempotent)
+  isFrosted = mode === 'frosted'
   
   tag = el.tagName.toLowerCase()
   

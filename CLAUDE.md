@@ -26,7 +26,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/constants.js` | `globalThis.PrivacyBlur` | Message types (`STORAGE.*`, `COMMAND.*`, `POPUP.*`), `DEFAULTS`, `isValid()`, `categoryOf()` |
 | `src/selector_utils.js` | `window.PrivacyBlurSelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
-| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `CATEGORY_SELECTORS` |
+| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `CATEGORY_SELECTORS` |
 | `src/shortcut_handler.js` | `window.PrivacyBlurShortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
 | `src/picker.js` | `window.PrivacyBlurPicker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all globals via aliases after DOM ready |
@@ -149,6 +149,7 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 | Constant | Value |
 |---|---|
 | Blur class | `pb-blurred` |
+| Frosted glass mode | `pb-frosted` |
 | Canvas overlay | `pb-canvas-overlay` |
 | Text wrapper | `pb-text-node-wrapper` |
 | Hover highlight | `pb-hover-highlight` |
@@ -164,7 +165,7 @@ No `import`, `export`, `import()`, or `require()` in any file under `src/`, `bac
 
 ### Running tests
 ```bash
-npm run test:unit          # 215 unit tests, fast
+npm run test:unit          # 223 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -239,4 +240,5 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | SPA selector staleness | `data-pb-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/CROSS_BROWSER.md §6.3` |
 | Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/CROSS_BROWSER.md §6.6` |
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |
+| `position: sticky` inside blurred containers stops sticking | CSS `filter` creates stacking context — spec behaviour | Same root cause as `position: fixed` issue |
 | `<select>` dropdown options visible when opened | CSS filter only blurs closed state | Known limitation |

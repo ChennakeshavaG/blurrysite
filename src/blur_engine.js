@@ -23,8 +23,10 @@ const PrivacyBlurEngine = (() => {
   // Internal constants
   // -------------------------------------------------------------------------
   const BLURRED_CLASS      = "pb-blurred";
+  const FROSTED_CLASS      = "pb-frosted";
   const CANVAS_CLASS       = "pb-canvas-overlay";
   const TEXT_WRAPPER_CLASS = "pb-text-node-wrapper";
+  const SVG_FILTER_ID      = "pb-svg-filters";
 
   // Map from video element -> { canvas, animFrameId } for cleanup
   const videoOverlayMap = new WeakMap();
@@ -299,6 +301,50 @@ const PrivacyBlurEngine = (() => {
   }
 
   // -------------------------------------------------------------------------
+  // SVG filter injection (frosted glass mode)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Injects an inline SVG element containing the frosted-glass filter into the
+   * document body. The filter combines feTurbulence displacement with Gaussian
+   * blur for AI-resistant obfuscation. Idempotent — only injects once.
+   */
+  function ensureSvgFilter() {
+    if (document.getElementById(SVG_FILTER_ID)) return;
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('id', SVG_FILTER_ID);
+    svg.setAttribute('style', 'position:absolute;width:0;height:0');
+
+    const filter = document.createElementNS(svgNS, 'filter');
+    filter.setAttribute('id', 'pb-frosted-filter');
+
+    const turbulence = document.createElementNS(svgNS, 'feTurbulence');
+    turbulence.setAttribute('type', 'turbulence');
+    turbulence.setAttribute('baseFrequency', '0.04');
+    turbulence.setAttribute('numOctaves', '3');
+    turbulence.setAttribute('result', 'noise');
+
+    const displacement = document.createElementNS(svgNS, 'feDisplacementMap');
+    displacement.setAttribute('in', 'SourceGraphic');
+    displacement.setAttribute('in2', 'noise');
+    displacement.setAttribute('scale', '12');
+    displacement.setAttribute('xChannelSelector', 'R');
+    displacement.setAttribute('yChannelSelector', 'G');
+
+    const gaussianBlur = document.createElementNS(svgNS, 'feGaussianBlur');
+    gaussianBlur.setAttribute('stdDeviation', '4');
+
+    filter.appendChild(turbulence);
+    filter.appendChild(displacement);
+    filter.appendChild(gaussianBlur);
+    svg.appendChild(filter);
+
+    document.body.appendChild(svg);
+  }
+
+  // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
 
@@ -306,8 +352,9 @@ const PrivacyBlurEngine = (() => {
    * Applies blur to an element.
    * @param {Element} element - The DOM element to blur
    * @param {number}  radius  - Blur radius in pixels (default 8)
+   * @param {string}  [mode]  - Blur mode: 'gaussian' (default) or 'frosted'
    */
-  function applyBlur(element, radius = 8) {
+  function applyBlur(element, radius = 8, mode) {
     if (!element || !(element instanceof Element)) return;
     if (isBlurred(element)) return; // idempotent
 
@@ -335,8 +382,11 @@ const PrivacyBlurEngine = (() => {
     // from the closure, not from CSS. The CSS class provides a fallback
     // filter via var(--pb-radius) from :root for the brief moment before
     // the canvas overlay is drawn.
+    const isFrosted = mode === 'frosted';
+
     if (tag === "video") {
       element.classList.add(BLURRED_CLASS);
+      if (isFrosted) element.classList.add(FROSTED_CLASS);
       startVideoBlurCanvas(element, radius);
       return;
     }
@@ -347,6 +397,7 @@ const PrivacyBlurEngine = (() => {
     // live radius updates from propagating without a page reload.
     if (tag === "img") {
       element.classList.add(BLURRED_CLASS);
+      if (isFrosted) element.classList.add(FROSTED_CLASS);
       return;
     }
 
@@ -370,6 +421,7 @@ const PrivacyBlurEngine = (() => {
     // CSS .pb-blurred uses var(--pb-radius) from :root, set by applySettingsToDom().
     // No per-element --pb-radius — this lets radius changes propagate instantly.
     element.classList.add(BLURRED_CLASS);
+    if (isFrosted) element.classList.add(FROSTED_CLASS);
   }
 
   /**
@@ -384,6 +436,7 @@ const PrivacyBlurEngine = (() => {
     // ---- VIDEO: stop canvas overlay ----
     if (tag === "video") {
       element.classList.remove(BLURRED_CLASS);
+      element.classList.remove(FROSTED_CLASS);
       element.style.removeProperty("--pb-radius");
       stopVideoBlurCanvas(element);
       return;
@@ -392,11 +445,13 @@ const PrivacyBlurEngine = (() => {
     // ---- IMG: remove class only ----
     if (tag === "img") {
       element.classList.remove(BLURRED_CLASS);
+      element.classList.remove(FROSTED_CLASS);
       return;
     }
 
     // ---- Generic element ----
     element.classList.remove(BLURRED_CLASS);
+    element.classList.remove(FROSTED_CLASS);
 
     // Clean up any text-node wrappers this engine introduced
     const textWrappers = element.querySelectorAll(`.${TEXT_WRAPPER_CLASS}`);
@@ -414,14 +469,15 @@ const PrivacyBlurEngine = (() => {
    * Toggles blur on an element: applies if not blurred, removes if blurred.
    * @param {Element} element
    * @param {number}  radius
+   * @param {string}  [mode] - Blur mode: 'gaussian' (default) or 'frosted'
    */
-  function toggleBlur(element, radius = 8) {
+  function toggleBlur(element, radius = 8, mode) {
     if (!element || !(element instanceof Element)) return;
 
     if (isBlurred(element)) {
       removeBlur(element);
     } else {
-      applyBlur(element, radius);
+      applyBlur(element, radius, mode);
     }
   }
 
@@ -440,17 +496,27 @@ const PrivacyBlurEngine = (() => {
    *   unconditionally. Catches containers where text lives entirely in child
    *   elements, at the cost of also blurring empty layout wrappers and
    *   icon-only elements.
+   * @param {string} [options.blurMode] - Blur mode: 'gaussian' (default) or
+   *   'frosted'. When 'frosted', elements get the pb-frosted class in addition
+   *   to pb-blurred, applying an SVG displacement + Gaussian blur filter.
    */
   function blurAllContent(radius = 8, options) {
     const cats = (options && options.categories) ? options.categories : DEFAULT_CATS;
     const thorough = !!(options && options.thoroughBlur);
+    const mode = (options && options.blurMode) || 'gaussian';
+
+    // Inject SVG filter element when frosted mode is active
+    if (mode === 'frosted') {
+      ensureSvgFilter();
+    }
+
     const { alwaysBlurSelector, textCheckSelector } = getSelectors(cats);
 
     // Pass 1: always-blur elements — blurred unconditionally.
     // Guard against empty selector (all categories off) which would throw.
     if (alwaysBlurSelector) {
       document.querySelectorAll(alwaysBlurSelector).forEach((el) => {
-        applyBlur(el, radius);
+        applyBlur(el, radius, mode);
       });
     }
 
@@ -461,7 +527,7 @@ const PrivacyBlurEngine = (() => {
       document.querySelectorAll(textCheckSelector).forEach((el) => {
         if (el.classList.contains(BLURRED_CLASS)) return;
         if (thorough || hasMeaningfulTextContent(el)) {
-          applyBlur(el, radius);
+          applyBlur(el, radius, mode);
         }
       });
     }
@@ -495,6 +561,11 @@ const PrivacyBlurEngine = (() => {
     // Remove any orphaned canvas overlays
     document.querySelectorAll(`.${CANVAS_CLASS}`).forEach((canvas) => {
       canvas.parentNode && canvas.parentNode.removeChild(canvas);
+    });
+
+    // Clean up any frosted class remnants
+    document.querySelectorAll(`.${FROSTED_CLASS}`).forEach((el) => {
+      el.classList.remove(FROSTED_CLASS);
     });
   }
 
@@ -577,6 +648,7 @@ const PrivacyBlurEngine = (() => {
     invalidateSelectorCache,
     matchesActiveCategories,
     shouldBlurElement,
+    ensureSvgFilter,
     CATEGORY_SELECTORS,
   };
 })();

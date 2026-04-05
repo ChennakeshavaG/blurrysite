@@ -172,6 +172,7 @@ See [`docs/HLD.md`](docs/HLD.md) and [`docs/LLD.md`](docs/LLD.md) for details.
 - **Cross-origin iframes** — content scripts cannot reach inside
 - **Closed shadow DOM** — not accessible via CSS selectors
 - **`<select>` dropdowns** — CSS blur only covers closed state; open dropdown is visible
+- **`position: sticky`** — sticky elements inside blurred containers stop sticking (same root cause as fixed positioning)
 - **SVG diagrams** — SVGs excluded globally to preserve icons; blur manually via picker
 - **`filter: blur()` at large fonts** — 8px radius partially readable at 20px+ font
 
