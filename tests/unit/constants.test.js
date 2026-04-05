@@ -308,36 +308,6 @@ describe('PrivacyBlur constants', () => {
       expect(s.BLUR_RADIUS).toBe(PB.DEFAULT_SETTINGS.BLUR_RADIUS);
     });
 
-    test('MAX_BLURRED accepts 0 (unlimited)', () => {
-      const s = PB.validateSettings({ PERFORMANCE: { MAX_BLURRED: 0 } });
-      expect(s.PERFORMANCE.MAX_BLURRED).toBe(0);
-    });
-
-    test('MAX_BLURRED accepts 5000 (max)', () => {
-      const s = PB.validateSettings({ PERFORMANCE: { MAX_BLURRED: 5000 } });
-      expect(s.PERFORMANCE.MAX_BLURRED).toBe(5000);
-    });
-
-    test('MAX_BLURRED rejects negative', () => {
-      const s = PB.validateSettings({ PERFORMANCE: { MAX_BLURRED: -1 } });
-      expect(s.PERFORMANCE.MAX_BLURRED).toBe(PB.DEFAULT_SETTINGS.PERFORMANCE.MAX_BLURRED);
-    });
-
-    test('CHUNK_SIZE accepts min boundary (10)', () => {
-      const s = PB.validateSettings({ PERFORMANCE: { CHUNK_SIZE: 10 } });
-      expect(s.PERFORMANCE.CHUNK_SIZE).toBe(10);
-    });
-
-    test('CHUNK_SIZE accepts max boundary (200)', () => {
-      const s = PB.validateSettings({ PERFORMANCE: { CHUNK_SIZE: 200 } });
-      expect(s.PERFORMANCE.CHUNK_SIZE).toBe(200);
-    });
-
-    test('CHUNK_SIZE rejects below min (9)', () => {
-      const s = PB.validateSettings({ PERFORMANCE: { CHUNK_SIZE: 9 } });
-      expect(s.PERFORMANCE.CHUNK_SIZE).toBe(PB.DEFAULT_SETTINGS.PERFORMANCE.CHUNK_SIZE);
-    });
-
     test('SHORTCUTS rejects empty keys array', () => {
       const s = PB.validateSettings({
         SHORTCUTS: { TOGGLE_BLUR_ALL: { primaryModifier: 'AltLeft', keys: [] } }

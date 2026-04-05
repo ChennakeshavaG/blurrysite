@@ -24,13 +24,6 @@
   "setting_blur_mode_hint": "Frosted adds AI-resistant noise. Uses more CPU/GPU.",
   "setting_thorough_blur": "Thorough Blur",
   "setting_thorough_hint": "Blur all matched elements, even empty containers. More aggressive.",
-  "setting_offscreen_unblur": "Off-screen Unblur",
-  "setting_offscreen_unblur_hint": "Free GPU layers for elements scrolled out of view. Recommended for long pages.",
-
-  "setting_max_blurred": "Max Blurred Elements",
-  "setting_max_blurred_hint": "Limit to prevent GPU memory exhaustion. 0 = unlimited.",
-  "setting_chunk_size": "Observer Batch Size",
-  "setting_chunk_size_hint": "DOM processing batch size. Lower = smoother during heavy page changes.",
 
   "reveal_click": "Click to peek",
   "reveal_hover": "Hover to peek",
@@ -43,7 +36,6 @@
   "group_behavior": "Behavior",
   "group_categories": "Blur Categories",
   "group_shortcuts": "Keyboard Shortcuts",
-  "group_performance": "Performance",
 
   "cat_text": "Text",
   "cat_text_hint": "Headings, paragraphs, links, inline text",

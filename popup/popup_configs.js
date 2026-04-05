@@ -164,39 +164,12 @@ const PopupConfigs = (() => {
       tier: 'advanced',
       group: 'behavior',
     },
-    {
-      key: 'PERFORMANCE.OFFSCREEN_UNBLUR',
-      i18nKey: 'setting_offscreen_unblur',
-      i18nHintKey: 'setting_offscreen_unblur_hint',
-      type: 'toggle',
-      tier: 'advanced',
-      group: 'performance',
-    },
   ]);
 
   // ── Experimental tier ──────────────────────────────────────────────────────
-  // Full power-user exposure. Tuning observer batching, element cap.
+  // Reserved for future power-user options.
 
-  const EXPERIMENTAL = Object.freeze([
-    {
-      key: 'PERFORMANCE.MAX_BLURRED',
-      i18nKey: 'setting_max_blurred',
-      i18nHintKey: 'setting_max_blurred_hint',
-      type: 'number',
-      tier: 'experimental',
-      group: 'performance',
-      options: { min: 0, max: 5000, step: 50 },
-    },
-    {
-      key: 'PERFORMANCE.CHUNK_SIZE',
-      i18nKey: 'setting_chunk_size',
-      i18nHintKey: 'setting_chunk_size_hint',
-      type: 'number',
-      tier: 'experimental',
-      group: 'performance',
-      options: { min: 10, max: 200, step: 10 },
-    },
-  ]);
+  const EXPERIMENTAL = Object.freeze([]);
 
   // ── Combined array ─────────────────────────────────────────────────────────
   const ALL = Object.freeze([...GENERAL, ...ADVANCED, ...EXPERIMENTAL]);

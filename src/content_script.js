@@ -79,7 +79,7 @@
   let visibilityObserver = null;
 
   function startVisibilityObserver() {
-    if (visibilityObserver || !settings.PERFORMANCE.OFFSCREEN_UNBLUR) return;
+    if (visibilityObserver) return;
 
     visibilityObserver = new IntersectionObserver((entries) => {
       for (const entry of entries) {
@@ -163,6 +163,7 @@
   function startDomObserver() {
     if (domObserver) return;
     buildObserverSelector();
+    startVisibilityObserver();
 
     domObserver = new MutationObserver((mutations) => {
       if (isPickerActive) return;
@@ -195,6 +196,7 @@
       domObserver.disconnect();
       domObserver = null;
     }
+    stopVisibilityObserver();
   }
 
   function restartDomObserver() {
@@ -562,7 +564,7 @@
       case MSG.TOGGLE_BLUR_ALL: {
         if (isPageBlurred) {
           dismissClickReveal();
-          stopVisibilityObserver();
+          stopDomObserver(); // stops both MO and IO
           Engine.unblurAll();
           isPageBlurred = false;
         } else {
@@ -580,7 +582,6 @@
             observeElement(el);
           });
           isPageBlurred = true;
-          if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
         }
         // Persist blur-all state for this hostname so it survives page reload
         Store.saveBlurState(hostname, isPageBlurred).catch(() => {});
@@ -612,7 +613,7 @@
           el.classList.remove(CLS.REVEAL_ON_HOVER);
         });
         dismissClickReveal();
-        stopVisibilityObserver();
+        stopDomObserver(); // stops both MO and IO
         Engine.unblurAll();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
@@ -783,17 +784,11 @@
       }
     }
 
-    // 5. DOM observer + visibility observer
+    // 5. DOM observer + visibility observer (always paired)
     if (settings.ENABLED) {
-      startDomObserver();
-      if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) {
-        startVisibilityObserver();
-      } else {
-        stopVisibilityObserver();
-      }
+      startDomObserver(); // also starts visibility observer
     } else {
-      stopDomObserver();
-      stopVisibilityObserver();
+      stopDomObserver(); // also stops visibility observer
     }
 
     // 6. Re-blur when config changed while blur-all is active
@@ -801,18 +796,17 @@
     const radiusChanged = old.BLUR_RADIUS !== settings.BLUR_RADIUS;
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
     if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
-      stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
+      stopDomObserver(); // disconnect both before re-blur to avoid thrashing
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
         categories: settings.BLUR_CATEGORIES,
         thoroughBlur: settings.THOROUGH_BLUR,
         blurMode: settings.BLUR_MODE,
       });
-      // Register blurred elements with visibility observer
+      startDomObserver(); // restart both — IO re-observes fresh elements
       document.querySelectorAll('.pb-blurred').forEach(el => {
         observeElement(el);
       });
-      if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
     }
 
     // 7. Reveal mode management (always runs — covers both re-blur and mode-only changes)
@@ -880,11 +874,10 @@
         });
         applyRevealClasses();
         isPageBlurred = true;
-        // Count and observe all blurred elements
+        // Register blurred elements with visibility observer
         document.querySelectorAll('.pb-blurred').forEach(el => {
           observeElement(el);
         });
-        if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
       }
     } catch (_e) {
       // Storage unavailable — skip restore

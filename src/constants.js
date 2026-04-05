@@ -176,18 +176,6 @@ const Constants = (() => {
       STRUCTURE: true,
     }),
 
-    PERFORMANCE: Object.freeze({
-      // Unblur elements when they scroll off-screen, re-blur when they return.
-      // Reduces compositing layer count on long/infinite-scroll pages.
-      OFFSCREEN_UNBLUR:   true,
-
-      // Maximum number of simultaneously blurred elements. 0 = unlimited.
-      // When the cap is reached, oldest elements (by blur order) are skipped.
-      MAX_BLURRED:        500,
-
-      // Batch size for the MutationObserver chunk processor.
-      CHUNK_SIZE:         50,
-    }),
   });
 
   // ── Utility: deep merge ─────────────────────────────────────────────────────
@@ -288,17 +276,6 @@ const Constants = (() => {
         result.SHORTCUTS[action] = JSON.parse(JSON.stringify(defaults.SHORTCUTS[action]));
       }
     }
-
-    // PERFORMANCE: validate each key with type + range checks
-    result.PERFORMANCE = {};
-    const perf = (settings.PERFORMANCE && typeof settings.PERFORMANCE === 'object')
-      ? settings.PERFORMANCE : {};
-    result.PERFORMANCE.OFFSCREEN_UNBLUR = (typeof perf.OFFSCREEN_UNBLUR === 'boolean')
-      ? perf.OFFSCREEN_UNBLUR : defaults.PERFORMANCE.OFFSCREEN_UNBLUR;
-    result.PERFORMANCE.MAX_BLURRED = (typeof perf.MAX_BLURRED === 'number' && perf.MAX_BLURRED >= 0 && perf.MAX_BLURRED <= 5000)
-      ? perf.MAX_BLURRED : defaults.PERFORMANCE.MAX_BLURRED;
-    result.PERFORMANCE.CHUNK_SIZE = (typeof perf.CHUNK_SIZE === 'number' && perf.CHUNK_SIZE >= 10 && perf.CHUNK_SIZE <= 200)
-      ? perf.CHUNK_SIZE : defaults.PERFORMANCE.CHUNK_SIZE;
 
     return result;
   }
