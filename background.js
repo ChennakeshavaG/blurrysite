@@ -275,6 +275,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
+    // ---- Blur-all state per hostname ----
+    case MSG.GET_BLUR_STATE: {
+      if (!isValidHostname(message.hostname)) {
+        sendResponse({ blurAll: false });
+        return true;
+      }
+      chrome.storage.local.get("blur_all_hosts", (result) => {
+        const hosts = result.blur_all_hosts || {};
+        sendResponse({ blurAll: !!hosts[message.hostname] });
+      });
+      return true;
+    }
+
+    case MSG.SAVE_BLUR_STATE: {
+      if (!isValidHostname(message.hostname)) {
+        sendResponse({ success: false });
+        return true;
+      }
+      serialWrite(() => new Promise((resolve) => {
+        chrome.storage.local.get("blur_all_hosts", (result) => {
+          const hosts = result.blur_all_hosts || {};
+          if (message.blurAll) {
+            hosts[message.hostname] = true;
+          } else {
+            delete hosts[message.hostname];
+          }
+          chrome.storage.local.set({ blur_all_hosts: hosts }, () => {
+            sendResponse({ success: true });
+            resolve();
+          });
+        });
+      }));
+      return true;
+    }
+
     default:
       return false;
   }

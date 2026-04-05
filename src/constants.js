@@ -36,6 +36,8 @@ const PrivacyBlur = (() => {
       SAVE_SETTINGS:   'SAVE_SETTINGS',
       GET_RULES:       'GET_RULES',
       SAVE_RULES:      'SAVE_RULES',
+      GET_BLUR_STATE:  'GET_BLUR_STATE',
+      SAVE_BLUR_STATE: 'SAVE_BLUR_STATE',
     }),
 
     /** Background → content script (command relay, restore, context menu) */

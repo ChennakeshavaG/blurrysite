@@ -405,6 +405,8 @@
           }
           isPageBlurred = true;
         }
+        // Persist blur-all state for this hostname so it survives page reload
+        Store.saveBlurState(hostname, isPageBlurred).catch(() => {});
         if (sendResponse) sendResponse({ isPageBlurred });
         break;
       }
@@ -436,6 +438,7 @@
         Engine.unblurAll();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
+        Store.saveBlurState(hostname, false).catch(() => {});
         if (sendResponse) sendResponse({ ok: true });
         break;
       }
@@ -625,14 +628,29 @@
     if (settings.ENABLED === false) return;
 
     // 6. Initialise keyboard shortcut handler.
-    // TODO: shortcutSettings() returns malformed data until Refactor 2 (shortcut rewrite).
-    // Wrap in try/catch to prevent crashing init and blocking observer/reveal setup.
-    try { Shortcuts.init(settings.SHORTCUTS, shortcutActionMap); } catch (_e) { /* noop until Refactor 2 */ }
+    Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
 
     // 7. Restore previously blurred elements for this hostname.
     await restoreBlurredElements();
 
-    // 8. Start DOM observer for dynamic content.
+    // 8. Restore blur-all state for this hostname.
+    try {
+      const wasBlurAll = await Store.getBlurState(hostname);
+      if (wasBlurAll && !isPageBlurred) {
+        Engine.blurAllContent(settings.BLUR_RADIUS, {
+          categories: settings.BLUR_CATEGORIES,
+          thoroughBlur: settings.THOROUGH_BLUR,
+        });
+        if (settings.REVEAL_MODE === 'hover') {
+          document.querySelectorAll('.pb-blurred').forEach(el => el.classList.add('pb-reveal-on-hover'));
+        }
+        isPageBlurred = true;
+      }
+    } catch (_e) {
+      // Storage unavailable — skip restore
+    }
+
+    // 9. Start DOM observer for dynamic content.
     startDomObserver();
 
     // 9. Register reveal handlers (both modes use event delegation on document).

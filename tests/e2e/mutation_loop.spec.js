@@ -95,6 +95,17 @@ describeFn('MutationObserver + blur-all integration', () => {
   });
 
   beforeEach(async () => {
+    // Clear persisted blur-all state so each test starts clean.
+    const client = await swTarget.createCDPSession();
+    try {
+      await client.send('Runtime.evaluate', {
+        expression: `chrome.storage.local.set({ blur_all_hosts: {} })`,
+        awaitPromise: true,
+      });
+    } finally {
+      await client.detach();
+    }
+
     await page.goto(testPageUrl, { waitUntil: 'load' });
     // Wait for content scripts to initialise + MutationObserver to attach.
     await new Promise((r) => setTimeout(r, 1500));

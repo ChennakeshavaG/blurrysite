@@ -120,6 +120,21 @@ const PrivacyBlurStorage = (() => {
   }
 
   // -------------------------------------------------------------------------
+  // Public API — blur-all state per hostname
+  // -------------------------------------------------------------------------
+
+  async function getBlurState(hostname) {
+    if (!hostname) return false;
+    const response = await send({ type: MSG.GET_BLUR_STATE, hostname });
+    return !!(response && response.blurAll);
+  }
+
+  async function saveBlurState(hostname, blurAll) {
+    if (!hostname) return;
+    await send({ type: MSG.SAVE_BLUR_STATE, hostname, blurAll: !!blurAll });
+  }
+
+  // -------------------------------------------------------------------------
   // Expose public API
   // -------------------------------------------------------------------------
   return {
@@ -132,6 +147,8 @@ const PrivacyBlurStorage = (() => {
     saveSettings,
     getRules,
     saveRules,
+    getBlurState,
+    saveBlurState,
   };
 })();
 
