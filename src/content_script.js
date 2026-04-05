@@ -201,7 +201,7 @@
   }
 
   function startDomObserver() {
-    if (domObserver) return;
+    if (domObserver) return; // Already running — use restartDomObserver() to rebuild
     buildObserverSelector();
 
     domObserver = new MutationObserver((mutations) => {
@@ -209,17 +209,39 @@
       if (!isPageBlurred) return;
 
       for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          // Queue the node itself. For descendants, use the cached combined
-          // selector instead of querySelectorAll('*') to avoid quadratic
-          // complexity when large subtrees are inserted.
-          pendingNodes.push(node);
-          if (observerSelector) {
-            const children = node.querySelectorAll(observerSelector);
-            for (let i = 0; i < children.length; i++) {
-              pendingNodes.push(children[i]);
+        // Handle new nodes added to the DOM
+        if (mutation.type === 'childList') {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            // Queue the node itself. For descendants, use the cached combined
+            // selector instead of querySelectorAll('*') to avoid quadratic
+            // complexity when large subtrees are inserted.
+            pendingNodes.push(node);
+            if (observerSelector) {
+              const children = node.querySelectorAll(observerSelector);
+              for (let i = 0; i < children.length; i++) {
+                pendingNodes.push(children[i]);
+              }
             }
+          }
+        }
+
+        // Handle text content changes in existing elements (SPA re-renders)
+        // When a SPA like YouTube updates text in place, the parent element
+        // may already exist but now has new content that should be blurred.
+        if (mutation.type === 'characterData') {
+          const parent = mutation.target.parentElement;
+          if (parent && parent.isConnected && !Engine.isBlurred(parent)) {
+            pendingNodes.push(parent);
+          }
+        }
+
+        // Handle attribute changes that may indicate re-rendered content
+        // (e.g. SPA frameworks swapping aria-label, title, or data attributes)
+        if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
+          const el = mutation.target;
+          if (el.isConnected && !Engine.isBlurred(el)) {
+            pendingNodes.push(el);
           }
         }
       }
@@ -233,6 +255,9 @@
     domObserver.observe(document.body, {
       childList: true,
       subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['title', 'aria-label', 'alt', 'placeholder', 'value'],
     });
   }
 
@@ -243,6 +268,12 @@
     }
     pendingNodes = [];
     processingScheduled = false;
+  }
+
+  /** Stop and restart the observer with fresh selector and config. */
+  function restartDomObserver() {
+    stopDomObserver();
+    startDomObserver();
   }
 
   // ─── Picker callbacks ─────────────────────────────────────────────────────────
@@ -612,8 +643,12 @@
           Engine.unblurAll();
           blurredElementCount = 0;
           offscreenElements.clear();
+          pendingNodes = [];
           isPageBlurred = false;
         } else {
+          // Ensure observer is running to catch SPA re-renders
+          buildObserverSelector();
+          startDomObserver();
           Engine.blurAllContent(settings.BLUR_RADIUS, {
             categories: settings.BLUR_CATEGORIES,
             thoroughBlur: settings.THOROUGH_BLUR,
@@ -809,7 +844,9 @@
     const catsChanged = CATEGORY_KEYS.some(k => old.BLUR_CATEGORIES[k] !== settings.BLUR_CATEGORIES[k]);
     if (catsChanged) {
       Engine.invalidateSelectorCache();
-      buildObserverSelector();
+      // Restart observer so it uses the new selector for descendant queries
+      if (domObserver) restartDomObserver();
+      else buildObserverSelector();
     }
 
     // 3. Shortcuts (init is already idempotent — destroy + re-create)
@@ -853,6 +890,7 @@
     if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
       stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
       offscreenElements.clear();
+      pendingNodes = []; // Clear stale queued nodes before re-blur
       blurredElementCount = 0;
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
