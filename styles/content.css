@@ -34,8 +34,7 @@
 
 /* ─── Reveal: click-to-reveal via data attribute ───────────────────────────── */
 
-/* Doubled selector for higher specificity than tag:not():not() rules */
-[data-pb-revealed][data-pb-revealed] {
+[data-pb-revealed] {
   filter: blur(0px) !important;
   outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
   outline-offset: 2px !important;
