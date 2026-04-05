@@ -174,7 +174,7 @@ const Constants = (() => {
       MEDIA:     true,
       FORM:      false,
       TABLE:     true,
-      STRUCTURE: false, // OFF by default — filter on containers breaks position:fixed/sticky/absolute children
+      STRUCTURE: true, // Safe with data-pb-blur (no classList = no framework loops)
     }),
 
   });
