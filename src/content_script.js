@@ -67,9 +67,79 @@
     }
   }
 
+  // ── Performance: off-screen unblur via IntersectionObserver ─────────────────
+  // When enabled, elements scrolled off-screen lose their blur (compositing
+  // layer freed). When they scroll back, blur is re-applied. This keeps the
+  // active compositing layer count bounded on infinite-scroll pages.
+
+  let visibilityObserver = null;
+  /** Set of elements currently unblurred because they're off-screen */
+  const offscreenElements = new Set();
+
+  function startVisibilityObserver() {
+    if (visibilityObserver || !settings.PERFORMANCE.OFFSCREEN_UNBLUR) return;
+
+    visibilityObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const el = entry.target;
+        if (entry.isIntersecting) {
+          // Back on screen — re-apply blur
+          if (offscreenElements.has(el)) {
+            offscreenElements.delete(el);
+            el.classList.add('pb-blurred');
+            if (settings.BLUR_MODE === 'frosted') el.classList.add('pb-frosted');
+            if (settings.REVEAL_MODE === 'hover') el.classList.add('pb-reveal-on-hover');
+          }
+        } else {
+          // Off screen — remove blur to free compositing layer
+          if (el.classList.contains('pb-blurred')) {
+            offscreenElements.add(el);
+            el.classList.remove('pb-blurred', 'pb-frosted', 'pb-reveal-on-hover');
+          }
+        }
+      }
+    }, {
+      // rootMargin: observe slightly beyond viewport to pre-blur before visible
+      rootMargin: '200px',
+    });
+  }
+
+  function stopVisibilityObserver() {
+    if (visibilityObserver) {
+      visibilityObserver.disconnect();
+      visibilityObserver = null;
+    }
+    // Re-blur any elements that were temporarily unblurred
+    for (const el of offscreenElements) {
+      if (el.isConnected) {
+        el.classList.add('pb-blurred');
+        if (settings.BLUR_MODE === 'frosted') el.classList.add('pb-frosted');
+      }
+    }
+    offscreenElements.clear();
+  }
+
+  /** Track a blurred element with the visibility observer */
+  function observeElement(el) {
+    if (visibilityObserver && el instanceof Element) {
+      visibilityObserver.observe(el);
+    }
+  }
+
+  // ── Performance: element cap ──────────────────────────────────────────────
+  // Tracks the total number of blurred elements. When MAX_BLURRED is reached,
+  // new elements are not blurred. 0 = unlimited.
+
+  let blurredElementCount = 0;
+
+  function canBlurMore() {
+    const max = settings.PERFORMANCE.MAX_BLURRED;
+    return max === 0 || blurredElementCount < max;
+  }
+
   // ── Batched MutationObserver ────────────────────────────────────────────────
 
-  const CHUNK_SIZE = 50;
+  // CHUNK_SIZE read from settings (configurable, default 50)
   let pendingNodes = [];
   let processingScheduled = false;
 
@@ -83,15 +153,19 @@
       return;
     }
 
-    const chunk = pendingNodes.splice(0, CHUNK_SIZE);
+    const chunkSize = settings.PERFORMANCE.CHUNK_SIZE || 50;
+    const chunk = pendingNodes.splice(0, chunkSize);
 
     for (let i = 0; i < chunk.length; i++) {
       const node = chunk[i];
       if (!node.isConnected) continue;
+      if (!canBlurMore()) break; // element cap reached
 
       if (Engine.shouldBlurElement(node, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
         Engine.applyBlur(node, settings.BLUR_RADIUS, settings.BLUR_MODE);
         if (settings.REVEAL_MODE === 'hover') node.classList.add('pb-reveal-on-hover');
+        blurredElementCount++;
+        observeElement(node);
       }
     }
 
@@ -523,7 +597,10 @@
       case MSG.TOGGLE_BLUR_ALL: {
         if (isPageBlurred) {
           dismissClickReveal();
+          stopVisibilityObserver();
           Engine.unblurAll();
+          blurredElementCount = 0;
+          offscreenElements.clear();
           isPageBlurred = false;
         } else {
           Engine.blurAllContent(settings.BLUR_RADIUS, {
@@ -531,12 +608,15 @@
             thoroughBlur: settings.THOROUGH_BLUR,
             blurMode: settings.BLUR_MODE,
           });
-          if (settings.REVEAL_MODE === 'hover') {
-            document.querySelectorAll('.pb-blurred').forEach((el) => {
-              el.classList.add('pb-reveal-on-hover');
-            });
-          }
+          // Track and observe all blurred elements
+          blurredElementCount = 0;
+          document.querySelectorAll('.pb-blurred').forEach((el) => {
+            blurredElementCount++;
+            if (settings.REVEAL_MODE === 'hover') el.classList.add('pb-reveal-on-hover');
+            observeElement(el);
+          });
           isPageBlurred = true;
+          if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
         }
         // Persist blur-all state for this hostname so it survives page reload
         Store.saveBlurState(hostname, isPageBlurred).catch(() => {});
@@ -568,7 +648,10 @@
           el.classList.remove('pb-reveal-on-hover');
         });
         dismissClickReveal();
+        stopVisibilityObserver();
         Engine.unblurAll();
+        blurredElementCount = 0;
+        offscreenElements.clear();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
         Store.saveBlurState(hostname, false).catch(() => {});
@@ -735,11 +818,17 @@
       }
     }
 
-    // 5. DOM observer
+    // 5. DOM observer + visibility observer
     if (settings.ENABLED) {
       startDomObserver();
+      if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) {
+        startVisibilityObserver();
+      } else {
+        stopVisibilityObserver();
+      }
     } else {
       stopDomObserver();
+      stopVisibilityObserver();
     }
 
     // 6. Re-blur when config changed while blur-all is active
@@ -747,12 +836,21 @@
     const radiusChanged = old.BLUR_RADIUS !== settings.BLUR_RADIUS;
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
     if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
+      stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
+      offscreenElements.clear();
+      blurredElementCount = 0;
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
         categories: settings.BLUR_CATEGORIES,
         thoroughBlur: settings.THOROUGH_BLUR,
         blurMode: settings.BLUR_MODE,
       });
+      // Re-count and observe all newly blurred elements
+      document.querySelectorAll('.pb-blurred').forEach(el => {
+        blurredElementCount++;
+        observeElement(el);
+      });
+      if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
     }
 
     // 7. Reveal mode management (always runs — covers both re-blur and mode-only changes)
