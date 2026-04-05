@@ -8,10 +8,10 @@
  * Each config entry describes: what setting key it maps to, its type,
  * its i18n keys, its tier, and any type-specific options.
  *
- * Exposed as window.PrivacyBlurPopupConfigs (IIFE — no ES module syntax).
+ * Exposed as window.PopupConfigs (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurPopupConfigs = (() => {
+const PopupConfigs = (() => {
   'use strict';
 
   // ── Config entry types ─────────────────────────────────────────────────────
@@ -204,4 +204,4 @@ const PrivacyBlurPopupConfigs = (() => {
   return Object.freeze({ GENERAL, ADVANCED, EXPERIMENTAL, ALL });
 })();
 
-window.PrivacyBlurPopupConfigs = PrivacyBlurPopupConfigs;
+pb.PopupConfigs = PopupConfigs;

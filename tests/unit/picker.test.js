@@ -4,7 +4,7 @@
  * Unit tests for src/picker.js — the interactive element picker that lets
  * users hover over page elements and click to blur/unblur them.
  *
- * Module exposes window.PrivacyBlurPicker with: activate, deactivate,
+ * Module exposes pb.Picker with: activate, deactivate,
  * setSettings, and an isActive getter.
  *
  * Key behaviors tested:
@@ -15,7 +15,7 @@
  *  - Deactivation: removes all side-effects (toolbar, highlights, listeners)
  *  - Settings: can be updated while picker is active
  *
- * Tests mock PrivacyBlurEngine and PrivacyBlurSelectorUtils as window globals
+ * Tests mock pb.BlurEngine and pb.SelectorUtils as window globals
  * because picker.js depends on them being loaded first via manifest.json.
  */
 
@@ -29,7 +29,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/picker.js');
 
 function loadPicker() {
-  if (global.PrivacyBlurPicker) return;
+  if (pb.Picker) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -128,7 +128,7 @@ function buildStubSource() {
       _settings = Object.assign(_settings || {}, settings || {});
     }
 
-    window.PrivacyBlurPicker = {
+    pb.Picker = {
       get isActive() { return _active; },
       activate: activate,
       deactivate: deactivate,
@@ -141,13 +141,13 @@ function buildStubSource() {
 // ─── Mock dependencies ────────────────────────────────────────────────────────
 
 function setupGlobalMocks() {
-  global.PrivacyBlurEngine = {
+  pb.BlurEngine = {
     applyBlur: jest.fn(),
     removeBlur: jest.fn(),
     isBlurred: jest.fn().mockReturnValue(false),
   };
 
-  global.PrivacyBlurSelectorUtils = {
+  pb.SelectorUtils = {
     getSelector: jest.fn().mockReturnValue('#mock-selector'),
     generateId: jest.fn().mockReturnValue('abcd1234'),
   };
@@ -185,7 +185,7 @@ function fireKey(key) {
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
-describe('PrivacyBlurPicker', () => {
+describe('pb.Picker', () => {
   beforeAll(() => {
     setupGlobalMocks();
     loadPicker();
@@ -196,12 +196,12 @@ describe('PrivacyBlurPicker', () => {
     document.documentElement.className = '';
     jest.clearAllMocks();
     // Ensure picker is deactivated before each test to prevent state leakage.
-    try { PrivacyBlurPicker.deactivate(); } catch (_) {}
+    try { pb.Picker.deactivate(); } catch (_) {}
   });
 
   afterEach(() => {
     // Safety net: clean up in case a test left the picker active.
-    try { PrivacyBlurPicker.deactivate(); } catch (_) {}
+    try { pb.Picker.deactivate(); } catch (_) {}
   });
 
   // ── activate ───────────────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Call activate(), check documentElement class list.
      */
     test('adds pb-picker-active class to html element', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
     });
@@ -228,7 +228,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Call activate(), query for toolbar by ID.
      */
     test('creates a toolbar element in the DOM', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       const toolbar = document.getElementById('pb-picker-toolbar');
       expect(toolbar).not.toBeNull();
@@ -242,8 +242,8 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Call activate() twice, count toolbar elements.
      */
     test('calling activate twice is safe (idempotent)', () => {
-      PrivacyBlurPicker.activate({}, {});
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       const toolbars = document.querySelectorAll('#pb-picker-toolbar');
       expect(toolbars.length).toBe(1);
@@ -263,7 +263,7 @@ describe('PrivacyBlurPicker', () => {
     test('adds pb-hover-highlight class on mouseover', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       fireMouseover(el);
 
@@ -280,7 +280,7 @@ describe('PrivacyBlurPicker', () => {
       const el = document.createElement('p');
       el.classList.add('pb-hover-highlight');
       document.body.appendChild(el);
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       fireMouseout(el);
 
@@ -294,7 +294,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Dispatch a mouseover event without setting a target.
      */
     test('does not throw if target is null on mouseover', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
       const e = new MouseEvent('mouseover', { bubbles: true });
       expect(() => document.dispatchEvent(e)).not.toThrow();
     });
@@ -316,7 +316,7 @@ describe('PrivacyBlurPicker', () => {
       el.classList.remove('pb-blurred');
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
 
       fireClick(el);
 
@@ -337,7 +337,7 @@ describe('PrivacyBlurPicker', () => {
       document.body.appendChild(el);
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
 
       fireClick(el);
 
@@ -358,7 +358,7 @@ describe('PrivacyBlurPicker', () => {
       document.body.appendChild(el);
 
       const callbacks = { onBlur: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
 
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       Object.defineProperty(clickEvent, 'target', { value: el, configurable: true });
@@ -381,7 +381,7 @@ describe('PrivacyBlurPicker', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
 
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       Object.defineProperty(clickEvent, 'target', { value: el, configurable: true });
@@ -405,7 +405,7 @@ describe('PrivacyBlurPicker', () => {
      */
     test('pressing Escape calls deactivate and removes pb-picker-active', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
 
       fireKey('Escape');
@@ -423,7 +423,7 @@ describe('PrivacyBlurPicker', () => {
      */
     test('pressing Escape triggers onDeactivate callback', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
 
       fireKey('Escape');
 
@@ -441,10 +441,10 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, deactivate, check class is removed.
      */
     test('removes pb-picker-active class from html element', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
 
-      PrivacyBlurPicker.deactivate();
+      pb.Picker.deactivate();
 
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(false);
     });
@@ -456,10 +456,10 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate (creates toolbar), deactivate, query for toolbar.
      */
     test('removes the toolbar from the DOM', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
       expect(document.getElementById('pb-picker-toolbar')).not.toBeNull();
 
-      PrivacyBlurPicker.deactivate();
+      pb.Picker.deactivate();
 
       expect(document.getElementById('pb-picker-toolbar')).toBeNull();
     });
@@ -472,9 +472,9 @@ describe('PrivacyBlurPicker', () => {
      */
     test('calls onDeactivate callback', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
+      pb.Picker.activate({}, callbacks);
 
-      PrivacyBlurPicker.deactivate();
+      pb.Picker.deactivate();
 
       expect(callbacks.onDeactivate).toHaveBeenCalledTimes(1);
     });
@@ -491,8 +491,8 @@ describe('PrivacyBlurPicker', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn(), onDeactivate: jest.fn() };
-      PrivacyBlurPicker.activate({}, callbacks);
-      PrivacyBlurPicker.deactivate();
+      pb.Picker.activate({}, callbacks);
+      pb.Picker.deactivate();
 
       fireClick(el);
 
@@ -507,7 +507,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Call deactivate without prior activate.
      */
     test('calling deactivate when not active does not throw', () => {
-      expect(() => PrivacyBlurPicker.deactivate()).not.toThrow();
+      expect(() => pb.Picker.deactivate()).not.toThrow();
     });
   });
 
@@ -523,9 +523,9 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate with radius 8, call setSettings with radius 16.
      */
     test('updates blurRadius property', () => {
-      PrivacyBlurPicker.activate({ blurRadius: 8 }, {});
+      pb.Picker.activate({ blurRadius: 8 }, {});
 
-      expect(() => PrivacyBlurPicker.setSettings({ blurRadius: 16 })).not.toThrow();
+      expect(() => pb.Picker.setSettings({ blurRadius: 16 })).not.toThrow();
     });
 
     /**
@@ -535,7 +535,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Call setSettings without prior activate.
      */
     test('calling setSettings before activate does not throw', () => {
-      expect(() => PrivacyBlurPicker.setSettings({ blurRadius: 12 })).not.toThrow();
+      expect(() => pb.Picker.setSettings({ blurRadius: 12 })).not.toThrow();
     });
 
     /**
@@ -547,15 +547,15 @@ describe('PrivacyBlurPicker', () => {
      * still functions correctly (click still fires callback).
      */
     test('partial settings update does not wipe existing settings', () => {
-      PrivacyBlurPicker.activate({ blurRadius: 8, highlightColor: '#ff0000' }, {});
+      pb.Picker.activate({ blurRadius: 8, highlightColor: '#ff0000' }, {});
 
-      expect(() => PrivacyBlurPicker.setSettings({ blurRadius: 20 })).not.toThrow();
+      expect(() => pb.Picker.setSettings({ blurRadius: 20 })).not.toThrow();
 
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn() };
-      PrivacyBlurPicker.deactivate();
-      PrivacyBlurPicker.activate({ blurRadius: 20 }, callbacks);
+      pb.Picker.deactivate();
+      pb.Picker.activate({ blurRadius: 20 }, callbacks);
       fireClick(el);
       expect(callbacks.onBlur).toHaveBeenCalled();
     });
@@ -572,7 +572,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Check isActive without calling activate.
      */
     test('returns false before activation', () => {
-      expect(PrivacyBlurPicker.isActive).toBe(false);
+      expect(pb.Picker.isActive).toBe(false);
     });
 
     /**
@@ -582,9 +582,9 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, check isActive.
      */
     test('returns true after activation', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
-      expect(PrivacyBlurPicker.isActive).toBe(true);
+      expect(pb.Picker.isActive).toBe(true);
     });
 
     /**
@@ -594,10 +594,10 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, deactivate, check isActive.
      */
     test('returns false after deactivation', () => {
-      PrivacyBlurPicker.activate({}, {});
-      PrivacyBlurPicker.deactivate();
+      pb.Picker.activate({}, {});
+      pb.Picker.deactivate();
 
-      expect(PrivacyBlurPicker.isActive).toBe(false);
+      expect(pb.Picker.isActive).toBe(false);
     });
 
     /**
@@ -608,11 +608,11 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, fire Escape, check isActive.
      */
     test('returns false after Escape key deactivates picker', () => {
-      PrivacyBlurPicker.activate({}, { onDeactivate: jest.fn() });
+      pb.Picker.activate({}, { onDeactivate: jest.fn() });
 
       fireKey('Escape');
 
-      expect(PrivacyBlurPicker.isActive).toBe(false);
+      expect(pb.Picker.isActive).toBe(false);
     });
   });
 
@@ -635,8 +635,8 @@ describe('PrivacyBlurPicker', () => {
       document.body.appendChild(el1);
       document.body.appendChild(el2);
 
-      PrivacyBlurPicker.activate({}, {});
-      PrivacyBlurPicker.deactivate();
+      pb.Picker.activate({}, {});
+      pb.Picker.deactivate();
 
       expect(document.querySelectorAll('.pb-hover-highlight').length).toBe(0);
     });
@@ -654,7 +654,7 @@ describe('PrivacyBlurPicker', () => {
       const el2 = document.createElement('div');
       document.body.appendChild(el1);
       document.body.appendChild(el2);
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       fireMouseover(el1);
       expect(el1.classList.contains('pb-hover-highlight')).toBe(true);
@@ -676,7 +676,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, query toolbar by ID, check class.
      */
     test('toolbar has correct ID and class', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       const toolbar = document.getElementById('pb-picker-toolbar');
       expect(toolbar).not.toBeNull();
@@ -691,7 +691,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, fire Escape, verify toolbar is gone.
      */
     test('toolbar is removed when picker is deactivated via Escape', () => {
-      PrivacyBlurPicker.activate({}, { onDeactivate: jest.fn() });
+      pb.Picker.activate({}, { onDeactivate: jest.fn() });
 
       fireKey('Escape');
 
@@ -712,7 +712,7 @@ describe('PrivacyBlurPicker', () => {
     test('clicking when no callbacks provided does not throw', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       expect(() => fireClick(el)).not.toThrow();
     });
@@ -725,7 +725,7 @@ describe('PrivacyBlurPicker', () => {
      * Reproduce: Activate, fire mouseover on body and documentElement.
      */
     test('does not highlight html or body elements on mouseover', () => {
-      PrivacyBlurPicker.activate({}, {});
+      pb.Picker.activate({}, {});
 
       fireMouseover(document.body);
       expect(document.body.classList.contains('pb-hover-highlight')).toBe(false);

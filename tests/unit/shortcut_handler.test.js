@@ -2,7 +2,7 @@
  * tests/unit/shortcut_handler.test.js
  *
  * Unit tests for src/shortcut_handler.js
- * Module exposes window.PrivacyBlurShortcuts with: init, destroy, showToast, _setPickerActive
+ * Module exposes pb.Shortcuts with: init, destroy, showToast, _setPickerActive
  *
  * The module tracks held keys via keydown/keyup and fires callbacks when
  * a primary modifier + all required keys are held simultaneously.
@@ -16,7 +16,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/shortcut_handler.js');
 
 function loadShortcutHandler() {
-  if (global.PrivacyBlurShortcuts) return;
+  if (pb.Shortcuts) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -82,7 +82,7 @@ function buildStubSource() {
 
     function showToast() {}
 
-    window.PrivacyBlurShortcuts = {
+    pb.Shortcuts = {
       init: init, destroy: destroy, showToast: showToast,
       _setPickerActive: function(v) { _isPickerActive = !!v; }
     };
@@ -139,11 +139,11 @@ const DEFAULT_SHORTCUTS = {
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe('PrivacyBlurShortcuts', () => {
+describe('pb.Shortcuts', () => {
   beforeAll(() => loadShortcutHandler());
 
   afterEach(() => {
-    PrivacyBlurShortcuts.destroy();
+    pb.Shortcuts.destroy();
   });
 
   // ── Single-key shortcut detection ──────────────────────────────────────────
@@ -151,7 +151,7 @@ describe('PrivacyBlurShortcuts', () => {
   describe('shortcut detection', () => {
     test('fires TOGGLE_BLUR_ALL when Alt+Shift+B pressed', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       // Hold AltLeft
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
@@ -165,7 +165,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('fires TOGGLE_PICKER when Alt+Shift+P pressed', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_PICKER: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_PICKER: cb });
 
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
       fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
@@ -176,7 +176,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('fires CLEAR_ALL when Alt+Shift+U pressed', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { CLEAR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { CLEAR_ALL: cb });
 
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
       fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
@@ -187,7 +187,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('does NOT fire when wrong modifier side is held', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       // Use AltRight instead of AltLeft
       fireKeyDown('Alt', { code: 'AltRight', alt: true });
@@ -199,7 +199,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('does NOT fire when primary modifier is not held', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       // Press B without any modifier
       fireKeyDown('b', { code: 'KeyB' });
@@ -209,7 +209,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('does NOT fire when not all keys are held', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       // Alt + B but no Shift
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
@@ -222,7 +222,7 @@ describe('PrivacyBlurShortcuts', () => {
       const blur = jest.fn();
       const picker = jest.fn();
       const clear = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, {
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, {
         TOGGLE_BLUR_ALL: blur, TOGGLE_PICKER: picker, CLEAR_ALL: clear,
       });
 
@@ -250,8 +250,8 @@ describe('PrivacyBlurShortcuts', () => {
   describe('Escape key', () => {
     test('fires onExitPicker when picker is active', () => {
       const exitPicker = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exitPicker });
-      PrivacyBlurShortcuts._setPickerActive(true);
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exitPicker });
+      pb.Shortcuts._setPickerActive(true);
 
       fireKeyDown('Escape', { code: 'Escape' });
 
@@ -260,7 +260,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('does NOT fire onExitPicker when picker is inactive', () => {
       const exitPicker = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exitPicker });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exitPicker });
 
       fireKeyDown('Escape', { code: 'Escape' });
 
@@ -273,7 +273,7 @@ describe('PrivacyBlurShortcuts', () => {
   describe('early exit guards', () => {
     test('ignores repeated keydown events', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
       fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
@@ -284,7 +284,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('ignores events during IME composition', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
       fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
@@ -295,7 +295,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('ignores Dead key events', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       fireKeyDown('Dead', { code: 'KeyB' });
 
@@ -304,7 +304,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('ignores AltGraph events', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
 
       const event = new KeyboardEvent('keydown', {
         key: 'b', code: 'KeyB', altKey: true, ctrlKey: true,
@@ -321,8 +321,8 @@ describe('PrivacyBlurShortcuts', () => {
   describe('destroy', () => {
     test('removes listeners so shortcuts stop firing', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-      PrivacyBlurShortcuts.destroy();
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      pb.Shortcuts.destroy();
 
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
       fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
@@ -334,8 +334,8 @@ describe('PrivacyBlurShortcuts', () => {
     test('re-calling init replaces previous listener', () => {
       const cb1 = jest.fn();
       const cb2 = jest.fn();
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb1 });
-      PrivacyBlurShortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb2 });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb1 });
+      pb.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb2 });
 
       fireKeyDown('Alt', { code: 'AltLeft', alt: true });
       fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
@@ -351,7 +351,7 @@ describe('PrivacyBlurShortcuts', () => {
   describe('custom shortcuts', () => {
     test('supports single modifier + single key', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init({
+      pb.Shortcuts.init({
         TOGGLE_BLUR_ALL: { primaryModifier: 'ControlLeft', keys: [{ key: 'b', code: 'KeyB' }] },
       }, { TOGGLE_BLUR_ALL: cb });
 
@@ -363,7 +363,7 @@ describe('PrivacyBlurShortcuts', () => {
 
     test('supports MetaLeft (Command) as primary modifier', () => {
       const cb = jest.fn();
-      PrivacyBlurShortcuts.init({
+      pb.Shortcuts.init({
         TOGGLE_BLUR_ALL: { primaryModifier: 'MetaLeft', keys: [{ key: '1', code: 'Digit1' }] },
       }, { TOGGLE_BLUR_ALL: cb });
 
@@ -374,11 +374,11 @@ describe('PrivacyBlurShortcuts', () => {
     });
 
     test('handles empty shortcuts object gracefully', () => {
-      expect(() => PrivacyBlurShortcuts.init({}, {})).not.toThrow();
+      expect(() => pb.Shortcuts.init({}, {})).not.toThrow();
     });
 
     test('handles null shortcuts gracefully', () => {
-      expect(() => PrivacyBlurShortcuts.init(null, null)).not.toThrow();
+      expect(() => pb.Shortcuts.init(null, null)).not.toThrow();
     });
   });
 });

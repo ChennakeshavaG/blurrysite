@@ -8,10 +8,10 @@
  *  1. Unique ID attribute  → #escaped-id
  *  2. Fallback             → stamp a generated data-pb-id UUID on the element
  *
- * Exposed as window.PrivacyBlurSelectorUtils (IIFE, no ES module syntax).
+ * Exposed as pb.SelectorUtils (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurSelectorUtils = (() => {
+const SelectorUtils = (() => {
   'use strict';
 
   // -------------------------------------------------------------------------
@@ -138,4 +138,4 @@ const PrivacyBlurSelectorUtils = (() => {
 })();
 
 // Attach to window so content_script.js and other injected scripts can access it
-window.PrivacyBlurSelectorUtils = PrivacyBlurSelectorUtils;
+pb.SelectorUtils = SelectorUtils;

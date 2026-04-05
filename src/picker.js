@@ -1,22 +1,20 @@
 /**
- * privacyblur — picker.js
+ * picker.js — PrivacyBlur Element Picker
  *
- * Exposes `window.PrivacyBlurPicker`.
+ * Exposed as pb.Picker (IIFE — no ES module syntax).
  *
  * Interactive element picker: the user hovers to highlight an element then
  * clicks to blur (or unblur) it. Activated/deactivated programmatically
  * by content_script.js.
  *
- * Depends on window globals: PrivacyBlurEngine (loaded before this
- * file via manifest.json content_scripts order).
+ * Depends on pb.BlurEngine (loaded before this file via manifest.json).
  */
 
-window.PrivacyBlurPicker = (() => {
+const Picker = (() => {
   'use strict';
 
-  const _PB = window.PrivacyBlur || {};
-  const CLS = (_PB.CSS) || {};
-  const _IDS = (_PB.IDS) || {};
+  const CLS = pb.CSS || {};
+  const _IDS = pb.IDS || {};
 
   // ─── Internal state ──────────────────────────────────────────────────────────
 
@@ -30,10 +28,8 @@ window.PrivacyBlurPicker = (() => {
 
   /** Active settings snapshot: { blurRadius, highlightColor, … } */
   let activeSettings = {
-    blurRadius: (globalThis.PrivacyBlur && globalThis.PrivacyBlur.DEFAULT_SETTINGS)
-      ? globalThis.PrivacyBlur.DEFAULT_SETTINGS.BLUR_RADIUS : 8,
-    highlightColor: (globalThis.PrivacyBlur && globalThis.PrivacyBlur.DEFAULT_SETTINGS)
-      ? globalThis.PrivacyBlur.DEFAULT_SETTINGS.HIGHLIGHT_COLOR : '#f59e0b',
+    blurRadius: pb.DEFAULT_SETTINGS.BLUR_RADIUS,
+    highlightColor: pb.DEFAULT_SETTINGS.HIGHLIGHT_COLOR,
   };
 
   /** Callbacks provided by content_script: { onBlur, onUnblur, onDeactivate } */
@@ -142,7 +138,7 @@ window.PrivacyBlurPicker = (() => {
       if (typeof activeCallbacks.onUnblur === 'function') {
         activeCallbacks.onUnblur(el);
       } else {
-        window.PrivacyBlurEngine.removeBlur(el);
+        pb.BlurEngine.removeBlur(el);
       }
     }
     selectedElements.clear();
@@ -185,7 +181,7 @@ window.PrivacyBlurPicker = (() => {
       if (typeof activeCallbacks.onUnblur === 'function') {
         activeCallbacks.onUnblur(target);
       } else {
-        window.PrivacyBlurEngine.removeBlur(target);
+        pb.BlurEngine.removeBlur(target);
       }
       selectedElements.delete(target);
       flashElementIndicator(target, 'Unblurred');
@@ -193,7 +189,7 @@ window.PrivacyBlurPicker = (() => {
       if (typeof activeCallbacks.onBlur === 'function') {
         activeCallbacks.onBlur(target);
       } else {
-        window.PrivacyBlurEngine.applyBlur(target, activeSettings.blurRadius);
+        pb.BlurEngine.applyBlur(target, activeSettings.blurRadius);
       }
       selectedElements.add(target);
       flashElementIndicator(target, 'Blurred');
@@ -300,3 +296,5 @@ window.PrivacyBlurPicker = (() => {
   };
 
 })();
+
+pb.Picker = Picker;

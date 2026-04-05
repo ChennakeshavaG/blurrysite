@@ -2,7 +2,7 @@
  * blur_engine.js — PrivacyBlur Core Blur Engine
  *
  * Handles all DOM manipulation for blurring/unblurring elements.
- * Exposed as window.PrivacyBlurEngine (IIFE — no ES module syntax).
+ * Exposed as pb.BlurEngine (IIFE — no ES module syntax).
  *
  * Special handling:
  *  - All elements: CSS class (pb-blurred) + optional frosted class (pb-frosted)
@@ -15,17 +15,16 @@
  *  - Selector strings are cached and rebuilt only when categories change.
  */
 
-const PrivacyBlurEngine = (() => {
+const BlurEngine = (() => {
   'use strict';
 
   // -------------------------------------------------------------------------
   // Constants from shared definitions
   // -------------------------------------------------------------------------
-  const PB = globalThis.PrivacyBlur;
-  const BLUR_RADIUS        = PB.DEFAULT_SETTINGS.BLUR_RADIUS;
-  const BLURRED_CLASS      = PB.CSS.BLURRED;
-  const FROSTED_CLASS      = PB.CSS.FROSTED;
-  const SVG_FILTER_ID      = PB.IDS.SVG_FILTERS;
+  const BLUR_RADIUS        = pb.DEFAULT_SETTINGS.BLUR_RADIUS;
+  const BLURRED_CLASS      = pb.CSS.BLURRED;
+  const FROSTED_CLASS      = pb.CSS.FROSTED;
+  const SVG_FILTER_ID      = pb.IDS.SVG_FILTERS;
 
   // -------------------------------------------------------------------------
   // Category selector definitions
@@ -67,8 +66,8 @@ const PrivacyBlurEngine = (() => {
   });
 
   // Fallback: all categories enabled. Used when options.categories is omitted.
-  // Reads from PrivacyBlur.DEFAULT_SETTINGS to avoid duplicating values.
-  const DEFAULT_CATS = globalThis.PrivacyBlur.DEFAULT_SETTINGS.BLUR_CATEGORIES;
+  // Reads from pb.DEFAULT_SETTINGS to avoid duplicating values.
+  const DEFAULT_CATS = pb.DEFAULT_SETTINGS.BLUR_CATEGORIES;
 
   // Category names in fixed order for cache key generation.
   const CATEGORY_ORDER = Object.freeze(['TEXT','MEDIA','FORM','TABLE','STRUCTURE']);
@@ -199,9 +198,9 @@ const PrivacyBlurEngine = (() => {
     if (isBlurred(element)) return; // idempotent
 
     // Never blur extension UI elements (picker toolbar, toast notifications).
-    const toolbarId = PB.IDS.PICKER_TOOLBAR;
-    const toastClass = PB.CSS.TOAST;
-    const toolbarClass = PB.CSS.TOOLBAR;
+    const toolbarId = pb.IDS.PICKER_TOOLBAR;
+    const toastClass = pb.CSS.TOAST;
+    const toolbarClass = pb.CSS.TOOLBAR;
     if (element.id === toolbarId || element.closest('#' + toolbarId) ||
         element.classList.contains(toastClass) || element.closest('.' + toastClass) ||
         element.classList.contains(toolbarClass)) {
@@ -213,7 +212,7 @@ const PrivacyBlurEngine = (() => {
     // pb-frosted adds: SVG displacement filter override (AI-resistant).
     // Both classes needed for frosted mode — pb-blurred is the base.
     element.classList.add(BLURRED_CLASS);
-    if (mode === PB.BLUR_MODES.FROSTED) {
+    if (mode === pb.BLUR_MODES.FROSTED) {
       ensureSvgFilter();
       element.classList.add(FROSTED_CLASS);
     }
@@ -267,10 +266,10 @@ const PrivacyBlurEngine = (() => {
   function blurAllContent(radius = BLUR_RADIUS, options) {
     const cats = (options && options.categories) ? options.categories : DEFAULT_CATS;
     const thorough = !!(options && options.thoroughBlur);
-    const mode = (options && options.blurMode) || PB.BLUR_MODES.GAUSSIAN; // Defaults to Gaussian
+    const mode = (options && options.blurMode) || pb.BLUR_MODES.GAUSSIAN; // Defaults to Gaussian
 
     // Inject SVG filter element when frosted mode is active
-    if (mode === PB.BLUR_MODES.FROSTED) {
+    if (mode === pb.BLUR_MODES.FROSTED) {
       ensureSvgFilter();
     }
 
@@ -391,4 +390,4 @@ const PrivacyBlurEngine = (() => {
 })();
 
 // Attach to window so content_script.js and other injected scripts can access it
-window.PrivacyBlurEngine = PrivacyBlurEngine;
+pb.BlurEngine = BlurEngine;

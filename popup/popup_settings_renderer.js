@@ -10,13 +10,13 @@
  * The renderer dispatches to type-specific creators (toggle, range, select, etc.)
  * and maintains a control map for bi-directional sync.
  *
- * Exposed as window.PrivacyBlurSettingsRenderer (IIFE — no ES module syntax).
+ * Exposed as pb.SettingsRenderer (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurSettingsRenderer = (() => {
+const SettingsRenderer = (() => {
   'use strict';
 
-  const I18n = () => window.PrivacyBlurI18n;
+  const I18n = () => pb.I18n;
 
   // ── Control registry ───────────────────────────────────────────────────────
   // Maps setting key → { control: HTMLElement, display: HTMLElement|null, config }
@@ -525,4 +525,4 @@ const PrivacyBlurSettingsRenderer = (() => {
   };
 })();
 
-window.PrivacyBlurSettingsRenderer = PrivacyBlurSettingsRenderer;
+pb.SettingsRenderer = SettingsRenderer;

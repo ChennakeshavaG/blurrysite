@@ -2,7 +2,7 @@
 
 importScripts('src/constants.js');
 
-const MSG = self.PrivacyBlur;
+const MSG = self.pb;
 
 /**
  * background.js — PrivacyBlur MV3 Service Worker
@@ -13,8 +13,8 @@ const MSG = self.PrivacyBlur;
  *  - Manage the right-click context menu entries
  *  - Re-apply persisted blur state whenever a tab finishes loading
  *
- * Settings and deepMerge are sourced from constants.js (PrivacyBlur.DEFAULT_SETTINGS,
- * PrivacyBlur.deepMerge). No local copies.
+ * Settings and deepMerge are sourced from constants.js (pb.DEFAULT_SETTINGS,
+ * pb.deepMerge). No local copies.
  */
 
 // ---------------------------------------------------------------------------

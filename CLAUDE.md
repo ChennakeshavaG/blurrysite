@@ -21,15 +21,15 @@ Full design docs: `docs/HLD.md` (architecture), `docs/LLD.md` (contracts + algor
 
 Every source file exposes exactly one window global. Using the wrong name causes a silent `undefined` crash in the page context.
 
-| File | Global | Exposed API |
+| File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.PrivacyBlur` | Message types (`STORAGE.*`, `COMMAND.*`, `POPUP.*`), `DEFAULTS`, `isValid()`, `categoryOf()` |
-| `src/selector_utils.js` | `window.PrivacyBlurSelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
-| `src/storage_manager.js` | `window.PrivacyBlurStorage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
-| `src/blur_engine.js` | `window.PrivacyBlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `CATEGORY_SELECTORS` |
-| `src/shortcut_handler.js` | `window.PrivacyBlurShortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
-| `src/picker.js` | `window.PrivacyBlurPicker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
-| `content_script.js` | _(none — orchestrator)_ | Binds all globals via aliases after DOM ready |
+| `src/constants.js` | `globalThis.pb` | Message types (`pb.STORAGE.*`, `pb.COMMAND.*`, `pb.POPUP.*`), `DEFAULT_SETTINGS`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `deepMerge()` |
+| `src/selector_utils.js` | `pb.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
+| `src/storage_manager.js` | `pb.Storage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
+| `src/blur_engine.js` | `pb.BlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `CATEGORY_SELECTORS` |
+| `src/shortcut_handler.js` | `pb.Shortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
+| `src/picker.js` | `pb.Picker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
+| `content_script.js` | _(none — orchestrator)_ | Binds all modules via `pb.*` aliases after DOM ready |
 
 **Load order is fixed by `manifest.json`** — constants → selector_utils → storage_manager → blur_engine → shortcut_handler → picker → content_script. Never reorder.
 

@@ -4,10 +4,10 @@
  * Loads language JSON files and provides a t() function for string lookup.
  * Falls back: current locale → English → raw key.
  *
- * Exposed as window.PrivacyBlurI18n (IIFE — no ES module syntax).
+ * Exposed as window.I18n (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurI18n = (() => {
+const I18n = (() => {
   'use strict';
 
   /** @type {Object<string, string>} Current language strings */
@@ -69,4 +69,4 @@ const PrivacyBlurI18n = (() => {
   return { init, t };
 })();
 
-window.PrivacyBlurI18n = PrivacyBlurI18n;
+pb.I18n = I18n;

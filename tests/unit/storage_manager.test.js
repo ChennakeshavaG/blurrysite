@@ -2,7 +2,7 @@
  * tests/unit/storage_manager.test.js
  *
  * Unit tests for src/storage_manager.js
- * Module exposes window.PrivacyBlurStorage with:
+ * Module exposes pb.Storage with:
  *   saveBlurredElement, removeBlurredElement, getBlurredSelectors,
  *   clearHost, clearAll, getSettings, saveSettings
  *
@@ -20,7 +20,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/storage_manager.js');
 
 function loadStorageManager() {
-  if (global.PrivacyBlurStorage) return;
+  if (pb.Storage) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -32,7 +32,7 @@ function buildStubSource() {
   return `
   (function() {
     'use strict';
-    var MSG = window.PrivacyBlur;
+    var MSG = pb;
 
     function sendMsg(msg) {
       return new Promise(function(resolve, reject) {
@@ -81,7 +81,7 @@ function buildStubSource() {
       return sendMsg({ type: 'SAVE_RULES', rules: rules });
     }
 
-    window.PrivacyBlurStorage = {
+    pb.Storage = {
       saveBlurredElement: saveBlurredElement,
       removeBlurredElement: removeBlurredElement,
       getBlurredSelectors: getBlurredSelectors,
@@ -128,7 +128,7 @@ function mockSendMessageError(errorMessage) {
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
-describe('PrivacyBlurStorage', () => {
+describe('pb.Storage', () => {
   beforeAll(() => {
     loadStorageManager();
   });
@@ -139,7 +139,7 @@ describe('PrivacyBlurStorage', () => {
     test('sends SAVE_SELECTOR message with hostname and selector', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.saveBlurredElement('example.com', '#target');
+      await pb.Storage.saveBlurredElement('example.com', '#target');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -154,7 +154,7 @@ describe('PrivacyBlurStorage', () => {
     test('resolves with the response from background', async () => {
       mockSendMessageResponse({ ok: true });
 
-      const result = await PrivacyBlurStorage.saveBlurredElement('example.com', '#target');
+      const result = await pb.Storage.saveBlurredElement('example.com', '#target');
 
       expect(result).toEqual({ ok: true });
     });
@@ -166,7 +166,7 @@ describe('PrivacyBlurStorage', () => {
     test('sends REMOVE_SELECTOR message with correct payload', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.removeBlurredElement('example.com', '#target');
+      await pb.Storage.removeBlurredElement('example.com', '#target');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -185,7 +185,7 @@ describe('PrivacyBlurStorage', () => {
     test('resolves with selectors array from background response', async () => {
       mockSendMessageResponse({ selectors: ['#foo', '.bar', '[data-pb-id="abc"]'] });
 
-      const selectors = await PrivacyBlurStorage.getBlurredSelectors('example.com');
+      const selectors = await pb.Storage.getBlurredSelectors('example.com');
 
       expect(selectors).toEqual(['#foo', '.bar', '[data-pb-id="abc"]']);
     });
@@ -193,7 +193,7 @@ describe('PrivacyBlurStorage', () => {
     test('resolves with empty array when background returns no selectors', async () => {
       mockSendMessageResponse({});
 
-      const selectors = await PrivacyBlurStorage.getBlurredSelectors('example.com');
+      const selectors = await pb.Storage.getBlurredSelectors('example.com');
 
       expect(Array.isArray(selectors)).toBe(true);
       expect(selectors).toHaveLength(0);
@@ -202,7 +202,7 @@ describe('PrivacyBlurStorage', () => {
     test('sends GET_SELECTORS message with correct hostname', async () => {
       mockSendMessageResponse({ selectors: [] });
 
-      await PrivacyBlurStorage.getBlurredSelectors('news.example.org');
+      await pb.Storage.getBlurredSelectors('news.example.org');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -216,7 +216,7 @@ describe('PrivacyBlurStorage', () => {
     test('resolves with empty array when response is null', async () => {
       mockSendMessageResponse(null);
 
-      const selectors = await PrivacyBlurStorage.getBlurredSelectors('x.com');
+      const selectors = await pb.Storage.getBlurredSelectors('x.com');
 
       expect(selectors).toEqual([]);
     });
@@ -228,7 +228,7 @@ describe('PrivacyBlurStorage', () => {
     test('sends CLEAR_HOST message with correct hostname', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.clearHost('example.com');
+      await pb.Storage.clearHost('example.com');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -242,7 +242,7 @@ describe('PrivacyBlurStorage', () => {
     test('does not send CLEAR_ALL when only clearing a specific host', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.clearHost('example.com');
+      await pb.Storage.clearHost('example.com');
 
       const calls = chrome.runtime.sendMessage.mock.calls;
       calls.forEach(([msg]) => {
@@ -257,7 +257,7 @@ describe('PrivacyBlurStorage', () => {
     test('sends CLEAR_ALL message', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.clearAll();
+      await pb.Storage.clearAll();
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'CLEAR_ALL' }),
@@ -268,7 +268,7 @@ describe('PrivacyBlurStorage', () => {
     test('does not include hostname in CLEAR_ALL message', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.clearAll();
+      await pb.Storage.clearAll();
 
       const [msg] = chrome.runtime.sendMessage.mock.calls[0];
       expect(msg.hostname).toBeUndefined();
@@ -281,7 +281,7 @@ describe('PrivacyBlurStorage', () => {
     test('returns settings from background response', async () => {
       mockSendMessageResponse({ settings: { BLUR_RADIUS: 12, ENABLED: true } });
 
-      const settings = await PrivacyBlurStorage.getSettings();
+      const settings = await pb.Storage.getSettings();
 
       expect(settings.BLUR_RADIUS).toBe(12);
       expect(settings.ENABLED).toBe(true);
@@ -290,7 +290,7 @@ describe('PrivacyBlurStorage', () => {
     test('falls back to defaults when response has no settings', async () => {
       mockSendMessageResponse({});
 
-      const settings = await PrivacyBlurStorage.getSettings();
+      const settings = await pb.Storage.getSettings();
 
       // buildDefaultSettings() returns a full default object
       expect(settings.BLUR_RADIUS).toBe(10);
@@ -301,7 +301,7 @@ describe('PrivacyBlurStorage', () => {
     test('falls back to defaults when response is null', async () => {
       mockSendMessageResponse(null);
 
-      const settings = await PrivacyBlurStorage.getSettings();
+      const settings = await pb.Storage.getSettings();
 
       expect(settings.BLUR_RADIUS).toBe(10);
     });
@@ -314,9 +314,9 @@ describe('PrivacyBlurStorage', () => {
       chrome.runtime.sendMessage
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
-      const fullSettings = PrivacyBlur.buildDefaultSettings();
+      const fullSettings = pb.buildDefaultSettings();
       fullSettings.BLUR_RADIUS = 20;
-      await PrivacyBlurStorage.saveSettings(fullSettings);
+      await pb.Storage.saveSettings(fullSettings);
 
       const saveCalls = chrome.runtime.sendMessage.mock.calls.filter(
         ([msg]) => msg.type === 'SAVE_SETTINGS'
@@ -331,7 +331,7 @@ describe('PrivacyBlurStorage', () => {
       chrome.runtime.sendMessage
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
-      await PrivacyBlurStorage.saveSettings(PrivacyBlur.buildDefaultSettings());
+      await pb.Storage.saveSettings(pb.buildDefaultSettings());
 
       const saveCall = chrome.runtime.sendMessage.mock.calls.find(
         ([msg]) => msg.type === 'SAVE_SETTINGS'
@@ -347,7 +347,7 @@ describe('PrivacyBlurStorage', () => {
       mockSendMessageError('Extension context invalidated');
 
       await expect(
-        PrivacyBlurStorage.saveBlurredElement('x.com', '#el')
+        pb.Storage.saveBlurredElement('x.com', '#el')
       ).rejects.toBeTruthy();
     });
 
@@ -355,7 +355,7 @@ describe('PrivacyBlurStorage', () => {
       mockSendMessageError('Background not ready');
 
       await expect(
-        PrivacyBlurStorage.getBlurredSelectors('x.com')
+        pb.Storage.getBlurredSelectors('x.com')
       ).rejects.toBeTruthy();
     });
 
@@ -365,7 +365,7 @@ describe('PrivacyBlurStorage', () => {
       });
 
       await expect(
-        PrivacyBlurStorage.saveBlurredElement('x.com', '#el')
+        pb.Storage.saveBlurredElement('x.com', '#el')
       ).rejects.toThrow('Extension context invalidated');
     });
 
@@ -373,7 +373,7 @@ describe('PrivacyBlurStorage', () => {
       mockSendMessageError('Service worker suspended');
 
       await expect(
-        PrivacyBlurStorage.clearAll()
+        pb.Storage.clearAll()
       ).rejects.toBeTruthy();
     });
 
@@ -381,7 +381,7 @@ describe('PrivacyBlurStorage', () => {
       mockSendMessageError('Service worker suspended');
 
       await expect(
-        PrivacyBlurStorage.clearHost('example.com')
+        pb.Storage.clearHost('example.com')
       ).rejects.toBeTruthy();
     });
   });
@@ -392,7 +392,7 @@ describe('PrivacyBlurStorage', () => {
     test('saveBlurredElement returns early for empty hostname', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.saveBlurredElement('', '#el');
+      await pb.Storage.saveBlurredElement('', '#el');
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
@@ -400,7 +400,7 @@ describe('PrivacyBlurStorage', () => {
     test('saveBlurredElement returns early for empty selector', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.saveBlurredElement('example.com', '');
+      await pb.Storage.saveBlurredElement('example.com', '');
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
@@ -408,13 +408,13 @@ describe('PrivacyBlurStorage', () => {
     test('removeBlurredElement returns early for empty hostname', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.removeBlurredElement('', '#el');
+      await pb.Storage.removeBlurredElement('', '#el');
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
     test('getBlurredSelectors returns empty array for empty hostname', async () => {
-      const result = await PrivacyBlurStorage.getBlurredSelectors('');
+      const result = await pb.Storage.getBlurredSelectors('');
 
       expect(result).toEqual([]);
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
@@ -423,7 +423,7 @@ describe('PrivacyBlurStorage', () => {
     test('clearHost returns early for empty hostname', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.clearHost('');
+      await pb.Storage.clearHost('');
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
@@ -431,7 +431,7 @@ describe('PrivacyBlurStorage', () => {
     test('saveSettings returns early for null input', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.saveSettings(null);
+      await pb.Storage.saveSettings(null);
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
@@ -439,7 +439,7 @@ describe('PrivacyBlurStorage', () => {
     test('saveSettings returns early for non-object input', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await PrivacyBlurStorage.saveSettings('not an object');
+      await pb.Storage.saveSettings('not an object');
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
@@ -451,7 +451,7 @@ describe('PrivacyBlurStorage', () => {
     test('returns rules array from background', async () => {
       mockSendMessageResponse({ rules: [{ id: 'r1', pattern: '*.test.com' }] });
 
-      const rules = await PrivacyBlurStorage.getRules();
+      const rules = await pb.Storage.getRules();
       expect(rules).toHaveLength(1);
       expect(rules[0].id).toBe('r1');
     });
@@ -459,7 +459,7 @@ describe('PrivacyBlurStorage', () => {
     test('returns empty array when no rules saved', async () => {
       mockSendMessageResponse({});
 
-      const rules = await PrivacyBlurStorage.getRules();
+      const rules = await pb.Storage.getRules();
       expect(rules).toEqual([]);
     });
   });
@@ -470,7 +470,7 @@ describe('PrivacyBlurStorage', () => {
         .mockImplementationOnce((_msg, cb) => cb({ ok: true }));
 
       const rules = [{ id: 'r1', pattern: '*.example.com', patternType: 'wildcard', settings: {} }];
-      await PrivacyBlurStorage.saveRules(rules);
+      await pb.Storage.saveRules(rules);
 
       const saveCall = chrome.runtime.sendMessage.mock.calls.find(
         ([msg]) => msg.type === 'SAVE_RULES'
@@ -488,7 +488,7 @@ describe('PrivacyBlurStorage', () => {
         if (cb) cb({ blurAll: true });
       });
 
-      const result = await PrivacyBlurStorage.getBlurState('example.com');
+      const result = await pb.Storage.getBlurState('example.com');
       expect(result).toBeDefined();
 
       const call = chrome.runtime.sendMessage.mock.calls.find(
@@ -505,7 +505,7 @@ describe('PrivacyBlurStorage', () => {
         if (cb) cb({ success: true });
       });
 
-      await PrivacyBlurStorage.saveBlurState('example.com', true);
+      await pb.Storage.saveBlurState('example.com', true);
 
       const call = chrome.runtime.sendMessage.mock.calls.find(
         ([msg]) => msg.type === 'SAVE_BLUR_STATE'

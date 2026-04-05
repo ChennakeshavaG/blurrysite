@@ -2,7 +2,7 @@
  * tests/unit/selector_utils.test.js
  *
  * Unit tests for src/selector_utils.js
- * Module exposes window.PrivacyBlurSelectorUtils with:
+ * Module exposes pb.SelectorUtils with:
  *   getSelector, generateId, restoreSelector, restoreAllSelectors
  */
 
@@ -16,7 +16,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/selector_utils.js');
 
 function loadSelectorUtils() {
-  if (global.PrivacyBlurSelectorUtils) return;
+  if (pb.SelectorUtils) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -65,7 +65,7 @@ function buildStubSource() {
         .filter(function(el) { return el !== null; });
     }
 
-    window.PrivacyBlurSelectorUtils = {
+    pb.SelectorUtils = {
       getSelector: getSelector,
       generateId: generateId,
       restoreSelector: restoreSelector,
@@ -77,7 +77,7 @@ function buildStubSource() {
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
-describe('PrivacyBlurSelectorUtils', () => {
+describe('pb.SelectorUtils', () => {
   beforeAll(() => {
     loadSelectorUtils();
   });
@@ -94,7 +94,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.id = 'uniqueTarget';
       document.body.appendChild(div);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      const selector = pb.SelectorUtils.getSelector(div);
 
       expect(selector).toBe('#uniqueTarget');
     });
@@ -108,7 +108,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       document.body.appendChild(div1);
       document.body.appendChild(div2);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div1);
+      const selector = pb.SelectorUtils.getSelector(div1);
 
       // Should NOT return '#shared' because it is not unique.
       expect(selector).not.toBe('#shared');
@@ -118,7 +118,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
-      PrivacyBlurSelectorUtils.getSelector(div);
+      pb.SelectorUtils.getSelector(div);
 
       expect(div.dataset.pbId).toBeTruthy();
     });
@@ -127,7 +127,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      const selector = pb.SelectorUtils.getSelector(div);
 
       expect(selector).toMatch(/\[data-pb-id="/);
     });
@@ -136,19 +136,19 @@ describe('PrivacyBlurSelectorUtils', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
-      const s1 = PrivacyBlurSelectorUtils.getSelector(div);
-      const s2 = PrivacyBlurSelectorUtils.getSelector(div);
+      const s1 = pb.SelectorUtils.getSelector(div);
+      const s2 = pb.SelectorUtils.getSelector(div);
 
       expect(s1).toBe(s2);
     });
 
     test('returns null (or falsy) when called with body element', () => {
-      const result = PrivacyBlurSelectorUtils.getSelector(document.body);
+      const result = pb.SelectorUtils.getSelector(document.body);
       expect(result).toBeFalsy();
     });
 
     test('returns null when called with null', () => {
-      const result = PrivacyBlurSelectorUtils.getSelector(null);
+      const result = pb.SelectorUtils.getSelector(null);
       expect(result).toBeFalsy();
     });
 
@@ -156,7 +156,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       const p = document.createElement('p');
       document.body.appendChild(p);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(p);
+      const selector = pb.SelectorUtils.getSelector(p);
       const found = document.querySelector(selector);
 
       expect(found).toBe(p);
@@ -167,20 +167,20 @@ describe('PrivacyBlurSelectorUtils', () => {
 
   describe('generateId', () => {
     test('returns an 8-character string', () => {
-      const id = PrivacyBlurSelectorUtils.generateId();
+      const id = pb.SelectorUtils.generateId();
       expect(typeof id).toBe('string');
       expect(id.length).toBe(8);
     });
 
     test('returns a hex string (only 0-9, a-f characters)', () => {
-      const id = PrivacyBlurSelectorUtils.generateId();
+      const id = pb.SelectorUtils.generateId();
       expect(id).toMatch(/^[0-9a-f]{8}$/);
     });
 
     test('returns unique values on repeated calls', () => {
       const ids = new Set();
       for (let i = 0; i < 50; i++) {
-        ids.add(PrivacyBlurSelectorUtils.generateId());
+        ids.add(pb.SelectorUtils.generateId());
       }
       // With 50 calls we expect virtually no collisions (8-hex = 4 billion space).
       expect(ids.size).toBeGreaterThan(45);
@@ -195,32 +195,32 @@ describe('PrivacyBlurSelectorUtils', () => {
       span.id = 'restoreMe';
       document.body.appendChild(span);
 
-      const found = PrivacyBlurSelectorUtils.restoreSelector('#restoreMe');
+      const found = pb.SelectorUtils.restoreSelector('#restoreMe');
 
       expect(found).toBe(span);
     });
 
     test('returns null when selector matches nothing (stale selector)', () => {
-      const found = PrivacyBlurSelectorUtils.restoreSelector('#elementThatDoesNotExist');
+      const found = pb.SelectorUtils.restoreSelector('#elementThatDoesNotExist');
       expect(found).toBeNull();
     });
 
     test('returns null instead of throwing for syntactically invalid selector', () => {
       // "##bad" is invalid CSS selector syntax.
       expect(() => {
-        const found = PrivacyBlurSelectorUtils.restoreSelector('##bad-selector!!!');
+        const found = pb.SelectorUtils.restoreSelector('##bad-selector!!!');
         expect(found).toBeNull();
       }).not.toThrow();
     });
 
     test('returns null for null input', () => {
-      const found = PrivacyBlurSelectorUtils.restoreSelector(null);
+      const found = pb.SelectorUtils.restoreSelector(null);
       expect(found).toBeNull();
     });
 
     test('returns null for empty string input', () => {
       // Empty string querySelector throws or returns null depending on impl.
-      const found = PrivacyBlurSelectorUtils.restoreSelector('');
+      const found = pb.SelectorUtils.restoreSelector('');
       // Either null or no throw is acceptable.
       expect(found == null || found instanceof Element).toBe(true);
     });
@@ -230,7 +230,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.dataset.pbId = 'abc12345';
       document.body.appendChild(div);
 
-      const found = PrivacyBlurSelectorUtils.restoreSelector('[data-pb-id="abc12345"]');
+      const found = pb.SelectorUtils.restoreSelector('[data-pb-id="abc12345"]');
 
       expect(found).toBe(div);
     });
@@ -244,7 +244,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.id = 'existsNow';
       document.body.appendChild(div);
 
-      const results = PrivacyBlurSelectorUtils.restoreAllSelectors([
+      const results = pb.SelectorUtils.restoreAllSelectors([
         '#existsNow',
         '#doesNotExist',
         '#alsoMissing',
@@ -255,7 +255,7 @@ describe('PrivacyBlurSelectorUtils', () => {
     });
 
     test('returns empty array when all selectors are stale', () => {
-      const results = PrivacyBlurSelectorUtils.restoreAllSelectors([
+      const results = pb.SelectorUtils.restoreAllSelectors([
         '#ghost1',
         '#ghost2',
       ]);
@@ -263,18 +263,18 @@ describe('PrivacyBlurSelectorUtils', () => {
     });
 
     test('returns empty array when called with empty array', () => {
-      const results = PrivacyBlurSelectorUtils.restoreAllSelectors([]);
+      const results = pb.SelectorUtils.restoreAllSelectors([]);
       expect(results).toEqual([]);
     });
 
     test('does not throw for invalid selector in the array', () => {
       expect(() => {
-        PrivacyBlurSelectorUtils.restoreAllSelectors(['##invalid', '#valid-but-missing']);
+        pb.SelectorUtils.restoreAllSelectors(['##invalid', '#valid-but-missing']);
       }).not.toThrow();
     });
 
     test('returns empty array for non-array input', () => {
-      const results = PrivacyBlurSelectorUtils.restoreAllSelectors(null);
+      const results = pb.SelectorUtils.restoreAllSelectors(null);
       expect(Array.isArray(results)).toBe(true);
       expect(results).toHaveLength(0);
     });
@@ -282,7 +282,7 @@ describe('PrivacyBlurSelectorUtils', () => {
     test('returns all elements when every selector is valid', () => {
       document.body.innerHTML = '<p id="p1">A</p><p id="p2">B</p><p id="p3">C</p>';
 
-      const results = PrivacyBlurSelectorUtils.restoreAllSelectors(['#p1', '#p2', '#p3']);
+      const results = pb.SelectorUtils.restoreAllSelectors(['#p1', '#p2', '#p3']);
 
       expect(results).toHaveLength(3);
     });
@@ -292,12 +292,12 @@ describe('PrivacyBlurSelectorUtils', () => {
 
   describe('getSelector edge cases', () => {
     test('returns null when called with documentElement', () => {
-      const result = PrivacyBlurSelectorUtils.getSelector(document.documentElement);
+      const result = pb.SelectorUtils.getSelector(document.documentElement);
       expect(result).toBeFalsy();
     });
 
     test('returns null when called with undefined', () => {
-      const result = PrivacyBlurSelectorUtils.getSelector(undefined);
+      const result = pb.SelectorUtils.getSelector(undefined);
       expect(result).toBeFalsy();
     });
 
@@ -306,7 +306,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.id = 'my:special.id';
       document.body.appendChild(div);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      const selector = pb.SelectorUtils.getSelector(div);
 
       // Should either use escaped ID or fall back to data-pb-id
       expect(selector).toBeTruthy();
@@ -319,7 +319,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.id = '123numeric';
       document.body.appendChild(div);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      const selector = pb.SelectorUtils.getSelector(div);
       expect(selector).toBeTruthy();
 
       const found = document.querySelector(selector);
@@ -331,7 +331,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.setAttribute('id', '   ');
       document.body.appendChild(div);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      const selector = pb.SelectorUtils.getSelector(div);
 
       // Whitespace ID should be skipped, use data-pb-id
       expect(selector).toMatch(/\[data-pb-id="/);
@@ -342,7 +342,7 @@ describe('PrivacyBlurSelectorUtils', () => {
       div.dataset.pbId = 'existing123';
       document.body.appendChild(div);
 
-      const selector = PrivacyBlurSelectorUtils.getSelector(div);
+      const selector = pb.SelectorUtils.getSelector(div);
 
       expect(div.dataset.pbId).toBe('existing123');
       expect(selector).toBe('[data-pb-id="existing123"]');
@@ -354,8 +354,8 @@ describe('PrivacyBlurSelectorUtils', () => {
       document.body.appendChild(div1);
       document.body.appendChild(div2);
 
-      const s1 = PrivacyBlurSelectorUtils.getSelector(div1);
-      const s2 = PrivacyBlurSelectorUtils.getSelector(div2);
+      const s1 = pb.SelectorUtils.getSelector(div1);
+      const s2 = pb.SelectorUtils.getSelector(div2);
 
       expect(s1).not.toBe(s2);
     });
@@ -365,19 +365,19 @@ describe('PrivacyBlurSelectorUtils', () => {
 
   describe('restoreSelector edge cases', () => {
     test('returns null for undefined input', () => {
-      const found = PrivacyBlurSelectorUtils.restoreSelector(undefined);
+      const found = pb.SelectorUtils.restoreSelector(undefined);
       expect(found).toBeNull();
     });
 
     test('returns null for numeric input', () => {
-      const found = PrivacyBlurSelectorUtils.restoreSelector(42);
+      const found = pb.SelectorUtils.restoreSelector(42);
       expect(found).toBeNull();
     });
 
     test('handles complex selectors correctly', () => {
       document.body.innerHTML = '<div class="container"><p class="text">Hello</p></div>';
 
-      const found = PrivacyBlurSelectorUtils.restoreSelector('.container > .text');
+      const found = pb.SelectorUtils.restoreSelector('.container > .text');
       expect(found).not.toBeNull();
       expect(found.textContent).toBe('Hello');
     });
@@ -388,7 +388,7 @@ describe('PrivacyBlurSelectorUtils', () => {
   describe('generateId robustness', () => {
     test('all generated IDs are exactly 8 lowercase hex chars', () => {
       for (let i = 0; i < 100; i++) {
-        const id = PrivacyBlurSelectorUtils.generateId();
+        const id = pb.SelectorUtils.generateId();
         expect(id).toMatch(/^[0-9a-f]{8}$/);
       }
     });
@@ -396,7 +396,7 @@ describe('PrivacyBlurSelectorUtils', () => {
     test('high uniqueness over many generations', () => {
       const ids = new Set();
       for (let i = 0; i < 500; i++) {
-        ids.add(PrivacyBlurSelectorUtils.generateId());
+        ids.add(pb.SelectorUtils.generateId());
       }
       // With 32-bit space, 500 calls should have ~0 collisions
       expect(ids.size).toBeGreaterThanOrEqual(495);

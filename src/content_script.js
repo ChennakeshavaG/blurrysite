@@ -2,15 +2,14 @@
  * privacyblur — content_script.js
  *
  * Main content script injected into every page. Coordinates all modules via
- * their window.PrivacyBlur* globals, which are loaded before this script via
- * the manifest.json content_scripts load order.
+ * the pb.* namespace, loaded before this script via manifest.json.
  */
 
 (() => {
   'use strict';
 
-  const MSG = window.PrivacyBlur;
-  const CATEGORY_KEYS = Object.keys(window.PrivacyBlurEngine.CATEGORY_SELECTORS);
+  const MSG = pb;
+  const CATEGORY_KEYS = Object.keys(pb.BlurEngine.CATEGORY_SELECTORS);
   const RM = MSG.REVEAL_MODES;
   const BM = MSG.BLUR_MODES;
   const PT = MSG.PATTERN_TYPES;
@@ -924,11 +923,11 @@
   // ─── Initialisation ───────────────────────────────────────────────────────────
 
   async function init() {
-    Engine    = window.PrivacyBlurEngine;
-    Store     = window.PrivacyBlurStorage;
-    Selector  = window.PrivacyBlurSelectorUtils;
-    Picker    = window.PrivacyBlurPicker;
-    Shortcuts = window.PrivacyBlurShortcuts;
+    Engine    = pb.BlurEngine;
+    Store     = pb.Storage;
+    Selector  = pb.SelectorUtils;
+    Picker    = pb.Picker;
+    Shortcuts = pb.Shortcuts;
 
     // 1. Load settings and URL rules from storage.
     try {

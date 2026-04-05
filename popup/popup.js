@@ -13,10 +13,10 @@
   'use strict';
 
   // ── Module aliases ─────────────────────────────────────────────────────────
-  const MSG      = window.PrivacyBlur;
-  const I18n     = window.PrivacyBlurI18n;
-  const Configs  = window.PrivacyBlurPopupConfigs;
-  const Renderer = window.PrivacyBlurSettingsRenderer;
+  const MSG      = pb;
+  const I18n     = pb.I18n;
+  const Configs  = pb.PopupConfigs;
+  const Renderer = pb.SettingsRenderer;
 
   const DEBOUNCE_MS   = 300;
   const TOAST_MS      = 2000;

@@ -5,20 +5,20 @@
  * functions used across the extension (background worker, content scripts, popup).
  *
  * Usage:
- *   PrivacyBlur.STORAGE.SAVE_SELECTOR          // namespaced access
- *   PrivacyBlur.SAVE_SELECTOR                   // flat shorthand
- *   PrivacyBlur.isValid('SAVE_SELECTOR')        // true — validates a type string
- *   PrivacyBlur.categoryOf('SAVE_SELECTOR')     // 'STORAGE'
- *   PrivacyBlur.DEFAULT_SETTINGS                // frozen settings object
- *   PrivacyBlur.buildDefaultSettings()          // mutable deep clone
- *   PrivacyBlur.deepMerge(base, override)       // prototype-safe recursive merge
+ *   pb.STORAGE.SAVE_SELECTOR          // namespaced access
+ *   pb.SAVE_SELECTOR                   // flat shorthand
+ *   pb.isValid('SAVE_SELECTOR')        // true — validates a type string
+ *   pb.DEFAULT_SETTINGS                // frozen settings object
+ *   pb.BlurEngine.applyBlur(el)        // module access (Java-style)
+ *   pb.Storage.getSettings()           // module access
  *
- * Exposed as globalThis.PrivacyBlur (IIFE — no ES module syntax).
+ * Exposed as globalThis.pb (IIFE — no ES module syntax).
  * Uses globalThis so it works in both window (content scripts) and
- * self (service worker) contexts.
+ * self (service worker) contexts. Other modules attach to pb:
+ *   pb.BlurEngine, pb.Storage, pb.SelectorUtils, pb.Shortcuts, pb.Picker
  */
 
-const PrivacyBlur = (() => {
+const Constants = (() => {
   'use strict';
 
   // ── Message type categories ─────────────────────────────────────────────────
@@ -310,7 +310,8 @@ const PrivacyBlur = (() => {
     Object.assign(flat, catObj);
   }
 
-  return Object.freeze(Object.assign(flat, categories, {
+  // Not frozen — other modules attach to pb (pb.BlurEngine, pb.Storage, etc.)
+  return Object.assign(flat, categories, {
     REVEAL_MODES,
     BLUR_MODES,
     PATTERN_TYPES,
@@ -322,7 +323,7 @@ const PrivacyBlur = (() => {
     deepMerge,
     isValid,
     categoryOf,
-  }));
+  });
 })();
 
-globalThis.PrivacyBlur = PrivacyBlur;
+globalThis.pb = Constants;

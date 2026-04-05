@@ -15,13 +15,13 @@
  *   "blurred_selectors": { "hostname": ["selector1", ...] }
  * }
  *
- * Exposed as window.PrivacyBlurStorage (IIFE — no ES module syntax).
+ * Exposed as pb.Storage (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurStorage = (() => {
+const Storage = (() => {
   'use strict';
 
-  const MSG = window.PrivacyBlur;
+  const MSG = pb;
 
   // -------------------------------------------------------------------------
   // Private: send a message to the background worker and return a Promise
@@ -152,4 +152,4 @@ const PrivacyBlurStorage = (() => {
   };
 })();
 
-window.PrivacyBlurStorage = PrivacyBlurStorage;
+pb.Storage = Storage;

@@ -17,14 +17,13 @@
  *  3. Escape always calls onExitPicker when picker is active.
  *  4. Window blur clears the heldKeys Set (prevents phantom held keys).
  *
- * Exposed as window.PrivacyBlurShortcuts (IIFE — no ES module syntax).
+ * Exposed as pb.Shortcuts (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurShortcuts = (() => {
+const Shortcuts = (() => {
   'use strict';
 
-  const _PB = globalThis.PrivacyBlur || {};
-  const _CSS = (_PB.CSS) || {};
+  const _CSS = (pb.CSS) || {};
 
   // -------------------------------------------------------------------------
   // Internal state
@@ -280,4 +279,4 @@ const PrivacyBlurShortcuts = (() => {
   };
 })();
 
-window.PrivacyBlurShortcuts = PrivacyBlurShortcuts;
+pb.Shortcuts = Shortcuts;

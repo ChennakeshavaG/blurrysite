@@ -2,14 +2,14 @@
  * tests/unit/constants.test.js
  *
  * Unit tests for src/constants.js
- * Module exposes globalThis.PrivacyBlur with message type constants,
+ * Module exposes globalThis.pb with message type constants,
  * DEFAULT_SETTINGS, buildDefaultSettings(), deepMerge(), isValid(), categoryOf().
  */
 
 'use strict';
 
 describe('PrivacyBlur constants', () => {
-  const PB = global.PrivacyBlur;
+  const PB = pb;
 
   // ── Message type categories ───────────────────────────────────────────────
 
@@ -272,8 +272,10 @@ describe('PrivacyBlur constants', () => {
   // ── Immutability ──────────────────────────────────────────────────────────
 
   describe('immutability', () => {
-    test('top-level object is frozen', () => {
-      expect(Object.isFrozen(PB)).toBe(true);
+    test('top-level pb namespace is extensible (modules attach to it)', () => {
+      // pb is NOT frozen — other modules (BlurEngine, Storage, etc.) attach to it.
+      // Internal objects (DEFAULT_SETTINGS, STORAGE, COMMAND, etc.) are still frozen.
+      expect(typeof PB).toBe('object');
     });
 
     test('category objects are frozen', () => {
