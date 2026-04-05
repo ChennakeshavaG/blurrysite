@@ -58,9 +58,7 @@
 
       for (const selector of selectors) {
         const el = Selector.restoreSelector(selector);
-        if (el && canBlurMore()) {
           Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
-          blurredElementCount++;
           observeElement(el);
           if (settings.REVEAL_MODE === RM.HOVER) {
             el.classList.add(CLS.REVEAL_ON_HOVER);
@@ -119,19 +117,6 @@
     }
   }
 
-  // ── Performance: element cap ──────────────────────────────────────────────
-  // Tracks the total number of blurred elements. When MAX_BLURRED is reached,
-  // new elements are not blurred. 0 = unlimited.
-
-  let blurredElementCount = 0;
-
-  function canBlurMore() {
-    const max = settings.PERFORMANCE.MAX_BLURRED;
-    return max === 0 || blurredElementCount < max;
-  }
-
-  // ── Batched MutationObserver ────────────────────────────────────────────────
-
   // ── MutationObserver: blur new DOM elements synchronously ─────────────────
   // applyBlur is just classList.add — no DOM injection, no reflow.
   // Synchronous processing is simpler and faster than the old chunked RAF pipeline.
@@ -156,11 +141,9 @@
   function tryBlurElement(el) {
     if (!el.isConnected) return;
     if (Engine.isBlurred(el)) return;
-    if (!canBlurMore()) return;
     if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
-      blurredElementCount++;
       observeElement(el);
     }
   }
@@ -222,9 +205,7 @@
 
   const pickerCallbacks = {
     onBlur(el) {
-      if (!canBlurMore()) return;
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
-      blurredElementCount++;
       observeElement(el);
       if (settings.REVEAL_MODE === RM.HOVER) {
         el.classList.add(CLS.REVEAL_ON_HOVER);
@@ -238,7 +219,6 @@
     onUnblur(el) {
       el.classList.remove(CLS.REVEAL_ON_HOVER);
       Engine.removeBlur(el);
-      if (blurredElementCount > 0) blurredElementCount--;
       const selector = Selector.getSelector(el);
       if (selector) {
         Store.removeBlurredElement(hostname, selector).catch(() => {});
@@ -583,7 +563,6 @@
           dismissClickReveal();
           stopVisibilityObserver();
           Engine.unblurAll();
-          blurredElementCount = 0;
           isPageBlurred = false;
         } else {
           // Ensure observer is running to catch SPA re-renders
@@ -595,9 +574,7 @@
             blurMode: settings.BLUR_MODE,
           });
           // Track and observe all blurred elements
-          blurredElementCount = 0;
           document.querySelectorAll('.pb-blurred').forEach((el) => {
-            blurredElementCount++;
             if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
             observeElement(el);
           });
@@ -636,7 +613,6 @@
         dismissClickReveal();
         stopVisibilityObserver();
         Engine.unblurAll();
-        blurredElementCount = 0;
         offscreenElements.clear();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
@@ -693,9 +669,7 @@
       // ── Context menu: blur the right-clicked element ─────────────────────
       case MSG.CONTEXT_BLUR: {
         const target = lastContextMenuTarget;
-        if (target && target instanceof Element && canBlurMore()) {
           Engine.applyBlur(target, settings.BLUR_RADIUS, settings.BLUR_MODE);
-          blurredElementCount++;
           observeElement(target);
           if (settings.REVEAL_MODE === RM.HOVER) {
             target.classList.add(CLS.REVEAL_ON_HOVER);
@@ -717,7 +691,6 @@
         if (unblurTarget) {
           unblurTarget.classList.remove(CLS.REVEAL_ON_HOVER);
           Engine.removeBlur(unblurTarget);
-          if (blurredElementCount > 0) blurredElementCount--;
           const sel = Selector.getSelector(unblurTarget);
           if (sel) {
             Store.removeBlurredElement(hostname, sel).catch(() => {});
@@ -736,7 +709,6 @@
             if (el) {
               el.classList.remove(CLS.REVEAL_ON_HOVER);
               Engine.removeBlur(el);
-              if (blurredElementCount > 0) blurredElementCount--;
             }
           } catch (_e) { /* invalid selector — skip */ }
         }
@@ -829,7 +801,6 @@
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
     if (isPageBlurred && (catsChanged || thoroughChanged || radiusChanged || modeChanged)) {
       stopVisibilityObserver(); // disconnect before re-blur to avoid thrashing
-      blurredElementCount = 0;
       Engine.unblurAll();
       Engine.blurAllContent(settings.BLUR_RADIUS, {
         categories: settings.BLUR_CATEGORIES,
@@ -838,7 +809,6 @@
       });
       // Re-count and observe all newly blurred elements
       document.querySelectorAll('.pb-blurred').forEach(el => {
-        blurredElementCount++;
         observeElement(el);
       });
       if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
@@ -851,7 +821,6 @@
     // 8. Disable cleanup — reset all state so re-enable starts fresh
     if (!settings.ENABLED) {
       dismissClickReveal();
-      blurredElementCount = 0;
       offscreenElements.clear();
       isPageBlurred = false;
     }
@@ -912,9 +881,7 @@
         applyRevealClasses();
         isPageBlurred = true;
         // Count and observe all blurred elements
-        blurredElementCount = 0;
         document.querySelectorAll('.pb-blurred').forEach(el => {
-          blurredElementCount++;
           observeElement(el);
         });
         if (settings.PERFORMANCE.OFFSCREEN_UNBLUR) startVisibilityObserver();
