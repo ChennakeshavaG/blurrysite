@@ -848,7 +848,7 @@ describe('pb.BlurEngine', () => {
 
     test('does not blur form elements when form category off (default-like)', () => {
       document.body.innerHTML = '<input value="secret"><p>visible</p>';
-      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true };
+      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: false };
       pb.BlurEngine.blurAllContent(8, { categories: defaults });
       expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
       expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
@@ -860,21 +860,10 @@ describe('pb.BlurEngine', () => {
       expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(true);
     });
 
-    test('blurs structure elements with text when structure enabled', () => {
+    test('STRUCTURE category is empty — does not blur any containers', () => {
+      // STRUCTURE was removed because CSS filter on layout containers
+      // breaks position:fixed/sticky children. TEXT+MEDIA cover content.
       document.body.innerHTML = '<div>text content</div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('blurs structure elements with descendant text (text-check gate)', () => {
-      document.body.innerHTML = '<div><span>inner</span></div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      // div has visible text via descendant span — should be blurred
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
-    });
-
-    test('does not blur truly empty structure elements', () => {
-      document.body.innerHTML = '<div></div>';
       pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
     });
@@ -927,30 +916,28 @@ describe('pb.BlurEngine', () => {
     });
 
     test('thoroughBlur blurs text-check elements without direct text', () => {
-      // div has only element children, no direct text nodes
-      document.body.innerHTML = '<div><span>inner text</span></div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE'), thoroughBlur: true });
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
+      // td has only element children, no direct text nodes
+      document.body.innerHTML = '<table><tr><td><span>inner</span></td></tr></table>';
+      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE'), thoroughBlur: true });
+      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(true);
     });
 
     test('thoroughBlur off skips truly empty text-check elements', () => {
-      document.body.innerHTML = '<div></div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE'), thoroughBlur: false });
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
+      document.body.innerHTML = '<table><tr><td></td></tr></table>';
+      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE'), thoroughBlur: false });
+      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(false);
     });
 
     test('thoroughBlur does not affect always-blur elements', () => {
       document.body.innerHTML = '<p>text</p>';
-      // always-blur elements blurred regardless of thoroughBlur
       pb.BlurEngine.blurAllContent(8, { categories: ONLY('TEXT'), thoroughBlur: false });
       expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
     });
 
     test('thoroughBlur defaults to false when not specified', () => {
-      document.body.innerHTML = '<div></div>';
-      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
-      // Empty div should NOT blur because thoroughBlur defaults to false
-      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
+      document.body.innerHTML = '<table><tr><td></td></tr></table>';
+      pb.BlurEngine.blurAllContent(8, { categories: ONLY('TABLE') });
+      expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(false);
     });
   });
 
@@ -1040,23 +1027,23 @@ describe('pb.BlurEngine', () => {
       expect(pb.BlurEngine.shouldBlurElement(img, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false }, false)).toBe(false);
     });
 
-    test('text-check gate: returns false for empty div without thorough', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(false);
+    test('text-check gate: returns false for empty td without thorough', () => {
+      const td = document.createElement('td');
+      document.body.appendChild(td);
+      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, false)).toBe(false);
     });
 
-    test('text-check gate: returns true for div with text', () => {
-      const div = document.createElement('div');
-      div.textContent = 'has text';
-      document.body.appendChild(div);
-      expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(true);
+    test('text-check gate: returns true for td with text', () => {
+      const td = document.createElement('td');
+      td.textContent = 'has text';
+      document.body.appendChild(td);
+      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, false)).toBe(true);
     });
 
     test('thorough mode bypasses text-check gate', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, true)).toBe(true);
+      const td = document.createElement('td');
+      document.body.appendChild(td);
+      expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, true)).toBe(true);
     });
 
     test('returns false for unknown tags', () => {

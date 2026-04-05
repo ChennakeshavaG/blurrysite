@@ -57,11 +57,13 @@ const BlurEngine = (() => {
       alwaysBlur: Object.freeze(['caption']),
       textCheck:  Object.freeze(['td','th']),
     }),
+    // STRUCTURE category removed — blurring layout containers (div, section,
+    // header, footer, etc.) breaks position:fixed/sticky children because CSS
+    // filter creates a new containing block. TEXT + MEDIA categories already
+    // cover all readable content inside these containers.
     STRUCTURE: Object.freeze({
       alwaysBlur: Object.freeze([]),
-      textCheck:  Object.freeze([
-        'div','section','article','aside','header','footer','figure','details','dialog'
-      ]),
+      textCheck:  Object.freeze([]),
     }),
   });
 

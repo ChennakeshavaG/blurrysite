@@ -173,7 +173,7 @@ const Constants = (() => {
       MEDIA:     true,
       FORM:      false,
       TABLE:     true,
-      STRUCTURE: true,
+      STRUCTURE: false, // Empty — layout containers break with CSS filter
     }),
 
   });
