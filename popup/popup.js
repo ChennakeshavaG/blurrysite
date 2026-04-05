@@ -475,6 +475,9 @@ function renderRulesList() {
     delBtn.addEventListener('click', async () => {
       urlRules = urlRules.filter(r => r.id !== rule.id);
       await bgMessage({ type: MSG.SAVE_RULES, rules: urlRules });
+      if (currentTab) {
+        await tabMessage(currentTab.id, { type: MSG.UPDATE_SETTINGS, settings });
+      }
       renderRulesList();
       showToast('Rule deleted');
     });
@@ -568,6 +571,11 @@ function openRuleModal(existingRule) {
     }
 
     await bgMessage({ type: MSG.SAVE_RULES, rules: urlRules });
+    // Notify the active tab directly so settings re-resolve immediately
+    // (don't rely solely on storage.onChanged which can be delayed)
+    if (currentTab) {
+      await tabMessage(currentTab.id, { type: MSG.UPDATE_SETTINGS, settings });
+    }
     renderRulesList();
     closeRuleModal();
     showToast(editingRuleId ? 'Rule updated' : 'Rule added');

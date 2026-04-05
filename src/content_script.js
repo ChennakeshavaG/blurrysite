@@ -576,13 +576,19 @@
       // ── Update settings ───────────────────────────────────────────────────
       case MSG.UPDATE_SETTINGS: {
         if (message.settings) {
-          const oldCategories = settings.BLUR_CATEGORIES;
-          const oldThorough = settings.THOROUGH_BLUR;
-          const oldEnabled = settings.ENABLED;
-          const oldRadius = settings.BLUR_RADIUS;
-          globalSettings = MSG.deepMerge(globalSettings, message.settings);
-          settings = resolveSettings(location.href, globalSettings, rules);
-          applySettingsToDom();
+          // Async handler — reload rules then re-resolve settings
+          (async () => {
+            const oldCategories = settings.BLUR_CATEGORIES;
+            const oldThorough = settings.THOROUGH_BLUR;
+            const oldEnabled = settings.ENABLED;
+            const oldRadius = settings.BLUR_RADIUS;
+            globalSettings = MSG.deepMerge(globalSettings, message.settings);
+
+            // Reload rules — popup may have saved new rules before this message
+            try { const r = await Store.getRules(); if (r) rules = r; } catch (_e) {}
+
+            settings = resolveSettings(location.href, globalSettings, rules);
+            applySettingsToDom();
 
           // Detect if blur configuration changed
           const catsChanged = CATEGORY_KEYS.some(k => oldCategories[k] !== settings.BLUR_CATEGORIES[k]);
@@ -639,9 +645,11 @@
               }).catch(() => {});
             }
           }
+
+            if (sendResponse) sendResponse({ ok: true });
+          })();
         }
-        if (sendResponse) sendResponse({ ok: true });
-        break;
+        return true; // async handler
       }
 
       // ── Context menu: blur the right-clicked element ─────────────────────
