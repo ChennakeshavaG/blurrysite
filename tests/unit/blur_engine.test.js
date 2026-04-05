@@ -848,7 +848,7 @@ describe('pb.BlurEngine', () => {
 
     test('does not blur form elements when form category off (default-like)', () => {
       document.body.innerHTML = '<input value="secret"><p>visible</p>';
-      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true };
+      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: false };
       pb.BlurEngine.blurAllContent(8, { categories: defaults });
       expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
       expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);

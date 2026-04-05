@@ -173,7 +173,7 @@ const Constants = (() => {
       MEDIA:     true,
       FORM:      false,
       TABLE:     true,
-      STRUCTURE: true,
+      STRUCTURE: false, // OFF by default — filter on containers breaks position:fixed/sticky/absolute children
     }),
 
   });
