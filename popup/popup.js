@@ -256,16 +256,16 @@ async function init() {
   const rulesResp = await bgMessage({ type: MSG.GET_RULES });
   if (rulesResp && Array.isArray(rulesResp.rules)) urlRules = rulesResp.rules;
 
-  // Render everything
-  renderEnableToggle();
-  renderSettingsPanel();
-  renderCategoryToggles();
-  renderRulesList();
-  renderBlurList();
-  renderShortcutDisplays();
-
-  // Wire controls
+  // Wire controls FIRST so buttons are responsive even if rendering fails.
   wireControls();
+
+  // Then render — each wrapped individually so one failure doesn't block others.
+  try { renderEnableToggle(); } catch (e) { console.warn('[PB popup] renderEnableToggle:', e); }
+  try { renderSettingsPanel(); } catch (e) { console.warn('[PB popup] renderSettingsPanel:', e); }
+  try { renderCategoryToggles(); } catch (e) { console.warn('[PB popup] renderCategoryToggles:', e); }
+  try { renderRulesList(); } catch (e) { console.warn('[PB popup] renderRulesList:', e); }
+  try { renderBlurList(); } catch (e) { console.warn('[PB popup] renderBlurList:', e); }
+  try { renderShortcutDisplays(); } catch (e) { console.warn('[PB popup] renderShortcutDisplays:', e); }
 }
 
 // ─── Control wiring ──────────────────────────────────────────────────────────
