@@ -43,10 +43,10 @@
   --pb-success:         #22c55e;
 
   /* Frosted glass */
-  --pb-frost-bg:        rgba(255, 255, 255, 0.06);
-  --pb-frost-blur:      12px;
-  --pb-frost-border:    rgba(255, 255, 255, 0.12);
-  --pb-frost-shadow:    0 4px 16px rgba(0, 0, 0, 0.3);
+  --pb-frost-bg:        rgba(255, 255, 255, 0.08);
+  --pb-frost-blur:      14px;
+  --pb-frost-border:    rgba(255, 255, 255, 0.18);
+  --pb-frost-shadow:    0 4px 20px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
 
   /* Dynamic blur background (updated by JS) */
   --pb-bg-blur-radius:  10px;
@@ -91,14 +91,17 @@
 /* ---------- Reset & Base ---------- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: var(--pb-font-size-base); }
+html {
+  font-size: var(--pb-font-size-base);
+  background: var(--pb-bg); /* Solid base behind everything */
+}
 
 body {
   width: var(--pb-popup-width);
   max-height: 520px;
   overflow-y: auto;
   overflow-x: hidden;
-  background: var(--pb-bg);
+  background: transparent; /* Let .pb-bg blobs show through for frosted glass effect */
   color: var(--pb-text);
   font-family: var(--pb-font);
   line-height: 1.5;
@@ -118,24 +121,55 @@ button { cursor: pointer; font-family: inherit; }
 ::-webkit-scrollbar-thumb:hover { background: var(--pb-accent); }
 
 /* ---------- Dynamic Background ---------- */
+/* Rich color blobs that the blur acts on — gives frosted elements something to frost against */
 .pb-bg {
   position: fixed;
-  inset: 0;
+  inset: -20px; /* Overshoot to prevent blur edge gaps */
   z-index: 0;
   background: var(--pb-bg);
-  background-image:
-    radial-gradient(ellipse at 25% 15%, rgba(245, 158, 11, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse at 75% 80%, rgba(99, 102, 241, 0.08) 0%, transparent 50%);
-  filter: blur(var(--pb-bg-blur-radius));
-  transform: scale(1.15); /* Prevent blur edge bleeding */
   pointer-events: none;
 }
 
+.pb-bg::before,
+.pb-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(var(--pb-bg-blur-radius));
+}
+
+/* Warm amber blob — top-left */
+.pb-bg::before {
+  width: 200px;
+  height: 200px;
+  top: -40px;
+  left: -30px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.45) 0%, rgba(245, 158, 11, 0.15) 40%, transparent 70%);
+}
+
+/* Cool indigo blob — bottom-right */
+.pb-bg::after {
+  width: 220px;
+  height: 220px;
+  bottom: -50px;
+  right: -40px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, rgba(99, 102, 241, 0.1) 40%, transparent 70%);
+}
+
+/* Light mode: brighter, more saturated blobs */
+[data-theme="light"] .pb-bg::before {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.5) 0%, rgba(245, 158, 11, 0.2) 40%, transparent 70%);
+}
+[data-theme="light"] .pb-bg::after {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(99, 102, 241, 0.15) 40%, transparent 70%);
+}
+
 /* ---------- Frosted Glass Mixin ---------- */
+/* backdrop-filter blurs the background blobs behind the element, creating glass effect */
 .pb-frost {
   background: var(--pb-frost-bg);
-  backdrop-filter: blur(var(--pb-frost-blur));
-  -webkit-backdrop-filter: blur(var(--pb-frost-blur));
+  backdrop-filter: blur(var(--pb-frost-blur)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--pb-frost-blur)) saturate(1.4);
   border: 1px solid var(--pb-frost-border);
   border-radius: var(--pb-radius-md);
   box-shadow: var(--pb-frost-shadow);
@@ -217,6 +251,8 @@ button { cursor: pointer; font-family: inherit; }
   width: 32px;
   height: 18px;
   background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--pb-frost-border);
   border-radius: 18px;
   transition: background 0.2s, border-color 0.2s;
@@ -284,13 +320,18 @@ button { cursor: pointer; font-family: inherit; }
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 8px 6px;
+  padding: 10px 6px;
   font-size: var(--pb-font-size-sm);
   font-weight: 600;
   font-family: inherit;
   color: var(--pb-text);
   border: none;
-  transition: background 0.15s, transform 0.1s, color 0.15s;
+  transition: background 0.15s, transform 0.1s, color 0.15s, box-shadow 0.15s;
+}
+
+.pb-actions__btn:hover {
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .pb-actions__btn:active { transform: scale(0.96); }
