@@ -81,6 +81,55 @@ const PrivacyBlur = (() => {
     return typeToCategory[type] || null;
   }
 
+  // ── Enum constants ──────────────────────────────────────────────────────────
+  // Strongly-typed values for settings that accept a fixed set of options.
+  // Use these instead of bare string literals in comparisons.
+
+  const REVEAL_MODES = Object.freeze({
+    NONE:  'none',
+    CLICK: 'click',
+    HOVER: 'hover',
+  });
+
+  const BLUR_MODES = Object.freeze({
+    GAUSSIAN: 'gaussian',
+    FROSTED:  'frosted',
+  });
+
+  const PATTERN_TYPES = Object.freeze({
+    WILDCARD: 'wildcard',
+    REGEX:    'regex',
+  });
+
+  // ── CSS class and ID constants ─────────────────────────────────────────────
+  // Shared across blur_engine, content_script, picker, shortcut_handler.
+  // Must match the class names in styles/content.css exactly.
+
+  const CSS = Object.freeze({
+    BLURRED:          'pb-blurred',
+    FROSTED:          'pb-frosted',
+    CANVAS_OVERLAY:   'pb-canvas-overlay',
+    TEXT_WRAPPER:     'pb-text-node-wrapper',
+    REVEAL_ON_HOVER:  'pb-reveal-on-hover',
+    ANCESTOR_REVEAL:  'pb-ancestor-reveal',
+    REVEALED:         'pb-revealed',
+    HOVER_HIGHLIGHT:  'pb-hover-highlight',
+    PICKER_ACTIVE:    'pb-picker-active',
+    TOAST:            'pb-toast',
+    TOAST_MESSAGE:    'pb-toast__message',
+    TOAST_EXITING:    'pb-toast--exiting',
+    TOOLBAR:          'pb-toolbar',
+    TOOLBAR_LABEL:    'pb-toolbar-label',
+    TOOLBAR_BTN:      'pb-toolbar-btn',
+    TOOLBAR_BTN_CLEAR:'pb-toolbar-btn--clear',
+    TOOLBAR_BTN_CLOSE:'pb-toolbar-btn--close',
+  });
+
+  const IDS = Object.freeze({
+    PICKER_TOOLBAR: 'pb-picker-toolbar',
+    SVG_FILTERS:    'pb-svg-filters',
+  });
+
   // ── Default settings ────────────────────────────────────────────────────────
   // Single source of truth. All UPPER_SNAKE_CASE. Every file in the codebase
   // references this object or uses buildDefaultSettings() to get a mutable copy.
@@ -90,10 +139,10 @@ const PrivacyBlur = (() => {
     BLUR_RADIUS:          10,
     TRANSITION_DURATION:  200,
     HIGHLIGHT_COLOR:      '#f59e0b',
-    REVEAL_MODE:          'hover',   // 'none' | 'click' | 'hover'
+    REVEAL_MODE:          REVEAL_MODES.HOVER,
     ENABLED:              true,
     THOROUGH_BLUR:        false,
-    BLUR_MODE:            'gaussian',  // 'gaussian' | 'frosted'
+    BLUR_MODE:            BLUR_MODES.GAUSSIAN,
 
     SHORTCUTS: Object.freeze({
       TOGGLE_BLUR_ALL: Object.freeze({
@@ -201,7 +250,7 @@ const PrivacyBlur = (() => {
       /^#[0-9a-fA-F]{6}$/.test(settings.HIGHLIGHT_COLOR))
       ? settings.HIGHLIGHT_COLOR : defaults.HIGHLIGHT_COLOR;
 
-    result.REVEAL_MODE = (['none', 'click', 'hover'].includes(settings.REVEAL_MODE))
+    result.REVEAL_MODE = (Object.values(REVEAL_MODES).includes(settings.REVEAL_MODE))
       ? settings.REVEAL_MODE : defaults.REVEAL_MODE;
 
     result.ENABLED = (typeof settings.ENABLED === 'boolean')
@@ -210,7 +259,7 @@ const PrivacyBlur = (() => {
     result.THOROUGH_BLUR = (typeof settings.THOROUGH_BLUR === 'boolean')
       ? settings.THOROUGH_BLUR : defaults.THOROUGH_BLUR;
 
-    result.BLUR_MODE = (['gaussian', 'frosted'].includes(settings.BLUR_MODE))
+    result.BLUR_MODE = (Object.values(BLUR_MODES).includes(settings.BLUR_MODE))
       ? settings.BLUR_MODE : defaults.BLUR_MODE;
 
     // BLUR_CATEGORIES: each key must be boolean
@@ -262,6 +311,11 @@ const PrivacyBlur = (() => {
   }
 
   return Object.freeze(Object.assign(flat, categories, {
+    REVEAL_MODES,
+    BLUR_MODES,
+    PATTERN_TYPES,
+    CSS,
+    IDS,
     DEFAULT_SETTINGS,
     buildDefaultSettings,
     validateSettings,

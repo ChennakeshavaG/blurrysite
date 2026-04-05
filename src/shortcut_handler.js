@@ -23,6 +23,9 @@
 const PrivacyBlurShortcuts = (() => {
   'use strict';
 
+  const _PB = globalThis.PrivacyBlur || {};
+  const _CSS = (_PB.CSS) || {};
+
   // -------------------------------------------------------------------------
   // Internal state
   // -------------------------------------------------------------------------
@@ -112,12 +115,12 @@ const PrivacyBlurShortcuts = (() => {
     }
 
     const toast = document.createElement("div");
-    toast.className = "pb-toast";
+    toast.className = _CSS.TOAST || "pb-toast";
     toast.setAttribute("role", "status");
     toast.setAttribute("aria-live", "polite");
 
     const msgSpan = document.createElement("span");
-    msgSpan.className = "pb-toast__message";
+    msgSpan.className = _CSS.TOAST_MESSAGE || "pb-toast__message";
     msgSpan.textContent = text;
     toast.appendChild(msgSpan);
 
@@ -125,7 +128,7 @@ const PrivacyBlurShortcuts = (() => {
     currentToastEl = toast;
 
     const removeTimer = setTimeout(() => {
-      toast.classList.add("pb-toast--exiting");
+      toast.classList.add(_CSS.TOAST_EXITING || "pb-toast--exiting");
       setTimeout(() => {
         if (toast.parentNode) toast.parentNode.removeChild(toast);
         if (currentToastEl === toast) currentToastEl = null;

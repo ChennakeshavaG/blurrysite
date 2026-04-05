@@ -11,6 +11,10 @@
 
   const MSG = window.PrivacyBlur;
   const CATEGORY_KEYS = Object.keys(window.PrivacyBlurEngine.CATEGORY_SELECTORS);
+  const RM = MSG.REVEAL_MODES;
+  const BM = MSG.BLUR_MODES;
+  const PT = MSG.PATTERN_TYPES;
+  const CLS = MSG.CSS;
 
   // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -59,8 +63,8 @@
           Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
           blurredElementCount++;
           observeElement(el);
-          if (settings.REVEAL_MODE === 'hover') {
-            el.classList.add('pb-reveal-on-hover');
+          if (settings.REVEAL_MODE === RM.HOVER) {
+            el.classList.add(CLS.REVEAL_ON_HOVER);
           }
         }
       }
@@ -88,15 +92,15 @@
           // Back on screen — re-apply blur
           if (offscreenElements.has(el)) {
             offscreenElements.delete(el);
-            el.classList.add('pb-blurred');
-            if (settings.BLUR_MODE === 'frosted') el.classList.add('pb-frosted');
-            if (settings.REVEAL_MODE === 'hover') el.classList.add('pb-reveal-on-hover');
+            el.classList.add(CLS.BLURRED);
+            if (settings.BLUR_MODE === BM.FROSTED) el.classList.add(CLS.FROSTED);
+            if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
           }
         } else {
           // Off screen — remove blur to free compositing layer
-          if (el.classList.contains('pb-blurred')) {
+          if (el.classList.contains(CLS.BLURRED)) {
             offscreenElements.add(el);
-            el.classList.remove('pb-blurred', 'pb-frosted', 'pb-reveal-on-hover');
+            el.classList.remove(CLS.BLURRED, CLS.FROSTED, CLS.REVEAL_ON_HOVER);
           }
         }
       }
@@ -114,9 +118,9 @@
     // Re-blur any elements that were temporarily unblurred
     for (const el of offscreenElements) {
       if (el.isConnected) {
-        el.classList.add('pb-blurred');
-        if (settings.BLUR_MODE === 'frosted') el.classList.add('pb-frosted');
-        if (settings.REVEAL_MODE === 'hover') el.classList.add('pb-reveal-on-hover');
+        el.classList.add(CLS.BLURRED);
+        if (settings.BLUR_MODE === BM.FROSTED) el.classList.add(CLS.FROSTED);
+        if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
       }
     }
     offscreenElements.clear();
@@ -166,7 +170,7 @@
 
       if (Engine.shouldBlurElement(node, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
         Engine.applyBlur(node, settings.BLUR_RADIUS, settings.BLUR_MODE);
-        if (settings.REVEAL_MODE === 'hover') node.classList.add('pb-reveal-on-hover');
+        if (settings.REVEAL_MODE === RM.HOVER) node.classList.add(CLS.REVEAL_ON_HOVER);
         blurredElementCount++;
         observeElement(node);
       }
@@ -249,8 +253,8 @@
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       blurredElementCount++;
       observeElement(el);
-      if (settings.REVEAL_MODE === 'hover') {
-        el.classList.add('pb-reveal-on-hover');
+      if (settings.REVEAL_MODE === RM.HOVER) {
+        el.classList.add(CLS.REVEAL_ON_HOVER);
       }
       const selector = Selector.getSelector(el);
       if (selector) {
@@ -259,7 +263,7 @@
     },
 
     onUnblur(el) {
-      el.classList.remove('pb-reveal-on-hover');
+      el.classList.remove(CLS.REVEAL_ON_HOVER);
       Engine.removeBlur(el);
       if (blurredElementCount > 0) blurredElementCount--;
       const selector = Selector.getSelector(el);
@@ -396,7 +400,7 @@
 
     // Regex mode: match against URL without hash.
     // Reject patterns with nested quantifiers to prevent ReDoS.
-    if (patternType === 'regex') {
+    if (patternType === PT.REGEX) {
       try {
         if (/([+*?])\s*[)]\s*[+*?{]/.test(pattern) || /([+*?{])\s*\1/.test(pattern)) {
           return false; // nested quantifiers — catastrophic backtracking risk
@@ -456,7 +460,7 @@
   function findBlurredAncestor(el) {
     let node = el;
     while (node && node !== document.documentElement) {
-      if (node instanceof Element && node.classList.contains('pb-blurred')) return node;
+      if (node instanceof Element && node.classList.contains(CLS.BLURRED)) return node;
       node = node.parentElement;
     }
     return null;
@@ -470,7 +474,7 @@
 
   function clearRevealedAncestors() {
     for (let i = 0; i < revealedAncestors.length; i++) {
-      revealedAncestors[i].classList.remove('pb-ancestor-reveal');
+      revealedAncestors[i].classList.remove(CLS.ANCESTOR_REVEAL);
     }
     revealedAncestors = [];
   }
@@ -479,8 +483,8 @@
     clearRevealedAncestors();
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
-      if (node.classList.contains('pb-blurred')) {
-        node.classList.add('pb-ancestor-reveal');
+      if (node.classList.contains(CLS.BLURRED)) {
+        node.classList.add(CLS.ANCESTOR_REVEAL);
         revealedAncestors.push(node);
       }
       node = node.parentElement;
@@ -489,14 +493,14 @@
 
   function dismissClickReveal() {
     if (clickRevealedEl) {
-      clickRevealedEl.classList.remove('pb-revealed');
+      clickRevealedEl.classList.remove(CLS.REVEALED);
       clickRevealedEl = null;
     }
     clearRevealedAncestors();
   }
 
   function onRevealClick(e) {
-    if (settings.REVEAL_MODE !== 'click') return;
+    if (settings.REVEAL_MODE !== RM.CLICK) return;
     if (isPickerActive) return;
 
     const target = e.target;
@@ -511,7 +515,7 @@
     }
 
     dismissClickReveal();
-    blurredEl.classList.add('pb-revealed');
+    blurredEl.classList.add(CLS.REVEALED);
     clickRevealedEl = blurredEl;
     revealAncestorChain(blurredEl);
   }
@@ -523,7 +527,7 @@
   }
 
   function onRevealMouseOver(e) {
-    if (settings.REVEAL_MODE !== 'hover') return;
+    if (settings.REVEAL_MODE !== RM.HOVER) return;
     const target = e.target;
     if (!(target instanceof Element)) return;
 
@@ -619,7 +623,7 @@
           blurredElementCount = 0;
           document.querySelectorAll('.pb-blurred').forEach((el) => {
             blurredElementCount++;
-            if (settings.REVEAL_MODE === 'hover') el.classList.add('pb-reveal-on-hover');
+            if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
             observeElement(el);
           });
           isPageBlurred = true;
@@ -652,7 +656,7 @@
       // ── Clear all blur on this page ───────────────────────────────────────
       case MSG.CLEAR_ALL_BLUR: {
         document.querySelectorAll('.pb-reveal-on-hover').forEach((el) => {
-          el.classList.remove('pb-reveal-on-hover');
+          el.classList.remove(CLS.REVEAL_ON_HOVER);
         });
         dismissClickReveal();
         stopVisibilityObserver();
@@ -718,8 +722,8 @@
           Engine.applyBlur(target, settings.BLUR_RADIUS, settings.BLUR_MODE);
           blurredElementCount++;
           observeElement(target);
-          if (settings.REVEAL_MODE === 'hover') {
-            target.classList.add('pb-reveal-on-hover');
+          if (settings.REVEAL_MODE === RM.HOVER) {
+            target.classList.add(CLS.REVEAL_ON_HOVER);
           }
           const sel = Selector.getSelector(target);
           if (sel) {
@@ -736,7 +740,7 @@
         const target = lastContextMenuTarget;
         const unblurTarget = findBlurredAncestor(target);
         if (unblurTarget) {
-          unblurTarget.classList.remove('pb-reveal-on-hover');
+          unblurTarget.classList.remove(CLS.REVEAL_ON_HOVER);
           Engine.removeBlur(unblurTarget);
           if (blurredElementCount > 0) blurredElementCount--;
           const sel = Selector.getSelector(unblurTarget);
@@ -755,7 +759,7 @@
           try {
             const el = document.querySelector(message.selector);
             if (el) {
-              el.classList.remove('pb-reveal-on-hover');
+              el.classList.remove(CLS.REVEAL_ON_HOVER);
               Engine.removeBlur(el);
               if (blurredElementCount > 0) blurredElementCount--;
             }
@@ -782,9 +786,9 @@
 
   /** Apply reveal-on-hover class to all blurred elements based on current reveal mode. */
   function applyRevealClasses() {
-    const isHover = settings.REVEAL_MODE === 'hover';
+    const isHover = settings.REVEAL_MODE === RM.HOVER;
     document.querySelectorAll('.pb-blurred').forEach(el => {
-      el.classList.toggle('pb-reveal-on-hover', isHover);
+      el.classList.toggle(CLS.REVEAL_ON_HOVER, isHover);
     });
   }
 
@@ -866,7 +870,7 @@
 
     // 7. Reveal mode management (always runs — covers both re-blur and mode-only changes)
     applyRevealClasses();
-    if (settings.REVEAL_MODE !== 'click') dismissClickReveal();
+    if (settings.REVEAL_MODE !== RM.CLICK) dismissClickReveal();
 
     // 8. Disable cleanup
     if (!settings.ENABLED) dismissClickReveal();

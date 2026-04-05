@@ -14,6 +14,10 @@
 window.PrivacyBlurPicker = (() => {
   'use strict';
 
+  const _PB = window.PrivacyBlur || {};
+  const CLS = (_PB.CSS) || {};
+  const _IDS = (_PB.IDS) || {};
+
   // ─── Internal state ──────────────────────────────────────────────────────────
 
   let isActive = false;
@@ -78,8 +82,8 @@ window.PrivacyBlurPicker = (() => {
     if (toolbarEl) return;
 
     toolbarEl = document.createElement('div');
-    toolbarEl.id = 'pb-picker-toolbar';
-    toolbarEl.className = 'pb-toolbar';
+    toolbarEl.id = (_IDS.PICKER_TOOLBAR || 'pb-picker-toolbar');
+    toolbarEl.className = (CLS.TOOLBAR || 'pb-toolbar');
     toolbarEl.setAttribute('data-pb-toolbar', 'true');
 
     // Prevent picker events from propagating into the toolbar itself.
@@ -89,7 +93,7 @@ window.PrivacyBlurPicker = (() => {
 
     // ── Left: status text ──────────────────────────────────────────────────
     const label = document.createElement('span');
-    label.className = 'pb-toolbar-label';
+    label.className = (CLS.TOOLBAR_LABEL || 'pb-toolbar-label');
     label.textContent =
       'Picker Mode — hover an element and click to blur. Press Esc to exit.';
 
@@ -151,16 +155,16 @@ window.PrivacyBlurPicker = (() => {
     if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
 
     if (hoveredElement && hoveredElement !== target) {
-      hoveredElement.classList.remove('pb-hover-highlight');
+      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
     }
     hoveredElement = target;
-    hoveredElement.classList.add('pb-hover-highlight');
+    hoveredElement.classList.add((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
   }
 
   function onMouseOut(e) {
     const target = resolveTarget(e.target);
     if (target) {
-      target.classList.remove('pb-hover-highlight');
+      target.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
     }
     if (hoveredElement === target) {
       hoveredElement = null;
@@ -231,7 +235,7 @@ window.PrivacyBlurPicker = (() => {
     isActive = true;
 
     // Add crosshair cursor cue to page root.
-    document.documentElement.classList.add('pb-picker-active');
+    document.documentElement.classList.add((CLS.PICKER_ACTIVE || 'pb-picker-active'));
 
     // Build and show toolbar.
     buildToolbar();
@@ -260,13 +264,13 @@ window.PrivacyBlurPicker = (() => {
     // Remove highlight class from any lingering elements.
     const highlighted = document.querySelectorAll('.pb-hover-highlight');
     for (const el of highlighted) {
-      el.classList.remove('pb-hover-highlight');
+      el.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
     }
     hoveredElement = null;
     selectedElements.clear();
 
     // Remove visual cues.
-    document.documentElement.classList.remove('pb-picker-active');
+    document.documentElement.classList.remove((CLS.PICKER_ACTIVE || 'pb-picker-active'));
     removeToolbar();
 
     // Notify content script.

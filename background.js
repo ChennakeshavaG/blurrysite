@@ -271,7 +271,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         id:          (typeof r.id === 'string' && r.id.length <= 20) ? r.id : 'r_' + Math.random().toString(36).slice(2, 10),
         name:        (typeof r.name === 'string') ? r.name.slice(0, 100) : '',
         pattern:     (typeof r.pattern === 'string') ? r.pattern.slice(0, 500) : '',
-        patternType: (r.patternType === 'regex' || r.patternType === 'wildcard') ? r.patternType : 'wildcard',
+        patternType: (r.patternType === MSG.PATTERN_TYPES.REGEX || r.patternType === MSG.PATTERN_TYPES.WILDCARD) ? r.patternType : MSG.PATTERN_TYPES.WILDCARD,
         settings:    (r.settings && typeof r.settings === 'object' && !Array.isArray(r.settings) && JSON.stringify(r.settings).length <= 2000) ? r.settings : {},
       }));
       serialWrite(() => new Promise((resolve) => {

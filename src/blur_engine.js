@@ -20,13 +20,18 @@ const PrivacyBlurEngine = (() => {
   'use strict';
 
   // -------------------------------------------------------------------------
-  // Internal constants
+  // Constants from shared definitions
   // -------------------------------------------------------------------------
-  const BLURRED_CLASS      = "pb-blurred";
-  const FROSTED_CLASS      = "pb-frosted";
-  const CANVAS_CLASS       = "pb-canvas-overlay";
-  const TEXT_WRAPPER_CLASS = "pb-text-node-wrapper";
-  const SVG_FILTER_ID      = "pb-svg-filters";
+  const PB = globalThis.PrivacyBlur || {};
+  const _CSS = (PB.CSS) || {};
+  const _IDS = (PB.IDS) || {};
+  const _BLUR_MODES = (PB.BLUR_MODES) || {};
+
+  const BLURRED_CLASS      = _CSS.BLURRED       || "pb-blurred";
+  const FROSTED_CLASS      = _CSS.FROSTED        || "pb-frosted";
+  const CANVAS_CLASS       = _CSS.CANVAS_OVERLAY || "pb-canvas-overlay";
+  const TEXT_WRAPPER_CLASS = _CSS.TEXT_WRAPPER    || "pb-text-node-wrapper";
+  const SVG_FILTER_ID      = _IDS.SVG_FILTERS    || "pb-svg-filters";
 
   // Map from video element -> { canvas, animFrameId } for cleanup
   const videoOverlayMap = new WeakMap();
@@ -369,9 +374,12 @@ const PrivacyBlurEngine = (() => {
     }
 
     // Never blur extension UI elements (picker toolbar, toast notifications).
-    if (element.id === 'pb-picker-toolbar' || element.closest('#pb-picker-toolbar') ||
-        element.classList.contains('pb-toast') || element.closest('.pb-toast') ||
-        element.classList.contains('pb-toolbar')) {
+    const toolbarId = _IDS.PICKER_TOOLBAR || 'pb-picker-toolbar';
+    const toastClass = _CSS.TOAST || 'pb-toast';
+    const toolbarClass = _CSS.TOOLBAR || 'pb-toolbar';
+    if (element.id === toolbarId || element.closest('#' + toolbarId) ||
+        element.classList.contains(toastClass) || element.closest('.' + toastClass) ||
+        element.classList.contains(toolbarClass)) {
       return;
     }
 
@@ -382,7 +390,7 @@ const PrivacyBlurEngine = (() => {
     // from the closure, not from CSS. The CSS class provides a fallback
     // filter via var(--pb-radius) from :root for the brief moment before
     // the canvas overlay is drawn.
-    const isFrosted = mode === 'frosted';
+    const isFrosted = mode === (_BLUR_MODES.FROSTED || 'frosted');
     if (isFrosted) ensureSvgFilter();
 
     if (tag === "video") {
@@ -507,7 +515,7 @@ const PrivacyBlurEngine = (() => {
     const mode = (options && options.blurMode) || 'gaussian';
 
     // Inject SVG filter element when frosted mode is active
-    if (mode === 'frosted') {
+    if (mode === (_BLUR_MODES.FROSTED || 'frosted')) {
       ensureSvgFilter();
     }
 
