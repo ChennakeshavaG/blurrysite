@@ -58,6 +58,7 @@
 
       for (const selector of selectors) {
         const el = Selector.restoreSelector(selector);
+        if (el) {
           Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
           observeElement(el);
           if (settings.REVEAL_MODE === RM.HOVER) {
@@ -613,7 +614,6 @@
         dismissClickReveal();
         stopVisibilityObserver();
         Engine.unblurAll();
-        offscreenElements.clear();
         isPageBlurred = false;
         Store.clearHost(hostname).catch(() => {});
         Store.saveBlurState(hostname, false).catch(() => {});
@@ -669,6 +669,7 @@
       // ── Context menu: blur the right-clicked element ─────────────────────
       case MSG.CONTEXT_BLUR: {
         const target = lastContextMenuTarget;
+        if (target) {
           Engine.applyBlur(target, settings.BLUR_RADIUS, settings.BLUR_MODE);
           observeElement(target);
           if (settings.REVEAL_MODE === RM.HOVER) {
@@ -807,7 +808,7 @@
         thoroughBlur: settings.THOROUGH_BLUR,
         blurMode: settings.BLUR_MODE,
       });
-      // Re-count and observe all newly blurred elements
+      // Register blurred elements with visibility observer
       document.querySelectorAll('.pb-blurred').forEach(el => {
         observeElement(el);
       });
@@ -821,7 +822,6 @@
     // 8. Disable cleanup — reset all state so re-enable starts fresh
     if (!settings.ENABLED) {
       dismissClickReveal();
-      offscreenElements.clear();
       isPageBlurred = false;
     }
   }
