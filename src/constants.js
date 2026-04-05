@@ -173,7 +173,7 @@ const Constants = (() => {
       MEDIA:     true,
       FORM:      false,
       TABLE:     true,
-      STRUCTURE: false,
+      STRUCTURE: true,
     }),
 
   });

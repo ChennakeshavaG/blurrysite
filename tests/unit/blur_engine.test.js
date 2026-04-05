@@ -848,7 +848,7 @@ describe('pb.BlurEngine', () => {
 
     test('does not blur form elements when form category off (default-like)', () => {
       document.body.innerHTML = '<input value="secret"><p>visible</p>';
-      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: false };
+      const defaults = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true };
       pb.BlurEngine.blurAllContent(8, { categories: defaults });
       expect(document.querySelector('input').classList.contains('pb-blurred')).toBe(false);
       expect(document.querySelector('p').classList.contains('pb-blurred')).toBe(true);
@@ -860,8 +860,14 @@ describe('pb.BlurEngine', () => {
       expect(document.querySelector('td').classList.contains('pb-blurred')).toBe(true);
     });
 
-    test('STRUCTURE category is empty — layout stability over completeness', () => {
+    test('blurs structure elements with direct text when structure enabled', () => {
       document.body.innerHTML = '<div>plain text</div>';
+      pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
+      expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(true);
+    });
+
+    test('does not blur empty structure elements', () => {
+      document.body.innerHTML = '<div></div>';
       pb.BlurEngine.blurAllContent(8, { categories: ONLY('STRUCTURE') });
       expect(document.querySelector('div').classList.contains('pb-blurred')).toBe(false);
     });
@@ -1044,9 +1050,15 @@ describe('pb.BlurEngine', () => {
       expect(pb.BlurEngine.shouldBlurElement(td, ALL_ON, true)).toBe(true);
     });
 
-    test('div not matched by any category (STRUCTURE empty)', () => {
+    test('div with direct text matched by STRUCTURE', () => {
       const div = document.createElement('div');
-      div.textContent = 'text';
+      div.appendChild(document.createTextNode('text'));
+      document.body.appendChild(div);
+      expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(true);
+    });
+
+    test('empty div not matched', () => {
+      const div = document.createElement('div');
       document.body.appendChild(div);
       expect(pb.BlurEngine.shouldBlurElement(div, ALL_ON, false)).toBe(false);
     });
