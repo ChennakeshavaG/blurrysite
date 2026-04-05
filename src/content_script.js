@@ -81,22 +81,29 @@
   function startVisibilityObserver() {
     if (visibilityObserver) return;
 
+    let _ioCallCount = 0;
+
     visibilityObserver = new IntersectionObserver((entries) => {
+      _ioCallCount++;
+      let blurred = 0, unblurred = 0;
       for (const entry of entries) {
         const el = entry.target;
         if (entry.isIntersecting) {
-          // Entering viewport — re-apply blur if not already blurred
           if (!Engine.isBlurred(el)) {
             Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
             if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
+            blurred++;
           }
         } else {
-          // Leaving viewport — remove blur to free GPU compositing layer
           if (Engine.isBlurred(el)) {
             Engine.removeBlur(el);
             el.classList.remove(CLS.REVEAL_ON_HOVER);
+            unblurred++;
           }
         }
+      }
+      if (blurred > 0 || unblurred > 0 || window.__PB_DEBUG) {
+        _dbg(`IO #${_ioCallCount}: ${entries.length} entries, +${blurred} blurred, -${unblurred} unblurred`);
       }
     }, {
       rootMargin: '200px',
@@ -118,9 +125,12 @@
     }
   }
 
+  // ── DEBUG: set window.__PB_DEBUG = true in console to enable logging ──────
+  function _dbg(...args) {
+    if (window.__PB_DEBUG) console.log('[PB]', ...args);
+  }
+
   // ── MutationObserver: blur new DOM elements synchronously ─────────────────
-  // applyBlur is just classList.add — no DOM injection, no reflow.
-  // Synchronous processing is simpler and faster than the old chunked RAF pipeline.
 
   /** CSS selector for descendant queries. Built from CATEGORY_SELECTORS. */
   let observerSelector = '';
@@ -143,6 +153,7 @@
     if (!el.isConnected) return;
     if (Engine.isBlurred(el)) return;
     if (Engine.shouldBlurElement(el, settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR)) {
+      _dbg('tryBlur:', el.tagName, el.id || el.className);
       Engine.applyBlur(el, settings.BLUR_RADIUS, settings.BLUR_MODE);
       if (settings.REVEAL_MODE === RM.HOVER) el.classList.add(CLS.REVEAL_ON_HOVER);
       observeElement(el);
@@ -165,22 +176,36 @@
     buildObserverSelector();
     startVisibilityObserver();
 
+    let _moCallCount = 0;
+
     domObserver = new MutationObserver((mutations) => {
       if (isPickerActive) return;
       if (!isPageBlurred) return;
+
+      _moCallCount++;
+      const t0 = performance.now();
+      let addedCount = 0;
+      let charDataCount = 0;
 
       for (const mutation of mutations) {
         if (mutation.type === 'childList') {
           for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            addedCount++;
             blurNewSubtree(node);
           }
         }
 
         if (mutation.type === 'characterData') {
+          charDataCount++;
           const el = mutation.target.parentElement;
           if (el && el.isConnected) tryBlurElement(el);
         }
+      }
+
+      const elapsed = performance.now() - t0;
+      if (elapsed > 5 || addedCount > 50 || window.__PB_DEBUG) {
+        _dbg(`MO #${_moCallCount}: ${mutations.length} mutations, ${addedCount} added, ${charDataCount} charData, ${elapsed.toFixed(1)}ms`);
       }
     });
 
@@ -912,6 +937,7 @@
     if (!Engine) return;
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
+    _dbg('URL change:', lastUrl, '→', currentUrl);
     lastUrl = currentUrl;
 
     try {
@@ -919,8 +945,7 @@
       const resolved = resolveSettings(currentUrl, globalSettings, rules);
       applyState(resolved, prev);
     } catch (err) {
-      // SPA navigation can fire during teardown — fail silently
-      console.warn('[PrivacyBlur] URL change handler error:', err.message);
+      console.warn('[PrivacyBlur] URL change handler error:', err.message, err.stack);
     }
   }
 
