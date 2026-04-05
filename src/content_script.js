@@ -152,9 +152,9 @@
    * element identity. Legitimate bulk renders (page load, search results) fire
    * MO in bursts but don't sustain high frequency across multiple windows.
    */
-  const LOOP_THRESHOLD = 50;  // MO callbacks per window
+  const LOOP_THRESHOLD = 500; // MO callbacks per window — high enough for React re-renders
   const LOOP_WINDOW_MS = 1000;
-  const LOOP_PAUSE_MS  = 2000; // pause duration when loop detected
+  const LOOP_PAUSE_MS  = 3000; // pause duration when loop detected
   let _moHits = 0;
   let _moWindowStart = 0;
   let _moPaused = false;
