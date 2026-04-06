@@ -539,8 +539,20 @@
   // ── Rule editor modal ──────────────────────────────────────────────────────
 
   let ruleSettings = {};
+  let _ruleModalOnSave = null;
+  let _ruleModalOnCancel = null;
 
   function openRuleModal(existingRule) {
+    // Remove stale listeners from any previous open
+    if (_ruleModalOnSave) {
+      ui.ruleModalSave.removeEventListener('click', _ruleModalOnSave);
+      _ruleModalOnSave = null;
+    }
+    if (_ruleModalOnCancel) {
+      ui.ruleModalCancel.removeEventListener('click', _ruleModalOnCancel);
+      _ruleModalOnCancel = null;
+    }
+
     editingRuleId = existingRule ? existingRule.id : null;
     ui.ruleModalTitle.textContent = existingRule ? I18n.t('rule_edit') : I18n.t('rule_add_title');
     ui.ruleName.value = existingRule ? (existingRule.name || '') : '';
@@ -609,8 +621,12 @@
     function cleanup() {
       ui.ruleModalSave.removeEventListener('click', onSave);
       ui.ruleModalCancel.removeEventListener('click', onCancel);
+      _ruleModalOnSave = null;
+      _ruleModalOnCancel = null;
     }
 
+    _ruleModalOnSave = onSave;
+    _ruleModalOnCancel = onCancel;
     ui.ruleModalSave.addEventListener('click', onSave);
     ui.ruleModalCancel.addEventListener('click', onCancel);
   }

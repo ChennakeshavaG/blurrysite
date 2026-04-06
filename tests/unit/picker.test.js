@@ -144,7 +144,7 @@ function setupGlobalMocks() {
   pb.BlurEngine = {
     applyBlur: jest.fn(),
     removeBlur: jest.fn(),
-    isBlurred: jest.fn().mockReturnValue(false),
+    isBlurred: jest.fn((el) => !!(el && el.dataset && el.dataset.pbBlur)),
   };
 
   pb.SelectorUtils = {

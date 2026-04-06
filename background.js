@@ -112,9 +112,19 @@ function isValidSelector(s) {
 // Write serializer — prevents concurrent get-then-set data loss
 // ---------------------------------------------------------------------------
 let writeQueue = Promise.resolve();
+const SERIAL_WRITE_TIMEOUT_MS = 10000;
 
 function serialWrite(fn) {
-  writeQueue = writeQueue.then(fn).catch(() => {});
+  writeQueue = writeQueue.then(() => {
+    return Promise.race([
+      fn(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('serialWrite timeout')), SERIAL_WRITE_TIMEOUT_MS)
+      ),
+    ]);
+  }).catch((err) => {
+    console.warn('[PrivacyBlur] serialWrite error:', err?.message || err);
+  });
   return writeQueue;
 }
 

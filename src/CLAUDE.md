@@ -57,7 +57,7 @@ A module may only depend on modules loaded before it.
 - `applyBlur` is idempotent — always guard with `if (isBlurred(el)) return`.
 - Video elements use `videoOverlayMap` (WeakMap) to track canvas + RAF handle. Never store canvas on `el._pbCanvas` — that was a previous iteration.
 - Canvas class must be `"pb-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
-- IMG blur: CSS class only (`pb-blurred`). No inline `style.filter` — the CSS rule handles it via `var(--pb-radius)` from `:root`.
+- IMG blur: `data-pb-blur` attribute + CSS rule `[data-pb-blur] { filter: blur(var(--pb-radius)) }`. No inline `style.filter`.
 
 #### Category-based blurring
 - `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[] }`. Keys are UPPER_SNAKE_CASE: TEXT, MEDIA, FORM, TABLE, STRUCTURE. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
@@ -92,15 +92,15 @@ A module may only depend on modules loaded before it.
 ### picker.js
 - Toolbar: `toolbarEl.id = "pb-picker-toolbar"` (tests use `getElementById`).
 - Toolbar appended to `document.body`, not `document.documentElement`.
-- Blur/unblur decision: `target.classList.contains("pb-blurred")` — do not call `PrivacyBlurEngine.isBlurred()`.
+- Blur/unblur decision: use `pb.BlurEngine.isBlurred(target)` to detect both data-attribute and CSS-tag-rule blurs.
 - Do not call `PrivacyBlurSelectorUtils` inside picker — it is not picker's responsibility.
 - All event listeners at capture phase. `onClick` calls `stopPropagation` + `stopImmediatePropagation`.
 
 ### content_script.js
-- Bind module aliases inside `init()` after DOM ready, not at top level.
+- Module aliases (`Engine`, `Store`, etc.) are assigned synchronously at the top of the IIFE — all `pb.*` globals are available at load time via manifest script order.
 - Call `Shortcuts._setPickerActive(true/false)` whenever `isPickerActive` changes.
 - Pass `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
-- `GET_STATUS` response: count blurred elements as `document.querySelectorAll('.pb-blurred').length`.
+- `GET_STATUS` response: count blurred elements as `document.querySelectorAll('[data-pb-blur]').length`.
 - Async message handlers that need `sendResponse` must `return true` from `handleMessage`.
 - `settings.BLUR_CATEGORIES` is `{ TEXT, MEDIA, FORM, TABLE, STRUCTURE }` (UPPER_SNAKE_CASE).
 - `TOGGLE_BLUR_ALL` passes `{ categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR }` to `Engine.blurAllContent`.

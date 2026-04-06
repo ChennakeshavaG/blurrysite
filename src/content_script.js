@@ -41,13 +41,13 @@
   /** Hostname used as the storage key for persisted selectors */
   const hostname = location.hostname;
 
-  // ─── Module aliases ──────────────────────────────────────────────────────────
+  // ─── Module aliases (synchronous — loaded before this script by manifest) ──
 
-  let Engine   = null;
-  let Store    = null;
-  let Selector = null;
-  let Picker   = null;
-  let Shortcuts = null;
+  const Engine    = pb.BlurEngine;
+  const Store     = pb.Storage;
+  const Selector  = pb.SelectorUtils;
+  const Picker    = pb.Picker;
+  const Shortcuts = pb.Shortcuts;
 
   // ─── Restore blurred elements ────────────────────────────────────────────────
 
@@ -383,6 +383,13 @@
     el.style.removeProperty('filter');
     setTimeout(() => el.style.removeProperty('transition'), 120);
     _revealedElements.delete(el);
+    // Clean up descendants added by _revealElement
+    el.querySelectorAll('*').forEach(child => {
+      if (_revealedElements.has(child)) {
+        child.style.removeProperty('filter');
+        _revealedElements.delete(child);
+      }
+    });
   }
 
   function _unrevealAll() {
@@ -639,6 +646,11 @@
       // ── Context menu: unblur the right-clicked element ────────────────────
       case MSG.CONTEXT_UNBLUR: {
         const target = lastContextMenuTarget;
+        if (!target) {
+          lastContextMenuTarget = null;
+          if (sendResponse) sendResponse({ ok: false, reason: 'no_target' });
+          break;
+        }
         const unblurTarget = findBlurredAncestor(target);
         if (unblurTarget) {
           Engine.removeBlur(unblurTarget);
@@ -750,11 +762,6 @@
 
   async function init() {
     log.log('init() starting');
-    Engine    = pb.BlurEngine;
-    Store     = pb.Storage;
-    Selector  = pb.SelectorUtils;
-    Picker    = pb.Picker;
-    Shortcuts = pb.Shortcuts;
 
     // 1. Load settings and URL rules from storage.
     try {

@@ -196,7 +196,7 @@ const Picker = (() => {
     // Walk up to nearest parent with a class for stable selector persistence
     target = findClassedParent(target);
 
-    const alreadyBlurred = !!target.dataset.pbBlur;
+    const alreadyBlurred = pb.BlurEngine.isBlurred(target);
 
     if (alreadyBlurred) {
       if (typeof activeCallbacks.onUnblur === 'function') {

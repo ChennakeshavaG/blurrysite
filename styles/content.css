@@ -282,7 +282,7 @@
  * on print would defeat the purpose of the extension.
  */
 @media print {
-  .pb-blurred {
+  [data-pb-blur] {
     filter: blur(var(--pb-radius, 10px)) !important;
     user-select: none !important;
   }
