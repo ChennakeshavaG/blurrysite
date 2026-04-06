@@ -71,7 +71,26 @@ const SelectorUtils = (() => {
       // Non-unique IDs fall through to next strategy
     }
 
-    // ---- Strategy 2: stamp data-pb-id and return attribute selector ----
+    // ---- Strategy 2: class-based selector (stable across reloads) ----
+    if (element.className && typeof element.className === 'string' && element.className.trim().length > 0) {
+      // Use the first class name as a selector, combined with tag for specificity
+      const tag = element.tagName.toLowerCase();
+      const classes = element.className.trim().split(/\s+/);
+      const classSelector = tag + '.' + classes.map(c => cssEscape(c)).join('.');
+      if (isUnique(classSelector)) {
+        return classSelector;
+      }
+      // If tag.class isn't unique, try with parent context
+      const parent = element.parentElement;
+      if (parent && parent.id) {
+        const contextSelector = `#${cssEscape(parent.id)} > ${classSelector}`;
+        if (isUnique(contextSelector)) {
+          return contextSelector;
+        }
+      }
+    }
+
+    // ---- Strategy 3: stamp data-pb-id (session-only fallback) ----
     if (!element.dataset.pbId) {
       element.dataset.pbId = generateId();
     }

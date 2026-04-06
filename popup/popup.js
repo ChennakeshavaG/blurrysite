@@ -54,8 +54,6 @@
     ui.bodyGeneral       = $('bodyGeneral');
     ui.advancedToggle    = $('advancedToggle');
     ui.bodyAdvanced      = $('bodyAdvanced');
-    ui.experimentalToggle = $('experimentalToggle');
-    ui.bodyExperimental  = $('bodyExperimental');
     // Rules
     ui.rulesToggle       = $('rulesToggle');
     ui.bodyRules         = $('bodyRules');
@@ -333,7 +331,6 @@
     // Accordion toggles
     wireAccordion(ui.generalToggle, ui.bodyGeneral);
     wireAccordion(ui.advancedToggle, ui.bodyAdvanced);
-    wireAccordion(ui.experimentalToggle, ui.bodyExperimental);
     wireAccordion(ui.rulesToggle, ui.bodyRules);
 
     // Rules
@@ -680,7 +677,6 @@
     // Render settings sections via POJO renderer
     Renderer.renderSection(ui.bodyGeneral, Configs.GENERAL, settings, onSettingChanged);
     Renderer.renderSection(ui.bodyAdvanced, Configs.ADVANCED, settings, onSettingChanged);
-    Renderer.renderSection(ui.bodyExperimental, Configs.EXPERIMENTAL, settings, onSettingChanged);
 
     // Render lists
     try { renderRulesList(); } catch (e) { console.warn('[PB] renderRulesList:', e); }

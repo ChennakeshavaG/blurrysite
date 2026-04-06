@@ -166,15 +166,10 @@ const PopupConfigs = (() => {
     },
   ]);
 
-  // ── Experimental tier ──────────────────────────────────────────────────────
-  // Reserved for future power-user options.
-
-  const EXPERIMENTAL = Object.freeze([]);
-
   // ── Combined array ─────────────────────────────────────────────────────────
-  const ALL = Object.freeze([...GENERAL, ...ADVANCED, ...EXPERIMENTAL]);
+  const ALL = Object.freeze([...GENERAL, ...ADVANCED]);
 
-  return Object.freeze({ GENERAL, ADVANCED, EXPERIMENTAL, ALL });
+  return Object.freeze({ GENERAL, ADVANCED, ALL });
 })();
 
 pb.PopupConfigs = PopupConfigs;

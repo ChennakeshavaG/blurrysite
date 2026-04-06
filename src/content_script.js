@@ -315,15 +315,14 @@
 
   // ─── DOM helpers ─────────────────────────────────────────────────────────────
 
-  /** Find the topmost blurred ancestor (walks all the way up) */
+  /** Find the nearest blurred ancestor */
   function findBlurredAncestor(el) {
-    let topmost = null;
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
-      if (node instanceof Element && Engine.isBlurred(node)) topmost = node;
+      if (node instanceof Element && Engine.isBlurred(node)) return node;
       node = node.parentElement;
     }
-    return topmost;
+    return null;
   }
 
   // ─── Reveal management (click + hover modes) ──────────────────────────────────

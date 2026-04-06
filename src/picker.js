@@ -167,16 +167,33 @@ const Picker = (() => {
     }
   }
 
+  /**
+   * Walk up from an element to find the nearest parent with a CSS class.
+   * Elements with classes are stable across reloads (framework components).
+   * Falls back to the element itself if no classed parent found.
+   */
+  function findClassedParent(el) {
+    let node = el;
+    while (node && node !== document.body && node !== document.documentElement) {
+      if (node.className && typeof node.className === 'string' && node.className.trim().length > 0) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return el; // fallback to original element
+  }
+
   function onClick(e) {
-    const target = resolveTarget(e.target);
+    let target = resolveTarget(e.target);
     if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
 
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    // Check only individual blur (data attribute), not CSS-rule blur.
-    // Picker toggles per-element blur independently of blur-all mode.
+    // Walk up to nearest parent with a class for stable selector persistence
+    target = findClassedParent(target);
+
     const alreadyBlurred = !!target.dataset.pbBlur;
 
     if (alreadyBlurred) {
