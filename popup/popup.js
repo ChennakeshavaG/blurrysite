@@ -46,18 +46,15 @@
     ui.clearAllBtn       = $('clearAllBtn');
     ui.pickerBtn         = $('pickerBtn');
     ui.hostname          = $('hostname');
-    ui.blurCount         = $('blurCount');
     ui.activeRule        = $('activeRule');
     ui.toast             = $('toast');
     // Sections
-    ui.generalToggle     = $('generalToggle');
-    ui.bodyGeneral       = $('bodyGeneral');
-    ui.advancedToggle    = $('advancedToggle');
-    ui.bodyAdvanced      = $('bodyAdvanced');
+    ui.bodyShortcuts     = $('bodyShortcuts');
+    ui.settingsToggle    = $('settingsToggle');
+    ui.bodySettings      = $('bodySettings');
     // Rules
     ui.rulesToggle       = $('rulesToggle');
     ui.bodyRules         = $('bodyRules');
-    ui.rulesCount        = $('rulesCount');
     ui.rulesList         = $('rulesList');
     ui.rulesEmpty        = $('rulesEmpty');
     ui.addRuleBtn        = $('addRuleBtn');
@@ -200,7 +197,6 @@
 
   function renderRulesList() {
     const count = urlRules.length;
-    ui.rulesCount.textContent = String(count);
     ui.rulesEmpty.classList.toggle('is-visible', count === 0);
     ui.rulesList.style.display = count > 0 ? '' : 'none';
     ui.rulesList.textContent = '';
@@ -329,8 +325,7 @@
     });
 
     // Accordion toggles
-    wireAccordion(ui.generalToggle, ui.bodyGeneral);
-    wireAccordion(ui.advancedToggle, ui.bodyAdvanced);
+    wireAccordion(ui.settingsToggle, ui.bodySettings);
     wireAccordion(ui.rulesToggle, ui.bodyRules);
 
     // Rules
@@ -675,8 +670,8 @@
     document.documentElement.style.setProperty('--pb-bg-blur-radius', settings.BLUR_RADIUS + 'px');
 
     // Render settings sections via POJO renderer
-    Renderer.renderSection(ui.bodyGeneral, Configs.GENERAL, settings, onSettingChanged);
-    Renderer.renderSection(ui.bodyAdvanced, Configs.ADVANCED, settings, onSettingChanged);
+    Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, settings, onSettingChanged);
+    Renderer.renderSection(ui.bodySettings, Configs.SETTINGS, settings, onSettingChanged);
 
     // Render lists
     try { renderRulesList(); } catch (e) { console.warn('[PB] renderRulesList:', e); }

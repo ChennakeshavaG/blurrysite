@@ -75,43 +75,34 @@
   <!-- ===== SITE INFO ===== -->
   <section class="pb-site-info">
     <span class="pb-site-info__host" id="hostname">--</span>
-    <span class="pb-site-info__count pb-site-info__count--zero" id="blurCount">0</span>
     <span class="pb-site-info__rule" id="activeRule"></span>
   </section>
 
-  <!-- ===== GENERAL (expanded by default) ===== -->
-  <section class="pb-section" id="sectionGeneral">
-    <button class="pb-section__header pb-frost" id="generalToggle" aria-expanded="true" aria-controls="bodyGeneral">
-      <span data-i18n="section_general">General</span>
-      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
-    <div class="pb-section__body is-open" id="bodyGeneral">
+  <!-- ===== KEYBOARD SHORTCUTS (always visible) ===== -->
+  <section class="pb-section" id="sectionShortcuts">
+    <div class="pb-section__header" style="cursor:default;padding:var(--pb-spacing-sm) var(--pb-spacing-md)">
+      <span>Keyboard Shortcuts</span>
+    </div>
+    <div class="pb-section__body is-open" id="bodyShortcuts">
       <!-- Populated by Renderer.renderSection() -->
     </div>
   </section>
 
-  <!-- ===== ADVANCED (collapsed) ===== -->
-  <section class="pb-section" id="sectionAdvanced">
-    <button class="pb-section__header pb-frost" id="advancedToggle" aria-expanded="false" aria-controls="bodyAdvanced">
-      <div class="pb-section__header-left">
-        <span data-i18n="section_advanced">Advanced</span>
-        <svg class="pb-section__gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-        </svg>
-      </div>
+  <!-- ===== SETTINGS (collapsible, collapsed by default) ===== -->
+  <section class="pb-section" id="sectionSettings">
+    <button class="pb-section__header pb-frost" id="settingsToggle" aria-expanded="false" aria-controls="bodySettings">
+      <span>Settings</span>
       <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
-    <div class="pb-section__body" id="bodyAdvanced">
+    <div class="pb-section__body" id="bodySettings">
       <!-- Populated by Renderer.renderSection() -->
     </div>
   </section>
 
-  <!-- ===== URL RULES (in General section conceptually, separate accordion) ===== -->
+  <!-- ===== URL RULES ===== -->
   <section class="pb-section" id="sectionRules">
     <button class="pb-section__header pb-frost" id="rulesToggle" aria-expanded="false" aria-controls="bodyRules">
       <span>URL Rules</span>
-      <span class="pb-list-count" id="rulesCount">0</span>
       <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <div class="pb-section__body" id="bodyRules">
