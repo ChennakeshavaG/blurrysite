@@ -32,23 +32,6 @@
   user-select: none !important;
 }
 
-/* ─── Reveal: click-to-reveal via data attribute ───────────────────────────── */
-
-[data-pb-revealed] {
-  filter: blur(0px) !important;
-  outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
-  outline-offset: 2px !important;
-}
-
-/**
- * Ancestor unblur: JS adds pb-ancestor-reveal to blurred ancestors
- * when a descendant is revealed. Removes the ancestor's filter so
- * the revealed content is visible through the ancestor chain.
- */
-.pb-ancestor-reveal {
-  filter: blur(0px) !important;
-}
-
 /* ─── Picker mode ───────────────────────────────────────────────────────────── */
 
 /**

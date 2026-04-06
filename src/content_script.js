@@ -333,7 +333,7 @@
 
   function clearRevealedAncestors() {
     for (let i = 0; i < revealedAncestors.length; i++) {
-      revealedAncestors[i].classList.remove(CLS.ANCESTOR_REVEAL);
+      revealedAncestors[i].style.removeProperty('filter');
     }
     revealedAncestors = [];
   }
@@ -343,7 +343,7 @@
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
       if (Engine.isBlurred(node)) {
-        node.classList.add(CLS.ANCESTOR_REVEAL);
+        node.style.setProperty('filter', 'none', 'important');
         revealedAncestors.push(node);
       }
       node = node.parentElement;
@@ -735,7 +735,8 @@
 
     // 5. Re-inject blur rules when config changed while blur-all is active
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
-    if (isPageBlurred && (catsChanged || modeChanged)) {
+    const thoroughChanged = old.THOROUGH_BLUR !== settings.THOROUGH_BLUR;
+    if (isPageBlurred && (catsChanged || modeChanged || thoroughChanged)) {
       Engine.unblurAll();
       Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
       Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
@@ -743,7 +744,15 @@
       startDomObserver();
     }
 
-    // 6. DOM observer
+    // 6. Clear stale reveal state on mode change
+    if (old.REVEAL_MODE !== settings.REVEAL_MODE) {
+      clearRevealedAncestors();
+      _unrevealAll();
+      _hoverRevealedEl = null;
+      clickRevealedEl = null;
+    }
+
+    // 7. DOM observer
     if (settings.ENABLED && isPageBlurred) {
       startDomObserver();
     } else if (!settings.ENABLED) {

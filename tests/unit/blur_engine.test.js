@@ -83,10 +83,6 @@ describe('pb.BlurEngine', () => {
       expect(css).toContain(':not(#pb-picker-toolbar)');
     });
 
-    test('includes revealed override', () => {
-      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
-      expect(document.getElementById('pb-blur-styles').textContent).toContain('[data-pb-revealed]');
-    });
   });
 
   describe('blurTextCheckElements', () => {

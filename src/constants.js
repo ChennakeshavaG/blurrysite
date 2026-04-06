@@ -106,14 +106,7 @@ const Constants = (() => {
   // Must match the class names in styles/content.css exactly.
 
   const CSS = Object.freeze({
-    BLURRED:          'pb-blurred',
-    FROSTED:          'pb-frosted',
-    SUSPENDED:        'pb-suspended',
     CANVAS_OVERLAY:   'pb-canvas-overlay',
-    TEXT_WRAPPER:     'pb-text-node-wrapper',
-    REVEAL_ON_HOVER:  'pb-reveal-on-hover',
-    ANCESTOR_REVEAL:  'pb-ancestor-reveal',
-    REVEALED:         'pb-revealed',
     HOVER_HIGHLIGHT:  'pb-hover-highlight',
     PICKER_ACTIVE:    'pb-picker-active',
     TOAST:            'pb-toast',

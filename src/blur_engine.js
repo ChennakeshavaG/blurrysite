@@ -194,9 +194,6 @@ const BlurEngine = (() => {
     // Data attribute rule — for text-check elements and individual picker blurs
     rules.push(`[data-pb-blur] { ${blurDecl} }`);
 
-    // Revealed override — higher specificity
-    rules.push(`[data-pb-revealed] { filter: blur(0px) !important; outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important; outline-offset: 2px !important; }`);
-
     if (rules.length === 0) return;
 
     _styleEl = document.createElement('style');
@@ -269,7 +266,6 @@ const BlurEngine = (() => {
   function removeBlur(element) {
     if (!element || !(element instanceof Element)) return;
     delete element.dataset.pbBlur;
-    delete element.dataset.pbRevealed;
   }
 
   function toggleBlur(element) {
@@ -300,7 +296,6 @@ const BlurEngine = (() => {
     removeBlurRules();
     document.querySelectorAll('[data-pb-blur]').forEach(el => {
       delete el.dataset.pbBlur;
-      delete el.dataset.pbRevealed;
     });
   }
 
