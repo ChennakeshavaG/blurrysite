@@ -13,3 +13,4 @@ debug.js
 
 # Chrome extension cache
 chrome-extension:/
+dist/
