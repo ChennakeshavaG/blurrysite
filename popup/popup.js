@@ -164,8 +164,6 @@
   }
 
   function renderBlurCount() {
-    ui.blurCount.textContent = blurredCount;
-    ui.blurCount.classList.toggle('pb-site-info__count--zero', blurredCount === 0);
     ui.blurAllBtn.dataset.active = String(isPageBlurred);
   }
 

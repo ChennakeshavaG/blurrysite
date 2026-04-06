@@ -1043,6 +1043,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   padding: var(--pb-spacing-sm) var(--pb-spacing-lg);
+  margin-top: var(--pb-spacing-lg);
   position: sticky;
   bottom: 0;
   z-index: 10;
