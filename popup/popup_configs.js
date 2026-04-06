@@ -13,9 +13,9 @@ const PopupConfigs = (() => {
   // ── Shortcuts (displayed in own always-visible section) ────────────────────
 
   const SHORTCUTS = Object.freeze([
-    { key: 'SHORTCUTS.TOGGLE_BLUR_ALL', i18nKey: 'shortcut_blur_all', type: 'shortcut', group: 'shortcuts' },
-    { key: 'SHORTCUTS.TOGGLE_PICKER',   i18nKey: 'shortcut_picker',   type: 'shortcut', group: 'shortcuts' },
-    { key: 'SHORTCUTS.CLEAR_ALL',       i18nKey: 'shortcut_clear',    type: 'shortcut', group: 'shortcuts' },
+    { key: 'SHORTCUTS.TOGGLE_BLUR_ALL', i18nKey: 'shortcut_blur_all', type: 'shortcut' },
+    { key: 'SHORTCUTS.TOGGLE_PICKER',   i18nKey: 'shortcut_picker',   type: 'shortcut' },
+    { key: 'SHORTCUTS.CLEAR_ALL',       i18nKey: 'shortcut_clear',    type: 'shortcut' },
   ]);
 
   // ── Settings (single section: Appearance → Behavior → Categories → Advanced)
