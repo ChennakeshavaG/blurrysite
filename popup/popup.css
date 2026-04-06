@@ -489,15 +489,15 @@ button { cursor: pointer; font-family: inherit; }
   overflow: hidden;
   max-height: 0;
   opacity: 0;
-  transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.25s ease;
+  transition: max-height 0.2s ease-out, opacity 0.15s ease, padding 0.15s ease;
   padding: 0 var(--pb-spacing-sm);
 }
 
 .pb-section__body.is-open {
-  max-height: 800px;
+  max-height: 600px;
   opacity: 1;
   padding: var(--pb-spacing-sm);
-  overflow: visible; /* Allow dropdowns and tooltips to render outside */
+  overflow: visible;
 }
 
 /* ---------- Setting Row ---------- */

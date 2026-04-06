@@ -585,7 +585,7 @@
 
       // ── Status query ──────────────────────────────────────────────────────
       case MSG.GET_STATUS: {
-        const blurredCount = document.querySelectorAll('.pb-blurred').length;
+        const blurredCount = document.querySelectorAll('[data-pb-blur]').length;
         if (sendResponse) sendResponse({ isPageBlurred, isPickerActive, blurredCount });
         break;
       }

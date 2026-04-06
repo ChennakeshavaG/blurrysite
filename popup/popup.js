@@ -293,7 +293,7 @@
       const status = await tabMessage(currentTab.id, { type: MSG.GET_STATUS });
       if (status) {
         blurredCount = status.count || 0;
-        isPageBlurred = status.isBlurAll || false;
+        isPageBlurred = status.isPageBlurred || false;
       }
       blurredItems = await fetchBlurredSelectors();
       renderBlurCount();
@@ -684,7 +684,7 @@
         const status = await tabMessage(currentTab.id, { type: MSG.GET_STATUS });
         if (status) {
           blurredCount = status.count || 0;
-          isPageBlurred = status.isBlurAll || false;
+          isPageBlurred = status.isPageBlurred || false;
           isPickerActive = status.isPickerActive || false;
           renderBlurCount();
           ui.pickerBtn.dataset.active = String(isPickerActive);
