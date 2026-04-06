@@ -558,14 +558,31 @@ button { cursor: pointer; font-family: inherit; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Setting with range/number takes full width below label */
-.pb-setting--range,
+/* Range: label left, value right (same line), slider below full width */
+.pb-setting--range {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  position: relative;
+}
+
+.pb-setting--range .pb-range-wrapper .pb-setting__value {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+}
+
+.pb-setting--range .pb-range-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+/* Number input: same wrap pattern */
 .pb-setting--number {
   flex-wrap: wrap;
   overflow: hidden;
 }
 
-.pb-setting--range .pb-range-wrapper,
 .pb-setting--number .pb-number-wrapper {
   width: 100%;
   min-width: 0;
