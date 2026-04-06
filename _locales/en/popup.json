@@ -36,6 +36,7 @@
   "group_behavior": "Behavior",
   "group_categories": "Blur Categories",
   "group_shortcuts": "Keyboard Shortcuts",
+  "group_advanced": "Advanced",
 
   "cat_text": "Text",
   "cat_text_hint": "Headings, paragraphs, links, inline text",

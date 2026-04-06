@@ -175,12 +175,14 @@ const Picker = (() => {
   function findClassedParent(el) {
     let node = el;
     while (node && node !== document.body && node !== document.documentElement) {
-      if (node.className && typeof node.className === 'string' && node.className.trim().length > 0) {
-        return node;
+      if (node.className && typeof node.className === 'string') {
+        // Filter out our own pb-* classes — only match site-defined classes
+        const siteClasses = node.className.trim().split(/\s+/).filter(c => !c.startsWith('pb-'));
+        if (siteClasses.length > 0) return node;
       }
       node = node.parentElement;
     }
-    return el; // fallback to original element
+    return el;
   }
 
   function onClick(e) {

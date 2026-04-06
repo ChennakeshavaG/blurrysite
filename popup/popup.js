@@ -172,6 +172,9 @@
   function renderBlurList() {
     const count = blurredItems.length;
     ui.blurListCount.textContent = count;
+    // Hide entire section when no blurred elements
+    const sectionEl = document.getElementById('sectionBlurred');
+    if (sectionEl) sectionEl.style.display = count > 0 ? '' : 'none';
     ui.blurEmpty.classList.toggle('is-visible', count === 0);
     ui.blurList.textContent = '';
 
