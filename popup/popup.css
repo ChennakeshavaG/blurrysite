@@ -575,16 +575,15 @@ button { cursor: pointer; font-family: inherit; }
 /* ---------- Setting Group Header ---------- */
 .pb-setting-group {
   font-size: var(--pb-font-size-xs);
-  font-weight: 700;
-  color: var(--pb-accent);
+  font-weight: 600;
+  color: var(--pb-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  padding: var(--pb-spacing-sm) var(--pb-spacing-sm);
-  margin-top: var(--pb-spacing-md);
+  letter-spacing: 0.6px;
+  padding: var(--pb-spacing-xs) var(--pb-spacing-sm);
+  margin-top: var(--pb-spacing-sm);
   margin-bottom: var(--pb-spacing-xs);
-  background: rgba(245, 158, 11, 0.06);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: var(--pb-radius-sm);
-  border-left: 2px solid var(--pb-accent);
 }
 
 .pb-setting-group:first-child {
@@ -595,18 +594,19 @@ button { cursor: pointer; font-family: inherit; }
 .pb-range-wrapper {
   display: flex;
   align-items: center;
-  gap: var(--pb-spacing-md);
+  gap: 6px;
+  width: 100%;
 }
 
 .pb-range-wrapper .pb-setting__value {
-  min-width: 32px;
+  min-width: 26px;
   text-align: center;
-  font-size: var(--pb-font-size-xs);
+  font-size: 10px;
   font-weight: 700;
   color: var(--pb-accent);
-  background: rgba(245, 158, 11, 0.12);
-  padding: 2px 6px;
-  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
   flex-shrink: 0;
 }
 
@@ -615,18 +615,18 @@ button { cursor: pointer; font-family: inherit; }
   appearance: none;
   flex: 1;
   min-width: 0;
-  max-width: 100%;
-  height: 6px;
-  background: linear-gradient(to right, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.3));
-  border-radius: 6px;
+  width: 100%;
+  height: 4px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 4px;
   outline: none;
   cursor: pointer;
 }
 
 .pb-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   background: var(--pb-accent);
   border-radius: 50%;
   cursor: pointer;
@@ -827,7 +827,8 @@ kbd {
   letter-spacing: 0.5px;
 }
 
-.pb-modal__body { padding: 12px 14px; }
+.pb-modal__body { padding: 12px 14px; overflow: hidden; }
+.pb-modal__body .pb-input { box-sizing: border-box; width: 100%; }
 
 .pb-modal__footer {
   display: flex;
