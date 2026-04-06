@@ -652,7 +652,7 @@
           if (sendResponse) sendResponse({ ok: false, reason: 'no_target' });
           break;
         }
-        const unblurTarget = findBlurredAncestor(target);
+        const unblurTarget = findBlurredTarget(target);
         if (unblurTarget) {
           Engine.removeBlur(unblurTarget);
           const sel = Selector.getSelector(unblurTarget);

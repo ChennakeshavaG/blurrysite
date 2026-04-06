@@ -657,10 +657,9 @@
     ui.extVersion.textContent = 'v' + manifest.version;
 
     // Active tab
-    const allTabs = await chrome.tabs.query({ url: ['*://*/*'] });
-    if (allTabs && allTabs.length > 0) {
-      allTabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-      currentTab = allTabs[0];
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab) {
+      currentTab = activeTab;
     }
     currentHost = currentTab ? extractHostname(currentTab.url) : '';
     ui.hostname.textContent = currentHost || '--';
