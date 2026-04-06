@@ -125,7 +125,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
   }
 
   async function countBlurred() {
-    return page.evaluate(() => document.querySelectorAll('.pb-blurred').length);
+    return page.evaluate(() => document.querySelectorAll('[data-pb-blur]').length);
   }
 
   async function getRadius() {
@@ -143,7 +143,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     // Trigger TOGGLE_BLUR_ALL via content script globals (simulates what
     // background.js does when relaying chrome.commands).
     await evalInContentScript(`
-      pb.BlurEngine.blurAllContent(8);
+      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
     `);
     await new Promise((r) => setTimeout(r, 300));
 
@@ -249,7 +249,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     expect(hasCS).toBe(true);
 
     // Blur all via content script world.
-    await evalInContentScript(`pb.BlurEngine.blurAllContent(8)`);
+    await evalInContentScript(`pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
     await new Promise((r) => setTimeout(r, 500));
 
     const count = await countBlurred();
@@ -265,7 +265,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 1500));
 
     // Blur.
-    await evalInContentScript(`pb.BlurEngine.blurAllContent(8)`);
+    await evalInContentScript(`pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
     await new Promise((r) => setTimeout(r, 300));
     const before = await countBlurred();
     console.log(`  → Before clear: ${before}`);
@@ -287,7 +287,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
       pb.Picker.activate(
         { blurRadius: 8, highlightColor: '#f59e0b' },
         {
-          onBlur: function(el) { pb.BlurEngine.applyBlur(el, 8); },
+          onBlur: function(el) { pb.BlurEngine.applyBlur(el); },
           onUnblur: function(el) { pb.BlurEngine.removeBlur(el); },
           onDeactivate: function() {}
         }
@@ -321,7 +321,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
       (async () => {
         const el = document.querySelector('#para1');
         if (el) {
-          pb.BlurEngine.applyBlur(el, 8);
+          pb.BlurEngine.applyBlur(el);
           const sel = pb.SelectorUtils.getSelector(el);
           if (sel) {
             await pb.Storage.saveBlurredElement(location.hostname, sel);

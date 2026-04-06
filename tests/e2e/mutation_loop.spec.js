@@ -3,10 +3,10 @@
  *
  * Integration test: MutationObserver + blur-all must not create infinite loops.
  *
- * The bug: In blur-all mode the content_script MutationObserver calls
- * Engine.applyBlur() on every new DOM node. applyBlur wraps bare text nodes
- * in a <span class="pb-text-node-wrapper"> — a DOM insertion that re-triggers
- * the observer, creating infinite nesting until the page OOMs.
+ * The new engine uses CSS tag rules + data-pb-blur attributes instead of
+ * CSS class manipulation. This test verifies that the MutationObserver
+ * correctly stamps data-pb-blur on dynamically added elements without
+ * causing infinite loops.
  *
  * These tests send TOGGLE_BLUR_ALL through the real extension messaging path
  * (background service worker → chrome.tabs.sendMessage → content script
@@ -153,7 +153,7 @@ describeFn('MutationObserver + blur-all integration', () => {
 
   // ── Tests ────────────────────────────────────────────────────────────────
 
-  test('blur-all does not cause infinite wrapper nesting on new DOM nodes', async () => {
+  test('blur-all does not cause infinite loops on new DOM nodes', async () => {
     // Activate blur-all through the real message handler so isPageBlurred
     // is set and the MutationObserver will blur new nodes.
     await sendMessageViaBackground('TOGGLE_BLUR_ALL');
@@ -161,14 +161,12 @@ describeFn('MutationObserver + blur-all integration', () => {
 
     // Sanity: blur-all actually worked.
     const blurredCount = await page.evaluate(
-      () => document.querySelectorAll('.pb-blurred').length
+      () => document.querySelectorAll('[data-pb-blur]').length
     );
     expect(blurredCount).toBeGreaterThan(0);
 
-    // Inject a new text-containing element. The MutationObserver will call
-    // Engine.applyBlur → wrapTextNodes → inserts a pb-text-node-wrapper span.
-    // WITHOUT the fix, that insertion re-triggers the observer infinitely.
-    // WITH the fix, applyBlur skips pb-text-node-wrapper elements.
+    // Inject a new text-containing element. The MutationObserver should
+    // stamp data-pb-blur on it once, without re-triggering infinitely.
     await page.evaluate(() => {
       const div = document.createElement('div');
       div.id = 'injected-div';
@@ -176,33 +174,22 @@ describeFn('MutationObserver + blur-all integration', () => {
       document.getElementById('dynamic-target').appendChild(div);
     });
 
-    // If the infinite loop bug exists the page freezes here and the test
+    // If an infinite loop exists the page freezes here and the test
     // times out. 1.5s is more than enough for a single observer cycle.
     await new Promise((r) => setTimeout(r, 1500));
 
-    // The injected element should be blurred by the observer.
+    // The injected element should be blurred by the observer (data-pb-blur stamped).
     const injectedBlurred = await page.evaluate(() => {
       const el = document.getElementById('injected-div');
-      return el ? el.classList.contains('pb-blurred') : false;
+      return el ? el.hasAttribute('data-pb-blur') : false;
     });
     expect(injectedBlurred).toBe(true);
 
-    // Critical: wrapper nesting depth must be exactly 1, not runaway.
-    const wrapperStats = await page.evaluate(() => {
-      const injected = document.getElementById('injected-div');
-      if (!injected) return { count: -1, nestedCount: -1 };
-
-      const wrappers = injected.querySelectorAll('.pb-text-node-wrapper');
-      let nestedCount = 0;
-      wrappers.forEach((w) => {
-        if (w.querySelector('.pb-text-node-wrapper')) nestedCount++;
-      });
-
-      return { count: wrappers.length, nestedCount };
+    // No text-node wrappers should exist (new engine uses CSS rules, not DOM wrapping).
+    const wrapperCount = await page.evaluate(() => {
+      return document.querySelectorAll('.pb-text-node-wrapper').length;
     });
-
-    expect(wrapperStats.count).toBeLessThanOrEqual(1);
-    expect(wrapperStats.nestedCount).toBe(0);
+    expect(wrapperCount).toBe(0);
   }, 15000);
 
   test('rapid DOM insertions in blur-all mode stay bounded', async () => {
@@ -224,21 +211,14 @@ describeFn('MutationObserver + blur-all integration', () => {
     await new Promise((r) => setTimeout(r, 2000));
 
     const stats = await page.evaluate(() => {
-      const allWrappers = document.querySelectorAll('.pb-text-node-wrapper');
       const injected = document.querySelectorAll('.rapid-inject');
-      const injectedBlurred = document.querySelectorAll('.rapid-inject.pb-blurred');
-
-      // Smoking gun: a wrapper containing another wrapper means the loop ran.
-      let nestedWrapperCount = 0;
-      allWrappers.forEach((w) => {
-        if (w.querySelector('.pb-text-node-wrapper')) nestedWrapperCount++;
-      });
+      const injectedBlurred = document.querySelectorAll('.rapid-inject[data-pb-blur]');
+      const allWrappers = document.querySelectorAll('.pb-text-node-wrapper');
 
       return {
-        totalWrappers: allWrappers.length,
         injectedCount: injected.length,
         injectedBlurredCount: injectedBlurred.length,
-        nestedWrapperCount,
+        wrapperCount: allWrappers.length,
       };
     });
 
@@ -246,17 +226,12 @@ describeFn('MutationObserver + blur-all integration', () => {
     expect(stats.injectedCount).toBe(20);
     expect(stats.injectedBlurredCount).toBe(20);
 
-    // No wrapper should contain another wrapper.
-    expect(stats.nestedWrapperCount).toBe(0);
-
-    // Total wrappers should be bounded. The page has ~4 original text
-    // elements + 20 injected = ~24. An infinite loop would produce
-    // hundreds or thousands.
-    expect(stats.totalWrappers).toBeLessThan(50);
+    // No text-node wrappers should exist (new engine uses CSS rules, not DOM wrapping).
+    expect(stats.wrapperCount).toBe(0);
   }, 20000);
 
-  test('canvas overlay elements are not double-blurred', async () => {
-    // Insert a video so blur-all creates a pb-canvas-overlay.
+  test('video elements are blurred via CSS tag rules without canvas overlays', async () => {
+    // Insert a video element.
     await page.evaluate(() => {
       const video = document.createElement('video');
       video.id = 'test-video';
@@ -269,18 +244,19 @@ describeFn('MutationObserver + blur-all integration', () => {
     await sendMessageViaBackground('TOGGLE_BLUR_ALL');
     await new Promise((r) => setTimeout(r, 1000));
 
-    const canvasStats = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
+      const video = document.getElementById('test-video');
+      // New engine uses CSS tag rules for media elements (no canvas overlays).
       const overlays = document.querySelectorAll('.pb-canvas-overlay');
-      let blurredOverlayCount = 0;
-      overlays.forEach((c) => {
-        if (c.classList.contains('pb-blurred')) blurredOverlayCount++;
-      });
-      return { total: overlays.length, blurred: blurredOverlayCount };
+      return {
+        videoExists: !!video,
+        canvasOverlayCount: overlays.length,
+      };
     });
 
-    // Canvas overlays are the blur mechanism — they must not be blurred
-    // themselves, which would cause a double-blur visual artefact.
-    expect(canvasStats.blurred).toBe(0);
+    // No canvas overlays should exist — the new engine blurs video via CSS rules.
+    expect(result.videoExists).toBe(true);
+    expect(result.canvasOverlayCount).toBe(0);
   }, 15000);
 
   test('MutationObserver respects categories: form elements not blurred when form OFF', async () => {
@@ -316,9 +292,9 @@ describeFn('MutationObserver + blur-all integration', () => {
       const textarea = document.getElementById('injected-textarea');
       const p = document.getElementById('injected-p');
       return {
-        inputBlurred: input ? input.classList.contains('pb-blurred') : null,
-        textareaBlurred: textarea ? textarea.classList.contains('pb-blurred') : null,
-        pBlurred: p ? p.classList.contains('pb-blurred') : null,
+        inputBlurred: input ? input.hasAttribute('data-pb-blur') : null,
+        textareaBlurred: textarea ? textarea.hasAttribute('data-pb-blur') : null,
+        pBlurred: p ? p.hasAttribute('data-pb-blur') : null,
       };
     });
 

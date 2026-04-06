@@ -3,8 +3,8 @@
  *
  * E2E tests for the observer pipeline:
  * - Blur-all doesn't crash (pendingRefresh removal)
- * - Perf mode ON: off-screen elements lose blur, re-blur on scroll back
- * - Perf mode OFF: all elements stay blurred regardless of scroll
+ * - All elements stay blurred regardless of scroll position
+ * - CSS tag rules + data-pb-blur attributes work together
  */
 
 'use strict';
@@ -126,11 +126,8 @@ describeFn('Observer Pipeline — E2E', () => {
     // Toggle blur-all ON — should not throw
     const result = await evalInContentScript(`
       try {
-        pb.BlurEngine.blurAllContent(10, {
-          categories: pb.DEFAULT_SETTINGS.BLUR_CATEGORIES,
-          thoroughBlur: false,
-          blurMode: 'gaussian'
-        });
+        pb.BlurEngine.injectBlurRules(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
+        pb.BlurEngine.blurTextCheckElements(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
         'ok';
       } catch (e) {
         'error: ' + e.message;
@@ -138,59 +135,47 @@ describeFn('Observer Pipeline — E2E', () => {
     `);
     expect(result).toBe('ok');
 
-    // Verify elements are blurred
-    const topBlurred = await page.$eval('#top-item p', (el) => el.classList.contains('pb-blurred'));
+    // Verify elements are blurred (text-check elements get data-pb-blur attribute)
+    const topBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
     expect(topBlurred).toBe(true);
   }, 15000);
 
   // ── Test: Perf mode ON — off-screen elements ─────────────────────────────
 
-  test('perf mode ON: off-screen elements lose blur, re-blur on scroll back', async () => {
+  test('blur-all stamps data-pb-blur on text-check elements above and below fold', async () => {
     await page.goto(testPageUrl, { waitUntil: 'load' });
     await new Promise((r) => setTimeout(r, 1000));
 
-    // Enable perf mode and blur-all via content script
+    // Enable blur-all via content script
     await evalInContentScript(`
-      pb.BlurEngine.blurAllContent(10, {
-        categories: pb.DEFAULT_SETTINGS.BLUR_CATEGORIES,
-        thoroughBlur: false,
-        blurMode: 'gaussian'
-      });
-      // Manually start visibility observer (simulates perf mode ON)
-      document.querySelectorAll('.pb-blurred').forEach(el => {
-        if (typeof visibilityObserver !== 'undefined' && visibilityObserver) {
-          visibilityObserver.observe(el);
-        }
-      });
+      pb.BlurEngine.injectBlurRules(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
+      pb.BlurEngine.blurTextCheckElements(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
     `);
 
-    // Verify top element is blurred initially
-    const topBlurredBefore = await page.$eval('#top-item p', (el) => el.classList.contains('pb-blurred'));
+    // Verify top element is blurred initially (text-check elements get data-pb-blur)
+    const topBlurredBefore = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
     expect(topBlurredBefore).toBe(true);
 
-    // Verify bottom element is also blurred (by blurAllContent)
-    const bottomBlurredBefore = await page.$eval('#bottom-item p', (el) => el.classList.contains('pb-blurred'));
+    // Verify bottom element is also blurred
+    const bottomBlurredBefore = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-pb-blur'));
     expect(bottomBlurredBefore).toBe(true);
   }, 15000);
 
   // ── Test: Perf mode OFF — all elements stay blurred ──────────────────────
 
-  test('perf mode OFF: all elements stay blurred regardless of position', async () => {
+  test('all elements stay blurred regardless of scroll position', async () => {
     await page.goto(testPageUrl, { waitUntil: 'load' });
     await new Promise((r) => setTimeout(r, 1000));
 
-    // Blur everything without perf mode
+    // Blur everything
     await evalInContentScript(`
-      pb.BlurEngine.blurAllContent(10, {
-        categories: pb.DEFAULT_SETTINGS.BLUR_CATEGORIES,
-        thoroughBlur: false,
-        blurMode: 'gaussian'
-      });
+      pb.BlurEngine.injectBlurRules(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
+      pb.BlurEngine.blurTextCheckElements(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
     `);
 
-    // All elements should be blurred
-    const topBlurred = await page.$eval('#top-item p', (el) => el.classList.contains('pb-blurred'));
-    const bottomBlurred = await page.$eval('#bottom-item p', (el) => el.classList.contains('pb-blurred'));
+    // All elements should be blurred (text-check elements get data-pb-blur)
+    const topBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
+    const bottomBlurred = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-pb-blur'));
     expect(topBlurred).toBe(true);
     expect(bottomBlurred).toBe(true);
 
@@ -198,12 +183,12 @@ describeFn('Observer Pipeline — E2E', () => {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await new Promise((r) => setTimeout(r, 500));
 
-    // Without perf mode, top element should STILL be blurred (no IO to remove it)
-    const topStillBlurred = await page.$eval('#top-item p', (el) => el.classList.contains('pb-blurred'));
+    // Top element should STILL be blurred (data attribute persists regardless of scroll)
+    const topStillBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
     expect(topStillBlurred).toBe(true);
 
     // Bottom element also blurred
-    const bottomStillBlurred = await page.$eval('#bottom-item p', (el) => el.classList.contains('pb-blurred'));
+    const bottomStillBlurred = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-pb-blur'));
     expect(bottomStillBlurred).toBe(true);
   }, 15000);
 });

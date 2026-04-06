@@ -182,11 +182,12 @@ describeFn('PrivacyBlur extension — E2E', () => {
     const expressions = {
       TOGGLE_BLUR_ALL: `
         (function() {
-          var blurred = document.querySelectorAll('.pb-blurred');
+          var blurred = document.querySelectorAll('[data-pb-blur]');
           if (blurred.length > 0) {
             pb.BlurEngine.unblurAll();
           } else {
-            pb.BlurEngine.blurAllContent(8);
+            pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
+            pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
           }
         })()
       `,
@@ -199,7 +200,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
               { blurRadius: 8, highlightColor: '#f59e0b' },
               {
                 onBlur: function(el) {
-                  pb.BlurEngine.applyBlur(el, 8);
+                  pb.BlurEngine.applyBlur(el);
                   var sel = pb.SelectorUtils.getSelector(el);
                   if (sel) pb.Storage.saveBlurredElement(location.hostname, sel);
                 },
@@ -224,19 +225,18 @@ describeFn('PrivacyBlur extension — E2E', () => {
     return evalInContentScript(expr);
   }
 
-  async function hasClass(selector, className) {
+  async function hasBlurAttr(selector) {
     return page.evaluate(
-      (sel, cls) => {
+      (sel) => {
         const el = document.querySelector(sel);
-        return el ? el.classList.contains(cls) : false;
+        return el ? el.hasAttribute('data-pb-blur') : false;
       },
-      selector,
-      className
+      selector
     );
   }
 
   async function countBlurred() {
-    return page.evaluate(() => document.querySelectorAll('.pb-blurred').length);
+    return page.evaluate(() => document.querySelectorAll('[data-pb-blur]').length);
   }
 
   // ── Tests ─────────────────────────────────────────────────────────────────
@@ -257,8 +257,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await sendCommand('TOGGLE_BLUR_ALL');
     await new Promise((r) => setTimeout(r, 300));
 
-    const paraBlurred = await hasClass('#test-para', 'pb-blurred');
-    const imgBlurred = await hasClass('#test-img', 'pb-blurred');
+    const paraBlurred = await hasBlurAttr('#test-para');
+    const imgBlurred = await hasBlurAttr('#test-img');
     expect(paraBlurred || imgBlurred).toBe(true);
   });
 
@@ -269,8 +269,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await sendCommand('TOGGLE_BLUR_ALL');
     await new Promise((r) => setTimeout(r, 300));
 
-    const paraBlurred = await hasClass('#test-para', 'pb-blurred');
-    const imgBlurred = await hasClass('#test-img', 'pb-blurred');
+    const paraBlurred = await hasBlurAttr('#test-para');
+    const imgBlurred = await hasBlurAttr('#test-img');
     expect(paraBlurred).toBe(false);
     expect(imgBlurred).toBe(false);
   });
@@ -285,14 +285,14 @@ describeFn('PrivacyBlur extension — E2E', () => {
     expect(pickerActive).toBe(true);
   });
 
-  test('clicking an image in picker mode applies pb-blurred', async () => {
+  test('clicking an image in picker mode applies data-pb-blur', async () => {
     await sendCommand('TOGGLE_PICKER');
     await new Promise((r) => setTimeout(r, 300));
 
     await page.click('#test-img');
     await new Promise((r) => setTimeout(r, 300));
 
-    const blurred = await hasClass('#test-img', 'pb-blurred');
+    const blurred = await hasBlurAttr('#test-img');
     expect(blurred).toBe(true);
   });
 
@@ -317,7 +317,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await page.click('#test-para');
     await new Promise((r) => setTimeout(r, 400));
 
-    const blurredBefore = await hasClass('#test-para', 'pb-blurred');
+    const blurredBefore = await hasBlurAttr('#test-para');
     expect(blurredBefore).toBe(true);
 
     // Deactivate picker.
@@ -328,15 +328,15 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await page.reload({ waitUntil: 'load' });
     await new Promise((r) => setTimeout(r, 1500));
 
-    const blurredAfter = await hasClass('#test-para', 'pb-blurred');
+    const blurredAfter = await hasBlurAttr('#test-para');
     expect(blurredAfter).toBe(true);
   });
 
   test('clear all blur removes everything', async () => {
     // Directly blur some elements to ensure there is something to clear.
     await evalInContentScript(`
-      pb.BlurEngine.applyBlur(document.querySelector('#test-img'), 8);
-      pb.BlurEngine.applyBlur(document.querySelector('#test-para'), 8);
+      pb.BlurEngine.applyBlur(document.querySelector('#test-img'));
+      pb.BlurEngine.applyBlur(document.querySelector('#test-para'));
     `);
     await new Promise((r) => setTimeout(r, 300));
 
@@ -368,14 +368,17 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
     await new Promise((r) => setTimeout(r, 1500));
 
-    // Find the content script world and call blurAllContent.
+    // Find the content script world and call blur-all APIs.
     const client = await page.createCDPSession();
     try {
       const contextId = await getContentScriptContextId(client);
       expect(contextId).toBeTruthy();
 
       await client.send('Runtime.evaluate', {
-        expression: 'pb.BlurEngine.blurAllContent(8)',
+        expression: `
+          pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
+          pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
+        `,
         contextId,
         returnByValue: true,
         awaitPromise: true,
@@ -387,7 +390,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await new Promise((r) => setTimeout(r, 500));
 
     const blurredCount = await page.evaluate(
-      () => document.querySelectorAll('.pb-blurred').length
+      () => document.querySelectorAll('[data-pb-blur]').length
     );
     expect(blurredCount).toBeGreaterThan(0);
   });
@@ -407,7 +410,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
           pb.Picker.activate(
             { blurRadius: 8, highlightColor: '#f59e0b' },
             {
-              onBlur: function(el) { pb.BlurEngine.applyBlur(el, 8); },
+              onBlur: function(el) { pb.BlurEngine.applyBlur(el); },
               onUnblur: function(el) { pb.BlurEngine.removeBlur(el); },
               onDeactivate: function() {}
             }
