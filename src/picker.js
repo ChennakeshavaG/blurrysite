@@ -147,8 +147,13 @@ const Picker = (() => {
   // ─── Event listeners ──────────────────────────────────────────────────────────
 
   function onMouseOver(e) {
-    const target = resolveTarget(e.target);
+    let target = resolveTarget(e.target);
     if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
+
+    // Match the click logic: if not already blurred, highlight the classed parent
+    if (!pb.BlurEngine.isBlurred(target)) {
+      target = findClassedParent(target);
+    }
 
     if (hoveredElement && hoveredElement !== target) {
       hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
@@ -193,10 +198,12 @@ const Picker = (() => {
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    // Walk up to nearest parent with a class for stable selector persistence
-    target = findClassedParent(target);
-
+    // If the clicked element is already blurred, operate on it directly.
+    // Only walk up to a classed parent for NEW blurs (stable selector persistence).
     const alreadyBlurred = pb.BlurEngine.isBlurred(target);
+    if (!alreadyBlurred) {
+      target = findClassedParent(target);
+    }
 
     if (alreadyBlurred) {
       if (typeof activeCallbacks.onUnblur === 'function') {
