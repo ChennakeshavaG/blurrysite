@@ -447,8 +447,9 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
-    // Walk up to find the topmost blurred ancestor — reveal the whole subtree
-    const blurredRoot = findBlurredAncestor(target) || (Engine.isBlurred(target) ? target : null);
+    // Prefer target itself if blurred, else walk up to nearest blurred element.
+    // This keeps reveal scoped tightly to what the user actually hovered.
+    const blurredRoot = findBlurredTarget(target);
     if (!blurredRoot) return;
 
     if (mouseoutTimer) {

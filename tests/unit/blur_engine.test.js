@@ -95,9 +95,22 @@ describe('pb.BlurEngine', () => {
       expect(divs[1].dataset.pbBlur).toBeUndefined();
     });
 
-    test('thorough stamps all', () => {
+    test('thorough stamps inline elements without text', () => {
+      document.body.innerHTML = '<span></span>';
+      pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false }, true);
+      expect(document.querySelector('span').dataset.pbBlur).toBe('1');
+    });
+
+    test('thorough does not bypass text gate for structural containers', () => {
       document.body.innerHTML = '<div></div>';
       pb.BlurEngine.blurTextCheckElements({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true }, true);
+      // Empty div — structural container still requires direct text even in thorough mode
+      expect(document.querySelector('div').dataset.pbBlur).toBeUndefined();
+    });
+
+    test('structural container with direct text is stamped in any mode', () => {
+      document.body.innerHTML = '<div>Direct text</div>';
+      pb.BlurEngine.blurTextCheckElements({ TEXT: false, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: true }, false);
       expect(document.querySelector('div').dataset.pbBlur).toBe('1');
     });
   });

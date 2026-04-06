@@ -103,6 +103,17 @@ const BlurEngine = (() => {
     return false;
   }
 
+  /**
+   * Structural container tags — wrappers that group content but rarely hold
+   * private text directly. Blurring these creates redundant nested blur that
+   * breaks hover reveal (CSS filter on a parent composites the entire subtree,
+   * so unblurring a parent leaks all siblings). These always require the
+   * hasMeaningfulTextContent gate, even in thorough mode.
+   */
+  const _structuralTags = new Set(
+    CATEGORY_SELECTORS.STRUCTURE.textCheck
+  );
+
   /** Set of text-check tag names for O(1) lookup in MO callback */
   let _textCheckSet = new Set();
 
@@ -226,7 +237,13 @@ const BlurEngine = (() => {
     document.querySelectorAll(textCheckSelector).forEach(el => {
       if (el.dataset.pbBlur) return; // already stamped
       if (_isExtensionUI(el)) return;
-      if (thorough || hasMeaningfulTextContent(el)) {
+      // Structural containers (div, section, etc.) always require the text gate —
+      // blurring wrappers creates nested blur that breaks hover reveal.
+      // Thorough mode only bypasses the gate for inline content elements.
+      const needsTextGate = _structuralTags.has(el.tagName.toLowerCase());
+      if (needsTextGate) {
+        if (hasMeaningfulTextContent(el)) el.dataset.pbBlur = '1';
+      } else if (thorough || hasMeaningfulTextContent(el)) {
         el.dataset.pbBlur = '1';
       }
     });
@@ -242,7 +259,10 @@ const BlurEngine = (() => {
     if (_isExtensionUI(element)) return;
     const tag = element.tagName.toLowerCase();
     if (!_textCheckSet.has(tag)) return;
-    if (thorough || hasMeaningfulTextContent(element)) {
+    const needsTextGate = _structuralTags.has(tag);
+    if (needsTextGate) {
+      if (hasMeaningfulTextContent(element)) element.dataset.pbBlur = '1';
+    } else if (thorough || hasMeaningfulTextContent(element)) {
       element.dataset.pbBlur = '1';
     }
   }
