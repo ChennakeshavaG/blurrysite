@@ -447,44 +447,53 @@
   /** Set of elements currently revealed via inline style */
   const _revealedElements = new Set();
 
-  function _revealElement(el) {
-    el.style.setProperty('transition', 'filter 100ms ease', 'important');
-    el.style.setProperty('filter', 'none', 'important');
-    _revealedElements.add(el);
-    // Reveal ALL blurred descendants — they may be blurred by:
-    // 1. data-pb-blur attribute ([data-pb-blur] CSS rule)
-    // 2. CSS tag rules (span, p, img, etc. from injected <style>)
-    // Both need inline style override to unblur.
-    el.querySelectorAll('*').forEach(child => {
-      if (Engine.isBlurred(child)) {
-        child.style.setProperty('filter', 'none', 'important');
-        _revealedElements.add(child);
-      }
-    });
+  function _isZoneOverlay(el) {
+    return el && el.dataset && el.dataset.pbZone !== undefined;
   }
 
+  /** Unified reveal — works for both regular blurred elements and zone overlays. */
+  function _revealElement(el) {
+    if (_isZoneOverlay(el)) {
+      el.style.setProperty('backdrop-filter', 'none', 'important');
+      el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+    } else {
+      el.style.setProperty('filter', 'none', 'important');
+      // Reveal ALL blurred descendants (data-pb-blur + CSS tag rules)
+      el.querySelectorAll('*').forEach(child => {
+        if (Engine.isBlurred(child)) {
+          child.style.setProperty('filter', 'none', 'important');
+          _revealedElements.add(child);
+        }
+      });
+    }
+    _revealedElements.add(el);
+  }
+
+  /** Unified unreveal — restores CSS-applied blur for both types. */
   function _unrevealElement(el) {
-    el.style.removeProperty('filter');
-    setTimeout(() => el.style.removeProperty('transition'), 120);
+    if (_isZoneOverlay(el)) {
+      el.style.removeProperty('backdrop-filter');
+      el.style.removeProperty('-webkit-backdrop-filter');
+    } else {
+      el.style.removeProperty('filter');
+      el.style.removeProperty('transition');
+      // Clean up descendants
+      el.querySelectorAll('*').forEach(child => {
+        if (_revealedElements.has(child)) {
+          child.style.removeProperty('filter');
+          _revealedElements.delete(child);
+        }
+      });
+    }
     _revealedElements.delete(el);
-    // Clean up descendants added by _revealElement
-    el.querySelectorAll('*').forEach(child => {
-      if (_revealedElements.has(child)) {
-        child.style.removeProperty('filter');
-        _revealedElements.delete(child);
-      }
-    });
   }
 
   function _unrevealAll() {
-    // Snapshot to avoid mutating Set during iteration (_unrevealZone deletes)
     const snapshot = Array.from(_revealedElements);
     for (const el of snapshot) {
       if (_isZoneOverlay(el)) {
         el.style.removeProperty('backdrop-filter');
         el.style.removeProperty('-webkit-backdrop-filter');
-        el.style.removeProperty('background');
-        el.style.removeProperty('border-color');
       } else {
         el.style.removeProperty('filter');
         el.style.removeProperty('transition');
@@ -493,34 +502,9 @@
     _revealedElements.clear();
   }
 
-  /** Reveal/unreveal a zone overlay (uses backdrop-filter, not filter) */
-  function _revealZone(el) {
-    el.style.setProperty('backdrop-filter', 'none', 'important');
-    el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-    el.style.setProperty('background', 'transparent', 'important');
-    el.style.setProperty('border-color', 'transparent', 'important');
-    _revealedElements.add(el);
-  }
-
-  function _unrevealZone(el) {
-    el.style.removeProperty('backdrop-filter');
-    el.style.removeProperty('-webkit-backdrop-filter');
-    el.style.removeProperty('background');
-    el.style.removeProperty('border-color');
-    _revealedElements.delete(el);
-  }
-
-  function _isZoneOverlay(el) {
-    return el && el.dataset && el.dataset.pbZone !== undefined;
-  }
-
   function dismissClickReveal() {
     if (clickRevealedEl) {
-      if (_isZoneOverlay(clickRevealedEl)) {
-        _unrevealZone(clickRevealedEl);
-      } else {
-        _unrevealElement(clickRevealedEl);
-      }
+      _unrevealElement(clickRevealedEl);
       clickRevealedEl = null;
     }
     clearRevealedAncestors();
@@ -558,7 +542,7 @@
         dismissClickReveal();
       } else {
         dismissClickReveal();
-        _revealZone(zone);
+        _revealElement(zone);
         clickRevealedEl = zone;
       }
       return;
@@ -602,7 +586,7 @@
     if (zone) {
       if (_hoverRevealedEl === zone) return;
       _dismissHoverReveal();
-      _revealZone(zone);
+      _revealElement(zone);
       _hoverRevealedEl = zone;
       return;
     }
@@ -621,12 +605,8 @@
 
   function _dismissHoverReveal() {
     if (_hoverRevealedEl) {
-      if (_isZoneOverlay(_hoverRevealedEl)) {
-        _unrevealZone(_hoverRevealedEl);
-      } else {
-        _unrevealAll();
-        clearRevealedAncestors();
-      }
+      _unrevealAll();
+      clearRevealedAncestors();
       _hoverRevealedEl = null;
     }
   }
