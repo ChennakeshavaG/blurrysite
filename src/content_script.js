@@ -201,9 +201,7 @@
 
       Engine.createZoneOverlay({ id, name, x: item.x, y: item.y, width: item.width, height: item.height });
       log.log('onStickyBlur saving:', hostname, item.id, item.name);
-      Store.saveBlurItem(hostname, item)
-        .then(r => log.log('saveBlurItem result:', r))
-        .catch(e => console.error('[PB] saveBlurItem FAILED:', e));
+      Store.saveBlurItem(hostname, item);
       Shortcuts.showToast(name);
     },
 

@@ -27,6 +27,7 @@ const Storage = (() => {
   // Private: send a message to the background worker and return a Promise
   // -------------------------------------------------------------------------
 
+  /** Send message and wait for response (for reads). */
   function send(message) {
     return new Promise((resolve, reject) => {
       try {
@@ -43,18 +44,26 @@ const Storage = (() => {
     });
   }
 
+  /** Send message without waiting for response (for writes).
+   *  No callback = no message port = no "port closed" error. */
+  function fire(message) {
+    try {
+      chrome.runtime.sendMessage(message);
+    } catch (_) {}
+  }
+
   // -------------------------------------------------------------------------
   // Public API — blur items (typed: dynamic selectors + sticky zones)
   // -------------------------------------------------------------------------
 
-  async function saveBlurItem(hostname, item) {
+  function saveBlurItem(hostname, item) {
     if (!hostname || !item) return;
-    return send({ type: MSG.SAVE_BLUR_ITEM, hostname, item });
+    fire({ type: MSG.SAVE_BLUR_ITEM, hostname, item });
   }
 
-  async function removeBlurItem(hostname, itemId) {
+  function removeBlurItem(hostname, itemId) {
     if (!hostname || !itemId) return;
-    await send({ type: MSG.REMOVE_BLUR_ITEM, hostname, itemId });
+    fire({ type: MSG.REMOVE_BLUR_ITEM, hostname, itemId });
   }
 
   async function getBlurItems(hostname) {
@@ -63,13 +72,13 @@ const Storage = (() => {
     return (response && Array.isArray(response.items)) ? response.items : [];
   }
 
-  async function clearHost(hostname) {
+  function clearHost(hostname) {
     if (!hostname) return;
-    await send({ type: MSG.CLEAR_HOST, hostname });
+    fire({ type: MSG.CLEAR_HOST, hostname });
   }
 
-  async function clearAll() {
-    await send({ type: MSG.CLEAR_ALL });
+  function clearAll() {
+    fire({ type: MSG.CLEAR_ALL });
   }
 
   // -------------------------------------------------------------------------
@@ -92,9 +101,9 @@ const Storage = (() => {
    * Saves the entire settings object. No partial merges — the caller must
    * pass the complete settings object.
    */
-  async function saveSettings(fullSettings) {
+  function saveSettings(fullSettings) {
     if (!fullSettings || typeof fullSettings !== "object") return;
-    await send({ type: MSG.SAVE_SETTINGS, settings: fullSettings });
+    fire({ type: MSG.SAVE_SETTINGS, settings: fullSettings });
   }
 
   // -------------------------------------------------------------------------
@@ -114,9 +123,9 @@ const Storage = (() => {
    * Saves the entire URL rules array. Replaces all existing rules.
    * @param {Array} rules
    */
-  async function saveRules(rules) {
+  function saveRules(rules) {
     if (!Array.isArray(rules)) return;
-    await send({ type: MSG.SAVE_RULES, rules });
+    fire({ type: MSG.SAVE_RULES, rules });
   }
 
   // -------------------------------------------------------------------------
@@ -129,9 +138,9 @@ const Storage = (() => {
     return !!(response && response.blurAll);
   }
 
-  async function saveBlurState(hostname, blurAll) {
+  function saveBlurState(hostname, blurAll) {
     if (!hostname) return;
-    await send({ type: MSG.SAVE_BLUR_STATE, hostname, blurAll: !!blurAll });
+    fire({ type: MSG.SAVE_BLUR_STATE, hostname, blurAll: !!blurAll });
   }
 
   // -------------------------------------------------------------------------
