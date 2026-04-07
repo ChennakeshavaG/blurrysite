@@ -58,6 +58,7 @@
   async function restoreBlurItems() {
     try {
       const items = await Store.getBlurItems(hostname);
+      log.log('restoreBlurItems:', hostname, 'found', items ? items.length : 0, 'items');
       if (!items || items.length === 0) return;
 
       for (const item of items) {
@@ -199,7 +200,10 @@
       };
 
       Engine.createZoneOverlay({ id, name, x: item.x, y: item.y, width: item.width, height: item.height });
-      Store.saveBlurItem(hostname, item).catch(() => {});
+      log.log('onStickyBlur saving:', hostname, item.id, item.name);
+      Store.saveBlurItem(hostname, item)
+        .then(r => log.log('saveBlurItem result:', r))
+        .catch(e => console.error('[PB] saveBlurItem FAILED:', e));
       Shortcuts.showToast(name);
     },
 
