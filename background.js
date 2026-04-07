@@ -40,6 +40,9 @@ function createContextMenus() {
 chrome.runtime.onInstalled.addListener(() => {
   createContextMenus();
 
+  // Clean up stale storage key from pre-refactor versions
+  chrome.storage.local.remove('blurred_selectors');
+
   // Seed default settings to storage if not present. This ensures the popup
   // shows correct toggle states on first load (instead of all-unchecked).
   chrome.storage.local.get("settings", (result) => {
