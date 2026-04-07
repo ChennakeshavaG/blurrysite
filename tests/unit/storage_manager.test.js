@@ -50,28 +50,19 @@ function buildStubSource() {
       });
     }
 
-    function fire(msg) {
-      try { chrome.runtime.sendMessage(msg); } catch(_) {}
-    }
-
     function saveBlurItem(hostname, item) {
-      if (!hostname || !item) return;
-      fire({ type: 'SAVE_BLUR_ITEM', hostname: hostname, item: item });
+      return sendMsg({ type: 'SAVE_BLUR_ITEM', hostname: hostname, item: item });
     }
     function removeBlurItem(hostname, itemId) {
-      if (!hostname || !itemId) return;
-      fire({ type: 'REMOVE_BLUR_ITEM', hostname: hostname, itemId: itemId });
+      return sendMsg({ type: 'REMOVE_BLUR_ITEM', hostname: hostname, itemId: itemId });
     }
     function getBlurItems(hostname) {
       return sendMsg({ type: 'GET_BLUR_ITEMS', hostname: hostname }).then(function(res) {
         return (res && Array.isArray(res.items)) ? res.items : [];
       });
     }
-    function clearHost(hostname) {
-      if (!hostname) return;
-      fire({ type: 'CLEAR_HOST', hostname: hostname });
-    }
-    function clearAll() { fire({ type: 'CLEAR_ALL' }); }
+    function clearHost(hostname) { return sendMsg({ type: 'CLEAR_HOST', hostname: hostname }); }
+    function clearAll() { return sendMsg({ type: 'CLEAR_ALL' }); }
 
     function getSettings() {
       return sendMsg({ type: 'GET_SETTINGS' }).then(function(res) {
@@ -79,8 +70,7 @@ function buildStubSource() {
       });
     }
     function saveSettings(fullSettings) {
-      if (!fullSettings || typeof fullSettings !== 'object') return;
-      fire({ type: 'SAVE_SETTINGS', settings: fullSettings });
+      return sendMsg({ type: 'SAVE_SETTINGS', settings: fullSettings });
     }
     function getRules() {
       return sendMsg({ type: 'GET_RULES' }).then(function(res) {
@@ -88,8 +78,7 @@ function buildStubSource() {
       });
     }
     function saveRules(rules) {
-      if (!Array.isArray(rules)) return;
-      fire({ type: 'SAVE_RULES', rules: rules });
+      return sendMsg({ type: 'SAVE_RULES', rules: rules });
     }
 
     pb.Storage = {
@@ -147,40 +136,47 @@ describe('pb.Storage', () => {
   // ── saveBlurItem ───────────────────────────────────────────────────────────
 
   describe('saveBlurItem', () => {
-    test('sends SAVE_BLUR_ITEM message with hostname and item (fire-and-forget)', () => {
+    test('sends SAVE_BLUR_ITEM message with hostname and item', async () => {
+      mockSendMessageResponse({ ok: true });
+
       const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#target' };
-      pb.Storage.saveBlurItem('example.com', item);
+      await pb.Storage.saveBlurItem('example.com', item);
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'SAVE_BLUR_ITEM',
           hostname: 'example.com',
           item,
-        })
+        }),
+        expect.any(Function)
       );
     });
 
-    test('does not pass callback (no response expected)', () => {
-      const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#target' };
-      pb.Storage.saveBlurItem('example.com', item);
+    test('resolves with the response from background', async () => {
+      mockSendMessageResponse({ ok: true });
 
-      const call = chrome.runtime.sendMessage.mock.calls[0];
-      expect(call).toHaveLength(1); // only message, no callback
+      const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#target' };
+      const result = await pb.Storage.saveBlurItem('example.com', item);
+
+      expect(result).toEqual({ ok: true });
     });
   });
 
   // ── removeBlurItem ────────────────────────────────────────────────────────
 
   describe('removeBlurItem', () => {
-    test('sends REMOVE_BLUR_ITEM message (fire-and-forget)', () => {
-      pb.Storage.removeBlurItem('example.com', '#target');
+    test('sends REMOVE_BLUR_ITEM message with correct payload', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.removeBlurItem('example.com', '#target');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'REMOVE_BLUR_ITEM',
           hostname: 'example.com',
           itemId: '#target',
-        })
+        }),
+        expect.any(Function)
       );
     });
   });
@@ -235,14 +231,17 @@ describe('pb.Storage', () => {
   // ── clearHost ──────────────────────────────────────────────────────────────
 
   describe('clearHost', () => {
-    test('sends CLEAR_HOST message with correct hostname (fire-and-forget)', () => {
-      pb.Storage.clearHost('example.com');
+    test('sends CLEAR_HOST message with correct hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.clearHost('example.com');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'CLEAR_HOST',
           hostname: 'example.com',
-        })
+        }),
+        expect.any(Function)
       );
     });
 
@@ -261,16 +260,21 @@ describe('pb.Storage', () => {
   // ── clearAll ───────────────────────────────────────────────────────────────
 
   describe('clearAll', () => {
-    test('sends CLEAR_ALL message (fire-and-forget)', () => {
-      pb.Storage.clearAll();
+    test('sends CLEAR_ALL message', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.clearAll();
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'CLEAR_ALL' })
+        expect.objectContaining({ type: 'CLEAR_ALL' }),
+        expect.any(Function)
       );
     });
 
-    test('does not include hostname in CLEAR_ALL message', () => {
-      pb.Storage.clearAll();
+    test('does not include hostname in CLEAR_ALL message', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.clearAll();
 
       const [msg] = chrome.runtime.sendMessage.mock.calls[0];
       expect(msg.hostname).toBeUndefined();
@@ -345,14 +349,12 @@ describe('pb.Storage', () => {
   // ── Error handling ─────────────────────────────────────────────────────────
 
   describe('error handling', () => {
-    test('saveBlurItem does not throw on sendMessage error (fire-and-forget)', () => {
-      chrome.runtime.sendMessage.mockImplementation(() => {
-        throw new Error('Extension context invalidated');
-      });
+    test('rejects when sendMessage triggers lastError', async () => {
+      mockSendMessageError('Extension context invalidated');
 
-      expect(() => {
-        pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'Dynamic 1', selector: '#el' });
-      }).not.toThrow();
+      await expect(
+        pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'Dynamic 1', selector: '#el' })
+      ).rejects.toBeTruthy();
     });
 
     test('getBlurItems handles sendMessage error gracefully by rejecting', async () => {
@@ -363,38 +365,57 @@ describe('pb.Storage', () => {
       ).rejects.toBeTruthy();
     });
 
-    test('clearAll does not throw on sendMessage error (fire-and-forget)', () => {
+    test('rejects when sendMessage throws synchronously', async () => {
       chrome.runtime.sendMessage.mockImplementation(() => {
-        throw new Error('Service worker suspended');
+        throw new Error('Extension context invalidated');
       });
 
-      expect(() => pb.Storage.clearAll()).not.toThrow();
+      await expect(
+        pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'Dynamic 1', selector: '#el' })
+      ).rejects.toThrow('Extension context invalidated');
     });
 
-    test('clearHost does not throw on sendMessage error (fire-and-forget)', () => {
-      chrome.runtime.sendMessage.mockImplementation(() => {
-        throw new Error('Service worker suspended');
-      });
+    test('clearAll rejects on lastError', async () => {
+      mockSendMessageError('Service worker suspended');
 
-      expect(() => pb.Storage.clearHost('example.com')).not.toThrow();
+      await expect(
+        pb.Storage.clearAll()
+      ).rejects.toBeTruthy();
+    });
+
+    test('clearHost rejects on lastError', async () => {
+      mockSendMessageError('Service worker suspended');
+
+      await expect(
+        pb.Storage.clearHost('example.com')
+      ).rejects.toBeTruthy();
     });
   });
 
   // ── Guard clauses ─────────────────────────────────────────────────────────
 
   describe('guard clauses', () => {
-    test('saveBlurItem returns early for empty hostname', () => {
-      pb.Storage.saveBlurItem('', { type: 'dynamic', name: 'D1', selector: '#el' });
+    test('saveBlurItem returns early for empty hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.saveBlurItem('', { type: 'dynamic', name: 'D1', selector: '#el' });
+
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('saveBlurItem returns early for null item', () => {
-      pb.Storage.saveBlurItem('example.com', null);
+    test('saveBlurItem returns early for null item', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.saveBlurItem('example.com', null);
+
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('removeBlurItem returns early for empty hostname', () => {
-      pb.Storage.removeBlurItem('', '#el');
+    test('removeBlurItem returns early for empty hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.removeBlurItem('', '#el');
+
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
@@ -405,18 +426,27 @@ describe('pb.Storage', () => {
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('clearHost returns early for empty hostname', () => {
-      pb.Storage.clearHost('');
+    test('clearHost returns early for empty hostname', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.clearHost('');
+
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('saveSettings returns early for null input', () => {
-      pb.Storage.saveSettings(null);
+    test('saveSettings returns early for null input', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.saveSettings(null);
+
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('saveSettings returns early for non-object input', () => {
-      pb.Storage.saveSettings('not an object');
+    test('saveSettings returns early for non-object input', async () => {
+      mockSendMessageResponse({ ok: true });
+
+      await pb.Storage.saveSettings('not an object');
+
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
   });
