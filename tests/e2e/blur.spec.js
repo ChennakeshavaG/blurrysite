@@ -202,7 +202,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
                 onBlur: function(el) {
                   pb.BlurEngine.applyBlur(el);
                   var sel = pb.SelectorUtils.getSelector(el);
-                  if (sel) pb.Storage.saveBlurredElement(location.hostname, sel);
+                  if (sel) pb.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
                 },
                 onUnblur: function(el) {
                   pb.BlurEngine.removeBlur(el);

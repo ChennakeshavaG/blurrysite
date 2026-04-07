@@ -38,8 +38,12 @@
   /** MutationObserver watching for dynamically added nodes */
   let domObserver = null;
 
-  /** Hostname used as the storage key for persisted selectors */
+  /** Hostname used as the storage key for persisted blur items */
   const hostname = location.hostname;
+
+  /** Auto-naming counters for blur items (per session, seeded from storage on init) */
+  let dynamicCounter = 0;
+  let stickyCounter = 0;
 
   // ─── Module aliases (synchronous — loaded before this script by manifest) ──
 
@@ -49,17 +53,49 @@
   const Picker    = pb.Picker;
   const Shortcuts = pb.Shortcuts;
 
-  // ─── Restore blurred elements ────────────────────────────────────────────────
+  // ─── Restore blur items ──────────────────────────────────────────────────────
 
-  async function restoreBlurredElements() {
+  async function restoreBlurItems() {
     try {
-      const selectors = await Store.getBlurredSelectors(hostname);
-      if (!selectors || selectors.length === 0) return;
+      const items = await Store.getBlurItems(hostname);
+      if (!items || items.length === 0) return;
 
-      for (const selector of selectors) {
-        const el = Selector.restoreSelector(selector);
-        if (el) {
-          Engine.applyBlur(el);
+      for (const item of items) {
+        if (item.type === 'dynamic') {
+          const el = Selector.restoreSelector(item.selector);
+          if (el) {
+            Engine.applyBlur(el);
+          }
+          const num = parseInt((item.name || '').replace('Dynamic ', ''), 10);
+          if (!isNaN(num) && num >= dynamicCounter) dynamicCounter = num;
+
+        } else if (item.type === 'sticky') {
+          // Exact path match (trailing-slash tolerant) — zone from /dashboard doesn't show on /settings
+          if (item.path) {
+            const stored = item.path.replace(/\/+$/, '') || '/';
+            const current = location.pathname.replace(/\/+$/, '') || '/';
+            if (stored !== current) continue;
+          }
+
+          // Proportional coordinate scaling (fallback to viewport if doc not sized)
+          const curW = document.documentElement.scrollWidth || window.innerWidth;
+          const curH = document.documentElement.scrollHeight || window.innerHeight;
+          const x = (typeof item.xPct === 'number') ? item.xPct * curW : item.x;
+          const y = (typeof item.yPct === 'number') ? item.yPct * curH : item.y;
+          const w = (typeof item.widthPct === 'number') ? item.widthPct * curW : item.width;
+          const h = (typeof item.heightPct === 'number') ? item.heightPct * curH : item.height;
+
+          Engine.createZoneOverlay({
+            id: item.id,
+            name: item.name,
+            x: Math.round(x),
+            y: Math.round(y),
+            width: Math.round(w),
+            height: Math.round(h),
+          });
+
+          const num = parseInt((item.name || '').replace('Sticky ', ''), 10);
+          if (!isNaN(num) && num >= stickyCounter) stickyCounter = num;
         }
       }
     } catch (err) {
@@ -87,6 +123,8 @@
         if (mutation.type !== 'childList') continue;
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          // Skip zone overlay elements — they are our own injected divs
+          if (node.dataset && node.dataset.pbZone !== undefined) continue;
           // Stamp the node itself if it's a text-check element with text
           Engine.tryBlurTextCheck(node, settings.THOROUGH_BLUR);
           // Also check descendants
@@ -113,12 +151,18 @@
 
   // ─── Picker callbacks ─────────────────────────────────────────────────────────
 
+  function _generateZoneId() {
+    return 's_' + Math.random().toString(36).slice(2, 10);
+  }
+
   const pickerCallbacks = {
     onBlur(el) {
       Engine.applyBlur(el);
       const selector = Selector.getSelector(el);
       if (selector) {
-        Store.saveBlurredElement(hostname, selector).catch(() => {});
+        dynamicCounter++;
+        const item = { type: 'dynamic', name: 'Dynamic ' + dynamicCounter, selector };
+        Store.saveBlurItem(hostname, item).catch(() => {});
       }
     },
 
@@ -126,8 +170,47 @@
       Engine.removeBlur(el);
       const selector = Selector.getSelector(el);
       if (selector) {
-        Store.removeBlurredElement(hostname, selector).catch(() => {});
+        Store.removeBlurItem(hostname, selector).catch(() => {});
       }
+    },
+
+    onStickyBlur(zoneRect) {
+      stickyCounter++;
+      const id = _generateZoneId();
+      const name = 'Sticky ' + stickyCounter;
+      const scrollW = zoneRect.scrollWidth;
+      const scrollH = zoneRect.scrollHeight;
+
+      const item = {
+        type: 'sticky',
+        name: name,
+        id: id,
+        x: zoneRect.x,
+        y: zoneRect.y,
+        width: zoneRect.width,
+        height: zoneRect.height,
+        xPct: scrollW ? zoneRect.x / scrollW : 0,
+        yPct: scrollH ? zoneRect.y / scrollH : 0,
+        widthPct: scrollW ? zoneRect.width / scrollW : 0,
+        heightPct: scrollH ? zoneRect.height / scrollH : 0,
+        scrollWidth: scrollW,
+        scrollHeight: scrollH,
+        path: location.pathname,
+      };
+
+      Engine.createZoneOverlay({ id, name, x: item.x, y: item.y, width: item.width, height: item.height });
+      Store.saveBlurItem(hostname, item).catch(() => {});
+      Shortcuts.showToast(name);
+    },
+
+    onStickyUnblur(zoneId) {
+      Engine.removeZoneOverlay(zoneId);
+      Store.removeBlurItem(hostname, zoneId).catch(() => {});
+    },
+
+    onModeChange(mode) {
+      settings.PICKER_MODE = mode;
+      Store.saveSettings(settings).catch(() => {});
     },
 
     onDeactivate() {
@@ -393,19 +476,67 @@
   }
 
   function _unrevealAll() {
-    for (const el of _revealedElements) {
-      el.style.removeProperty('filter');
-      el.style.removeProperty('transition');
+    // Snapshot to avoid mutating Set during iteration (_unrevealZone deletes)
+    const snapshot = Array.from(_revealedElements);
+    for (const el of snapshot) {
+      if (_isZoneOverlay(el)) {
+        el.style.removeProperty('backdrop-filter');
+        el.style.removeProperty('-webkit-backdrop-filter');
+        el.style.removeProperty('background');
+        el.style.removeProperty('border-color');
+      } else {
+        el.style.removeProperty('filter');
+        el.style.removeProperty('transition');
+      }
     }
     _revealedElements.clear();
   }
 
+  /** Reveal/unreveal a zone overlay (uses backdrop-filter, not filter) */
+  function _revealZone(el) {
+    el.style.setProperty('backdrop-filter', 'none', 'important');
+    el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+    el.style.setProperty('background', 'transparent', 'important');
+    el.style.setProperty('border-color', 'transparent', 'important');
+    _revealedElements.add(el);
+  }
+
+  function _unrevealZone(el) {
+    el.style.removeProperty('backdrop-filter');
+    el.style.removeProperty('-webkit-backdrop-filter');
+    el.style.removeProperty('background');
+    el.style.removeProperty('border-color');
+    _revealedElements.delete(el);
+  }
+
+  function _isZoneOverlay(el) {
+    return el && el.dataset && el.dataset.pbZone !== undefined;
+  }
+
   function dismissClickReveal() {
     if (clickRevealedEl) {
-      _unrevealElement(clickRevealedEl);
+      if (_isZoneOverlay(clickRevealedEl)) {
+        _unrevealZone(clickRevealedEl);
+      } else {
+        _unrevealElement(clickRevealedEl);
+      }
       clickRevealedEl = null;
     }
     clearRevealedAncestors();
+  }
+
+  /** Find the zone overlay at the given viewport coordinates, if any. */
+  function _findZoneAtPoint(clientX, clientY) {
+    const zones = Engine.getZoneOverlays();
+    for (let i = zones.length - 1; i >= 0; i--) {
+      const z = zones[i];
+      const rect = z.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right &&
+          clientY >= rect.top && clientY <= rect.bottom) {
+        return z;
+      }
+    }
+    return null;
   }
 
   function onRevealClick(e) {
@@ -418,6 +549,19 @@
     const tag = target.tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
         tag === 'button' || target.isContentEditable) return;
+
+    // Check zone overlays first (they have pointer-events: none, so check coords)
+    const zone = _findZoneAtPoint(e.clientX, e.clientY);
+    if (zone) {
+      if (zone === clickRevealedEl) {
+        dismissClickReveal();
+      } else {
+        dismissClickReveal();
+        _revealZone(zone);
+        clickRevealedEl = zone;
+      }
+      return;
+    }
 
     const blurredEl = findBlurredTarget(target);
     if (!blurredEl) return;
@@ -447,28 +591,43 @@
     const target = e.target;
     if (!(target instanceof Element)) return;
 
-    // Prefer target itself if blurred, else walk up to nearest blurred element.
-    // This keeps reveal scoped tightly to what the user actually hovered.
-    const blurredRoot = findBlurredTarget(target);
-    if (!blurredRoot) return;
-
     if (mouseoutTimer) {
       clearTimeout(mouseoutTimer);
       mouseoutTimer = null;
     }
 
-    // Already revealing this root — skip
-    if (_hoverRevealedEl === blurredRoot) return;
-
-    // Unreveal previous
-    if (_hoverRevealedEl) {
-      _unrevealAll();
-      clearRevealedAncestors();
+    // Check zone overlays first (pointer-events: none, so use coords)
+    const zone = _findZoneAtPoint(e.clientX, e.clientY);
+    if (zone) {
+      if (_hoverRevealedEl === zone) return;
+      _dismissHoverReveal();
+      _revealZone(zone);
+      _hoverRevealedEl = zone;
+      return;
     }
 
+    // Prefer target itself if blurred, else walk up to nearest blurred element.
+    const blurredRoot = findBlurredTarget(target);
+    if (!blurredRoot) return;
+
+    if (_hoverRevealedEl === blurredRoot) return;
+
+    _dismissHoverReveal();
     _revealElement(blurredRoot);
     _hoverRevealedEl = blurredRoot;
     revealAncestorChain(blurredRoot);
+  }
+
+  function _dismissHoverReveal() {
+    if (_hoverRevealedEl) {
+      if (_isZoneOverlay(_hoverRevealedEl)) {
+        _unrevealZone(_hoverRevealedEl);
+      } else {
+        _unrevealAll();
+        clearRevealedAncestors();
+      }
+      _hoverRevealedEl = null;
+    }
   }
 
   function onRevealMouseOut(e) {
@@ -476,11 +635,7 @@
     if (mouseoutTimer) clearTimeout(mouseoutTimer);
     mouseoutTimer = setTimeout(() => {
       mouseoutTimer = null;
-      if (_hoverRevealedEl) {
-        _unrevealElement(_hoverRevealedEl);
-        _hoverRevealedEl = null;
-      }
-      clearRevealedAncestors();
+      _dismissHoverReveal();
     }, 50);
   }
 
@@ -563,6 +718,7 @@
           Picker.activate({
             blurRadius: settings.BLUR_RADIUS,
             highlightColor: settings.HIGHLIGHT_COLOR,
+            pickerMode: settings.PICKER_MODE,
           }, pickerCallbacks);
           isPickerActive = true;
           Shortcuts._setPickerActive(true);
@@ -583,9 +739,9 @@
         break;
       }
 
-      // ── Re-apply persisted blur selectors ────────────────────────────────
+      // ── Re-apply persisted blur items ──────────────────────────────────
       case MSG.RESTORE: {
-        restoreBlurredElements().then(() => {
+        restoreBlurItems().then(() => {
           if (sendResponse) sendResponse({ ok: true });
         });
         return true; // async response
@@ -636,7 +792,9 @@
           Engine.applyBlur(target);
           const sel = Selector.getSelector(target);
           if (sel) {
-            Store.saveBlurredElement(hostname, sel).catch(() => {});
+            dynamicCounter++;
+            const item = { type: 'dynamic', name: 'Dynamic ' + dynamicCounter, selector: sel };
+            Store.saveBlurItem(hostname, item).catch(() => {});
           }
         }
         lastContextMenuTarget = null;
@@ -657,7 +815,7 @@
           Engine.removeBlur(unblurTarget);
           const sel = Selector.getSelector(unblurTarget);
           if (sel) {
-            Store.removeBlurredElement(hostname, sel).catch(() => {});
+            Store.removeBlurItem(hostname, sel).catch(() => {});
           }
         }
         lastContextMenuTarget = null;
@@ -665,15 +823,17 @@
         break;
       }
 
-      // ── Unblur a specific selector (from popup remove button) ────────────
-      case MSG.UNBLUR_SELECTOR: {
-        if (message.selector) {
-          try {
-            const el = document.querySelector(message.selector);
-            if (el) {
-              Engine.removeBlur(el);
-            }
-          } catch (_e) { /* invalid selector — skip */ }
+      // ── Unblur a specific item (from popup remove button) ────────────────
+      case MSG.UNBLUR_ITEM: {
+        if (message.item) {
+          if (message.item.type === 'dynamic' && message.item.selector) {
+            try {
+              const el = document.querySelector(message.item.selector);
+              if (el) Engine.removeBlur(el);
+            } catch (_e) { /* invalid selector — skip */ }
+          } else if (message.item.type === 'sticky' && message.item.id) {
+            Engine.removeZoneOverlay(message.item.id);
+          }
         }
         if (sendResponse) sendResponse({ ok: true });
         break;
@@ -804,8 +964,8 @@
     // 6. Initialise keyboard shortcut handler.
     Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
 
-    // 7. Restore previously blurred elements for this hostname.
-    await restoreBlurredElements();
+    // 7. Restore previously blurred items for this hostname.
+    await restoreBlurItems();
 
     // 8. Restore blur-all state for this hostname.
     try {

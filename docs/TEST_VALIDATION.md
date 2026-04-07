@@ -1,10 +1,10 @@
 # PrivacyBlur — Test Validation & Manual Replication Guide
 
-**215 unit tests across 6 test files.** All validated 2026-04-03.
+**227 unit tests across 6 test files.** All validated 2026-04-07.
 
 ---
 
-## 1. blur_engine.test.js (48 tests)
+## 1. blur_engine.test.js (60 tests)
 
 ### applyBlur (9 tests)
 
@@ -108,6 +108,23 @@
 | 46 | does not throw on null | `PrivacyBlurEngine.toggleBlur(null)` — no error. |
 | 47 | does not throw on non-Element | `PrivacyBlurEngine.toggleBlur('hello')` — no error. |
 | 48 | uses custom radius when toggling on | `toggleBlur(el, 15)` — check `--pb-radius: 15px`. |
+
+### Zone overlay engine (12 tests)
+
+| # | Test | Manual Replication |
+|---|---|---|
+| 49 | createZoneOverlay injects overlay div into document.body | Call `PrivacyBlurEngine.createZoneOverlay({id:'z1', x:10, y:20, width:100, height:50})`. Inspect DOM — `document.body` has a child with `data-pb-zone="z1"`. |
+| 50 | createZoneOverlay sets position styles from coordinates | Same as above. Inspect styles — `position:fixed`, `left:10px`, `top:20px`, `width:100px`, `height:50px`. |
+| 51 | createZoneOverlay overlay has pb-zone-overlay class | Same overlay. Element has `class="pb-zone-overlay"`. |
+| 52 | createZoneOverlay returns null for missing id | `createZoneOverlay({x:0, y:0, width:10, height:10})` — returns `null`. |
+| 53 | createZoneOverlay replaces existing overlay with same id | Create overlay with id `z1`, then create another with same id. Only one `[data-pb-zone="z1"]` in DOM. |
+| 54 | removeZoneOverlay removes overlay from DOM and tracking | Create overlay `z1`, call `removeZoneOverlay('z1')`. No `[data-pb-zone="z1"]` in DOM. `getZoneOverlays()` returns empty. |
+| 55 | removeZoneOverlay no-op for unknown id | `removeZoneOverlay('nonexistent')` — no error, no DOM change. |
+| 56 | getZoneOverlays returns all active overlays | Create 3 overlays. `getZoneOverlays().length === 3`. |
+| 57 | getZoneOverlays returns empty array when none exist | No overlays created. `getZoneOverlays()` returns `[]`. |
+| 58 | removeAllZoneOverlays removes all overlays | Create 3 overlays, call `removeAllZoneOverlays()`. `getZoneOverlays()` returns `[]`, no overlay elements in DOM. |
+| 59 | unblurAll removes zone overlays along with data-pb-blur elements | Blur elements and create zone overlays. `unblurAll()`. Both blurred elements and zone overlays removed. |
+| 60 | _isExtensionUI excludes zones: zone overlay not treated as blur target | Create zone overlay, call `blurAllContent()`. Zone overlay does not get `pb-blurred` class. |
 
 ---
 
@@ -324,27 +341,27 @@
 
 ## 5. storage_manager.test.js (33 tests)
 
-### saveBlurredElement (2 tests)
+### saveBlurItem (2 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 1 | sends SAVE_SELECTOR message | Open background worker DevTools, blur an element. Confirm `SAVE_SELECTOR` message with correct hostname/selector. |
-| 2 | resolves with background response | Blur succeeds — no console errors. |
+| 1 | sends SAVE_BLUR_ITEM message with hostname and item | Open background worker DevTools, blur an element. Confirm `SAVE_BLUR_ITEM` message with correct hostname/item. |
+| 2 | resolves with the response from background | Blur succeeds — no console errors. |
 
-### removeBlurredElement (1 test)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 3 | sends REMOVE_SELECTOR message | Unblur an element, monitor background logs for `REMOVE_SELECTOR`. |
-
-### getBlurredSelectors (4 tests)
+### removeBlurItem (1 test)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 4 | resolves with selectors array | Blur elements, reload page. `getBlurredSelectors(location.hostname)` returns saved selectors. |
-| 5 | empty response yields empty array | Visit a page with no blurred elements. Returns `[]`. |
-| 6 | sends correct hostname | Navigate to a page, monitor messages. Hostname matches `location.hostname`. |
-| 7 | null response yields empty array | Robustness against null background response. |
+| 3 | sends REMOVE_BLUR_ITEM message with correct payload | Unblur an element, monitor background logs for `REMOVE_BLUR_ITEM`. |
+
+### getBlurItems (4 tests)
+
+| # | Test | Manual Replication |
+|---|---|---|
+| 4 | resolves with items array from background response | Blur elements, reload page. `getBlurItems(location.hostname)` returns saved items. |
+| 5 | resolves with empty array when background returns no items | Visit a page with no blurred elements. Returns `[]`. |
+| 6 | sends GET_BLUR_ITEMS message with correct hostname | Navigate to a page, monitor messages. Hostname matches `location.hostname`. |
+| 7 | resolves with empty array when response is null | Robustness against null background response. |
 
 ### clearHost (2 tests)
 
@@ -379,9 +396,9 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 17 | rejects on lastError | Disable/reload extension while page open. Blur attempt produces error. |
-| 18 | getBlurredSelectors handles error | Same scenario during page load. |
-| 19 | rejects on synchronous throw | Extension fully unloaded. Stale content script gets rejection. |
+| 17 | rejects when sendMessage triggers lastError | Disable/reload extension while page open. `saveBlurItem` attempt produces error. |
+| 18 | getBlurItems handles sendMessage error gracefully by rejecting | Same scenario during page load. |
+| 19 | rejects when sendMessage throws synchronously | Extension fully unloaded. Stale content script `saveBlurItem` gets rejection. |
 | 20 | clearAll rejects on lastError | Background suspended during clearAll. |
 | 21 | clearHost rejects on lastError | Background suspended during clearHost. |
 
@@ -389,10 +406,10 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 22 | saveBlurredElement early return for empty hostname | Programmatic guard — `sendMessage` never called with empty hostname. |
-| 23 | saveBlurredElement early return for empty selector | Same — empty selector blocked. |
-| 24 | removeBlurredElement early return for empty hostname | Same pattern. |
-| 25 | getBlurredSelectors returns [] for empty hostname | Returns `[]` without messaging background. |
+| 22 | saveBlurItem returns early for empty hostname | Programmatic guard — `sendMessage` never called with empty hostname. |
+| 23 | saveBlurItem returns early for null item | Same — null item blocked. |
+| 24 | removeBlurItem returns early for empty hostname | Same pattern. |
+| 25 | getBlurItems returns empty array for empty hostname | Returns `[]` without messaging background. |
 | 26 | clearHost early return for empty hostname | Same pattern. |
 | 27 | saveSettings early return for null | Null input blocked. |
 | 28 | saveSettings early return for non-object | String input blocked. |
@@ -443,13 +460,107 @@ Tests added for the category-aware `blurAllContent(radius, options)` API.
 | 21 | CATEGORY_SELECTORS has 5 categories | exactly 5 keys | Check key count |
 | 22 | each category has alwaysBlur and textCheck arrays | both are arrays | Iterate and check |
 
-## Category Constants Tests (constants.test.js)
+## Constants Tests (constants.test.js)
+
+### Message type categories (3 tests)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 1 | DEFAULTS.BLUR_CATEGORIES exists and is frozen | defined and frozen | Check Object.isFrozen |
-| 2 | has correct default values | text:true, media:true, form:false, table:true, structure:true | Compare each key |
-| 3 | has exactly 5 keys | length is 5 | Check Object.keys length |
+| 1 | exposes all storage message types | `GET_BLUR_ITEMS`, `SAVE_BLUR_ITEM`, `REMOVE_BLUR_ITEM`, `CLEAR_HOST`, `CLEAR_ALL`, `GET_SETTINGS`, `SAVE_SETTINGS`, `GET_RULES`, `SAVE_RULES` | `pb.STORAGE.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'` in DevTools |
+| 2 | exposes all command message types | `TOGGLE_BLUR_ALL`, `TOGGLE_PICKER`, `CLEAR_ALL_BLUR`, `RESTORE`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` | `pb.COMMAND.TOGGLE_BLUR_ALL` in DevTools |
+| 3 | exposes all popup message types | `UPDATE_SETTINGS`, `GET_STATUS`, `UNBLUR_ITEM` | `pb.POPUP.UNBLUR_ITEM === 'UNBLUR_ITEM'` in DevTools |
+
+### Flat shorthand access (1 test)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 4 | all message types accessible at top level | `pb.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'`, plus command and popup types | `pb.SAVE_BLUR_ITEM` in DevTools |
+
+### isValid (3 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 5 | returns true for known message types | `isValid('GET_BLUR_ITEMS')` etc. return `true` | `pb.isValid('GET_BLUR_ITEMS')` in DevTools |
+| 6 | returns false for unknown strings | `isValid('UNKNOWN_TYPE')` returns `false` | `pb.isValid('FOO')` in DevTools |
+| 7 | returns false for non-string input | `isValid(null)`, `isValid(42)` return `false` | `pb.isValid(null)` in DevTools |
+
+### categoryOf (4 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 8 | returns correct category for storage types | `categoryOf('SAVE_BLUR_ITEM')` returns `'STORAGE'` | `pb.categoryOf('SAVE_BLUR_ITEM')` in DevTools |
+| 9 | returns correct category for command types | `categoryOf('TOGGLE_BLUR_ALL')` returns `'COMMAND'` | `pb.categoryOf('TOGGLE_BLUR_ALL')` in DevTools |
+| 10 | returns correct category for popup types | `categoryOf('UPDATE_SETTINGS')` returns `'POPUP'` | `pb.categoryOf('UPDATE_SETTINGS')` in DevTools |
+| 11 | returns null for unknown types | `categoryOf('UNKNOWN')` returns `null` | `pb.categoryOf('FOO')` in DevTools |
+
+### DEFAULT_SETTINGS (4 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 12 | contains all expected top-level keys | BLUR_RADIUS=10, TRANSITION_DURATION=200, etc. | `pb.DEFAULT_SETTINGS` in DevTools |
+| 13 | is frozen (immutable) | `Object.isFrozen` returns `true` | `Object.isFrozen(pb.DEFAULT_SETTINGS)` in DevTools |
+| 14 | SHORTCUTS is frozen with 3 actions | 3 keys, all defined | Check `Object.keys(pb.DEFAULT_SETTINGS.SHORTCUTS).length` |
+| 15 | each shortcut has primaryModifier and keys array | all shortcuts have required shape | Inspect each shortcut object |
+
+### DEFAULT_SETTINGS.BLUR_CATEGORIES (3 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 16 | DEFAULTS.BLUR_CATEGORIES exists and is frozen | defined and frozen | Check Object.isFrozen |
+| 17 | has correct default values | text:true, media:true, form:false, table:true, structure:true | Compare each key |
+| 18 | has exactly 5 keys | length is 5 | Check Object.keys length |
+
+### buildDefaultSettings (2 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 19 | returns a mutable deep clone | clone can be modified without affecting original | Modify clone, check original unchanged |
+| 20 | nested objects are also cloned | modifying nested clone does not affect frozen original | Change BLUR_CATEGORIES.FORM on clone |
+
+### deepMerge (4 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 21 | merges flat keys | `{A:1,B:2}` + `{B:3}` = `{A:1,B:3}` | `pb.deepMerge({A:1},{A:2})` in DevTools |
+| 22 | merges nested objects | nested override replaces inner key only | Test with nested objects |
+| 23 | blocks prototype pollution keys | `__proto__` and `constructor` ignored | Attempt pollution, verify safe |
+| 24 | does not mutate base | frozen base survives merge | Merge over frozen object |
+
+### validateSettings (8 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 25 | returns full defaults for null input | null yields complete defaults | `pb.validateSettings(null)` in DevTools |
+| 26 | preserves valid values | custom values kept | Pass valid overrides, check preserved |
+| 27 | replaces out-of-range BLUR_RADIUS with default | 999, -1, 'abc' all reset to 10 | `pb.validateSettings({BLUR_RADIUS:999})` |
+| 28 | replaces invalid REVEAL_MODE with default | 'invalid', 42 reset to 'hover' | Test with bad REVEAL_MODE |
+| 29 | replaces invalid HIGHLIGHT_COLOR with default | 'red', '#fff' reset to '#f59e0b' | Test with bad color |
+| 30 | replaces non-boolean category values with defaults | 'yes', 1 reset to boolean defaults | Test with non-boolean categories |
+| 31 | replaces broken shortcut binding with default | missing keys restored | Test with broken shortcut shape |
+| 32 | fills missing keys with defaults | empty object gets all defaults | `pb.validateSettings({})` |
+
+### Immutability (2 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 33 | top-level pb namespace is extensible | `typeof pb === 'object'` | Modules attach to pb at runtime |
+| 34 | category objects are frozen | STORAGE, COMMAND, POPUP all frozen | Check `Object.isFrozen(pb.STORAGE)` |
+
+### validateSettings boundary values (10 tests)
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 35 | BLUR_RADIUS accepts min boundary (2) | radius 2 accepted | `pb.validateSettings({BLUR_RADIUS:2})` |
+| 36 | BLUR_RADIUS accepts max boundary (30) | radius 30 accepted | `pb.validateSettings({BLUR_RADIUS:30})` |
+| 37 | BLUR_RADIUS rejects below min (1) | radius 1 reset to default | `pb.validateSettings({BLUR_RADIUS:1})` |
+| 38 | BLUR_RADIUS rejects above max (31) | radius 31 reset to default | `pb.validateSettings({BLUR_RADIUS:31})` |
+| 39 | SHORTCUTS rejects empty keys array | empty keys falls back to default | Test with `keys: []` |
+| 40 | SHORTCUTS rejects keys exceeding limit (11) | 11 keys falls back to default | Test with 11-element keys array |
+| 41 | deepMerge stops at depth limit | depth 6+ returns override directly | Test with deeply nested object |
+| 42 | PICKER_MODE defaults to sticky | `DEFAULT_SETTINGS.PICKER_MODE === 'sticky'` | `pb.DEFAULT_SETTINGS.PICKER_MODE` in DevTools |
+| 43 | PICKER_MODE validates against enum | 'sticky' and 'dynamic' accepted, 'invalid' rejected | `pb.validateSettings({PICKER_MODE:'invalid'})` resets to default |
+| 44 | PICKER_MODES enum exists | `PICKER_MODES.STICKY === 'sticky'`, `PICKER_MODES.DYNAMIC === 'dynamic'` | `pb.PICKER_MODES.STICKY` in DevTools |
+| 45 | BLUR_MODE validates against enum | 'gaussian' and 'frosted' accepted, 'invalid' rejected | `pb.validateSettings({BLUR_MODE:'invalid'})` resets to default |
 
 ## Category Storage Tests (storage_manager.test.js)
 
@@ -478,4 +589,4 @@ Tests added for the category-aware `blurAllContent(radius, options)` API.
 | picker | #20 (partial settings) | Claims to test partial merge but only asserts onBlur fires. |
 | picker | #26 (highlight switches) | Does not verify el1 loses highlight when el2 gains it. |
 | selector_utils | #16 (empty string) | Overly permissive assertion (`== null || instanceof Element`). Should be `toBeNull()`. |
-| storage_manager | #15-16, 22-31 | 12 tests are incompatible with the `buildStubSource()` stub. Stub does not match real source contract. |
+| storage_manager | #15-16, 22-28 | Guard clause and settings tests may be incompatible with the `buildStubSource()` stub. Stub does not match real source contract. |

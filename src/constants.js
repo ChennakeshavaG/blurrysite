@@ -5,9 +5,9 @@
  * functions used across the extension (background worker, content scripts, popup).
  *
  * Usage:
- *   pb.STORAGE.SAVE_SELECTOR          // namespaced access
- *   pb.SAVE_SELECTOR                   // flat shorthand
- *   pb.isValid('SAVE_SELECTOR')        // true — validates a type string
+ *   pb.STORAGE.SAVE_BLUR_ITEM          // namespaced access
+ *   pb.SAVE_BLUR_ITEM                  // flat shorthand
+ *   pb.isValid('SAVE_BLUR_ITEM')       // true — validates a type string
  *   pb.DEFAULT_SETTINGS                // frozen settings object
  *   pb.BlurEngine.applyBlur(el)        // module access (Java-style)
  *   pb.Storage.getSettings()           // module access
@@ -27,17 +27,17 @@ const Constants = (() => {
   const categories = {
     /** Content script / popup → background (storage I/O) */
     STORAGE: Object.freeze({
-      GET_SELECTORS:   'GET_SELECTORS',
-      SAVE_SELECTOR:   'SAVE_SELECTOR',
-      REMOVE_SELECTOR: 'REMOVE_SELECTOR',
-      CLEAR_HOST:      'CLEAR_HOST',
-      CLEAR_ALL:       'CLEAR_ALL',
-      GET_SETTINGS:    'GET_SETTINGS',
-      SAVE_SETTINGS:   'SAVE_SETTINGS',
-      GET_RULES:       'GET_RULES',
-      SAVE_RULES:      'SAVE_RULES',
-      GET_BLUR_STATE:  'GET_BLUR_STATE',
-      SAVE_BLUR_STATE: 'SAVE_BLUR_STATE',
+      GET_BLUR_ITEMS:   'GET_BLUR_ITEMS',
+      SAVE_BLUR_ITEM:   'SAVE_BLUR_ITEM',
+      REMOVE_BLUR_ITEM: 'REMOVE_BLUR_ITEM',
+      CLEAR_HOST:       'CLEAR_HOST',
+      CLEAR_ALL:        'CLEAR_ALL',
+      GET_SETTINGS:     'GET_SETTINGS',
+      SAVE_SETTINGS:    'SAVE_SETTINGS',
+      GET_RULES:        'GET_RULES',
+      SAVE_RULES:       'SAVE_RULES',
+      GET_BLUR_STATE:   'GET_BLUR_STATE',
+      SAVE_BLUR_STATE:  'SAVE_BLUR_STATE',
     }),
 
     /** Background → content script (command relay, restore, context menu) */
@@ -54,7 +54,7 @@ const Constants = (() => {
     POPUP: Object.freeze({
       UPDATE_SETTINGS:  'UPDATE_SETTINGS',
       GET_STATUS:       'GET_STATUS',
-      UNBLUR_SELECTOR:  'UNBLUR_SELECTOR',
+      UNBLUR_ITEM:      'UNBLUR_ITEM',
     }),
   };
 
@@ -96,6 +96,11 @@ const Constants = (() => {
     FROSTED:  'frosted',
   });
 
+  const PICKER_MODES = Object.freeze({
+    STICKY:  'sticky',
+    DYNAMIC: 'dynamic',
+  });
+
   const PATTERN_TYPES = Object.freeze({
     WILDCARD: 'wildcard',
     REGEX:    'regex',
@@ -117,6 +122,10 @@ const Constants = (() => {
     TOOLBAR_BTN:      'pb-toolbar-btn',
     TOOLBAR_BTN_CLEAR:'pb-toolbar-btn--clear',
     TOOLBAR_BTN_CLOSE:'pb-toolbar-btn--close',
+    ZONE_OVERLAY:     'pb-zone-overlay',
+    ZONE_DRAWING:     'pb-zone-drawing',
+    ZONE_HIGHLIGHT:   'pb-zone-highlight',
+    ZONE_LABEL:       'pb-zone-label',
   });
 
   const IDS = Object.freeze({
@@ -137,6 +146,7 @@ const Constants = (() => {
     ENABLED:              true,
     THOROUGH_BLUR:        false,
     BLUR_MODE:            BLUR_MODES.GAUSSIAN,
+    PICKER_MODE:          PICKER_MODES.STICKY,
 
     SHORTCUTS: Object.freeze({
       TOGGLE_BLUR_ALL: Object.freeze({
@@ -244,6 +254,9 @@ const Constants = (() => {
     result.BLUR_MODE = (Object.values(BLUR_MODES).includes(settings.BLUR_MODE))
       ? settings.BLUR_MODE : defaults.BLUR_MODE;
 
+    result.PICKER_MODE = (Object.values(PICKER_MODES).includes(settings.PICKER_MODE))
+      ? settings.PICKER_MODE : defaults.PICKER_MODE;
+
     // BLUR_CATEGORIES: each key must be boolean
     result.BLUR_CATEGORIES = {};
     const cats = (settings.BLUR_CATEGORIES && typeof settings.BLUR_CATEGORIES === 'object')
@@ -285,6 +298,7 @@ const Constants = (() => {
   return Object.assign(flat, categories, {
     REVEAL_MODES,
     BLUR_MODES,
+    PICKER_MODES,
     PATTERN_TYPES,
     CSS,
     IDS,

@@ -174,7 +174,7 @@ if (
 |---|---|
 | **Module separation** | Each module is a self-contained IIFE with a clear single responsibility. Adding a new feature (e.g., a whitelist/blacklist mode) means adding a new module without modifying existing ones. |
 | **Message protocol** | All inter-component communication is via typed string messages. New message types can be added to background.js and content_script.js without breaking existing handlers. |
-| **Storage schema** | The `blurred_selectors` map is open-ended — any hostname can have any number of selectors. The `settings` object supports `deepMerge` so new settings keys can be added to `DEFAULT_SETTINGS` and they will be automatically backfilled for existing users. |
+| **Storage schema** | The `blurred_items` map is open-ended — any hostname can have typed blur items (dynamic selectors + sticky zones, max 10 per host). The `settings` object supports `deepMerge` so new settings keys can be added to `DEFAULT_SETTINGS` and they will be automatically backfilled for existing users. |
 | **CSS custom properties** | `--pb-radius`, `--pb-highlight-color`, and `--pb-transition-duration` are set on `:root` by content_script. Any new CSS rules in `content.css` can consume these without touching JavaScript. |
 | **Blur engine dispatch** | The element-type dispatch in `applyBlur` (video / img / background-image / generic) is an explicit if-chain that is easy to extend with new element types (e.g., `<canvas>`, `<iframe>`) without refactoring existing paths. |
 | **No build step** | Vanilla JS with no bundler means zero toolchain debt. New files are added to manifest.json's `content_scripts.js` array and they work immediately. |

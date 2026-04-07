@@ -15,9 +15,9 @@ describe('PrivacyBlur constants', () => {
 
   describe('STORAGE category', () => {
     test('exposes all storage message types', () => {
-      expect(PB.STORAGE.GET_SELECTORS).toBe('GET_SELECTORS');
-      expect(PB.STORAGE.SAVE_SELECTOR).toBe('SAVE_SELECTOR');
-      expect(PB.STORAGE.REMOVE_SELECTOR).toBe('REMOVE_SELECTOR');
+      expect(PB.STORAGE.GET_BLUR_ITEMS).toBe('GET_BLUR_ITEMS');
+      expect(PB.STORAGE.SAVE_BLUR_ITEM).toBe('SAVE_BLUR_ITEM');
+      expect(PB.STORAGE.REMOVE_BLUR_ITEM).toBe('REMOVE_BLUR_ITEM');
       expect(PB.STORAGE.CLEAR_HOST).toBe('CLEAR_HOST');
       expect(PB.STORAGE.CLEAR_ALL).toBe('CLEAR_ALL');
       expect(PB.STORAGE.GET_SETTINGS).toBe('GET_SETTINGS');
@@ -42,7 +42,7 @@ describe('PrivacyBlur constants', () => {
     test('exposes all popup message types', () => {
       expect(PB.POPUP.UPDATE_SETTINGS).toBe('UPDATE_SETTINGS');
       expect(PB.POPUP.GET_STATUS).toBe('GET_STATUS');
-      expect(PB.POPUP.UNBLUR_SELECTOR).toBe('UNBLUR_SELECTOR');
+      expect(PB.POPUP.UNBLUR_ITEM).toBe('UNBLUR_ITEM');
     });
   });
 
@@ -50,7 +50,7 @@ describe('PrivacyBlur constants', () => {
 
   describe('flat shorthand access', () => {
     test('all message types accessible at top level', () => {
-      expect(PB.SAVE_SELECTOR).toBe('SAVE_SELECTOR');
+      expect(PB.SAVE_BLUR_ITEM).toBe('SAVE_BLUR_ITEM');
       expect(PB.TOGGLE_BLUR_ALL).toBe('TOGGLE_BLUR_ALL');
       expect(PB.UPDATE_SETTINGS).toBe('UPDATE_SETTINGS');
     });
@@ -60,7 +60,7 @@ describe('PrivacyBlur constants', () => {
 
   describe('isValid', () => {
     test('returns true for known message types', () => {
-      expect(PB.isValid('GET_SELECTORS')).toBe(true);
+      expect(PB.isValid('GET_BLUR_ITEMS')).toBe(true);
       expect(PB.isValid('TOGGLE_BLUR_ALL')).toBe(true);
       expect(PB.isValid('UPDATE_SETTINGS')).toBe(true);
       expect(PB.isValid('GET_RULES')).toBe(true);
@@ -82,7 +82,7 @@ describe('PrivacyBlur constants', () => {
 
   describe('categoryOf', () => {
     test('returns correct category for storage types', () => {
-      expect(PB.categoryOf('SAVE_SELECTOR')).toBe('STORAGE');
+      expect(PB.categoryOf('SAVE_BLUR_ITEM')).toBe('STORAGE');
       expect(PB.categoryOf('GET_SETTINGS')).toBe('STORAGE');
       expect(PB.categoryOf('GET_RULES')).toBe('STORAGE');
     });
@@ -330,6 +330,24 @@ describe('PrivacyBlur constants', () => {
       const result = PB.deepMerge(base, deep);
       // At depth 6, override should be returned directly instead of recursing
       expect(result.a.b.c.d.e.f).toEqual({ g: 'deep' });
+    });
+
+    test('PICKER_MODE defaults to sticky', () => {
+      expect(PB.DEFAULT_SETTINGS.PICKER_MODE).toBe('sticky');
+    });
+
+    test('PICKER_MODE validates against enum', () => {
+      const s1 = PB.validateSettings({ PICKER_MODE: 'sticky' });
+      expect(s1.PICKER_MODE).toBe('sticky');
+      const s2 = PB.validateSettings({ PICKER_MODE: 'dynamic' });
+      expect(s2.PICKER_MODE).toBe('dynamic');
+      const s3 = PB.validateSettings({ PICKER_MODE: 'invalid' });
+      expect(s3.PICKER_MODE).toBe(PB.DEFAULT_SETTINGS.PICKER_MODE);
+    });
+
+    test('PICKER_MODES enum exists', () => {
+      expect(PB.PICKER_MODES.STICKY).toBe('sticky');
+      expect(PB.PICKER_MODES.DYNAMIC).toBe('dynamic');
     });
 
     test('BLUR_MODE validates against enum', () => {

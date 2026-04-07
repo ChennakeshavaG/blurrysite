@@ -20,7 +20,7 @@ PrivacyBlur is a Manifest V3 browser extension targeting Chrome, Edge, and Firef
 │  ┌────────────┐  context menu │  ┌─────────────────────────┐ │  │
 │  │  Context   │──────────────►│  │  chrome.storage.local   │ │  │
 │  │  Menu API  │               │  │                         │ │  │
-│  └────────────┘               │  │  blurred_selectors: {   │ │  │
+│  └────────────┘               │  │  blurred_items: {        │ │  │
 │                               │  │    "hostname": [...]    │ │  │
 │  ┌────────────┐  popup msgs   │  │  }                      │ │  │
 │  │  Popup UI  │◄─────────────►│  │  settings: { ... }      │ │  │
@@ -99,9 +99,11 @@ Applies and removes blur from DOM elements. Handles three element categories dif
 | `<img>` | `.pb-blurred` CSS class (CSS rule applies `blur(var(--pb-radius))`) |
 | Everything else | `.pb-blurred` CSS class |
 
-Exposes `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `CATEGORY_SELECTORS`.
+Exposes `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS`.
 
 **Category-based blurring:** `blurAllContent` accepts an `options.categories` object to control which element groups are blurred. Five categories are supported: **text**, **media**, **form**, **table**, and **structure**. Selector strings for each category are cached internally and rebuilt only when the active categories change.
+
+**Zone overlays (sticky blur):** The engine can create position-fixed overlay `<div>` elements that blur arbitrary rectangular regions of the viewport. Overlays are appended to `document.body`, identified by `data-pb-zone` attribute, and tracked internally. `unblurAll()` removes all zone overlays in addition to element-level blur. Zone overlay elements are excluded from blur targeting via `_isExtensionUI`.
 
 ### 3.4 selector_utils.js — Selector Generation
 
@@ -140,7 +142,7 @@ A mode where the user can interactively select elements to blur. When active:
 HTML/CSS/JS popup opened via the browser action icon. Communicates exclusively via `chrome.runtime.sendMessage` (to background.js) and `chrome.tabs.sendMessage` (to the active tab's content script). Allows users to:
 
 - Toggle the extension on/off
-- View and remove individual blurred selectors for the current page
+- View and remove individual blur items for the current page
 - Adjust settings (blur radius, transitions, reveal mode, shortcut customization)
 - Toggle blur categories, thorough blur mode
 - Manage URL rules (per-site settings overrides)
@@ -158,9 +160,9 @@ User clicks element
     → pickerCallbacks.onBlur(el)        [content_script.js]
       → PrivacyBlurEngine.applyBlur(el) [applies CSS filter]
       → PrivacyBlurSelectorUtils.getSelector(el) [generates selector]
-      → PrivacyBlurStorage.saveBlurredElement(host, selector)
-          → chrome.runtime.sendMessage({ type: "SAVE_SELECTOR", ... })
-              → background.js SAVE_SELECTOR handler
+      → PrivacyBlurStorage.saveBlurItem(host, blurItem)
+          → chrome.runtime.sendMessage({ type: "SAVE_BLUR_ITEM", ... })
+              → background.js SAVE_BLUR_ITEM handler
                   → chrome.storage.local.get + set
 ```
 
@@ -171,9 +173,9 @@ chrome.tabs.onUpdated (status: "complete")
   → background.js sends { type: "RESTORE" } to tab
       → content_script.js handleMessage("RESTORE")
           → restoreBlurredElements()
-              → PrivacyBlurStorage.getBlurredSelectors(hostname)
-                  → sendMessage GET_SELECTORS → background → storage
-              → for each selector:
+              → PrivacyBlurStorage.getBlurItems(hostname)
+                  → sendMessage GET_BLUR_ITEMS → background → storage
+              → for each blur item:
                   → PrivacyBlurSelectorUtils.restoreSelector(s)
                   → PrivacyBlurEngine.applyBlur(el, radius)
 ```
@@ -220,9 +222,9 @@ User changes blur radius slider
 
 ```json
 {
-  "blurred_selectors": {
-    "example.com": ["[data-pb-id=\"a3f92c1b\"]", "#main-header"],
-    "news.ycombinator.com": [".athing:nth-child(1) > .title"]
+  "blurred_items": {
+    "example.com": [{ "selector": "[data-pb-id=\"a3f92c1b\"]", "type": "picker" }, { "selector": "#main-header", "type": "picker" }],
+    "news.ycombinator.com": [{ "selector": ".athing:nth-child(1) > .title", "type": "picker" }]
   },
   "settings": {
     "BLUR_RADIUS": 8,
@@ -256,23 +258,23 @@ All inter-component communication uses typed message objects.
 |------|---------|-------------|
 | `TOGGLE_BLUR_ALL` | — | Toggle blur-all mode on the page |
 | `TOGGLE_PICKER` | — | Toggle element picker |
-| `CLEAR_ALL_BLUR` | — | Remove all blur, clear saved selectors for host |
-| `RESTORE` | — | Re-apply persisted selectors |
+| `CLEAR_ALL_BLUR` | — | Remove all blur, clear saved blur items for host |
+| `RESTORE` | — | Re-apply persisted blur items |
 | `GET_STATUS` | — | Returns `{ isPageBlurred, isPickerActive, blurredCount }` |
 | `UPDATE_SETTINGS` | `{ settings }` | Apply new settings live |
 | `CONTEXT_BLUR` | `{ elementSelector }` | Blur element by selector (context menu) |
 | `CONTEXT_UNBLUR` | `{ elementSelector }` | Unblur element by selector (context menu) |
-| `UNBLUR_SELECTOR` | `{ selector }` | Unblur a specific selector (popup remove button) |
+| `UNBLUR_ITEM` | `{ selector }` | Unblur a specific blur item (popup remove button) |
 
 ### storage_manager → background
 
 | Type | Payload | Description |
 |------|---------|-------------|
-| `GET_SELECTORS` | `{ hostname }` | Fetch saved selectors for host |
-| `SAVE_SELECTOR` | `{ hostname, selector }` | Persist a new selector |
-| `REMOVE_SELECTOR` | `{ hostname, selector }` | Remove a single selector |
-| `CLEAR_HOST` | `{ hostname }` | Clear all selectors for host |
-| `CLEAR_ALL` | — | Clear all selectors across all hosts |
+| `GET_BLUR_ITEMS` | `{ hostname }` | Fetch saved blur items for host |
+| `SAVE_BLUR_ITEM` | `{ hostname, blurItem }` | Persist a new blur item |
+| `REMOVE_BLUR_ITEM` | `{ hostname, selector }` | Remove a single blur item by selector |
+| `CLEAR_HOST` | `{ hostname }` | Clear all blur items for host |
+| `CLEAR_ALL` | — | Clear all blur items across all hosts |
 | `GET_SETTINGS` | — | Fetch settings merged with defaults |
 | `SAVE_SETTINGS` | `{ settings }` | Persist full settings object |
 | `GET_RULES` | — | Fetch URL rules array |

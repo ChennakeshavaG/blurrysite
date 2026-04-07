@@ -50,6 +50,10 @@ interface PrivacyBlurEngine {
   invalidateSelectorCache(): void;
   matchesActiveCategories(element: Element, categories?: BlurCategories): boolean;
   ensureSvgFilter(): void;
+  createZoneOverlay(zoneData: { id: string; x: number; y: number; width: number; height: number; [key: string]: any }): HTMLElement | null;
+  removeZoneOverlay(zoneId: string): void;
+  getZoneOverlays(): HTMLElement[];
+  removeAllZoneOverlays(): void;
 }
 ```
 
@@ -192,10 +196,20 @@ No local `DEFAULT_SETTINGS`. Uses `MSG.DEFAULT_SETTINGS` and `MSG.buildDefaultSe
 ### Public API
 
 ```typescript
+type BlurItemType = 'dynamic' | 'sticky';
+
+interface BlurItem {
+  type: BlurItemType;
+  name: string;
+  selector?: string;
+  id?: string;
+  [key: string]: any;
+}
+
 interface PrivacyBlurStorage {
-  saveBlurredElement(hostname: string, selector: string): Promise<any>;
-  removeBlurredElement(hostname: string, selector: string): Promise<void>;
-  getBlurredSelectors(hostname: string): Promise<string[]>;
+  saveBlurItem(hostname: string, item: BlurItem): Promise<any>;
+  removeBlurItem(hostname: string, itemId: string): Promise<void>;
+  getBlurItems(hostname: string): Promise<BlurItem[]>;
   clearHost(hostname: string): Promise<void>;
   clearAll(): Promise<void>;
   getSettings(): Promise<object>;
@@ -514,9 +528,9 @@ When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to
 | `RESTORE` | `restoreBlurredElements()` — async, returns true |
 | `GET_STATUS` | Returns `{isPageBlurred, isPickerActive, blurredCount}` |
 | `UPDATE_SETTINGS` | Merges into globalSettings, re-resolves via URL rules, re-inits shortcuts, updates CSS properties. Invalidates selector cache and re-blurs if categories/thoroughBlur changed. |
-| `CONTEXT_BLUR` | `Engine.applyBlur(lastContextMenuTarget)` → `Store.saveBlurredElement()` |
-| `CONTEXT_UNBLUR` | `findBlurredAncestor(target)` → `Engine.removeBlur()` → `Store.removeBlurredElement()` |
-| `UNBLUR_SELECTOR` | `querySelector(selector)` → `Engine.removeBlur()` |
+| `CONTEXT_BLUR` | `Engine.applyBlur(lastContextMenuTarget)` → `Store.saveBlurItem()` |
+| `CONTEXT_UNBLUR` | `findBlurredAncestor(target)` → `Engine.removeBlur()` → `Store.removeBlurItem()` |
+| `UNBLUR_ITEM` | `querySelector(selector)` → `Engine.removeBlur()` |
 
 ---
 
@@ -526,11 +540,11 @@ When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to
 
 | Message type | Storage operation |
 |---|---|
-| `GET_SELECTORS` | `storage.get("blurred_selectors")` → return `map[hostname] \|\| []` |
-| `SAVE_SELECTOR` | `storage.get` → deduplicate → push → `storage.set` |
-| `REMOVE_SELECTOR` | `storage.get` → filter out → `storage.set` |
+| `GET_BLUR_ITEMS` | `storage.get("blurred_items")` → return `map[hostname] \|\| []` |
+| `SAVE_BLUR_ITEM` | `storage.get` → deduplicate → push → `storage.set` |
+| `REMOVE_BLUR_ITEM` | `storage.get` → filter out → `storage.set` |
 | `CLEAR_HOST` | `storage.get` → `delete map[hostname]` → `storage.set` |
-| `CLEAR_ALL` | `storage.set({ blurred_selectors: {} })` |
+| `CLEAR_ALL` | `storage.set({ blurred_items: {} })` |
 | `GET_SETTINGS` | `storage.get("settings")` → `deepMerge(DEFAULT_SETTINGS, saved)` |
 | `SAVE_SETTINGS` | `storage.set({ settings: message.settings })` — full-object write, no partial merge |
 | `GET_RULES` | `storage.get("rules")` → return `rules \|\| []` |

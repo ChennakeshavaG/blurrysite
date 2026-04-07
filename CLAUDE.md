@@ -25,10 +25,10 @@ Every source file exposes exactly one window global. Using the wrong name causes
 |---|---|---|
 | `src/constants.js` | `globalThis.pb` | Message types (`pb.STORAGE.*`, `pb.COMMAND.*`, `pb.POPUP.*`), `DEFAULT_SETTINGS`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `deepMerge()` |
 | `src/selector_utils.js` | `pb.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
-| `src/storage_manager.js` | `pb.Storage` | `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
-| `src/blur_engine.js` | `pb.BlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `CATEGORY_SELECTORS` |
+| `src/storage_manager.js` | `pb.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
+| `src/blur_engine.js` | `pb.BlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS` |
 | `src/shortcut_handler.js` | `pb.Shortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
-| `src/picker.js` | `pb.Picker` | `activate`, `deactivate`, `setSettings`, `isActive` (getter) |
+| `src/picker.js` | `pb.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `pb.*` aliases after DOM ready |
 
 **Load order is fixed by `manifest.json`** — constants → selector_utils → storage_manager → blur_engine → shortcut_handler → picker → content_script. Never reorder.
@@ -43,11 +43,11 @@ Any mismatch between sender message type and background.js handler silently drop
 
 | Action | Type string |
 |---|---|
-| Fetch selectors for host | `GET_SELECTORS` |
-| Save a selector | `SAVE_SELECTOR` |
-| Remove a selector | `REMOVE_SELECTOR` |
-| Clear all selectors for host | `CLEAR_HOST` |
-| Clear all selectors everywhere | `CLEAR_ALL` |
+| Fetch blur items for host | `GET_BLUR_ITEMS` |
+| Save a blur item | `SAVE_BLUR_ITEM` |
+| Remove a blur item | `REMOVE_BLUR_ITEM` |
+| Clear all blur items for host | `CLEAR_HOST` |
+| Clear all blur items everywhere | `CLEAR_ALL` |
 | Fetch settings (merged with defaults) | `GET_SETTINGS` |
 | Persist settings (partial merge) | `SAVE_SETTINGS` |
 | Fetch URL rules array | `GET_RULES` |
@@ -70,7 +70,7 @@ Any mismatch between sender message type and background.js handler silently drop
 |---|---|
 | Live settings update | `UPDATE_SETTINGS` |
 | Query page status | `GET_STATUS` |
-| Unblur a specific selector | `UNBLUR_SELECTOR` |
+| Unblur a specific item | `UNBLUR_ITEM` |
 
 ---
 
@@ -101,6 +101,8 @@ settings.SHORTCUTS = {
 **`REVEAL_MODE`** — controls how blurred elements can be temporarily revealed: `'hover'` | `'click'` | `'none'`.
 
 **`THOROUGH_BLUR`** — boolean; when true, applies deeper blur processing for more thorough coverage.
+
+**`PICKER_MODE`** — controls the picker strategy: `'sticky'` (draw rectangle, default) | `'dynamic'` (click element).
 
 **All default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS`.** Do not hardcode defaults anywhere else.
 
@@ -159,6 +161,10 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 | Click-to-reveal active state | `pb-revealed` |
 | Ancestor chain unblur (click and hover) | `pb-ancestor-reveal` |
 | Hover-to-reveal target | `pb-reveal-on-hover` |
+| Sticky zone overlay | `pb-zone-overlay` |
+| Zone drawing preview | `pb-zone-drawing` |
+| Zone hover highlight (picker mode) | `pb-zone-highlight` |
+| Zone name label | `pb-zone-label` |
 
 ---
 
@@ -166,7 +172,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 223 unit tests, fast
+npm run test:unit          # 221 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 

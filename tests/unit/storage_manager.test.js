@@ -3,7 +3,7 @@
  *
  * Unit tests for src/storage_manager.js
  * Module exposes pb.Storage with:
- *   saveBlurredElement, removeBlurredElement, getBlurredSelectors,
+ *   saveBlurItem, removeBlurItem, getBlurItems,
  *   clearHost, clearAll, getSettings, saveSettings
  *
  * The module communicates with background.js via chrome.runtime.sendMessage,
@@ -50,15 +50,15 @@ function buildStubSource() {
       });
     }
 
-    function saveBlurredElement(hostname, selector) {
-      return sendMsg({ type: 'SAVE_SELECTOR', hostname: hostname, selector: selector });
+    function saveBlurItem(hostname, item) {
+      return sendMsg({ type: 'SAVE_BLUR_ITEM', hostname: hostname, item: item });
     }
-    function removeBlurredElement(hostname, selector) {
-      return sendMsg({ type: 'REMOVE_SELECTOR', hostname: hostname, selector: selector });
+    function removeBlurItem(hostname, itemId) {
+      return sendMsg({ type: 'REMOVE_BLUR_ITEM', hostname: hostname, itemId: itemId });
     }
-    function getBlurredSelectors(hostname) {
-      return sendMsg({ type: 'GET_SELECTORS', hostname: hostname }).then(function(res) {
-        return (res && res.selectors) ? res.selectors : [];
+    function getBlurItems(hostname) {
+      return sendMsg({ type: 'GET_BLUR_ITEMS', hostname: hostname }).then(function(res) {
+        return (res && Array.isArray(res.items)) ? res.items : [];
       });
     }
     function clearHost(hostname) { return sendMsg({ type: 'CLEAR_HOST', hostname: hostname }); }
@@ -82,9 +82,9 @@ function buildStubSource() {
     }
 
     pb.Storage = {
-      saveBlurredElement: saveBlurredElement,
-      removeBlurredElement: removeBlurredElement,
-      getBlurredSelectors: getBlurredSelectors,
+      saveBlurItem: saveBlurItem,
+      removeBlurItem: removeBlurItem,
+      getBlurItems: getBlurItems,
       clearHost: clearHost,
       clearAll: clearAll,
       getSettings: getSettings,
@@ -133,19 +133,20 @@ describe('pb.Storage', () => {
     loadStorageManager();
   });
 
-  // ── saveBlurredElement ─────────────────────────────────────────────────────
+  // ── saveBlurItem ───────────────────────────────────────────────────────────
 
-  describe('saveBlurredElement', () => {
-    test('sends SAVE_SELECTOR message with hostname and selector', async () => {
+  describe('saveBlurItem', () => {
+    test('sends SAVE_BLUR_ITEM message with hostname and item', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await pb.Storage.saveBlurredElement('example.com', '#target');
+      const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#target' };
+      await pb.Storage.saveBlurItem('example.com', item);
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'SAVE_SELECTOR',
+          type: 'SAVE_BLUR_ITEM',
           hostname: 'example.com',
-          selector: '#target',
+          item,
         }),
         expect.any(Function)
       );
@@ -154,59 +155,64 @@ describe('pb.Storage', () => {
     test('resolves with the response from background', async () => {
       mockSendMessageResponse({ ok: true });
 
-      const result = await pb.Storage.saveBlurredElement('example.com', '#target');
+      const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#target' };
+      const result = await pb.Storage.saveBlurItem('example.com', item);
 
       expect(result).toEqual({ ok: true });
     });
   });
 
-  // ── removeBlurredElement ───────────────────────────────────────────────────
+  // ── removeBlurItem ────────────────────────────────────────────────────────
 
-  describe('removeBlurredElement', () => {
-    test('sends REMOVE_SELECTOR message with correct payload', async () => {
+  describe('removeBlurItem', () => {
+    test('sends REMOVE_BLUR_ITEM message with correct payload', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await pb.Storage.removeBlurredElement('example.com', '#target');
+      await pb.Storage.removeBlurItem('example.com', '#target');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'REMOVE_SELECTOR',
+          type: 'REMOVE_BLUR_ITEM',
           hostname: 'example.com',
-          selector: '#target',
+          itemId: '#target',
         }),
         expect.any(Function)
       );
     });
   });
 
-  // ── getBlurredSelectors ────────────────────────────────────────────────────
+  // ── getBlurItems ──────────────────────────────────────────────────────────
 
-  describe('getBlurredSelectors', () => {
-    test('resolves with selectors array from background response', async () => {
-      mockSendMessageResponse({ selectors: ['#foo', '.bar', '[data-pb-id="abc"]'] });
+  describe('getBlurItems', () => {
+    test('resolves with items array from background response', async () => {
+      const items = [
+        { type: 'dynamic', name: 'Dynamic 1', selector: '#foo' },
+        { type: 'dynamic', name: 'Dynamic 2', selector: '.bar' },
+      ];
+      mockSendMessageResponse({ items });
 
-      const selectors = await pb.Storage.getBlurredSelectors('example.com');
+      const result = await pb.Storage.getBlurItems('example.com');
 
-      expect(selectors).toEqual(['#foo', '.bar', '[data-pb-id="abc"]']);
+      expect(result).toEqual(items);
     });
 
-    test('resolves with empty array when background returns no selectors', async () => {
+    test('resolves with empty array when background returns no items', async () => {
       mockSendMessageResponse({});
 
-      const selectors = await pb.Storage.getBlurredSelectors('example.com');
+      const result = await pb.Storage.getBlurItems('example.com');
 
-      expect(Array.isArray(selectors)).toBe(true);
-      expect(selectors).toHaveLength(0);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(0);
     });
 
-    test('sends GET_SELECTORS message with correct hostname', async () => {
-      mockSendMessageResponse({ selectors: [] });
+    test('sends GET_BLUR_ITEMS message with correct hostname', async () => {
+      mockSendMessageResponse({ items: [] });
 
-      await pb.Storage.getBlurredSelectors('news.example.org');
+      await pb.Storage.getBlurItems('news.example.org');
 
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'GET_SELECTORS',
+          type: 'GET_BLUR_ITEMS',
           hostname: 'news.example.org',
         }),
         expect.any(Function)
@@ -216,9 +222,9 @@ describe('pb.Storage', () => {
     test('resolves with empty array when response is null', async () => {
       mockSendMessageResponse(null);
 
-      const selectors = await pb.Storage.getBlurredSelectors('x.com');
+      const result = await pb.Storage.getBlurItems('x.com');
 
-      expect(selectors).toEqual([]);
+      expect(result).toEqual([]);
     });
   });
 
@@ -347,15 +353,15 @@ describe('pb.Storage', () => {
       mockSendMessageError('Extension context invalidated');
 
       await expect(
-        pb.Storage.saveBlurredElement('x.com', '#el')
+        pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'Dynamic 1', selector: '#el' })
       ).rejects.toBeTruthy();
     });
 
-    test('getBlurredSelectors handles sendMessage error gracefully by rejecting', async () => {
+    test('getBlurItems handles sendMessage error gracefully by rejecting', async () => {
       mockSendMessageError('Background not ready');
 
       await expect(
-        pb.Storage.getBlurredSelectors('x.com')
+        pb.Storage.getBlurItems('x.com')
       ).rejects.toBeTruthy();
     });
 
@@ -365,7 +371,7 @@ describe('pb.Storage', () => {
       });
 
       await expect(
-        pb.Storage.saveBlurredElement('x.com', '#el')
+        pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'Dynamic 1', selector: '#el' })
       ).rejects.toThrow('Extension context invalidated');
     });
 
@@ -389,32 +395,32 @@ describe('pb.Storage', () => {
   // ── Guard clauses ─────────────────────────────────────────────────────────
 
   describe('guard clauses', () => {
-    test('saveBlurredElement returns early for empty hostname', async () => {
+    test('saveBlurItem returns early for empty hostname', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await pb.Storage.saveBlurredElement('', '#el');
+      await pb.Storage.saveBlurItem('', { type: 'dynamic', name: 'D1', selector: '#el' });
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('saveBlurredElement returns early for empty selector', async () => {
+    test('saveBlurItem returns early for null item', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await pb.Storage.saveBlurredElement('example.com', '');
+      await pb.Storage.saveBlurItem('example.com', null);
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('removeBlurredElement returns early for empty hostname', async () => {
+    test('removeBlurItem returns early for empty hostname', async () => {
       mockSendMessageResponse({ ok: true });
 
-      await pb.Storage.removeBlurredElement('', '#el');
+      await pb.Storage.removeBlurItem('', '#el');
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
 
-    test('getBlurredSelectors returns empty array for empty hostname', async () => {
-      const result = await pb.Storage.getBlurredSelectors('');
+    test('getBlurItems returns empty array for empty hostname', async () => {
+      const result = await pb.Storage.getBlurItems('');
 
       expect(result).toEqual([]);
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();

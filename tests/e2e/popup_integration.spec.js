@@ -324,7 +324,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
           pb.BlurEngine.applyBlur(el);
           const sel = pb.SelectorUtils.getSelector(el);
           if (sel) {
-            await pb.Storage.saveBlurredElement(location.hostname, sel);
+            await pb.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
           }
         }
       })();

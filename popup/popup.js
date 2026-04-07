@@ -176,22 +176,33 @@
     ui.blurEmpty.classList.toggle('is-visible', count === 0);
     ui.blurList.textContent = '';
 
-    for (const selector of blurredItems) {
+    for (const item of blurredItems) {
       const li = document.createElement('li');
       li.className = 'pb-blur-item';
 
-      const span = document.createElement('span');
-      span.className = 'pb-blur-item__selector';
-      span.textContent = selector;
-      span.title = selector;
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'pb-blur-item__name';
+      nameSpan.textContent = item.name || (item.type === 'dynamic' ? 'Dynamic' : 'Sticky');
+
+      const detailSpan = document.createElement('span');
+      detailSpan.className = 'pb-blur-item__selector';
+      if (item.type === 'dynamic') {
+        detailSpan.textContent = item.selector;
+      } else {
+        const coords = item.x + ',' + item.y + ' \u2014 ' + item.width + '\u00d7' + item.height;
+        detailSpan.textContent = coords + (item.path ? '  ' + item.path : '');
+      }
+      detailSpan.title = detailSpan.textContent;
 
       const btn = document.createElement('button');
       btn.className = 'pb-blur-item__remove';
       btn.textContent = '\u00d7';
       btn.title = 'Remove blur';
-      btn.dataset.selector = selector;
+      btn.dataset.itemId = item.type === 'dynamic' ? item.selector : item.id;
+      btn.dataset.itemType = item.type;
+      btn.dataset.itemData = JSON.stringify(item);
 
-      li.append(span, btn);
+      li.append(nameSpan, detailSpan, btn);
       ui.blurList.appendChild(li);
     }
   }
@@ -295,7 +306,7 @@
         blurredCount = status.count || 0;
         isPageBlurred = status.isPageBlurred || false;
       }
-      blurredItems = await fetchBlurredSelectors();
+      blurredItems = await fetchBlurItems();
       renderBlurCount();
       renderBlurList();
       ui.blurAllBtn.disabled = false;
@@ -336,11 +347,13 @@
     ui.blurList.addEventListener('click', async (e) => {
       const btn = e.target.closest('.pb-blur-item__remove');
       if (!btn) return;
-      const selector = btn.dataset.selector;
-      if (!selector) return;
-      await bgMessage({ type: MSG.REMOVE_SELECTOR, hostname: currentHost, selector });
-      if (currentTab) await tabMessage(currentTab.id, { type: MSG.UNBLUR_SELECTOR, selector });
-      blurredItems = blurredItems.filter(s => s !== selector);
+      const itemId = btn.dataset.itemId;
+      if (!itemId) return;
+      await bgMessage({ type: MSG.REMOVE_BLUR_ITEM, hostname: currentHost, itemId });
+      let item = {};
+      try { item = JSON.parse(btn.dataset.itemData || '{}'); } catch (_e) {}
+      if (currentTab) await tabMessage(currentTab.id, { type: MSG.UNBLUR_ITEM, item });
+      blurredItems = blurredItems.filter(i => (i.type === 'dynamic' ? i.selector : i.id) !== itemId);
       blurredCount = Math.max(0, blurredCount - 1);
       renderBlurCount();
       renderBlurList();
@@ -370,10 +383,10 @@
 
   // ── Fetch helpers ──────────────────────────────────────────────────────────
 
-  async function fetchBlurredSelectors() {
+  async function fetchBlurItems() {
     if (!currentHost) return [];
-    const resp = await bgMessage({ type: MSG.GET_SELECTORS, hostname: currentHost });
-    return (resp && Array.isArray(resp.selectors)) ? resp.selectors : [];
+    const resp = await bgMessage({ type: MSG.GET_BLUR_ITEMS, hostname: currentHost });
+    return (resp && Array.isArray(resp.items)) ? resp.items : [];
   }
 
   // ── Storage change listener ────────────────────────────────────────────────
@@ -405,8 +418,8 @@
         }
       }
 
-        if (changes.blurred_selectors) {
-          blurredItems = await fetchBlurredSelectors();
+        if (changes.blurred_items) {
+          blurredItems = await fetchBlurItems();
           blurredCount = blurredItems.length;
           renderBlurCount();
           renderBlurList();
@@ -674,7 +687,7 @@
     if (rulesResp && Array.isArray(rulesResp.rules)) urlRules = rulesResp.rules;
 
     // Fetch blurred selectors
-    blurredItems = await fetchBlurredSelectors();
+    blurredItems = await fetchBlurItems();
 
     // Wire controls FIRST
     wireControls();

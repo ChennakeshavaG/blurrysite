@@ -55,7 +55,7 @@ init()
 | `UPDATE_SETTINGS` | popup (settings change) | Update local settings, invalidate selector cache |
 | `CONTEXT_BLUR` | background (right-click menu) | Blur the right-clicked element |
 | `CONTEXT_UNBLUR` | background (right-click menu) | Unblur the right-clicked element |
-| `UNBLUR_SELECTOR` | popup (remove from list) | Unblur a specific CSS selector |
+| `UNBLUR_ITEM` | popup (remove from list) | Unblur a specific blur item |
 | `GET_STATUS` | popup | Return blur count and state |
 
 ### 2. Background Service Worker
@@ -262,8 +262,8 @@ Instead of `debugger;` statements, you can set breakpoints in DevTools:
 // Check current settings
 PrivacyBlurStorage.getSettings().then(console.log)
 
-// Check saved selectors for current page
-PrivacyBlurStorage.getBlurredSelectors(location.hostname).then(console.log)
+// Check saved blur items for current page
+PrivacyBlurStorage.getBlurItems(location.hostname).then(console.log)
 
 // Blur everything (all categories ON)
 PrivacyBlurEngine.blurAllContent(8)
@@ -317,8 +317,8 @@ console.table(counts)
 ### Background service worker console
 
 ```js
-// Read all stored selectors
-chrome.storage.local.get('blurred_selectors', console.log)
+// Read all stored blur items
+chrome.storage.local.get('blurred_items', console.log)
 
 // Read all settings (includes blurCategories and thoroughBlur)
 chrome.storage.local.get('settings', console.log)
@@ -372,8 +372,8 @@ chrome.tabs.query({active: true, currentWindow: true}, ([tab]) => {
 4. Run the get command again — did it update?
 
 ### "Blur doesn't restore after reload"
-1. Check storage: `chrome.storage.local.get('blurred_selectors', console.log)`
-2. Look for the hostname — are selectors saved?
+1. Check storage: `chrome.storage.local.get('blurred_items', console.log)`
+2. Look for the hostname — are blur items saved?
 3. Set a breakpoint in `restoreBlurredElements()` in content_script.js
 4. Reload the page — does the breakpoint hit?
 

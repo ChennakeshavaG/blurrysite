@@ -271,7 +271,8 @@ const BlurEngine = (() => {
     const toolbarId = pb.IDS.PICKER_TOOLBAR;
     return element.id === toolbarId || element.closest('#' + toolbarId) ||
            element.classList.contains(pb.CSS.TOAST) || element.closest('.' + pb.CSS.TOAST) ||
-           element.classList.contains(pb.CSS.TOOLBAR);
+           element.classList.contains(pb.CSS.TOOLBAR) ||
+           element.dataset.pbZone !== undefined;
   }
 
   // ── Individual element blur (picker / context menu) ────────────────────────
@@ -317,6 +318,7 @@ const BlurEngine = (() => {
     document.querySelectorAll('[data-pb-blur]').forEach(el => {
       delete el.dataset.pbBlur;
     });
+    removeAllZoneOverlays();
   }
 
   function invalidateSelectorCache() {
@@ -346,6 +348,74 @@ const BlurEngine = (() => {
     return false;
   }
 
+  // ── Sticky zone overlays ───────────────────────────────────────────────────
+
+  /** Map of active zone overlays: zoneId → DOM element */
+  const _zoneOverlays = new Map();
+
+  /**
+   * Create and inject a sticky zone overlay div into document.body.
+   * @param {object} zoneData - { id, name, x, y, width, height, ... }
+   * @returns {HTMLElement} The created overlay element
+   */
+  function createZoneOverlay(zoneData) {
+    if (!zoneData || !zoneData.id) return null;
+
+    if (!document.body) return null;
+
+    // Remove existing overlay with same id (idempotent)
+    if (_zoneOverlays.has(zoneData.id)) {
+      removeZoneOverlay(zoneData.id);
+    }
+
+    const el = document.createElement('div');
+    el.className = pb.CSS.ZONE_OVERLAY;
+    el.dataset.pbZone = zoneData.id;
+    el.dataset.pbZoneName = zoneData.name || '';
+
+    el.style.cssText = [
+      'position: absolute',
+      'left: ' + zoneData.x + 'px',
+      'top: ' + zoneData.y + 'px',
+      'width: ' + zoneData.width + 'px',
+      'height: ' + zoneData.height + 'px',
+    ].join('; ') + ';';
+
+    document.body.appendChild(el);
+    _zoneOverlays.set(zoneData.id, el);
+    return el;
+  }
+
+  /**
+   * Remove a sticky zone overlay by id.
+   * @param {string} zoneId
+   */
+  function removeZoneOverlay(zoneId) {
+    const el = _zoneOverlays.get(zoneId);
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+    _zoneOverlays.delete(zoneId);
+  }
+
+  /**
+   * Get all active zone overlay elements.
+   * @returns {Array<HTMLElement>}
+   */
+  function getZoneOverlays() {
+    return Array.from(_zoneOverlays.values());
+  }
+
+  /**
+   * Remove all zone overlays from the DOM.
+   */
+  function removeAllZoneOverlays() {
+    for (const [id, el] of _zoneOverlays) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }
+    _zoneOverlays.clear();
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   return {
@@ -366,6 +436,12 @@ const BlurEngine = (() => {
     isBlurred,
     matchesActiveCategories,
     shouldBlurElement,
+
+    // Sticky zones
+    createZoneOverlay,
+    removeZoneOverlay,
+    getZoneOverlays,
+    removeAllZoneOverlays,
 
     // Utilities
     invalidateSelectorCache,

@@ -12,7 +12,7 @@
  * {
  *   "settings": { BLUR_RADIUS, TRANSITION_DURATION, ... (UPPER_SNAKE_CASE) },
  *   "rules": [ { id, name, pattern, patternType, settings }, ... ],
- *   "blurred_selectors": { "hostname": ["selector1", ...] }
+ *   "blurred_items": { "hostname": [{ type, name, selector|id, ... }, ...] }
  * }
  *
  * Exposed as pb.Storage (IIFE — no ES module syntax).
@@ -44,23 +44,23 @@ const Storage = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // Public API — blurred selectors
+  // Public API — blur items (typed: dynamic selectors + sticky zones)
   // -------------------------------------------------------------------------
 
-  async function saveBlurredElement(hostname, selector) {
-    if (!hostname || !selector) return;
-    return send({ type: MSG.SAVE_SELECTOR, hostname, selector });
+  async function saveBlurItem(hostname, item) {
+    if (!hostname || !item) return;
+    return send({ type: MSG.SAVE_BLUR_ITEM, hostname, item });
   }
 
-  async function removeBlurredElement(hostname, selector) {
-    if (!hostname || !selector) return;
-    await send({ type: MSG.REMOVE_SELECTOR, hostname, selector });
+  async function removeBlurItem(hostname, itemId) {
+    if (!hostname || !itemId) return;
+    await send({ type: MSG.REMOVE_BLUR_ITEM, hostname, itemId });
   }
 
-  async function getBlurredSelectors(hostname) {
+  async function getBlurItems(hostname) {
     if (!hostname) return [];
-    const response = await send({ type: MSG.GET_SELECTORS, hostname });
-    return (response && Array.isArray(response.selectors)) ? response.selectors : [];
+    const response = await send({ type: MSG.GET_BLUR_ITEMS, hostname });
+    return (response && Array.isArray(response.items)) ? response.items : [];
   }
 
   async function clearHost(hostname) {
@@ -138,9 +138,9 @@ const Storage = (() => {
   // Expose public API
   // -------------------------------------------------------------------------
   return {
-    saveBlurredElement,
-    removeBlurredElement,
-    getBlurredSelectors,
+    saveBlurItem,
+    removeBlurItem,
+    getBlurItems,
     clearHost,
     clearAll,
     getSettings,

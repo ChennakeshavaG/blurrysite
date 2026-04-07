@@ -261,4 +261,99 @@ describe('pb.BlurEngine', () => {
       expect(pb.BlurEngine.matchesActiveCategories(img, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false })).toBe(false);
     });
   });
+
+  // ── Zone overlay methods ──────────────────────────────────────────────────
+
+  describe('createZoneOverlay', () => {
+    test('injects overlay div into document.body', () => {
+      const el = pb.BlurEngine.createZoneOverlay({ id: 's_test1', name: 'Sticky 1', x: 10, y: 20, width: 100, height: 50 });
+      expect(el).not.toBeNull();
+      expect(el.parentNode).toBe(document.body);
+      expect(el.dataset.pbZone).toBe('s_test1');
+      expect(el.dataset.pbZoneName).toBe('Sticky 1');
+    });
+
+    test('sets position styles from coordinates', () => {
+      const el = pb.BlurEngine.createZoneOverlay({ id: 's_pos', name: 'S', x: 120, y: 340, width: 400, height: 200 });
+      expect(el.style.left).toBe('120px');
+      expect(el.style.top).toBe('340px');
+      expect(el.style.width).toBe('400px');
+      expect(el.style.height).toBe('200px');
+    });
+
+    test('has pb-zone-overlay class', () => {
+      const el = pb.BlurEngine.createZoneOverlay({ id: 's_cls', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+      expect(el.classList.contains('pb-zone-overlay')).toBe(true);
+    });
+
+    test('returns null for missing id', () => {
+      expect(pb.BlurEngine.createZoneOverlay({ name: 'S', x: 0, y: 0, width: 10, height: 10 })).toBeNull();
+      expect(pb.BlurEngine.createZoneOverlay(null)).toBeNull();
+    });
+
+    test('replaces existing overlay with same id', () => {
+      pb.BlurEngine.createZoneOverlay({ id: 's_dup', name: 'S1', x: 10, y: 10, width: 50, height: 50 });
+      const el2 = pb.BlurEngine.createZoneOverlay({ id: 's_dup', name: 'S1b', x: 20, y: 20, width: 60, height: 60 });
+      expect(el2.style.left).toBe('20px');
+      expect(document.querySelectorAll('[data-pb-zone="s_dup"]').length).toBe(1);
+    });
+  });
+
+  describe('removeZoneOverlay', () => {
+    test('removes overlay from DOM and tracking', () => {
+      pb.BlurEngine.createZoneOverlay({ id: 's_rm', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+      expect(document.querySelector('[data-pb-zone="s_rm"]')).not.toBeNull();
+      pb.BlurEngine.removeZoneOverlay('s_rm');
+      expect(document.querySelector('[data-pb-zone="s_rm"]')).toBeNull();
+    });
+
+    test('no-op for unknown id', () => {
+      expect(() => pb.BlurEngine.removeZoneOverlay('s_nonexistent')).not.toThrow();
+    });
+  });
+
+  describe('getZoneOverlays', () => {
+    test('returns all active overlays', () => {
+      pb.BlurEngine.createZoneOverlay({ id: 's_a', name: 'A', x: 0, y: 0, width: 10, height: 10 });
+      pb.BlurEngine.createZoneOverlay({ id: 's_b', name: 'B', x: 20, y: 20, width: 10, height: 10 });
+      const zones = pb.BlurEngine.getZoneOverlays();
+      expect(zones).toHaveLength(2);
+    });
+
+    test('returns empty array when none exist', () => {
+      expect(pb.BlurEngine.getZoneOverlays()).toHaveLength(0);
+    });
+  });
+
+  describe('removeAllZoneOverlays', () => {
+    test('removes all overlays', () => {
+      pb.BlurEngine.createZoneOverlay({ id: 's_x', name: 'X', x: 0, y: 0, width: 10, height: 10 });
+      pb.BlurEngine.createZoneOverlay({ id: 's_y', name: 'Y', x: 20, y: 20, width: 10, height: 10 });
+      pb.BlurEngine.removeAllZoneOverlays();
+      expect(pb.BlurEngine.getZoneOverlays()).toHaveLength(0);
+      expect(document.querySelectorAll('.pb-zone-overlay').length).toBe(0);
+    });
+  });
+
+  describe('unblurAll cleans zones', () => {
+    test('removes zone overlays along with data-pb-blur elements', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      pb.BlurEngine.applyBlur(div);
+      pb.BlurEngine.createZoneOverlay({ id: 's_unblur', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+
+      pb.BlurEngine.unblurAll();
+      expect(div.dataset.pbBlur).toBeUndefined();
+      expect(pb.BlurEngine.getZoneOverlays()).toHaveLength(0);
+    });
+  });
+
+  describe('_isExtensionUI excludes zones', () => {
+    test('zone overlay not treated as blur target', () => {
+      const zone = pb.BlurEngine.createZoneOverlay({ id: 's_excl', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+      pb.BlurEngine.applyBlur(zone);
+      // applyBlur should be a no-op on extension UI elements
+      expect(zone.dataset.pbBlur).toBeUndefined();
+    });
+  });
 });

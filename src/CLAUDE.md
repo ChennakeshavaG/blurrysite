@@ -59,6 +59,14 @@ A module may only depend on modules loaded before it.
 - Canvas class must be `"pb-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
 - IMG blur: `data-pb-blur` attribute + CSS rule `[data-pb-blur] { filter: blur(var(--pb-radius)) }`. No inline `style.filter`.
 
+#### Zone overlay methods
+- `createZoneOverlay(zoneData)` appends an overlay `<div>` to `document.body`. Overlays use the `data-pb-zone` attribute (set to `zoneData.id`) for identification.
+- `removeZoneOverlay(zoneId)` removes the overlay matching `zoneId` from DOM and internal tracking.
+- `getZoneOverlays()` returns an array of all active zone overlay elements.
+- `removeAllZoneOverlays()` removes all zone overlays from DOM and tracking.
+- `unblurAll()` also calls `removeAllZoneOverlays()` to clean up zones alongside blurred elements.
+- `_isExtensionUI` excludes zone overlays (elements with `pb-zone-overlay` class) from being treated as blur targets.
+
 #### Category-based blurring
 - `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[] }`. Keys are UPPER_SNAKE_CASE: TEXT, MEDIA, FORM, TABLE, STRUCTURE. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
 - Selector cache (`selectorCache`) stores pre-joined selector strings keyed by a 5-bit category toggle string. Invalidated by `invalidateSelectorCache()`.
@@ -76,7 +84,7 @@ A module may only depend on modules loaded before it.
 - `saveSettings(fullSettings)` sends the complete settings object to background.js. No partial merges — caller must pass the full object.
 - `getSettings()` is a passthrough — returns what background sends (already merged with defaults). Falls back to `buildDefaultSettings()` if background is unreachable.
 - `getRules()` / `saveRules(rules)` — URL rules CRUD. Rules are an array of `{ id, name, pattern, patternType, settings }`.
-- `saveBlurredElement` must `return send(...)` (not `await send(...)` without return) so callers get the response.
+- `saveBlurItem` must `return send(...)` (not `await send(...)` without return) so callers get the response.
 
 ### shortcut_handler.js
 - `init(shortcuts, callbacks)` accepts `{ ACTION_NAME: { primaryModifier, keys: [{ key, code }] } }`.

@@ -215,7 +215,7 @@ describe('pb.Picker', () => {
      * Reproduce: Call activate(), check documentElement class list.
      */
     test('adds pb-picker-active class to html element', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
     });
@@ -228,7 +228,7 @@ describe('pb.Picker', () => {
      * Reproduce: Call activate(), query for toolbar by ID.
      */
     test('creates a toolbar element in the DOM', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       const toolbar = document.getElementById('pb-picker-toolbar');
       expect(toolbar).not.toBeNull();
@@ -242,8 +242,8 @@ describe('pb.Picker', () => {
      * Reproduce: Call activate() twice, count toolbar elements.
      */
     test('calling activate twice is safe (idempotent)', () => {
-      pb.Picker.activate({}, {});
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       const toolbars = document.querySelectorAll('#pb-picker-toolbar');
       expect(toolbars.length).toBe(1);
@@ -263,7 +263,7 @@ describe('pb.Picker', () => {
     test('adds pb-hover-highlight class on mouseover', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseover(el);
 
@@ -280,7 +280,7 @@ describe('pb.Picker', () => {
       const el = document.createElement('p');
       el.classList.add('pb-hover-highlight');
       document.body.appendChild(el);
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseout(el);
 
@@ -294,7 +294,7 @@ describe('pb.Picker', () => {
      * Reproduce: Dispatch a mouseover event without setting a target.
      */
     test('does not throw if target is null on mouseover', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
       const e = new MouseEvent('mouseover', { bubbles: true });
       expect(() => document.dispatchEvent(e)).not.toThrow();
     });
@@ -316,7 +316,7 @@ describe('pb.Picker', () => {
       el.classList.remove('pb-blurred');
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       fireClick(el);
 
@@ -337,7 +337,7 @@ describe('pb.Picker', () => {
       el.dataset.pbBlur = '1'; // Simulate individual picker blur
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       fireClick(el);
 
@@ -358,7 +358,7 @@ describe('pb.Picker', () => {
       document.body.appendChild(el);
 
       const callbacks = { onBlur: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       Object.defineProperty(clickEvent, 'target', { value: el, configurable: true });
@@ -381,7 +381,7 @@ describe('pb.Picker', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       Object.defineProperty(clickEvent, 'target', { value: el, configurable: true });
@@ -405,7 +405,7 @@ describe('pb.Picker', () => {
      */
     test('pressing Escape calls deactivate and removes pb-picker-active', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
 
       fireKey('Escape');
@@ -423,7 +423,7 @@ describe('pb.Picker', () => {
      */
     test('pressing Escape triggers onDeactivate callback', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       fireKey('Escape');
 
@@ -441,7 +441,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, deactivate, check class is removed.
      */
     test('removes pb-picker-active class from html element', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
       expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
 
       pb.Picker.deactivate();
@@ -456,7 +456,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate (creates toolbar), deactivate, query for toolbar.
      */
     test('removes the toolbar from the DOM', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
       expect(document.getElementById('pb-picker-toolbar')).not.toBeNull();
 
       pb.Picker.deactivate();
@@ -472,7 +472,7 @@ describe('pb.Picker', () => {
      */
     test('calls onDeactivate callback', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       pb.Picker.deactivate();
 
@@ -491,7 +491,7 @@ describe('pb.Picker', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn(), onDeactivate: jest.fn() };
-      pb.Picker.activate({}, callbacks);
+      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
       pb.Picker.deactivate();
 
       fireClick(el);
@@ -523,7 +523,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate with radius 8, call setSettings with radius 16.
      */
     test('updates blurRadius property', () => {
-      pb.Picker.activate({ blurRadius: 8 }, {});
+      pb.Picker.activate({ blurRadius: 8, pickerMode: 'dynamic' }, {});
 
       expect(() => pb.Picker.setSettings({ blurRadius: 16 })).not.toThrow();
     });
@@ -547,7 +547,7 @@ describe('pb.Picker', () => {
      * still functions correctly (click still fires callback).
      */
     test('partial settings update does not wipe existing settings', () => {
-      pb.Picker.activate({ blurRadius: 8, highlightColor: '#ff0000' }, {});
+      pb.Picker.activate({ blurRadius: 8, highlightColor: '#ff0000', pickerMode: 'dynamic' }, {});
 
       expect(() => pb.Picker.setSettings({ blurRadius: 20 })).not.toThrow();
 
@@ -555,7 +555,7 @@ describe('pb.Picker', () => {
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn() };
       pb.Picker.deactivate();
-      pb.Picker.activate({ blurRadius: 20 }, callbacks);
+      pb.Picker.activate({ blurRadius: 20, pickerMode: 'dynamic' }, callbacks);
       fireClick(el);
       expect(callbacks.onBlur).toHaveBeenCalled();
     });
@@ -582,7 +582,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, check isActive.
      */
     test('returns true after activation', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       expect(pb.Picker.isActive).toBe(true);
     });
@@ -594,7 +594,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, deactivate, check isActive.
      */
     test('returns false after deactivation', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
       pb.Picker.deactivate();
 
       expect(pb.Picker.isActive).toBe(false);
@@ -608,7 +608,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, fire Escape, check isActive.
      */
     test('returns false after Escape key deactivates picker', () => {
-      pb.Picker.activate({}, { onDeactivate: jest.fn() });
+      pb.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
 
       fireKey('Escape');
 
@@ -635,7 +635,7 @@ describe('pb.Picker', () => {
       document.body.appendChild(el1);
       document.body.appendChild(el2);
 
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
       pb.Picker.deactivate();
 
       expect(document.querySelectorAll('.pb-hover-highlight').length).toBe(0);
@@ -654,7 +654,7 @@ describe('pb.Picker', () => {
       const el2 = document.createElement('div');
       document.body.appendChild(el1);
       document.body.appendChild(el2);
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseover(el1);
       expect(el1.classList.contains('pb-hover-highlight')).toBe(true);
@@ -676,7 +676,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, query toolbar by ID, check class.
      */
     test('toolbar has correct ID and class', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       const toolbar = document.getElementById('pb-picker-toolbar');
       expect(toolbar).not.toBeNull();
@@ -691,7 +691,7 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, fire Escape, verify toolbar is gone.
      */
     test('toolbar is removed when picker is deactivated via Escape', () => {
-      pb.Picker.activate({}, { onDeactivate: jest.fn() });
+      pb.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
 
       fireKey('Escape');
 
@@ -712,7 +712,7 @@ describe('pb.Picker', () => {
     test('clicking when no callbacks provided does not throw', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       expect(() => fireClick(el)).not.toThrow();
     });
@@ -725,13 +725,223 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, fire mouseover on body and documentElement.
      */
     test('does not highlight html or body elements on mouseover', () => {
-      pb.Picker.activate({}, {});
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseover(document.body);
       expect(document.body.classList.contains('pb-hover-highlight')).toBe(false);
 
       fireMouseover(document.documentElement);
       expect(document.documentElement.classList.contains('pb-hover-highlight')).toBe(false);
+    });
+  });
+
+  // ── Sticky mode ──────────────────────────────────────────────────────────
+
+  describe('sticky mode', () => {
+    function fireMouseDown(target, x, y) {
+      const event = new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, button: 0,
+        clientX: x || 0, clientY: y || 0,
+      });
+      target.dispatchEvent(event);
+      return event;
+    }
+
+    function fireMouseMove(x, y) {
+      const event = new MouseEvent('mousemove', {
+        bubbles: true, cancelable: true,
+        clientX: x || 0, clientY: y || 0,
+      });
+      document.dispatchEvent(event);
+      return event;
+    }
+
+    function fireMouseUp(x, y) {
+      const event = new MouseEvent('mouseup', {
+        bubbles: true, cancelable: true,
+        clientX: x || 0, clientY: y || 0,
+      });
+      document.dispatchEvent(event);
+      return event;
+    }
+
+    test('activates in sticky mode by default', () => {
+      pb.Picker.activate({}, {});
+      expect(pb.Picker.isActive).toBe(true);
+      // No hover highlight should appear in sticky mode
+      const el = document.createElement('div');
+      el.className = 'test-el';
+      document.body.appendChild(el);
+      fireMouseover(el);
+      expect(el.classList.contains('pb-hover-highlight')).toBe(false);
+    });
+
+    test('activates in sticky mode when pickerMode is sticky', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      expect(pb.Picker.isActive).toBe(true);
+    });
+
+    test('creates drawing preview on mousedown', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      fireMouseDown(el, 100, 100);
+      const preview = document.querySelector('.pb-zone-drawing');
+      expect(preview).not.toBeNull();
+    });
+
+    test('updates drawing preview on mousemove', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      fireMouseDown(el, 100, 100);
+      fireMouseMove(200, 200);
+
+      const preview = document.querySelector('.pb-zone-drawing');
+      expect(preview).not.toBeNull();
+      expect(preview.style.width).toBe('100px');
+      expect(preview.style.height).toBe('100px');
+    });
+
+    test('calls onStickyBlur on mouseup with valid area', () => {
+      const callbacks = { onStickyBlur: jest.fn() };
+      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      fireMouseDown(el, 100, 100);
+      fireMouseMove(200, 200);
+      fireMouseUp(200, 200);
+
+      expect(callbacks.onStickyBlur).toHaveBeenCalledTimes(1);
+      const zoneRect = callbacks.onStickyBlur.mock.calls[0][0];
+      expect(zoneRect.width).toBe(100);
+      expect(zoneRect.height).toBe(100);
+    });
+
+    test('does not call onStickyBlur for area smaller than 10px', () => {
+      const callbacks = { onStickyBlur: jest.fn() };
+      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      fireMouseDown(el, 100, 100);
+      fireMouseUp(105, 105);
+
+      expect(callbacks.onStickyBlur).not.toHaveBeenCalled();
+    });
+
+    test('removes drawing preview on mouseup', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      fireMouseDown(el, 100, 100);
+      fireMouseMove(200, 200);
+      fireMouseUp(200, 200);
+
+      expect(document.querySelector('.pb-zone-drawing')).toBeNull();
+    });
+
+    test('Escape cancels in-progress draw without deactivating', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      fireMouseDown(el, 100, 100);
+      fireMouseMove(200, 200);
+
+      // Press Escape during draw
+      const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      document.dispatchEvent(escEvent);
+
+      // Preview should be gone
+      expect(document.querySelector('.pb-zone-drawing')).toBeNull();
+      // But picker should still be active
+      expect(pb.Picker.isActive).toBe(true);
+    });
+
+    test('clicking zone overlay in sticky mode calls onStickyUnblur', () => {
+      const callbacks = { onStickyUnblur: jest.fn() };
+      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+
+      const zone = document.createElement('div');
+      zone.dataset.pbZone = 's_test123';
+      document.body.appendChild(zone);
+
+      fireMouseDown(zone, 50, 50);
+
+      expect(callbacks.onStickyUnblur).toHaveBeenCalledWith('s_test123');
+    });
+  });
+
+  // ── setMode ──────────────────────────────────────────────────────────────
+
+  describe('setMode', () => {
+    test('switches from sticky to dynamic', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      pb.Picker.setMode('dynamic');
+
+      // Dynamic mode should enable hover highlights
+      const el = document.createElement('div');
+      el.className = 'test-el';
+      document.body.appendChild(el);
+      fireMouseover(el);
+      expect(el.classList.contains('pb-hover-highlight')).toBe(true);
+    });
+
+    test('switches from dynamic to sticky', () => {
+      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      pb.Picker.setMode('sticky');
+
+      // Sticky mode should NOT enable hover highlights
+      const el = document.createElement('div');
+      el.className = 'test-el';
+      document.body.appendChild(el);
+      fireMouseover(el);
+      expect(el.classList.contains('pb-hover-highlight')).toBe(false);
+    });
+
+    test('cancels in-progress draw on mode switch', () => {
+      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+
+      // Start drawing
+      const event = new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, button: 0,
+        clientX: 100, clientY: 100,
+      });
+      Object.defineProperty(event, 'target', { value: el, writable: false });
+      document.dispatchEvent(event);
+
+      expect(document.querySelector('.pb-zone-drawing')).not.toBeNull();
+
+      pb.Picker.setMode('dynamic');
+      expect(document.querySelector('.pb-zone-drawing')).toBeNull();
+    });
+
+    test('calls onModeChange callback', () => {
+      const callbacks = { onModeChange: jest.fn() };
+      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      pb.Picker.setMode('dynamic');
+      expect(callbacks.onModeChange).toHaveBeenCalledWith('dynamic');
+    });
+
+    test('ignores invalid mode values', () => {
+      const callbacks = { onModeChange: jest.fn() };
+      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      pb.Picker.setMode('invalid');
+      expect(callbacks.onModeChange).not.toHaveBeenCalled();
+    });
+
+    test('no-op when setting same mode', () => {
+      const callbacks = { onModeChange: jest.fn() };
+      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      pb.Picker.setMode('sticky');
+      expect(callbacks.onModeChange).not.toHaveBeenCalled();
     });
   });
 });

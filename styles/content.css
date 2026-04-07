@@ -257,6 +257,60 @@
   }
 }
 
+/* ─── Sticky zone overlays ─────────────────────────────────────────────────── */
+
+/**
+ * Sticky blur zones — backdrop-filter overlays positioned absolutely over
+ * page content. Created by the picker in sticky mode, restored on page load.
+ */
+.pb-zone-overlay {
+  position: absolute !important;
+  backdrop-filter: blur(var(--pb-radius, 10px)) !important;
+  -webkit-backdrop-filter: blur(var(--pb-radius, 10px)) !important;
+  background: rgba(128, 128, 128, 0.05) !important;
+  border: 1px dashed rgba(128, 128, 128, 0.3) !important;
+  z-index: 2147483640 !important;
+  pointer-events: none !important;
+  transition: opacity var(--pb-transition-duration, 200ms) !important;
+}
+
+/* In picker mode, zones become interactive (click to remove) */
+.pb-picker-active .pb-zone-overlay {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  border-color: var(--pb-highlight-color, #f59e0b) !important;
+}
+
+/* Drawing preview while dragging in sticky picker mode */
+.pb-zone-drawing {
+  position: fixed !important;
+  background: rgba(245, 158, 11, 0.15) !important;
+  border: 2px solid var(--pb-highlight-color, #f59e0b) !important;
+  z-index: 2147483645 !important;
+  pointer-events: none !important;
+}
+
+/* Hover highlight on existing zone in picker mode */
+.pb-zone-overlay.pb-zone-highlight {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Zone name label (shown on hover in picker mode) */
+.pb-zone-label {
+  position: absolute !important;
+  top: -24px !important;
+  left: 0 !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: #fff !important;
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  border-radius: 3px !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  z-index: 2147483641 !important;
+}
+
 /* ─── Print ────────────────────────────────────────────────────────────────── */
 
 /**
@@ -270,9 +324,10 @@
     user-select: none !important;
   }
 
-  /* Hide picker UI and toasts — they are transient and not relevant in print */
+  /* Hide picker UI, toasts, and zone overlays — transient or already blurred */
   .pb-toolbar,
-  .pb-toast {
+  .pb-toast,
+  .pb-zone-overlay {
     display: none !important;
   }
 }

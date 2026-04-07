@@ -108,6 +108,29 @@ function isValidSelector(s) {
   return typeof s === "string" && s.length > 0 && s.length <= 2000;
 }
 
+/** Validate a blur item object. Must have type + type-specific fields. */
+function isValidBlurItem(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (item.type === 'dynamic') {
+    return isValidSelector(item.selector) &&
+           typeof item.name === 'string' && item.name.length <= 100;
+  }
+  if (item.type === 'sticky') {
+    return typeof item.id === 'string' && item.id.length > 0 &&
+           typeof item.name === 'string' && item.name.length <= 100 &&
+           typeof item.x === 'number' && typeof item.y === 'number' &&
+           typeof item.width === 'number' && typeof item.height === 'number';
+  }
+  return false;
+}
+
+/** Get the unique identifier for a blur item (selector for dynamic, id for sticky). */
+function getItemId(item) {
+  return item.type === 'dynamic' ? item.selector : item.id;
+}
+
+const PER_HOST_ITEM_LIMIT = 10;
+
 // ---------------------------------------------------------------------------
 // Write serializer — prevents concurrent get-then-set data loss
 // ---------------------------------------------------------------------------
@@ -135,41 +158,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   log.log('msg:', message.type, sender.tab ? 'tab:' + sender.tab.id : 'popup');
   switch (message.type) {
 
-    // ---- Selectors (unchanged) ----
-    case MSG.GET_SELECTORS: {
+    // ---- Blur items (typed: dynamic selectors + sticky zones) ----
+    case MSG.GET_BLUR_ITEMS: {
       if (!isValidHostname(message.hostname)) {
-        sendResponse({ selectors: [] });
+        sendResponse({ items: [] });
         return true;
       }
-      chrome.storage.local.get("blurred_selectors", (result) => {
-        const map = result.blurred_selectors || {};
-        sendResponse({ selectors: map[message.hostname] || [] });
+      chrome.storage.local.get("blurred_items", (result) => {
+        const map = result.blurred_items || {};
+        sendResponse({ items: map[message.hostname] || [] });
       });
       return true;
     }
 
-    case MSG.SAVE_SELECTOR: {
-      if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
+    case MSG.SAVE_BLUR_ITEM: {
+      if (!isValidHostname(message.hostname) || !isValidBlurItem(message.item)) {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.get("blurred_selectors", (result) => {
-          const map = result.blurred_selectors || {};
+        chrome.storage.local.get("blurred_items", (result) => {
+          const map = result.blurred_items || {};
           const list = map[message.hostname] || [];
 
-          if (list.length >= 500) {
+          if (list.length >= PER_HOST_ITEM_LIMIT) {
             sendResponse({ success: false, error: "per-host limit reached" });
             resolve();
             return;
           }
 
-          if (!list.includes(message.selector)) {
-            list.push(message.selector);
+          const newId = getItemId(message.item);
+          if (!list.some(existing => getItemId(existing) === newId)) {
+            list.push(message.item);
           }
 
           map[message.hostname] = list;
-          chrome.storage.local.set({ blurred_selectors: map }, () => {
+          chrome.storage.local.set({ blurred_items: map }, () => {
             sendResponse({ success: true });
             resolve();
           });
@@ -178,16 +202,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    case MSG.REMOVE_SELECTOR: {
-      if (!isValidHostname(message.hostname) || !isValidSelector(message.selector)) {
+    case MSG.REMOVE_BLUR_ITEM: {
+      if (!isValidHostname(message.hostname) || !message.itemId) {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.get("blurred_selectors", (result) => {
-          const map = result.blurred_selectors || {};
+        chrome.storage.local.get("blurred_items", (result) => {
+          const map = result.blurred_items || {};
           const list = (map[message.hostname] || []).filter(
-            (s) => s !== message.selector
+            (item) => getItemId(item) !== message.itemId
           );
 
           if (list.length > 0) {
@@ -196,7 +220,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             delete map[message.hostname];
           }
 
-          chrome.storage.local.set({ blurred_selectors: map }, () => {
+          chrome.storage.local.set({ blurred_items: map }, () => {
             sendResponse({ success: true });
             resolve();
           });
@@ -211,10 +235,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.get("blurred_selectors", (result) => {
-          const map = result.blurred_selectors || {};
+        chrome.storage.local.get("blurred_items", (result) => {
+          const map = result.blurred_items || {};
           delete map[message.hostname];
-          chrome.storage.local.set({ blurred_selectors: map }, () => {
+          chrome.storage.local.set({ blurred_items: map }, () => {
             sendResponse({ success: true });
             resolve();
           });
@@ -225,7 +249,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case MSG.CLEAR_ALL: {
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.set({ blurred_selectors: {} }, () => {
+        chrome.storage.local.set({ blurred_items: {} }, () => {
           sendResponse({ success: true });
           resolve();
         });
