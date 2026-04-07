@@ -101,11 +101,14 @@ const Picker = (() => {
     toolbarEl.className = (CLS.TOOLBAR || 'pb-toolbar');
     toolbarEl.setAttribute('data-pb-toolbar', 'true');
 
-    toolbarEl.addEventListener('mouseover', (e) => e.stopPropagation(), true);
-    toolbarEl.addEventListener('mouseout', (e) => e.stopPropagation(), true);
-    toolbarEl.addEventListener('click', (e) => e.stopPropagation(), true);
-    toolbarEl.addEventListener('mousedown', (e) => e.stopPropagation(), true);
-    toolbarEl.addEventListener('mouseup', (e) => e.stopPropagation(), true);
+    // Bubble-phase stopPropagation: prevents toolbar events from reaching
+    // page handlers, but lets events propagate DOWN through the toolbar's
+    // children first so button click/change handlers fire normally.
+    toolbarEl.addEventListener('mouseover', (e) => e.stopPropagation());
+    toolbarEl.addEventListener('mouseout', (e) => e.stopPropagation());
+    toolbarEl.addEventListener('click', (e) => e.stopPropagation());
+    toolbarEl.addEventListener('mousedown', (e) => e.stopPropagation());
+    toolbarEl.addEventListener('mouseup', (e) => e.stopPropagation());
 
     // ── Left: mode selector + status text ──────────────────────────────────
     const leftGroup = document.createElement('div');
