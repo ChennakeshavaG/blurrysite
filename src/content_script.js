@@ -641,15 +641,15 @@
       return;
     }
 
-    // Mouse is NOT over any zone — if a zone was revealed, dismiss it immediately
-    // (don't wait for the 50ms mouseout timer which gets reset on every element boundary)
-    if (_hoverRevealedEl && _isZoneOverlay(_hoverRevealedEl)) {
+    // Mouse is NOT over any zone or has moved to a different element.
+    // If something was revealed, dismiss immediately instead of waiting
+    // for the 50ms mouseout timer (which gets reset on every element boundary).
+    const blurredRoot = findBlurredTarget(target);
+    if (_hoverRevealedEl && _hoverRevealedEl !== blurredRoot) {
       _dismissHoverReveal();
-      // Fall through to check if we're now over a blurred element
+      // Fall through to reveal new target if it's blurred
     }
 
-    // Prefer target itself if blurred, else walk up to nearest blurred element.
-    const blurredRoot = findBlurredTarget(target);
     if (!blurredRoot) return;
 
     if (_hoverRevealedEl === blurredRoot) return;
