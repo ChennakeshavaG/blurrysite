@@ -27,6 +27,7 @@ const INCLUDE = [
   'popup/',
   'styles/',
   'icons/',
+  '_locales/',
 ];
 
 if (!fs.existsSync(DIST)) {
