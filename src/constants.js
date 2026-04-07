@@ -146,7 +146,7 @@ const Constants = (() => {
     ENABLED:              true,
     THOROUGH_BLUR:        false,
     BLUR_MODE:            BLUR_MODES.GAUSSIAN,
-    PICKER_MODE:          PICKER_MODES.STICKY,
+    PICKER_MODE:          PICKER_MODES.DYNAMIC,
 
     SHORTCUTS: Object.freeze({
       TOGGLE_BLUR_ALL: Object.freeze({

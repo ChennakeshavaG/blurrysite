@@ -332,8 +332,8 @@ describe('PrivacyBlur constants', () => {
       expect(result.a.b.c.d.e.f).toEqual({ g: 'deep' });
     });
 
-    test('PICKER_MODE defaults to sticky', () => {
-      expect(PB.DEFAULT_SETTINGS.PICKER_MODE).toBe('sticky');
+    test('PICKER_MODE defaults to dynamic', () => {
+      expect(PB.DEFAULT_SETTINGS.PICKER_MODE).toBe('dynamic');
     });
 
     test('PICKER_MODE validates against enum', () => {

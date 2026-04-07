@@ -115,8 +115,8 @@ const Picker = (() => {
     leftGroup.style.cssText = 'display:flex !important; align-items:center !important; gap:8px !important; flex:1 !important;';
 
     modeSelectEl = document.createElement('select');
-    modeSelectEl.className = 'pb-toolbar-btn';
-    modeSelectEl.style.cssText = 'cursor:pointer !important; padding:3px 6px !important; background:rgba(255,255,255,0.08) !important; color:#e5e7eb !important; border:1px solid rgba(255,255,255,0.12) !important; border-radius:4px !important; font-size:12px !important; font-family:system-ui,sans-serif !important;';
+    // No pb-toolbar-btn class — its `all: initial` destroys native <select> appearance
+    modeSelectEl.style.cssText = 'cursor:pointer !important; padding:3px 6px !important; background:rgba(255,255,255,0.08) !important; color:#e5e7eb !important; border:1px solid rgba(255,255,255,0.12) !important; border-radius:4px !important; font-size:12px !important; font-family:system-ui,sans-serif !important; appearance:auto !important; -webkit-appearance:menulist !important;';
 
     const optSticky = document.createElement('option');
     optSticky.value = PM.STICKY;
