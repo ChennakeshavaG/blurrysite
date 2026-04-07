@@ -176,13 +176,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
+      // Respond immediately — MV3 service worker may suspend before async write completes
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.get("blurred_items", (result) => {
           const map = result.blurred_items || {};
           const list = map[message.hostname] || [];
 
           if (list.length >= PER_HOST_ITEM_LIMIT) {
-            sendResponse({ success: false, error: "per-host limit reached" });
             resolve();
             return;
           }
@@ -193,10 +194,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           map[message.hostname] = list;
-          chrome.storage.local.set({ blurred_items: map }, () => {
-            sendResponse({ success: true });
-            resolve();
-          });
+          chrome.storage.local.set({ blurred_items: map }, resolve);
         });
       }));
       return true;
@@ -207,6 +205,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.get("blurred_items", (result) => {
           const map = result.blurred_items || {};
@@ -220,10 +219,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             delete map[message.hostname];
           }
 
-          chrome.storage.local.set({ blurred_items: map }, () => {
-            sendResponse({ success: true });
-            resolve();
-          });
+          chrome.storage.local.set({ blurred_items: map }, resolve);
         });
       }));
       return true;
@@ -234,25 +230,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.get("blurred_items", (result) => {
           const map = result.blurred_items || {};
           delete map[message.hostname];
-          chrome.storage.local.set({ blurred_items: map }, () => {
-            sendResponse({ success: true });
-            resolve();
-          });
+          chrome.storage.local.set({ blurred_items: map }, resolve);
         });
       }));
       return true;
     }
 
     case MSG.CLEAR_ALL: {
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.set({ blurred_items: {} }, () => {
-          sendResponse({ success: true });
-          resolve();
-        });
+        chrome.storage.local.set({ blurred_items: {} }, resolve);
       }));
       return true;
     }
@@ -276,11 +268,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       // Validate before persisting — strips invalid values, fills missing with defaults
       const validatedSettings = MSG.validateSettings(message.settings);
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.set({ settings: validatedSettings }, () => {
-          sendResponse({ success: true });
-          resolve();
-        });
+        chrome.storage.local.set({ settings: validatedSettings }, resolve);
       }));
       return true;
     }
@@ -313,11 +303,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         patternType: (r.patternType === MSG.PATTERN_TYPES.REGEX || r.patternType === MSG.PATTERN_TYPES.WILDCARD) ? r.patternType : MSG.PATTERN_TYPES.WILDCARD,
         settings:    (r.settings && typeof r.settings === 'object' && !Array.isArray(r.settings) && JSON.stringify(r.settings).length <= 2000) ? r.settings : {},
       }));
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
-        chrome.storage.local.set({ rules: sanitizedRules }, () => {
-          sendResponse({ success: true });
-          resolve();
-        });
+        chrome.storage.local.set({ rules: sanitizedRules }, resolve);
       }));
       return true;
     }
@@ -340,6 +328,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false });
         return true;
       }
+      sendResponse({ success: true });
       serialWrite(() => new Promise((resolve) => {
         chrome.storage.local.get("blur_all_hosts", (result) => {
           const hosts = result.blur_all_hosts || {};
@@ -348,10 +337,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           } else {
             delete hosts[message.hostname];
           }
-          chrome.storage.local.set({ blur_all_hosts: hosts }, () => {
-            sendResponse({ success: true });
-            resolve();
-          });
+          chrome.storage.local.set({ blur_all_hosts: hosts }, resolve);
         });
       }));
       return true;
