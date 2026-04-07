@@ -3,9 +3,9 @@
  *
  * Integration test: MutationObserver + blur-all must not create infinite loops.
  *
- * The new engine uses CSS tag rules + data-pb-blur attributes instead of
+ * The new engine uses CSS tag rules + data-bl-si-blur attributes instead of
  * CSS class manipulation. This test verifies that the MutationObserver
- * correctly stamps data-pb-blur on dynamically added elements without
+ * correctly stamps data-bl-si-blur on dynamically added elements without
  * causing infinite loops.
  *
  * These tests send TOGGLE_BLUR_ALL through the real extension messaging path
@@ -161,12 +161,12 @@ describeFn('MutationObserver + blur-all integration', () => {
 
     // Sanity: blur-all actually worked.
     const blurredCount = await page.evaluate(
-      () => document.querySelectorAll('[data-pb-blur]').length
+      () => document.querySelectorAll('[data-bl-si-blur]').length
     );
     expect(blurredCount).toBeGreaterThan(0);
 
     // Inject a new text-containing element. The MutationObserver should
-    // stamp data-pb-blur on it once, without re-triggering infinitely.
+    // stamp data-bl-si-blur on it once, without re-triggering infinitely.
     await page.evaluate(() => {
       const div = document.createElement('div');
       div.id = 'injected-div';
@@ -178,16 +178,16 @@ describeFn('MutationObserver + blur-all integration', () => {
     // times out. 1.5s is more than enough for a single observer cycle.
     await new Promise((r) => setTimeout(r, 1500));
 
-    // The injected element should be blurred by the observer (data-pb-blur stamped).
+    // The injected element should be blurred by the observer (data-bl-si-blur stamped).
     const injectedBlurred = await page.evaluate(() => {
       const el = document.getElementById('injected-div');
-      return el ? el.hasAttribute('data-pb-blur') : false;
+      return el ? el.hasAttribute('data-bl-si-blur') : false;
     });
     expect(injectedBlurred).toBe(true);
 
     // No text-node wrappers should exist (new engine uses CSS rules, not DOM wrapping).
     const wrapperCount = await page.evaluate(() => {
-      return document.querySelectorAll('.pb-text-node-wrapper').length;
+      return document.querySelectorAll('.bl-si-text-node-wrapper').length;
     });
     expect(wrapperCount).toBe(0);
   }, 15000);
@@ -212,8 +212,8 @@ describeFn('MutationObserver + blur-all integration', () => {
 
     const stats = await page.evaluate(() => {
       const injected = document.querySelectorAll('.rapid-inject');
-      const injectedBlurred = document.querySelectorAll('.rapid-inject[data-pb-blur]');
-      const allWrappers = document.querySelectorAll('.pb-text-node-wrapper');
+      const injectedBlurred = document.querySelectorAll('.rapid-inject[data-bl-si-blur]');
+      const allWrappers = document.querySelectorAll('.bl-si-text-node-wrapper');
 
       return {
         injectedCount: injected.length,
@@ -247,7 +247,7 @@ describeFn('MutationObserver + blur-all integration', () => {
     const result = await page.evaluate(() => {
       const video = document.getElementById('test-video');
       // New engine uses CSS tag rules for media elements (no canvas overlays).
-      const overlays = document.querySelectorAll('.pb-canvas-overlay');
+      const overlays = document.querySelectorAll('.bl-si-canvas-overlay');
       return {
         videoExists: !!video,
         canvasOverlayCount: overlays.length,
@@ -292,9 +292,9 @@ describeFn('MutationObserver + blur-all integration', () => {
       const textarea = document.getElementById('injected-textarea');
       const p = document.getElementById('injected-p');
       return {
-        inputBlurred: input ? input.hasAttribute('data-pb-blur') : null,
-        textareaBlurred: textarea ? textarea.hasAttribute('data-pb-blur') : null,
-        pBlurred: p ? p.hasAttribute('data-pb-blur') : null,
+        inputBlurred: input ? input.hasAttribute('data-bl-si-blur') : null,
+        textareaBlurred: textarea ? textarea.hasAttribute('data-bl-si-blur') : null,
+        pBlurred: p ? p.hasAttribute('data-bl-si-blur') : null,
       };
     });
 

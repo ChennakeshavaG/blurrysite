@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Blur</title>
+  <title>Blurry Site</title>
   <link rel="stylesheet" href="popup.css" />
   <script src="../src/constants.js" defer></script>
   <script src="popup_i18n.js" defer></script>
@@ -13,20 +13,20 @@
 </head>
 <body>
   <!-- ===== DYNAMIC BLUR BACKGROUND ===== -->
-  <div class="pb-bg" id="pbBg" aria-hidden="true"></div>
+  <div class="bl-si-bg" id="blSiBg" aria-hidden="true"></div>
 
   <!-- ===== HEADER ===== -->
-  <header class="pb-header pb-frost">
-    <div class="pb-header__brand">
-      <svg class="pb-header__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <header class="bl-si-header bl-si-frost">
+    <div class="bl-si-header__brand">
+      <svg class="bl-si-header__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <circle cx="12" cy="12" r="10" fill="#f59e0b" opacity="0.3"/>
         <circle cx="12" cy="12" r="6" fill="#f59e0b" opacity="0.5"/>
         <circle cx="12" cy="12" r="3" fill="#f59e0b" opacity="0.8"/>
       </svg>
-      <span class="pb-header__title" data-i18n="popup_title">Privacy Blur</span>
+      <span class="bl-si-header__title" data-i18n="popup_title">Blurry Site</span>
     </div>
-    <div class="pb-header__controls">
-      <button class="pb-header__theme-btn" id="themeToggle" aria-label="Toggle theme">
+    <div class="bl-si-header__controls">
+      <button class="bl-si-header__theme-btn" id="themeToggle" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
           <line x1="12" y1="1" x2="12" y2="3"/>
@@ -39,31 +39,31 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
         </svg>
       </button>
-      <label class="pb-toggle pb-toggle--master" title="Enable or disable Privacy Blur">
+      <label class="bl-si-toggle bl-si-toggle--master" title="Enable or disable Blurry Site">
         <input type="checkbox" id="enableToggle" />
-        <span class="pb-toggle__track"><span class="pb-toggle__thumb"></span></span>
+        <span class="bl-si-toggle__track"><span class="bl-si-toggle__thumb"></span></span>
       </label>
-      <span class="pb-toggle__label" id="enableLabel">On</span>
+      <span class="bl-si-toggle__label" id="enableLabel">On</span>
     </div>
   </header>
 
   <!-- ===== ACTION BAR ===== -->
-  <section class="pb-actions">
-    <button class="pb-actions__btn pb-frost pb-actions__btn--blur" id="blurAllBtn" data-active="false">
+  <section class="bl-si-actions">
+    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--blur" id="blurAllBtn" data-active="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
         <circle cx="12" cy="12" r="3"/>
       </svg>
       <span data-i18n="btn_blur_all">Blur All</span>
     </button>
-    <button class="pb-actions__btn pb-frost pb-actions__btn--clear" id="clearAllBtn">
+    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--clear" id="clearAllBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18"/>
         <line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
       <span data-i18n="btn_clear_all">Clear All</span>
     </button>
-    <button class="pb-actions__btn pb-frost pb-actions__btn--picker" id="pickerBtn" data-active="false">
+    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--picker" id="pickerBtn" data-active="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -73,114 +73,114 @@
   </section>
 
   <!-- ===== SITE INFO ===== -->
-  <section class="pb-site-info">
-    <span class="pb-site-info__host" id="hostname">--</span>
-    <span class="pb-site-info__rule" id="activeRule"></span>
+  <section class="bl-si-site-info">
+    <span class="bl-si-site-info__host" id="hostname">--</span>
+    <span class="bl-si-site-info__rule" id="activeRule"></span>
   </section>
 
   <!-- ===== KEYBOARD SHORTCUTS (always visible) ===== -->
-  <section class="pb-section" id="sectionShortcuts">
-    <div class="pb-section__header" style="cursor:default;padding:var(--pb-spacing-sm) var(--pb-spacing-md)">
+  <section class="bl-si-section" id="sectionShortcuts">
+    <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
       <span>Keyboard Shortcuts</span>
     </div>
-    <div class="pb-section__body is-open" id="bodyShortcuts">
+    <div class="bl-si-section__body is-open" id="bodyShortcuts">
       <!-- Populated by Renderer.renderSection() -->
     </div>
   </section>
 
   <!-- ===== SETTINGS (collapsible, collapsed by default) ===== -->
-  <section class="pb-section" id="sectionSettings">
-    <button class="pb-section__header pb-frost" id="settingsToggle" aria-expanded="false" aria-controls="bodySettings">
+  <section class="bl-si-section" id="sectionSettings">
+    <button class="bl-si-section__header bl-si-frost" id="settingsToggle" aria-expanded="false" aria-controls="bodySettings">
       <span>Settings</span>
-      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      <svg class="bl-si-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
-    <div class="pb-section__body" id="bodySettings">
+    <div class="bl-si-section__body" id="bodySettings">
       <!-- Populated by Renderer.renderSection() -->
     </div>
   </section>
 
   <!-- ===== URL RULES ===== -->
-  <section class="pb-section" id="sectionRules">
-    <button class="pb-section__header pb-frost" id="rulesToggle" aria-expanded="false" aria-controls="bodyRules">
+  <section class="bl-si-section" id="sectionRules">
+    <button class="bl-si-section__header bl-si-frost" id="rulesToggle" aria-expanded="false" aria-controls="bodyRules">
       <span>URL Rules</span>
-      <svg class="pb-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      <svg class="bl-si-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
-    <div class="pb-section__body" id="bodyRules">
-      <p class="pb-rules-hint" style="font-size:10px;color:var(--pb-text-dim);margin-bottom:6px" data-i18n="rule_hint">Per-URL settings overrides. First matching rule wins.</p>
-      <ul class="pb-rules-list" id="rulesList"></ul>
-      <p class="pb-rules-empty" id="rulesEmpty" data-i18n="rule_no_rules">No URL rules configured.</p>
-      <button class="pb-btn pb-btn--ghost pb-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add">+ Add Rule</button>
+    <div class="bl-si-section__body" id="bodyRules">
+      <p class="bl-si-rules-hint" style="font-size:10px;color:var(--bl-si-text-dim);margin-bottom:6px" data-i18n="rule_hint">Per-URL settings overrides. First matching rule wins.</p>
+      <ul class="bl-si-rules-list" id="rulesList"></ul>
+      <p class="bl-si-rules-empty" id="rulesEmpty" data-i18n="rule_no_rules">No URL rules configured.</p>
+      <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add">+ Add Rule</button>
     </div>
   </section>
 
   <!-- ===== BLURRED ELEMENTS ===== -->
-  <section class="pb-section" id="sectionBlurred">
-    <div class="pb-section__header" style="cursor:default;padding:var(--pb-spacing-sm) var(--pb-spacing-md)">
+  <section class="bl-si-section" id="sectionBlurred">
+    <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
       <span>Blurred Elements</span>
-      <span class="pb-list-count" id="blurListCount">0</span>
+      <span class="bl-si-list-count" id="blurListCount">0</span>
     </div>
-    <div class="pb-blur-list-wrapper">
-      <ul class="pb-blur-list" id="blurList"></ul>
-      <p class="pb-blur-empty" id="blurEmpty">No blurred elements on this page.</p>
+    <div class="bl-si-blur-list-wrapper">
+      <ul class="bl-si-blur-list" id="blurList"></ul>
+      <p class="bl-si-blur-empty" id="blurEmpty">No blurred elements on this page.</p>
     </div>
   </section>
 
   <!-- ===== TOAST ===== -->
-  <div class="pb-toast pb-frost" id="toast" role="status" aria-live="polite"></div>
+  <div class="bl-si-toast bl-si-frost" id="toast" role="status" aria-live="polite"></div>
 
   <!-- ===== SHORTCUT CAPTURE MODAL ===== -->
-  <div class="pb-modal-overlay" id="shortcutModal" hidden>
-    <div class="pb-modal pb-frost">
-      <div class="pb-modal__header" data-i18n="shortcut_modal_title">Customize Shortcut</div>
-      <div class="pb-modal__body">
-        <p style="font-size:11px;color:var(--pb-text);margin-bottom:6px" data-i18n="shortcut_modal_prompt">Hold a modifier, then press additional keys</p>
-        <div class="pb-capture pb-capture--listening" id="captureDisplay" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
+  <div class="bl-si-modal-overlay" id="shortcutModal" hidden>
+    <div class="bl-si-modal bl-si-frost">
+      <div class="bl-si-modal__header" data-i18n="shortcut_modal_title">Customize Shortcut</div>
+      <div class="bl-si-modal__body">
+        <p style="font-size:11px;color:var(--bl-si-text);margin-bottom:6px" data-i18n="shortcut_modal_prompt">Hold a modifier, then press additional keys</p>
+        <div class="bl-si-capture bl-si-capture--listening" id="captureDisplay" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
       </div>
-      <div class="pb-modal__footer">
-        <button class="pb-btn pb-btn--ghost pb-btn--sm" id="scModalCancel">Cancel</button>
-        <button class="pb-btn pb-btn--ghost pb-btn--sm" id="scModalReset" data-i18n="shortcut_reset">Reset default</button>
-        <button class="pb-btn pb-btn--primary pb-btn--sm" id="scModalSave" disabled>Save</button>
+      <div class="bl-si-modal__footer">
+        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalCancel">Cancel</button>
+        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalReset" data-i18n="shortcut_reset">Reset default</button>
+        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="scModalSave" disabled>Save</button>
       </div>
     </div>
   </div>
 
   <!-- ===== RULE EDITOR MODAL ===== -->
-  <div class="pb-modal-overlay" id="ruleModal" hidden>
-    <div class="pb-modal pb-frost">
-      <div class="pb-modal__header" id="ruleModalTitle" data-i18n="rule_add_title">Add URL Rule</div>
-      <div class="pb-modal__body">
+  <div class="bl-si-modal-overlay" id="ruleModal" hidden>
+    <div class="bl-si-modal bl-si-frost">
+      <div class="bl-si-modal__header" id="ruleModalTitle" data-i18n="rule_add_title">Add URL Rule</div>
+      <div class="bl-si-modal__body">
         <div style="margin-bottom:8px">
-          <label class="pb-setting__label" for="ruleName" data-i18n="rule_name" style="margin-bottom:4px">Name</label>
-          <input type="text" class="pb-input" id="ruleName" placeholder="e.g. Banking sites" />
+          <label class="bl-si-setting__label" for="ruleName" data-i18n="rule_name" style="margin-bottom:4px">Name</label>
+          <input type="text" class="bl-si-input" id="ruleName" placeholder="e.g. Banking sites" />
         </div>
         <div style="margin-bottom:8px">
-          <label class="pb-setting__label" for="rulePattern" data-i18n="rule_pattern" style="margin-bottom:4px">URL Pattern</label>
-          <input type="text" class="pb-input" id="rulePattern" placeholder="*.bank.com/*" />
+          <label class="bl-si-setting__label" for="rulePattern" data-i18n="rule_pattern" style="margin-bottom:4px">URL Pattern</label>
+          <input type="text" class="bl-si-input" id="rulePattern" placeholder="*.bank.com/*" />
         </div>
-        <div class="pb-setting" style="margin-top:8px">
-          <label class="pb-setting__label" for="rulePatternType" data-i18n="rule_pattern_type">Pattern type</label>
-          <select class="pb-select" id="rulePatternType">
+        <div class="bl-si-setting" style="margin-top:8px">
+          <label class="bl-si-setting__label" for="rulePatternType" data-i18n="rule_pattern_type">Pattern type</label>
+          <select class="bl-si-select" id="rulePatternType">
             <option value="wildcard">Wildcard</option>
             <option value="regex">Regex</option>
           </select>
         </div>
-        <hr style="border:none;border-top:1px solid var(--pb-border);margin:8px 0" />
-        <p style="font-size:10px;color:var(--pb-text-dim);margin-bottom:6px" data-i18n="rule_overrides">Settings overrides for matching URLs</p>
+        <hr style="border:none;border-top:1px solid var(--bl-si-border);margin:8px 0" />
+        <p style="font-size:10px;color:var(--bl-si-text-dim);margin-bottom:6px" data-i18n="rule_overrides">Settings overrides for matching URLs</p>
         <div id="ruleOverridesContainer">
           <!-- Populated by Renderer.renderSection() in ruleMode -->
         </div>
       </div>
-      <div class="pb-modal__footer">
-        <button class="pb-btn pb-btn--ghost pb-btn--sm" id="ruleModalCancel">Cancel</button>
-        <button class="pb-btn pb-btn--primary pb-btn--sm" id="ruleModalSave">Save</button>
+      <div class="bl-si-modal__footer">
+        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="ruleModalCancel">Cancel</button>
+        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="ruleModalSave">Save</button>
       </div>
     </div>
   </div>
 
   <!-- ===== FOOTER ===== -->
-  <footer class="pb-footer pb-frost">
-    <button class="pb-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all">Clear all sites</button>
-    <span class="pb-footer__version" id="extVersion">v1.0.0</span>
+  <footer class="bl-si-footer bl-si-frost">
+    <button class="bl-si-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all">Clear all sites</button>
+    <span class="bl-si-footer__version" id="extVersion">v1.0.0</span>
   </footer>
 </body>
 </html>

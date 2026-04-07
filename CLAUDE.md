@@ -1,9 +1,9 @@
-# PrivacyBlur — Claude Instructions
+# Blurry Site — Claude Instructions
 
 ## What This Project Is
 
 A Chrome/Firefox MV3 browser extension. Vanilla JS only — no bundler, no ES modules, no TypeScript.
-All source files are IIFEs that assign a single `window.PrivacyBlur*` global.
+All source files are IIFEs that assign a single `window.BlurrySite*` global.
 
 Full design docs: `docs/HLD.md` (architecture), `docs/LLD.md` (contracts + algorithms), `docs/CROSS_BROWSER.md` (compatibility + extensibility gaps).
 
@@ -23,13 +23,13 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.pb` | Message types (`pb.STORAGE.*`, `pb.COMMAND.*`, `pb.POPUP.*`), `DEFAULT_SETTINGS`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `deepMerge()` |
-| `src/selector_utils.js` | `pb.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
-| `src/storage_manager.js` | `pb.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
-| `src/blur_engine.js` | `pb.BlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS` |
-| `src/shortcut_handler.js` | `pb.Shortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
-| `src/picker.js` | `pb.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
-| `content_script.js` | _(none — orchestrator)_ | Binds all modules via `pb.*` aliases after DOM ready |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `deepMerge()` |
+| `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
+| `src/storage_manager.js` | `blsi.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
+| `src/blur_engine.js` | `blsi.BlurEngine` | `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS` |
+| `src/shortcut_handler.js` | `blsi.Shortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
+| `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
+| `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
 **Load order is fixed by `manifest.json`** — constants → selector_utils → storage_manager → blur_engine → shortcut_handler → picker → content_script. Never reorder.
 
@@ -104,13 +104,13 @@ settings.SHORTCUTS = {
 
 **`PICKER_MODE`** — controls the picker strategy: `'sticky'` (draw rectangle, default) | `'dynamic'` (click element).
 
-**All default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS`.** Do not hardcode defaults anywhere else.
+**All default values live in `src/constants.js` → `BlurrySite.DEFAULTS`.** Do not hardcode defaults anywhere else.
 
 ### Settings Shape: blurCategories
 
 Unlike shortcuts, `blurCategories` has the **same shape everywhere** -- no flattening needed.
 
-**In `chrome.storage.local` / background / `PrivacyBlurStorage.getSettings()` / content_script.js / popup.js:**
+**In `chrome.storage.local` / background / `blsi.Storage.getSettings()` / content_script.js / popup.js:**
 ```js
 settings.BLUR_CATEGORIES = {
   TEXT: true,        // headings, paragraphs, spans, etc.
@@ -121,7 +121,7 @@ settings.BLUR_CATEGORIES = {
 }
 ```
 
-Default values live in `src/constants.js` → `PrivacyBlur.DEFAULTS.BLUR_CATEGORIES`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
+Default values live in `src/constants.js` → `BlurrySite.DEFAULTS.BLUR_CATEGORIES`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
 
 Note: the section heading says "blurCategories" but the key is now `BLUR_CATEGORIES` (UPPER_SNAKE_CASE), consistent with the rest of the settings shape.
 
@@ -131,40 +131,40 @@ Note: the section heading says "blurCategories" but the key is now `BLUR_CATEGOR
 
 ### All source files must be IIFEs
 ```js
-const PrivacyBlurXxx = (() => {
+const BlurrySiteXxx = (() => {
   // ...
   return { publicMethod };
 })();
-window.PrivacyBlurXxx = PrivacyBlurXxx;
+blsi.Xxx = BlurrySiteXxx;
 ```
 
 ### No ES module syntax
 No `import`, `export`, `import()`, or `require()` in any file under `src/`, `background.js`, or `popup/`. The extension has no build step.
 
 ### Blur engine element handling
-All elements (video, img, text containers, generic) are blurred via CSS class only (`pb-blurred`). CSS `filter: blur()` on a parent blurs all descendants — no canvas overlays, no text-node wrapping, no DOM injection. This means:
+All elements (video, img, text containers, generic) are blurred via CSS class only (`bl-si-blurred`). CSS `filter: blur()` on a parent blurs all descendants — no canvas overlays, no text-node wrapping, no DOM injection. This means:
 - No `position: relative` injection on parent elements (was breaking layouts)
 - No `requestAnimationFrame` loops for video (CSS blur works on DRM video too)
 - No text-node wrapper spans (CSS blur covers text nodes via parent filter)
-- Live radius updates propagate instantly via `var(--pb-radius)` from `:root`
+- Live radius updates propagate instantly via `var(--bl-si-radius)` from `:root`
 
 ### CSS class constants (do not invent new names)
 | Constant | Value |
 |---|---|
-| Blur class | `pb-blurred` |
-| Frosted glass mode | `pb-frosted` |
-| Canvas overlay | `pb-canvas-overlay` |
-| Text wrapper | `pb-text-node-wrapper` |
-| Hover highlight | `pb-hover-highlight` |
-| Picker active (on `<html>`) | `pb-picker-active` |
-| Toolbar | `pb-toolbar` (id: `pb-picker-toolbar`) |
-| Click-to-reveal active state | `pb-revealed` |
-| Ancestor chain unblur (click and hover) | `pb-ancestor-reveal` |
-| Hover-to-reveal target | `pb-reveal-on-hover` |
-| Sticky zone overlay | `pb-zone-overlay` |
-| Zone drawing preview | `pb-zone-drawing` |
-| Zone hover highlight (picker mode) | `pb-zone-highlight` |
-| Zone name label | `pb-zone-label` |
+| Blur class | `bl-si-blurred` |
+| Frosted glass mode | `bl-si-frosted` |
+| Canvas overlay | `bl-si-canvas-overlay` |
+| Text wrapper | `bl-si-text-node-wrapper` |
+| Hover highlight | `bl-si-hover-highlight` |
+| Picker active (on `<html>`) | `bl-si-picker-active` |
+| Toolbar | `bl-si-toolbar` (id: `bl-si-picker-toolbar`) |
+| Click-to-reveal active state | `bl-si-revealed` |
+| Ancestor chain unblur (click and hover) | `bl-si-ancestor-reveal` |
+| Hover-to-reveal target | `bl-si-reveal-on-hover` |
+| Sticky zone overlay | `bl-si-zone-overlay` |
+| Zone drawing preview | `bl-si-zone-drawing` |
+| Zone hover highlight (picker mode) | `bl-si-zone-highlight` |
+| Zone name label | `bl-si-zone-label` |
 
 ---
 
@@ -181,7 +181,7 @@ npm test                   # + coverage (~91% line coverage on src/)
 | Rule | Why |
 |---|---|
 | Use `require(MODULE_PATH)` to load source files in tests | `require()` lets Jest instrument for coverage. Fallback to `(0, eval)(buildStubSource())` when file missing. |
-| `global.window = global` must be in `tests/setup.js` | IIFEs assign `window.PrivacyBlur*`; without this alias, the globals are lost |
+| `global.window = global` must be in `tests/setup.js` | IIFEs assign `window.BlurrySite*`; without this alias, the globals are lost |
 | `requestAnimationFrame` mock must NOT call the callback | Video blur uses `requestAnimationFrame` in an infinite loop; auto-executing causes OOM |
 | `HTMLCanvasElement.prototype.getContext` must be mocked | jsdom returns `null` from `getContext()`; `ctx.clearRect()` then throws |
 | `KeyboardEvent.prototype.getModifierState` must be mocked | jsdom may not implement it; shortcut handler uses it for AltGr detection |
@@ -190,7 +190,7 @@ npm test                   # + coverage (~91% line coverage on src/)
 ### Adding a new unit test file
 
 Follow the pattern in any existing `tests/unit/*.test.js`:
-1. `loadXxx()` guards with `if (global.PrivacyBlurXxx) return;`
+1. `loadXxx()` guards with `if (global.BlurrySiteXxx) return;`
 2. Use `require(MODULE_PATH)` to load the source (enables coverage)
 3. Provide a `buildStubSource()` that matches the public contract exactly
 4. `afterEach` or `beforeEach` must clean up any DOM and call `destroy()` if applicable
@@ -244,7 +244,7 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | Issue | Root cause | Status |
 |---|---|---|
 | ~~DRM video shows dark overlay~~ | Fixed — CSS `filter: blur()` works on DRM video (DRM blocks pixel extraction, not CSS rendering) | Resolved |
-| SPA selector staleness | `data-pb-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/CROSS_BROWSER.md §6.3` |
+| SPA selector staleness | `data-bl-si-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/CROSS_BROWSER.md §6.3` |
 | Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/CROSS_BROWSER.md §6.6` |
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |
 | `position: sticky` inside blurred containers stops sticking | CSS `filter` creates stacking context — spec behaviour | Same root cause as `position: fixed` issue |

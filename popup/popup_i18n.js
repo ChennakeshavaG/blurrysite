@@ -1,10 +1,10 @@
 /**
- * popup_i18n.js — PrivacyBlur Internationalization Loader
+ * popup_i18n.js — Blurry Site Internationalization Loader
  *
  * Loads language JSON files and provides a t() function for string lookup.
  * Falls back: current locale → English → raw key.
  *
- * Exposed as window.I18n (IIFE — no ES module syntax).
+ * Exposed as blsi.I18n (IIFE — no ES module syntax).
  */
 
 const I18n = (() => {
@@ -39,7 +39,7 @@ const I18n = (() => {
   async function init() {
     _fallback = await _loadJSON('en');
     if (Object.keys(_fallback).length === 0) {
-      console.warn('[PrivacyBlur i18n] Failed to load English fallback — UI will show raw keys');
+      console.warn('[BlurrySite i18n] Failed to load English fallback — UI will show raw keys');
     }
 
     const lang = (navigator.language || 'en').split('-')[0].toLowerCase();
@@ -69,4 +69,4 @@ const I18n = (() => {
   return { init, t };
 })();
 
-pb.I18n = I18n;
+blsi.I18n = I18n;

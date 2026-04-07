@@ -64,7 +64,7 @@ isPickerActive = !isPickerActive;  // local toggle, fire-and-forget
 ```js
 return _styleEl !== null && _styleEl.parentNode !== null;
 ```
-**Problem:** If another extension or page script removes `<style id="pb-blur-styles">`, `isBlurAllActive()` returns false but `isPageBlurred` in content_script stays true. `isBlurred()` for always-blur tags returns false, hover reveal breaks.
+**Problem:** If another extension or page script removes `<style id="bl-si-blur-styles">`, `isBlurAllActive()` returns false but `isPageBlurred` in content_script stays true. `isBlurred()` for always-blur tags returns false, hover reveal breaks.
 
 **Fix direction:** Check only `_styleEl !== null` (internal state), or re-verify/re-inject on desync.
 
@@ -82,8 +82,8 @@ return _styleEl !== null && _styleEl.parentNode !== null;
 **File:** `blur_engine.js:270-275`
 ```js
 return element.id === toolbarId || element.closest('#' + toolbarId) ||
-       element.classList.contains(pb.CSS.TOAST) || element.closest('.' + pb.CSS.TOAST) ||
-       element.classList.contains(pb.CSS.TOOLBAR);
+       element.classList.contains(blsi.CSS.TOAST) || element.closest('.' + blsi.CSS.TOAST) ||
+       element.classList.contains(blsi.CSS.TOOLBAR);
 ```
 **Problem:** Two `closest()` calls per element during `blurTextCheckElements`. On 30K elements, that's 60K ancestor walks. Toolbar/toast only exist when picker is active (rare during blur-all).
 
@@ -95,7 +95,7 @@ return element.id === toolbarId || element.closest('#' + toolbarId) ||
 **File:** `content_script.js:374,387`
 **Problem:** `_revealElement` queries all descendants to find blurred ones. `_unrevealElement` queries all descendants to find tracked ones. Expensive on large containers.
 
-**Fix direction:** For `_revealElement`, query `[data-pb-blur]` + always-blur tag selector. For `_unrevealElement`, filter `_revealedElements` Set for descendants of `el` instead of querying DOM.
+**Fix direction:** For `_revealElement`, query `[data-bl-si-blur]` + always-blur tag selector. For `_unrevealElement`, filter `_revealedElements` Set for descendants of `el` instead of querying DOM.
 
 ---
 

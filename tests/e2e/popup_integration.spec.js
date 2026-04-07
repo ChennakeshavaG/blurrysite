@@ -125,12 +125,12 @@ describeFn('Popup ↔ Content Script Integration', () => {
   }
 
   async function countBlurred() {
-    return page.evaluate(() => document.querySelectorAll('[data-pb-blur]').length);
+    return page.evaluate(() => document.querySelectorAll('[data-bl-si-blur]').length);
   }
 
   async function getRadius() {
     return page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue('--pb-radius').trim()
+      getComputedStyle(document.documentElement).getPropertyValue('--bl-si-radius').trim()
     );
   }
 
@@ -143,7 +143,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     // Trigger TOGGLE_BLUR_ALL via content script globals (simulates what
     // background.js does when relaying chrome.commands).
     await evalInContentScript(`
-      pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
+      blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
     `);
     await new Promise((r) => setTimeout(r, 300));
 
@@ -152,7 +152,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     expect(count).toBeGreaterThan(0);
 
     // Unblur.
-    await evalInContentScript(`pb.BlurEngine.unblurAll()`);
+    await evalInContentScript(`blsi.BlurEngine.unblurAll()`);
   });
 
   test('settings change via chrome.storage.onChanged reaches content script', async () => {
@@ -243,13 +243,13 @@ describeFn('Popup ↔ Content Script Integration', () => {
 
     // Verify content script is injected.
     const hasCS = await page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue('--pb-radius').trim().length > 0
+      getComputedStyle(document.documentElement).getPropertyValue('--bl-si-radius').trim().length > 0
     );
     console.log(`  → Content script on google: ${hasCS}`);
     expect(hasCS).toBe(true);
 
     // Blur all via content script world.
-    await evalInContentScript(`pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
+    await evalInContentScript(`blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
     await new Promise((r) => setTimeout(r, 500));
 
     const count = await countBlurred();
@@ -257,7 +257,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     expect(count).toBeGreaterThan(0);
 
     // Unblur.
-    await evalInContentScript(`pb.BlurEngine.unblurAll()`);
+    await evalInContentScript(`blsi.BlurEngine.unblurAll()`);
   });
 
   test('clear page works on google.com', async () => {
@@ -265,14 +265,14 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 1500));
 
     // Blur.
-    await evalInContentScript(`pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
+    await evalInContentScript(`blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
     await new Promise((r) => setTimeout(r, 300));
     const before = await countBlurred();
     console.log(`  → Before clear: ${before}`);
     expect(before).toBeGreaterThan(0);
 
     // Clear.
-    await evalInContentScript(`pb.BlurEngine.unblurAll()`);
+    await evalInContentScript(`blsi.BlurEngine.unblurAll()`);
     await new Promise((r) => setTimeout(r, 300));
     const after = await countBlurred();
     console.log(`  → After clear: ${after}`);
@@ -284,11 +284,11 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 1500));
 
     await evalInContentScript(`
-      pb.Picker.activate(
+      blsi.Picker.activate(
         { blurRadius: 8, highlightColor: '#f59e0b' },
         {
-          onBlur: function(el) { pb.BlurEngine.applyBlur(el); },
-          onUnblur: function(el) { pb.BlurEngine.removeBlur(el); },
+          onBlur: function(el) { blsi.BlurEngine.applyBlur(el); },
+          onUnblur: function(el) { blsi.BlurEngine.removeBlur(el); },
           onDeactivate: function() {}
         }
       );
@@ -296,7 +296,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 300));
 
     const active = await page.evaluate(() =>
-      document.documentElement.classList.contains('pb-picker-active')
+      document.documentElement.classList.contains('bl-si-picker-active')
     );
     console.log(`  → Picker active on google: ${active}`);
     expect(active).toBe(true);
@@ -305,7 +305,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
     await new Promise((r) => setTimeout(r, 300));
 
     const afterEscape = await page.evaluate(() =>
-      document.documentElement.classList.contains('pb-picker-active')
+      document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(afterEscape).toBe(false);
   });
@@ -321,10 +321,10 @@ describeFn('Popup ↔ Content Script Integration', () => {
       (async () => {
         const el = document.querySelector('#para1');
         if (el) {
-          pb.BlurEngine.applyBlur(el);
-          const sel = pb.SelectorUtils.getSelector(el);
+          blsi.BlurEngine.applyBlur(el);
+          const sel = blsi.SelectorUtils.getSelector(el);
           if (sel) {
-            await pb.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
+            await blsi.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
           }
         }
       })();
@@ -345,7 +345,7 @@ describeFn('Popup ↔ Content Script Integration', () => {
 
     // Clean up storage.
     await evalInContentScript(`
-      pb.Storage.clearHost(location.hostname);
+      blsi.Storage.clearHost(location.hostname);
     `);
   });
 });

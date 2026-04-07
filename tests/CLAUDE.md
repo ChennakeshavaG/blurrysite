@@ -20,7 +20,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/xxx.js');
 
 function loadXxx() {
-  if (global.PrivacyBlurXxx) return;          // load only once per suite
+  if (global.BlurrySiteXxx) return;          // load only once per suite
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);                      // require() enables Istanbul coverage
   } else {
@@ -29,7 +29,7 @@ function loadXxx() {
 }
 
 function buildStubSource() {
-  return `(function() { 'use strict'; ... window.PrivacyBlurXxx = { ... }; })();`;
+  return `(function() { 'use strict'; ... blsi.Xxx = { ... }; })();`;
 }
 ```
 
@@ -47,7 +47,7 @@ The `buildStubSource()` inline stub in each test file defines the exact API cont
 
 | Mock | Reason |
 |---|---|
-| `global.window = global` | IIFEs assign `window.PrivacyBlur*`; without this alias jsdom context loses the globals |
+| `global.window = global` | IIFEs assign `window.BlurrySite*`; without this alias jsdom context loses the globals |
 | `require('../src/constants.js')` | Loads message types + DEFAULTS before any source module |
 | `global.chrome = { runtime, storage, tabs, commands, contextMenus, action }` | All `jest.fn()` — lets unit tests assert message calls without a real browser |
 | `HTMLCanvasElement.prototype.getContext = jest.fn(() => fakeCtx)` | jsdom returns `null` from `getContext()`; `ctx.clearRect()` throws if not mocked |
@@ -122,10 +122,10 @@ beforeEach(() => {
   document.body.innerHTML = '';
   document.documentElement.className = '';
   jest.clearAllMocks();
-  try { PrivacyBlurPicker.deactivate(); } catch (_) {}
+  try { blsi.Picker.deactivate(); } catch (_) {}
 });
 afterEach(() => {
-  try { PrivacyBlurPicker.deactivate(); } catch (_) {}
+  try { blsi.Picker.deactivate(); } catch (_) {}
 });
 ```
 
@@ -133,7 +133,7 @@ afterEach(() => {
 
 ```js
 afterEach(() => {
-  PrivacyBlurShortcuts.destroy();
+  blsi.Shortcuts.destroy();
 });
 ```
 

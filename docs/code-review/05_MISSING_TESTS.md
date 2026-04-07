@@ -4,9 +4,9 @@
 
 | Test File | Issue |
 |---|---|
-| `tests/e2e/blur.spec.js` | 10+ assertions check `.pb-blurred` class (removed) |
+| `tests/e2e/blur.spec.js` | 10+ assertions check `.bl-si-blurred` class (removed) |
 | `tests/e2e/observer_pipeline.spec.js` | Calls `blurAllContent()` (removed from public API) |
-| `tests/e2e/mutation_loop.spec.js` | References `pb-text-node-wrapper` (removed) |
+| `tests/e2e/mutation_loop.spec.js` | References `bl-si-text-node-wrapper` (removed) |
 | `tests/e2e/popup_flow.spec.js` | References `#blurCount`, `#listCount` (removed from HTML) |
 
 ## New functions with 0 test coverage
@@ -18,7 +18,7 @@
 | `blurTextCheckElements()` | blur_engine.js | Text gate, thorough mode, exclusion |
 | `tryBlurTextCheck()` | blur_engine.js | Tag check, empty textCheckSet, idempotency |
 | `isBlurAllActive()` | blur_engine.js | State tracking |
-| `findClassedParent()` | picker.js | pb-* filtering, fallback to self |
+| `findClassedParent()` | picker.js | blsi-* filtering, fallback to self |
 | `_revealElement()` | content_script.js | Inline style, descendant reveal |
 | `_unrevealAll()` | content_script.js | Style cleanup, Set clearing |
 | `findBlurredTarget()` | content_script.js | CSS-rule + data-attribute detection |

@@ -1,4 +1,4 @@
-# PrivacyBlur
+# BlurrySite
 
 A browser extension for Chrome and Firefox that blurs sensitive content on any
 webpage — text, images, videos, form fields. Designed for screen-sharing,
@@ -118,7 +118,7 @@ SKIP_E2E=1 npm test   # skip e2e in CI
 ### Project Structure
 
 ```
-privacyblur/
+blurrysite/
 ├── manifest.json           MV3 extension manifest
 ├── background.js           Service worker: storage, commands, context menu
 ├── src/

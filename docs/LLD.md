@@ -1,4 +1,4 @@
-# PrivacyBlur — Low-Level Design
+# Blurry Site — Low-Level Design
 
 ## 1. Module Contracts
 
@@ -6,12 +6,12 @@ Each source module is an IIFE that assigns exactly one global on `window`. Modul
 
 **Load order:**
 ```
-constants.js       → globalThis.PrivacyBlur (message types + DEFAULTS)
-selector_utils.js  → window.PrivacyBlurSelectorUtils
-storage_manager.js → window.PrivacyBlurStorage
-blur_engine.js     → window.PrivacyBlurEngine
-shortcut_handler.js→ window.PrivacyBlurShortcuts
-picker.js          → window.PrivacyBlurPicker
+constants.js       → globalThis.BlurrySite (message types + DEFAULTS)
+selector_utils.js  → blsi.SelectorUtils
+storage_manager.js → blsi.Storage
+blur_engine.js     → blsi.BlurEngine
+shortcut_handler.js→ blsi.Shortcuts
+picker.js          → blsi.Picker
 content_script.js  → (orchestrator, no global)
 ```
 
@@ -78,7 +78,7 @@ applyBlur(el, radius = 8, mode)
     el.classList.add(BLURRED_CLASS)
     
   else:
-    wrapTextNodes(el)  // wrap bare text nodes in <span class="pb-text-node-wrapper">
+    wrapTextNodes(el)  // wrap bare text nodes in <span class="bl-si-text-node-wrapper">
     el.classList.add(BLURRED_CLASS)
 ```
 
@@ -88,7 +88,7 @@ applyBlur(el, radius = 8, mode)
 startVideoBlurCanvas(videoElement, radius)
   stop any existing overlay (stopVideoBlurCanvas)
   canvas = createElement("canvas")
-  canvas.className = "pb-canvas-overlay"
+  canvas.className = "bl-si-canvas-overlay"
   size canvas from videoElement.videoWidth/Height or getBoundingClientRect
   position canvas absolutely over video (CSS: position absolute, z-index 9999)
   if parent is position:static → set parent to position:relative
@@ -136,9 +136,9 @@ blurAllContent(radius = 8, options = {})
 
 | Constant | Value |
 |---|---|
-| `BLURRED_CLASS` | `"pb-blurred"` |
-| `CANVAS_CLASS` | `"pb-canvas-overlay"` |
-| `TEXT_WRAPPER_CLASS` | `"pb-text-node-wrapper"` |
+| `BLURRED_CLASS` | `"bl-si-blurred"` |
+| `CANVAS_CLASS` | `"bl-si-canvas-overlay"` |
+| `TEXT_WRAPPER_CLASS` | `"bl-si-text-node-wrapper"` |
 
 ---
 
@@ -167,10 +167,10 @@ getSelector(element)
     idSelector = "#" + CSS.escape(id)
     if document.querySelectorAll(idSelector).length === 1 → return idSelector
 
-  // Strategy 2: stamp data-pb-id
-  if element.dataset.pbId is empty:
-    element.dataset.pbId = generateId()   // 8-char hex UUID
-  return '[data-pb-id="' + element.dataset.pbId + '"]'
+  // Strategy 2: stamp data-bl-si-id
+  if element.dataset.blSiId is empty:
+    element.dataset.blSiId = generateId()   // 8-char hex UUID
+  return '[data-bl-si-id="' + element.dataset.blSiId + '"]'
 ```
 
 ### generateId
@@ -191,7 +191,7 @@ Calls `CSS.escape()` when available; falls back to a regex that backslash-escape
 
 ### Constants
 
-No local `DEFAULT_SETTINGS`. Uses `MSG.DEFAULT_SETTINGS` and `MSG.buildDefaultSettings()` from `constants.js` (referenced as `window.PrivacyBlur`). All settings keys are UPPER_SNAKE_CASE.
+No local `DEFAULT_SETTINGS`. Uses `MSG.DEFAULT_SETTINGS` and `MSG.buildDefaultSettings()` from `constants.js` (referenced as `window.BlurrySite`). All settings keys are UPPER_SNAKE_CASE.
 
 ### Public API
 
@@ -333,7 +333,7 @@ init(shortcuts, callbacks)
       // All keys held — match found
       event.preventDefault()
       callbacks[sc.actionName]?.()
-      showToast("PrivacyBlur: " + ACTION_LABELS[sc.actionName])
+      showToast("BlurrySite: " + ACTION_LABELS[sc.actionName])
       return
 
   onKeyUp(event):
@@ -351,7 +351,7 @@ Checks both the event boolean property (e.g. `event.altKey`) and the specific si
 
 ### showToast
 
-Creates a `<div class="pb-toast">` at bottom-right, appends to body, fades out after `duration` ms with a CSS animation, then removes from DOM.
+Creates a `<div class="bl-si-toast">` at bottom-right, appends to body, fades out after `duration` ms with a CSS animation, then removes from DOM.
 
 ---
 
@@ -397,8 +397,8 @@ activate(settings, callbacks)
   merge settings into activeSettings
   activeCallbacks = callbacks
   
-  document.documentElement.classList.add("pb-picker-active")
-  buildToolbar()  // creates #pb-picker-toolbar, appends to document.body
+  document.documentElement.classList.add("bl-si-picker-active")
+  buildToolbar()  // creates #bl-si-picker-toolbar, appends to document.body
   
   document.addEventListener("mouseover", onMouseOver, true)
   document.addEventListener("mouseout",  onMouseOut,  true)
@@ -417,7 +417,7 @@ onClick(event)
   event.stopPropagation()
   event.stopImmediatePropagation()
 
-  if target.classList.contains("pb-blurred"):
+  if target.classList.contains("bl-si-blurred"):
     callbacks.onUnblur?.(target)
     selectedElements.delete(target)
     flashElementIndicator(target, "Unblurred")
@@ -433,7 +433,7 @@ Returns null for `document.documentElement`, `document.body`, and non-Element ev
 
 ### buildToolbar
 
-Creates a `<div id="pb-picker-toolbar">` with:
+Creates a `<div id="bl-si-picker-toolbar">` with:
 - Left: status label text
 - Right: "Clear all" button + "×" close button
 - Appended to `document.body`
@@ -514,9 +514,9 @@ When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to
 
 | Property | Value | Used by |
 |---|---|---|
-| `--pb-radius` | `${BLUR_RADIUS}px` | `.pb-blurred { filter: blur(var(--pb-radius)) }` |
-| `--pb-highlight-color` | `#f59e0b` (default) | `.pb-hover-highlight` outline |
-| `--pb-transition-duration` | `200ms` (default) | `.pb-blurred` transition |
+| `--bl-si-radius` | `${BLUR_RADIUS}px` | `.bl-si-blurred { filter: blur(var(--bl-si-radius)) }` |
+| `--bl-si-highlight-color` | `#f59e0b` (default) | `.bl-si-hover-highlight` outline |
+| `--bl-si-transition-duration` | `200ms` (default) | `.bl-si-blurred` transition |
 
 ### Message handler — type dispatch table
 
@@ -554,7 +554,7 @@ All handlers return `true` to keep the message channel open for the async `sendR
 
 ### deepMerge
 
-Sourced from `constants.js` (`PrivacyBlur.deepMerge`). Recursive object merge (second wins) with depth limit (5). Arrays are replaced, not concatenated. Non-object values are assigned directly. Prototype-pollution safe (skips `__proto__`, `constructor`, `prototype`).
+Sourced from `constants.js` (`BlurrySite.deepMerge`). Recursive object merge (second wins) with depth limit (5). Arrays are replaced, not concatenated. Non-object values are assigned directly. Prototype-pollution safe (skips `__proto__`, `constructor`, `prototype`).
 
 ---
 
@@ -564,20 +564,20 @@ Sourced from `constants.js` (`PrivacyBlur.deepMerge`). Recursive object merge (s
 
 ```css
 :root {
-  --pb-radius: 8px;
-  --pb-highlight-color: #f59e0b;
-  --pb-transition-duration: 200ms;
+  --bl-si-radius: 8px;
+  --bl-si-highlight-color: #f59e0b;
+  --bl-si-transition-duration: 200ms;
 }
 ```
 
 ### Core blur rule
 
 ```css
-.pb-blurred {
-  filter: blur(var(--pb-radius, 8px)) !important;
-  -webkit-filter: blur(var(--pb-radius, 8px)) !important;
-  transition: filter var(--pb-transition-duration, 200ms) ease,
-              -webkit-filter var(--pb-transition-duration, 200ms) ease !important;
+.bl-si-blurred {
+  filter: blur(var(--bl-si-radius, 8px)) !important;
+  -webkit-filter: blur(var(--bl-si-radius, 8px)) !important;
+  transition: filter var(--bl-si-transition-duration, 200ms) ease,
+              -webkit-filter var(--bl-si-transition-duration, 200ms) ease !important;
   /* will-change: filter removed — creates permanent stacking context that
      breaks position:fixed/sticky children and z-index hover elevation. */
 }
@@ -585,32 +585,32 @@ Sourced from `constants.js` (`PrivacyBlur.deepMerge`). Recursive object merge (s
 
 ### Reveal modes
 
-**Click-to-reveal** (`pb-revealed`): JS adds class on click, removes on second click or Escape.
+**Click-to-reveal** (`bl-si-revealed`): JS adds class on click, removes on second click or Escape.
 
 ```css
-.pb-revealed {
+.bl-si-revealed {
   filter: none !important;
   -webkit-filter: none !important;
-  transition: filter calc(var(--pb-transition-duration, 200ms) / 2) ease,
-              -webkit-filter calc(var(--pb-transition-duration, 200ms) / 2) ease !important;
-  outline: 2px dashed var(--pb-highlight-color, #f59e0b) !important;
+  transition: filter calc(var(--bl-si-transition-duration, 200ms) / 2) ease,
+              -webkit-filter calc(var(--bl-si-transition-duration, 200ms) / 2) ease !important;
+  outline: 2px dashed var(--bl-si-highlight-color, #f59e0b) !important;
   outline-offset: 2px !important;
 }
 ```
 
-**Hover-to-reveal** (`pb-reveal-on-hover`): CSS hover removes filter. Only active when content_script adds the class.
+**Hover-to-reveal** (`bl-si-reveal-on-hover`): CSS hover removes filter. Only active when content_script adds the class.
 
 ```css
-.pb-reveal-on-hover:hover {
+.bl-si-reveal-on-hover:hover {
   filter: none !important;
   -webkit-filter: none !important;
 }
 ```
 
-**Ancestor unblur** (`pb-ancestor-reveal`): JS adds to blurred ancestors when a descendant is revealed (click or hover). Removes ancestor filter so revealed content is visible through the chain.
+**Ancestor unblur** (`bl-si-ancestor-reveal`): JS adds to blurred ancestors when a descendant is revealed (click or hover). Removes ancestor filter so revealed content is visible through the chain.
 
 ```css
-.pb-ancestor-reveal {
+.bl-si-ancestor-reveal {
   filter: none !important;
   -webkit-filter: none !important;
 }
@@ -619,7 +619,7 @@ Sourced from `constants.js` (`PrivacyBlur.deepMerge`). Recursive object merge (s
 ### Toolbar isolation
 
 ```css
-.pb-toolbar {
+.bl-si-toolbar {
   all: initial;    /* reset ALL inherited/computed styles from the page */
   /* then re-apply extension styles */
 }
@@ -634,13 +634,13 @@ Sourced from `constants.js` (`PrivacyBlur.deepMerge`). Recursive object merge (s
 Each test file:
 1. Uses `require(MODULE_PATH)` to load the real source file (enables Jest coverage instrumentation).
 2. If the source file is missing, falls back to `(0, eval)(buildStubSource())` with an inline stub that satisfies the same contract.
-3. The `require()` approach runs the IIFE in Jest's jsdom context where `window === global`, so `window.PrivacyBlur*` assignments work correctly.
+3. The `require()` approach runs the IIFE in Jest's jsdom context where `window === global`, so `window.BlurrySite*` assignments work correctly.
 
 ### Setup (tests/setup.js)
 
 | Mock | Why |
 |---|---|
-| `global.window = global` | IIFEs assign to `window.PrivacyBlur*`; jsdom doesn't alias `window` to Node's `global` |
+| `global.window = global` | IIFEs assign to `window.BlurrySite*`; jsdom doesn't alias `window` to Node's `global` |
 | `global.chrome = { ... }` | Full `chrome.*` API mock with `jest.fn()` for all used methods |
 | `HTMLCanvasElement.prototype.getContext` | jsdom doesn't implement canvas — returns a fake 2D context so video tests don't throw |
 | `global.requestAnimationFrame` | No-op that returns incrementing handles; video animation loop must not auto-execute |

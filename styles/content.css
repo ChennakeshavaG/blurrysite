@@ -1,34 +1,34 @@
 /**
- * privacyblur — content.css
+ * blurrysite — content.css
  *
- * Injected into every page. All selectors use the `pb-` prefix to avoid
+ * Injected into every page. All selectors use the `bl-si-` prefix to avoid
  * collisions with host-page styles.
  *
  * CSS custom properties (set on :root or <html> by content_script.js):
- *   --pb-radius               default 8px    — blur filter amount
- *   --pb-highlight-color      default #f59e0b — picker hover outline
- *   --pb-transition-duration  default 200ms  — blur-in/out transition
+ *   --bl-si-radius               default 8px    — blur filter amount
+ *   --bl-si-highlight-color      default #f59e0b — picker hover outline
+ *   --bl-si-transition-duration  default 200ms  — blur-in/out transition
  */
 
 /* ─── Custom property defaults ─────────────────────────────────────────────── */
 
 :root {
-  --pb-radius: 10px;
-  --pb-highlight-color: #f59e0b;
-  --pb-transition-duration: 200ms;
+  --bl-si-radius: 10px;
+  --bl-si-highlight-color: #f59e0b;
+  --bl-si-transition-duration: 200ms;
 }
 
 /* ─── Blur: always-blur tags are handled by injected <style> in blur_engine.
-     Text-check elements and picker blurs use data-pb-blur attribute. ────────── */
+     Text-check elements and picker blurs use data-bl-si-blur attribute. ────────── */
 
 /**
- * data-pb-blur: stamped on text-check elements (div, span, etc.) that pass
+ * data-bl-si-blur: stamped on text-check elements (div, span, etc.) that pass
  * the hasMeaningfulTextContent gate, and on individual picker/context blurs.
  * The injected <style> also includes this rule, but this static version
  * provides a fallback and handles picker blurs when blur-all is off.
  */
-[data-pb-blur] {
-  filter: blur(var(--pb-radius, 10px)) !important;
+[data-bl-si-blur] {
+  filter: blur(var(--bl-si-radius, 10px)) !important;
   user-select: none !important;
 }
 
@@ -39,17 +39,17 @@
  * CSS cursor inheritance. Only elements that explicitly set their own cursor
  * (buttons, links, inputs) need the override via the child selector below.
  */
-.pb-picker-active {
+.bl-si-picker-active {
   cursor: crosshair !important;
 }
 
-.pb-picker-active a,
-.pb-picker-active button,
-.pb-picker-active input,
-.pb-picker-active select,
-.pb-picker-active textarea,
-.pb-picker-active [role="button"],
-.pb-picker-active [style*="cursor"] {
+.bl-si-picker-active a,
+.bl-si-picker-active button,
+.bl-si-picker-active input,
+.bl-si-picker-active select,
+.bl-si-picker-active textarea,
+.bl-si-picker-active [role="button"],
+.bl-si-picker-active [style*="cursor"] {
   cursor: crosshair !important;
 }
 
@@ -57,8 +57,8 @@
  * Hover highlight: shown on the element currently under the cursor while the
  * picker is active.
  */
-.pb-hover-highlight {
-  outline: 2px solid var(--pb-highlight-color, #f59e0b) !important;
+.bl-si-hover-highlight {
+  outline: 2px solid var(--bl-si-highlight-color, #f59e0b) !important;
   outline-offset: 1px !important;
   /* Fallback for browsers without color-mix */
   box-shadow:
@@ -66,9 +66,9 @@
     inset 0 0 0 2px rgba(245, 158, 11, 0.15) !important;
   /* Progressive enhancement: color-mix for custom highlight color support */
   box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 25%, transparent),
-    inset 0 0 0 2px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 15%, transparent) !important;
-  transition: outline var(--pb-transition-duration, 200ms) ease !important;
+    0 0 0 4px color-mix(in srgb, var(--bl-si-highlight-color, #f59e0b) 25%, transparent),
+    inset 0 0 0 2px color-mix(in srgb, var(--bl-si-highlight-color, #f59e0b) 15%, transparent) !important;
+  transition: outline var(--bl-si-transition-duration, 200ms) ease !important;
 }
 
 /* ─── Picker toolbar ────────────────────────────────────────────────────────── */
@@ -77,7 +77,7 @@
  * Fixed toolbar shown at the top of the viewport when picker is active.
  * Max z-index to sit above all page content.
  */
-.pb-toolbar {
+.bl-si-toolbar {
   all: initial; /* Reset all inherited properties */
   position: fixed !important;
   top: 0 !important;
@@ -103,7 +103,7 @@
   pointer-events: auto !important;
 }
 
-.pb-toolbar-label {
+.bl-si-toolbar-label {
   all: initial;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 13px !important;
@@ -113,7 +113,7 @@
   padding-right: 12px !important;
 }
 
-.pb-toolbar-btn-group {
+.bl-si-toolbar-btn-group {
   all: initial;
   display: flex !important;
   align-items: center !important;
@@ -121,7 +121,7 @@
   flex-shrink: 0 !important;
 }
 
-.pb-toolbar-btn {
+.bl-si-toolbar-btn {
   all: initial;
   display: inline-flex !important;
   align-items: center !important;
@@ -139,19 +139,19 @@
   white-space: nowrap !important;
 }
 
-.pb-toolbar-btn--clear {
+.bl-si-toolbar-btn--clear {
   background: rgba(255, 255, 255, 0.08) !important;
   color: #d1d5db !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
-.pb-toolbar-btn--clear:hover {
+.bl-si-toolbar-btn--clear:hover {
   background: rgba(255, 255, 255, 0.15) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: #f3f4f6 !important;
 }
 
-.pb-toolbar-btn--close {
+.bl-si-toolbar-btn--close {
   background: rgba(239, 68, 68, 0.15) !important;
   color: #fca5a5 !important;
   border-color: rgba(239, 68, 68, 0.3) !important;
@@ -161,14 +161,14 @@
   line-height: 1.4 !important;
 }
 
-.pb-toolbar-btn--close:hover {
+.bl-si-toolbar-btn--close:hover {
   background: rgba(239, 68, 68, 0.3) !important;
   border-color: rgba(239, 68, 68, 0.5) !important;
   color: #fecaca !important;
 }
 
-.pb-toolbar-btn:focus-visible {
-  outline: 2px solid var(--pb-highlight-color, #f59e0b) !important;
+.bl-si-toolbar-btn:focus-visible {
+  outline: 2px solid var(--bl-si-highlight-color, #f59e0b) !important;
   outline-offset: 2px !important;
 }
 
@@ -179,7 +179,7 @@
  * to draw a blurred frame overlay, since CSS filter on video has inconsistent
  * behaviour across browsers.
  */
-.pb-canvas-overlay {
+.bl-si-canvas-overlay {
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
@@ -196,7 +196,7 @@
  * Transient notification shown in the bottom-right corner of the viewport
  * to confirm blur/unblur actions.
  */
-.pb-toast {
+.bl-si-toast {
   all: initial;
   position: fixed !important;
   bottom: 24px !important;
@@ -216,18 +216,18 @@
   border-radius: 8px !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
-  animation: pb-toast-in 200ms ease forwards !important;
+  animation: bl-si-toast-in 200ms ease forwards !important;
   pointer-events: none !important;
   user-select: none !important;
   max-width: 320px !important;
   box-sizing: border-box !important;
 }
 
-.pb-toast--exiting {
-  animation: pb-toast-out 200ms ease forwards !important;
+.bl-si-toast--exiting {
+  animation: bl-si-toast-out 200ms ease forwards !important;
 }
 
-.pb-toast__message {
+.bl-si-toast__message {
   all: initial;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 13px !important;
@@ -235,7 +235,7 @@
   line-height: 1.4 !important;
 }
 
-@keyframes pb-toast-in {
+@keyframes bl-si-toast-in {
   from {
     opacity: 0;
     transform: translateY(10px) scale(0.96);
@@ -246,7 +246,7 @@
   }
 }
 
-@keyframes pb-toast-out {
+@keyframes bl-si-toast-out {
   from {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -263,41 +263,41 @@
  * Sticky blur zones — backdrop-filter overlays positioned absolutely over
  * page content. Created by the picker in sticky mode, restored on page load.
  */
-.pb-zone-overlay {
+.bl-si-zone-overlay {
   position: absolute !important;
-  backdrop-filter: blur(var(--pb-radius, 10px)) !important;
-  -webkit-backdrop-filter: blur(var(--pb-radius, 10px)) !important;
+  backdrop-filter: blur(var(--bl-si-radius, 10px)) !important;
+  -webkit-backdrop-filter: blur(var(--bl-si-radius, 10px)) !important;
   background: rgba(128, 128, 128, 0.05) !important;
   border: 1px dashed rgba(128, 128, 128, 0.3) !important;
   z-index: 2147483640 !important;
   pointer-events: none !important;
-  transition: opacity var(--pb-transition-duration, 200ms) !important;
+  transition: opacity var(--bl-si-transition-duration, 200ms) !important;
 }
 
 /* In picker mode, zones become interactive (click to remove) */
-.pb-picker-active .pb-zone-overlay {
+.bl-si-picker-active .bl-si-zone-overlay {
   pointer-events: auto !important;
   cursor: pointer !important;
-  border-color: var(--pb-highlight-color, #f59e0b) !important;
+  border-color: var(--bl-si-highlight-color, #f59e0b) !important;
 }
 
 /* Drawing preview while dragging in sticky picker mode */
-.pb-zone-drawing {
+.bl-si-zone-drawing {
   position: fixed !important;
   background: rgba(245, 158, 11, 0.15) !important;
-  border: 2px solid var(--pb-highlight-color, #f59e0b) !important;
+  border: 2px solid var(--bl-si-highlight-color, #f59e0b) !important;
   z-index: 2147483645 !important;
   pointer-events: none !important;
 }
 
 /* Hover highlight on existing zone in picker mode */
-.pb-zone-overlay.pb-zone-highlight {
+.bl-si-zone-overlay.bl-si-zone-highlight {
   border-color: #ef4444 !important;
   background: rgba(239, 68, 68, 0.1) !important;
 }
 
 /* Zone name label (shown on hover in picker mode) */
-.pb-zone-label {
+.bl-si-zone-label {
   position: absolute !important;
   top: -24px !important;
   left: 0 !important;
@@ -319,15 +319,15 @@
  * on print would defeat the purpose of the extension.
  */
 @media print {
-  [data-pb-blur] {
-    filter: blur(var(--pb-radius, 10px)) !important;
+  [data-bl-si-blur] {
+    filter: blur(var(--bl-si-radius, 10px)) !important;
     user-select: none !important;
   }
 
   /* Hide picker UI, toasts, and zone overlays — transient or already blurred */
-  .pb-toolbar,
-  .pb-toast,
-  .pb-zone-overlay {
+  .bl-si-toolbar,
+  .bl-si-toast,
+  .bl-si-zone-overlay {
     display: none !important;
   }
 }

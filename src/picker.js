@@ -1,22 +1,22 @@
 /**
  * picker.js — PrivacyBlur Element Picker
  *
- * Exposed as pb.Picker (IIFE — no ES module syntax).
+ * Exposed as blsi.Picker (IIFE — no ES module syntax).
  *
  * Two-mode picker:
  *  - Sticky mode: user drags to draw a rectangle → creates a zone overlay
  *  - Dynamic mode: user hovers and clicks an element → blurs/unblurs it
  *
  * Activated/deactivated programmatically by content_script.js.
- * Depends on pb.BlurEngine (loaded before this file via manifest.json).
+ * Depends on blsi.BlurEngine (loaded before this file via manifest.json).
  */
 
 const Picker = (() => {
   'use strict';
 
-  const CLS = pb.CSS || {};
-  const _IDS = pb.IDS || {};
-  const PM = pb.PICKER_MODES || { STICKY: 'sticky', DYNAMIC: 'dynamic' };
+  const CLS = blsi.CSS || {};
+  const _IDS = blsi.IDS || {};
+  const PM = blsi.PICKER_MODES || { STICKY: 'sticky', DYNAMIC: 'dynamic' };
   const MIN_ZONE_SIZE = 10;
 
   // ─── Internal state ──────────────────────────────────────────────────────────
@@ -34,8 +34,8 @@ const Picker = (() => {
 
   /** Active settings snapshot: { blurRadius, highlightColor, pickerMode, … } */
   let activeSettings = {
-    blurRadius: pb.DEFAULT_SETTINGS.BLUR_RADIUS,
-    highlightColor: pb.DEFAULT_SETTINGS.HIGHLIGHT_COLOR,
+    blurRadius: blsi.DEFAULT_SETTINGS.BLUR_RADIUS,
+    highlightColor: blsi.DEFAULT_SETTINGS.HIGHLIGHT_COLOR,
   };
 
   /** Callbacks provided by content_script: { onBlur, onUnblur, onStickyBlur, onStickyUnblur, onDeactivate, onModeChange } */
@@ -97,9 +97,9 @@ const Picker = (() => {
     if (toolbarEl) return;
 
     toolbarEl = document.createElement('div');
-    toolbarEl.id = (_IDS.PICKER_TOOLBAR || 'pb-picker-toolbar');
-    toolbarEl.className = (CLS.TOOLBAR || 'pb-toolbar');
-    toolbarEl.setAttribute('data-pb-toolbar', 'true');
+    toolbarEl.id = (_IDS.PICKER_TOOLBAR || 'bl-si-picker-toolbar');
+    toolbarEl.className = (CLS.TOOLBAR || 'bl-si-toolbar');
+    toolbarEl.setAttribute('data-bl-si-toolbar', 'true');
 
     // Bubble-phase stopPropagation: prevents toolbar events from reaching
     // page handlers, but lets events propagate DOWN through the toolbar's
@@ -139,7 +139,7 @@ const Picker = (() => {
     });
 
     toolbarLabelEl = document.createElement('span');
-    toolbarLabelEl.className = (CLS.TOOLBAR_LABEL || 'pb-toolbar-label');
+    toolbarLabelEl.className = (CLS.TOOLBAR_LABEL || 'bl-si-toolbar-label');
     toolbarLabelEl.textContent = _modeLabel();
 
     leftGroup.appendChild(modeSelectEl);
@@ -147,10 +147,10 @@ const Picker = (() => {
 
     // ── Right: action buttons ──────────────────────────────────────────────
     const btnGroup = document.createElement('div');
-    btnGroup.className = 'pb-toolbar-btn-group';
+    btnGroup.className = 'bl-si-toolbar-btn-group';
 
     const clearBtn = document.createElement('button');
-    clearBtn.className = 'pb-toolbar-btn pb-toolbar-btn--clear';
+    clearBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--clear';
     clearBtn.textContent = 'Clear all';
     clearBtn.title = 'Remove all blur from this page';
     clearBtn.addEventListener('click', (e) => {
@@ -159,7 +159,7 @@ const Picker = (() => {
     });
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'pb-toolbar-btn pb-toolbar-btn--close';
+    closeBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--close';
     closeBtn.textContent = '\u00d7';
     closeBtn.title = 'Exit picker mode';
     closeBtn.setAttribute('aria-label', 'Close picker');
@@ -191,7 +191,7 @@ const Picker = (() => {
       if (typeof activeCallbacks.onUnblur === 'function') {
         activeCallbacks.onUnblur(el);
       } else {
-        pb.BlurEngine.removeBlur(el);
+        blsi.BlurEngine.removeBlur(el);
       }
     }
     selectedElements.clear();
@@ -208,7 +208,7 @@ const Picker = (() => {
 
     // Clean up dynamic mode state
     if (hoveredElement) {
-      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
+      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
       hoveredElement = null;
     }
 
@@ -235,12 +235,12 @@ const Picker = (() => {
     if (target === toolbarEl || (toolbarEl && toolbarEl.contains(target))) return;
 
     // Check if clicking an existing zone overlay → remove it
-    if (target.dataset && target.dataset.pbZone !== undefined) {
+    if (target.dataset && target.dataset.blSiZone !== undefined) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
       if (typeof activeCallbacks.onStickyUnblur === 'function') {
-        activeCallbacks.onStickyUnblur(target.dataset.pbZone);
+        activeCallbacks.onStickyUnblur(target.dataset.blSiZone);
       }
       _clearZoneHighlight();
       return;
@@ -250,7 +250,7 @@ const Picker = (() => {
     e.stopPropagation();
 
     const previewEl = document.createElement('div');
-    previewEl.className = (CLS.ZONE_DRAWING || 'pb-zone-drawing');
+    previewEl.className = (CLS.ZONE_DRAWING || 'bl-si-zone-drawing');
 
     drawState = {
       startX: e.clientX,
@@ -299,8 +299,8 @@ const Picker = (() => {
       drawState = null;
       if (dx > 2 || dy > 2) {
         // User tried to draw but too small — show feedback
-        if (pb.Shortcuts && pb.Shortcuts.showToast) {
-          pb.Shortcuts.showToast('Area too small (min ' + MIN_ZONE_SIZE + 'px)');
+        if (blsi.Shortcuts && blsi.Shortcuts.showToast) {
+          blsi.Shortcuts.showToast('Area too small (min ' + MIN_ZONE_SIZE + 'px)');
         }
       }
       return;
@@ -350,14 +350,14 @@ const Picker = (() => {
     if (target === toolbarEl || (toolbarEl && toolbarEl.contains(target))) return;
 
     // Check if hovering over a zone overlay
-    if (target.dataset && target.dataset.pbZone !== undefined) {
+    if (target.dataset && target.dataset.blSiZone !== undefined) {
       if (_highlightedZone === target) return;
       _clearZoneHighlight();
       _highlightedZone = target;
-      target.classList.add((CLS.ZONE_HIGHLIGHT || 'pb-zone-highlight'));
+      target.classList.add((CLS.ZONE_HIGHLIGHT || 'bl-si-zone-highlight'));
 
       // Show name label
-      const name = target.dataset.pbZoneName || target.dataset.pbZone;
+      const name = target.dataset.blSiZoneName || target.dataset.blSiZone;
       _showZoneLabel(target, name);
     } else if (_highlightedZone) {
       _clearZoneHighlight();
@@ -367,7 +367,7 @@ const Picker = (() => {
   function _showZoneLabel(zoneEl, text) {
     _hideZoneLabel();
     _zoneLabelEl = document.createElement('div');
-    _zoneLabelEl.className = (CLS.ZONE_LABEL || 'pb-zone-label');
+    _zoneLabelEl.className = (CLS.ZONE_LABEL || 'bl-si-zone-label');
     _zoneLabelEl.textContent = text;
     zoneEl.appendChild(_zoneLabelEl);
   }
@@ -381,7 +381,7 @@ const Picker = (() => {
 
   function _clearZoneHighlight() {
     if (_highlightedZone) {
-      _highlightedZone.classList.remove((CLS.ZONE_HIGHLIGHT || 'pb-zone-highlight'));
+      _highlightedZone.classList.remove((CLS.ZONE_HIGHLIGHT || 'bl-si-zone-highlight'));
       _hideZoneLabel();
       _highlightedZone = null;
     }
@@ -393,7 +393,7 @@ const Picker = (() => {
     let node = el;
     while (node && node !== document.body && node !== document.documentElement) {
       if (node.className && typeof node.className === 'string') {
-        const siteClasses = node.className.trim().split(/\s+/).filter(c => !c.startsWith('pb-'));
+        const siteClasses = node.className.trim().split(/\s+/).filter(c => !c.startsWith('bl-si-'));
         if (siteClasses.length > 0) return node;
       }
       node = node.parentElement;
@@ -418,15 +418,15 @@ const Picker = (() => {
     let target = resolveTarget(e.target);
     if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
 
-    if (!pb.BlurEngine.isBlurred(target)) {
+    if (!blsi.BlurEngine.isBlurred(target)) {
       target = findClassedParent(target);
     }
 
     if (hoveredElement && hoveredElement !== target) {
-      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
+      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
     }
     hoveredElement = target;
-    hoveredElement.classList.add((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
+    hoveredElement.classList.add((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
   }
 
   function onMouseOut(e) {
@@ -443,7 +443,7 @@ const Picker = (() => {
     // Dynamic mode
     const target = resolveTarget(e.target);
     if (target) {
-      target.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
+      target.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
     }
     if (hoveredElement === target) {
       hoveredElement = null;
@@ -487,7 +487,7 @@ const Picker = (() => {
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    const alreadyBlurred = pb.BlurEngine.isBlurred(target);
+    const alreadyBlurred = blsi.BlurEngine.isBlurred(target);
     if (!alreadyBlurred) {
       target = findClassedParent(target);
     }
@@ -496,7 +496,7 @@ const Picker = (() => {
       if (typeof activeCallbacks.onUnblur === 'function') {
         activeCallbacks.onUnblur(target);
       } else {
-        pb.BlurEngine.removeBlur(target);
+        blsi.BlurEngine.removeBlur(target);
       }
       selectedElements.delete(target);
       flashElementIndicator(target, 'Unblurred');
@@ -504,7 +504,7 @@ const Picker = (() => {
       if (typeof activeCallbacks.onBlur === 'function') {
         activeCallbacks.onBlur(target);
       } else {
-        pb.BlurEngine.applyBlur(target, activeSettings.blurRadius);
+        blsi.BlurEngine.applyBlur(target, activeSettings.blurRadius);
       }
       selectedElements.add(target);
       flashElementIndicator(target, 'Blurred');
@@ -541,7 +541,7 @@ const Picker = (() => {
       currentMode = (settings && settings.pickerMode === PM.DYNAMIC) ? PM.DYNAMIC : PM.STICKY;
     }
 
-    document.documentElement.classList.add((CLS.PICKER_ACTIVE || 'pb-picker-active'));
+    document.documentElement.classList.add((CLS.PICKER_ACTIVE || 'bl-si-picker-active'));
     buildToolbar();
 
     // Capture-phase listeners for all modes
@@ -569,14 +569,14 @@ const Picker = (() => {
     document.removeEventListener('mousemove', onMouseMove, true);
     document.removeEventListener('mouseup', onMouseUp, true);
 
-    const highlighted = document.querySelectorAll('.pb-hover-highlight');
+    const highlighted = document.querySelectorAll('.bl-si-hover-highlight');
     for (const el of highlighted) {
-      el.classList.remove((CLS.HOVER_HIGHLIGHT || 'pb-hover-highlight'));
+      el.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
     }
     hoveredElement = null;
     selectedElements.clear();
 
-    document.documentElement.classList.remove((CLS.PICKER_ACTIVE || 'pb-picker-active'));
+    document.documentElement.classList.remove((CLS.PICKER_ACTIVE || 'bl-si-picker-active'));
     removeToolbar();
 
     if (typeof activeCallbacks.onDeactivate === 'function') {
@@ -600,4 +600,4 @@ const Picker = (() => {
 
 })();
 
-pb.Picker = Picker;
+blsi.Picker = Picker;

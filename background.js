@@ -2,11 +2,11 @@
 
 importScripts('src/constants.js', 'src/logger.js');
 
-const MSG = self.pb;
-const log = pb.Logger;
+const MSG = self.blsi;
+const log = blsi.Logger;
 
 /**
- * background.js — PrivacyBlur MV3 Service Worker
+ * background.js — Blurry Site MV3 Service Worker
  *
  * Responsibilities:
  *  - Relay keyboard command events to the active tab's content script
@@ -14,8 +14,8 @@ const log = pb.Logger;
  *  - Manage the right-click context menu entries
  *  - Re-apply persisted blur state whenever a tab finishes loading
  *
- * Settings and deepMerge are sourced from constants.js (pb.DEFAULT_SETTINGS,
- * pb.deepMerge). No local copies.
+ * Settings and deepMerge are sourced from constants.js (blsi.DEFAULT_SETTINGS,
+ * blsi.deepMerge). No local copies.
  */
 
 // ---------------------------------------------------------------------------
@@ -24,13 +24,13 @@ const log = pb.Logger;
 function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: "pb-blur-element",
+      id: "bl-si-blur-element",
       title: "Blur this element",
       contexts: ["all"]
     });
 
     chrome.contextMenus.create({
-      id: "pb-unblur-element",
+      id: "bl-si-unblur-element",
       title: "Unblur this element",
       contexts: ["all"]
     });
@@ -66,9 +66,9 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) return;
 
-  if (info.menuItemId === "pb-blur-element") {
+  if (info.menuItemId === "bl-si-blur-element") {
     chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_BLUR }).catch(() => {});
-  } else if (info.menuItemId === "pb-unblur-element") {
+  } else if (info.menuItemId === "bl-si-unblur-element") {
     chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_UNBLUR }).catch(() => {});
   }
 });
@@ -151,7 +151,7 @@ function serialWrite(fn) {
       ),
     ]);
   }).catch((err) => {
-    console.error('[PrivacyBlur] serialWrite error:', err?.message || err);
+    console.error('[BlurrySite] serialWrite error:', err?.message || err);
   });
   return writeQueue;
 }

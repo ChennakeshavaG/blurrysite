@@ -18,7 +18,7 @@
 ## Top 6 Must-Fix Before Release
 
 1. **Firefox: background.js crashes** — `importScripts()` undefined in Firefox event page context. Entire background broken. No storage, no persistence, no message handling.
-2. **E2E tests broken** — reference removed APIs (blurAllContent, .pb-blurred)
+2. **E2E tests broken** — reference removed APIs (blurAllContent, .bl-si-blurred)
 3. **startDomObserver before Engine init** — keyboard shortcut before init → crash
 4. **serialWrite queue stall** — background becomes unresponsive
 5. **_revealedElements memory leak** — Set grows unbounded

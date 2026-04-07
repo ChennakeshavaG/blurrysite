@@ -13,7 +13,7 @@
 - **Height:** Let content dictate height, but aim for 400–500px max before scrolling. Users expect popups to be compact — if it needs more space, consider an options page.
 - **Chrome auto-sizes** the popup to fit content (up to the max), so set `min-width` on `<body>` to prevent jittery resizing, but avoid setting a fixed height.
 
-**Recommendation for PrivacyBlur:** Target 360px wide, let height flow naturally, cap at ~480px with internal scroll for overflow.
+**Recommendation for BlurrySite:** Target 360px wide, let height flow naturally, cap at ~480px with internal scroll for overflow.
 
 ---
 
@@ -69,7 +69,7 @@
 - When disabled, **grey out** the rest of the UI but keep it visible (don't hide it)
 - Dark Reader and Privacy Badger both do this well
 
-**Recommendation for PrivacyBlur:** A prominent toggle at top: "PrivacyBlur active on [domain]" with a toggle switch. Disabling it should unblur everything on the current page and grey out controls below.
+**Recommendation for BlurrySite:** A prominent toggle at top: "BlurrySite active on [domain]" with a toggle switch. Disabling it should unblur everything on the current page and grey out controls below.
 
 ### Collapsible Sections vs Tabs vs Scrolling
 - **Collapsible sections (accordions):** Best when you have 3–5 groups of related settings that users access infrequently. Keeps the popup compact. Risk: users don't discover collapsed content.
@@ -130,7 +130,7 @@
 - **Hover states:** Lighten background by ~8% (e.g., `#2d2d3d` → `#3a3a4a`), don't darken.
 - **Scrollbars:** Style thin and subtle (`scrollbar-width: thin; scrollbar-color: #555 transparent`).
 
-**Recommendation:** PrivacyBlur already uses a good 3-tier palette: base (`#1a1a2e`), surface (`#16213e`), elevated (`#2d2d4a`). Keep this. Consider teal/blue accent as alternative to amber for trust signaling, but amber is also fine for a "safety" extension.
+**Recommendation:** BlurrySite already uses a good 3-tier palette: base (`#1a1a2e`), surface (`#16213e`), elevated (`#2d2d4a`). Keep this. Consider teal/blue accent as alternative to amber for trust signaling, but amber is also fine for a "safety" extension.
 
 ---
 
@@ -201,11 +201,11 @@ Chrome extensions don't run on mobile Chrome, but considerations still apply:
 
 5. **Tooltip on hover:** "This setting only affects example.com" — good as supplementary, not primary indicator.
 
-**Recommendation for PrivacyBlur:** Use approach #1 (section headers) combined with #2 (icons). The top section is clearly labeled with the current domain and a site icon. Any global controls below are prefixed with a globe icon and labeled "All Sites."
+**Recommendation for BlurrySite:** Use approach #1 (section headers) combined with #2 (icons). The top section is clearly labeled with the current domain and a site icon. Any global controls below are prefixed with a globe icon and labeled "All Sites."
 
 ---
 
-## Summary: Specific Recommendations for PrivacyBlur Popup Redesign
+## Summary: Specific Recommendations for BlurrySite Popup Redesign
 
 | Aspect | Recommendation |
 |---|---|

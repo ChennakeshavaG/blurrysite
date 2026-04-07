@@ -10,10 +10,10 @@ Every file in src/ must follow this exact structure:
 /**
  * module_name.js — one-line purpose
  *
- * Exposed as window.PrivacyBlurXxx (IIFE — no ES module syntax).
+ * Exposed as blsi.Xxx (IIFE — no ES module syntax).
  */
 
-const PrivacyBlurXxx = (() => {
+const BlurrySiteXxx = (() => {
   'use strict';
 
   // private state here
@@ -23,13 +23,13 @@ const PrivacyBlurXxx = (() => {
   return { publicMethod };
 })();
 
-window.PrivacyBlurXxx = PrivacyBlurXxx;
+blsi.Xxx = BlurrySiteXxx;
 ```
 
 Rules:
 - No `import` / `export` / `require` anywhere.
 - One `window.*` assignment per file, at the very end.
-- The global name is always `PrivacyBlur` + PascalCase module name.
+- The global name is always `BlurrySite` + PascalCase module name.
 - `'use strict'` inside the IIFE.
 
 ---
@@ -37,12 +37,12 @@ Rules:
 ## Module Load Order (enforced by manifest.json)
 
 ```
-0. constants.js        → globalThis.PrivacyBlur (message types + DEFAULTS)
-1. selector_utils.js   → window.PrivacyBlurSelectorUtils
-2. storage_manager.js  → window.PrivacyBlurStorage
-3. blur_engine.js      → window.PrivacyBlurEngine
-4. shortcut_handler.js → window.PrivacyBlurShortcuts
-5. picker.js           → window.PrivacyBlurPicker
+0. constants.js        → globalThis.BlurrySite (message types + DEFAULTS)
+1. selector_utils.js   → blsi.SelectorUtils
+2. storage_manager.js  → blsi.Storage
+3. blur_engine.js      → blsi.BlurEngine
+4. shortcut_handler.js → blsi.Shortcuts
+5. picker.js           → blsi.Picker
 6. content_script.js   → (no global, binds all above)
 ```
 
@@ -56,16 +56,16 @@ A module may only depend on modules loaded before it.
 ### blur_engine.js
 - `applyBlur` is idempotent — always guard with `if (isBlurred(el)) return`.
 - Video elements use `videoOverlayMap` (WeakMap) to track canvas + RAF handle. Never store canvas on `el._pbCanvas` — that was a previous iteration.
-- Canvas class must be `"pb-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
-- IMG blur: `data-pb-blur` attribute + CSS rule `[data-pb-blur] { filter: blur(var(--pb-radius)) }`. No inline `style.filter`.
+- Canvas class must be `"bl-si-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
+- IMG blur: `data-bl-si-blur` attribute + CSS rule `[data-bl-si-blur] { filter: blur(var(--bl-si-radius)) }`. No inline `style.filter`.
 
 #### Zone overlay methods
-- `createZoneOverlay(zoneData)` appends an overlay `<div>` to `document.body`. Overlays use the `data-pb-zone` attribute (set to `zoneData.id`) for identification.
+- `createZoneOverlay(zoneData)` appends an overlay `<div>` to `document.body`. Overlays use the `data-bl-si-zone` attribute (set to `zoneData.id`) for identification.
 - `removeZoneOverlay(zoneId)` removes the overlay matching `zoneId` from DOM and internal tracking.
 - `getZoneOverlays()` returns an array of all active zone overlay elements.
 - `removeAllZoneOverlays()` removes all zone overlays from DOM and tracking.
 - `unblurAll()` also calls `removeAllZoneOverlays()` to clean up zones alongside blurred elements.
-- `_isExtensionUI` excludes zone overlays (elements with `pb-zone-overlay` class) from being treated as blur targets.
+- `_isExtensionUI` excludes zone overlays (elements with `bl-si-zone-overlay` class) from being treated as blur targets.
 
 #### Category-based blurring
 - `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[] }`. Keys are UPPER_SNAKE_CASE: TEXT, MEDIA, FORM, TABLE, STRUCTURE. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
@@ -76,7 +76,7 @@ A module may only depend on modules loaded before it.
 ### selector_utils.js
 - `getSelector(body)` and `getSelector(documentElement)` must return `null` — tests assert this.
 - `getSelector(null)` must return `null` (not empty string).
-- Strategy: unique id → stamp `data-pb-id`. No nth-child path (removed — breaks tests).
+- Strategy: unique id → stamp `data-bl-si-id`. No nth-child path (removed — breaks tests).
 - `generateId()` returns an 8-char lowercase hex string.
 
 ### storage_manager.js
@@ -98,17 +98,17 @@ A module may only depend on modules loaded before it.
 - `_setPickerActive(v)` must be in the public return object.
 
 ### picker.js
-- Toolbar: `toolbarEl.id = "pb-picker-toolbar"` (tests use `getElementById`).
+- Toolbar: `toolbarEl.id = "bl-si-picker-toolbar"` (tests use `getElementById`).
 - Toolbar appended to `document.body`, not `document.documentElement`.
-- Blur/unblur decision: use `pb.BlurEngine.isBlurred(target)` to detect both data-attribute and CSS-tag-rule blurs.
-- Do not call `PrivacyBlurSelectorUtils` inside picker — it is not picker's responsibility.
+- Blur/unblur decision: use `blsi.BlurEngine.isBlurred(target)` to detect both data-attribute and CSS-tag-rule blurs.
+- Do not call `blsi.SelectorUtils` inside picker — it is not picker's responsibility.
 - All event listeners at capture phase. `onClick` calls `stopPropagation` + `stopImmediatePropagation`.
 
 ### content_script.js
-- Module aliases (`Engine`, `Store`, etc.) are assigned synchronously at the top of the IIFE — all `pb.*` globals are available at load time via manifest script order.
+- Module aliases (`Engine`, `Store`, etc.) are assigned synchronously at the top of the IIFE — all `blsi.*` globals are available at load time via manifest script order.
 - Call `Shortcuts._setPickerActive(true/false)` whenever `isPickerActive` changes.
 - Pass `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
-- `GET_STATUS` response: count blurred elements as `document.querySelectorAll('[data-pb-blur]').length`.
+- `GET_STATUS` response: count blurred elements as `document.querySelectorAll('[data-bl-si-blur]').length`.
 - Async message handlers that need `sendResponse` must `return true` from `handleMessage`.
 - `settings.BLUR_CATEGORIES` is `{ TEXT, MEDIA, FORM, TABLE, STRUCTURE }` (UPPER_SNAKE_CASE).
 - `TOGGLE_BLUR_ALL` passes `{ categories: settings.BLUR_CATEGORIES, thoroughBlur: settings.THOROUGH_BLUR }` to `Engine.blurAllContent`.

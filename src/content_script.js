@@ -1,15 +1,15 @@
 /**
- * privacyblur — content_script.js
+ * blurrysite — content_script.js
  *
  * Main content script injected into every page. Coordinates all modules via
- * the pb.* namespace, loaded before this script via manifest.json.
+ * the blsi.* namespace, loaded before this script via manifest.json.
  */
 
 (() => {
   'use strict';
 
-  const MSG = pb;
-  const CATEGORY_KEYS = Object.keys(pb.BlurEngine.CATEGORY_SELECTORS);
+  const MSG = blsi;
+  const CATEGORY_KEYS = Object.keys(blsi.BlurEngine.CATEGORY_SELECTORS);
   const RM = MSG.REVEAL_MODES;
   const BM = MSG.BLUR_MODES;
   const PT = MSG.PATTERN_TYPES;
@@ -50,11 +50,11 @@
 
   // ─── Module aliases (synchronous — loaded before this script by manifest) ──
 
-  const Engine    = pb.BlurEngine;
-  const Store     = pb.Storage;
-  const Selector  = pb.SelectorUtils;
-  const Picker    = pb.Picker;
-  const Shortcuts = pb.Shortcuts;
+  const Engine    = blsi.BlurEngine;
+  const Store     = blsi.Storage;
+  const Selector  = blsi.SelectorUtils;
+  const Picker    = blsi.Picker;
+  const Shortcuts = blsi.Shortcuts;
 
   // ─── Repaint: single source of truth ──────────────────────────────────────────
   // Reads ALL blur state from storage and re-renders the DOM to match.
@@ -162,12 +162,12 @@
   }
 
   // ── Logger alias ──────────────────────────────────────────────────────────
-  const log = pb.Logger;
+  const log = blsi.Logger;
 
-  // ── MutationObserver: stamp data-pb-blur on new text-check elements ──────
+  // ── MutationObserver: stamp data-bl-si-blur on new text-check elements ──────
   // Always-blur tags are handled by CSS rules (auto-apply, no JS needed).
   // Text-check tags need the hasMeaningfulTextContent gate, so MO watches
-  // for new ones and stamps data-pb-blur. Uses data attribute instead of
+  // for new ones and stamps data-bl-si-blur. Uses data attribute instead of
   // classList to avoid triggering site framework re-render loops.
 
   function startDomObserver() {
@@ -182,7 +182,7 @@
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
           // Skip zone overlay elements — they are our own injected divs
-          if (node.dataset && node.dataset.pbZone !== undefined) continue;
+          if (node.dataset && node.dataset.blSiZone !== undefined) continue;
           // Stamp the node itself if it's a text-check element with text
           Engine.tryBlurTextCheck(node, settings.THOROUGH_BLUR);
           // Also check descendants
@@ -484,7 +484,7 @@
     }
   }
 
-  /** Find the nearest blurred element (data-pb-blur or CSS-rule-blurred tag) */
+  /** Find the nearest blurred element (data-bl-si-blur or CSS-rule-blurred tag) */
   function findBlurredTarget(el) {
     let node = el;
     while (node && node !== document.documentElement) {
@@ -498,7 +498,7 @@
   const _revealedElements = new Set();
 
   function _isZoneOverlay(el) {
-    return el && el.dataset && el.dataset.pbZone !== undefined;
+    return el && el.dataset && el.dataset.blSiZone !== undefined;
   }
 
   /** Unified reveal — works for both regular blurred elements and zone overlays. */
@@ -508,7 +508,7 @@
       el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
     } else {
       el.style.setProperty('filter', 'none', 'important');
-      // Reveal ALL blurred descendants (data-pb-blur + CSS tag rules)
+      // Reveal ALL blurred descendants (data-bl-si-blur + CSS tag rules)
       el.querySelectorAll('*').forEach(child => {
         if (Engine.isBlurred(child)) {
           child.style.setProperty('filter', 'none', 'important');
@@ -777,7 +777,7 @@
 
       // ── Status query ──────────────────────────────────────────────────────
       case MSG.GET_STATUS: {
-        const blurredCount = document.querySelectorAll('[data-pb-blur]').length;
+        const blurredCount = document.querySelectorAll('[data-bl-si-blur]').length;
         if (sendResponse) sendResponse({ isPageBlurred, isPickerActive, blurredCount });
         break;
       }
@@ -865,9 +865,9 @@
   // ─── Apply CSS custom properties ─────────────────────────────────────────────
 
   function applySettingsToDom() {
-    document.documentElement.style.setProperty('--pb-radius', `${settings.BLUR_RADIUS}px`);
-    document.documentElement.style.setProperty('--pb-highlight-color', settings.HIGHLIGHT_COLOR);
-    document.documentElement.style.setProperty('--pb-transition-duration', `${settings.TRANSITION_DURATION}ms`);
+    document.documentElement.style.setProperty('--bl-si-radius', `${settings.BLUR_RADIUS}px`);
+    document.documentElement.style.setProperty('--bl-si-highlight-color', settings.HIGHLIGHT_COLOR);
+    document.documentElement.style.setProperty('--bl-si-transition-duration', `${settings.TRANSITION_DURATION}ms`);
   }
 
   // ─── Idempotent state application ─────────────────────────────────────────────
@@ -1004,7 +1004,7 @@
       const resolved = resolveSettings(currentUrl, globalSettings, rules);
       applyState(resolved, prev);
     } catch (err) {
-      console.warn('[PrivacyBlur] URL change handler error:', err.message, err.stack);
+      console.warn('[BlurrySite] URL change handler error:', err.message, err.stack);
     }
   }
 

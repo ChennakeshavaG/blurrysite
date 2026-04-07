@@ -6,7 +6,7 @@
 
 `el.querySelectorAll('*')` + `Engine.isBlurred(child)` on every descendant. For a div with 1000+ children → O(n) DOM query + O(n) checks.
 
-**Fix:** Query `[data-pb-blur]` instead of `*` — only data-attribute blurred descendants need inline override. CSS-rule-blurred children inherit filter:none from the parent.
+**Fix:** Query `[data-bl-si-blur]` instead of `*` — only data-attribute blurred descendants need inline override. CSS-rule-blurred children inherit filter:none from the parent.
 
 ---
 

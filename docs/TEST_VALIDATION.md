@@ -1,4 +1,4 @@
-# PrivacyBlur — Test Validation & Manual Replication Guide
+# Blurry Site — Test Validation & Manual Replication Guide
 
 **227 unit tests across 6 test files.** All validated 2026-04-07.
 
@@ -10,22 +10,22 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 1 | adds pb-blurred class to element | DevTools console: `PrivacyBlurEngine.applyBlur(document.querySelector('div'), 8)`. Inspect element — `pb-blurred` class present. |
-| 2 | sets --pb-radius CSS custom property | Same as above with radius 12. Styles pane shows `--pb-radius: 12px` inline. |
-| 3 | uses default radius of 8px when not specified | `PrivacyBlurEngine.applyBlur(el)` — no second arg. Check `--pb-radius: 8px`. |
+| 1 | adds bl-si-blurred class to element | DevTools console: `PrivacyBlurEngine.applyBlur(document.querySelector('div'), 8)`. Inspect element — `bl-si-blurred` class present. |
+| 2 | sets --bl-si-radius CSS custom property | Same as above with radius 12. Styles pane shows `--bl-si-radius: 12px` inline. |
+| 3 | uses default radius of 8px when not specified | `PrivacyBlurEngine.applyBlur(el)` — no second arg. Check `--bl-si-radius: 8px`. |
 | 4 | applies CSS filter directly on img elements | Select an `<img>`, apply blur with radius 10. Image appears blurred. Elements panel shows `style="filter: blur(10px)"`. |
-| 5 | creates canvas overlay for video elements | Find an HTML5 `<video>`, apply blur. A `<canvas class="pb-canvas-overlay">` appears as sibling in DOM. |
+| 5 | creates canvas overlay for video elements | Find an HTML5 `<video>`, apply blur. A `<canvas class="bl-si-canvas-overlay">` appears as sibling in DOM. |
 | 6 | starts RAF animation loop for video elements | Blur a playing video. Performance panel shows continuous animation frame callbacks. Canvas updates with video frames. |
 | 7 | does not throw on null element | `PrivacyBlurEngine.applyBlur(null)` — no error in console. |
 | 8 | does not throw on element not in DOM | `let d = document.createElement('div'); PrivacyBlurEngine.applyBlur(d, 8)` — no error. |
-| 9 | calling applyBlur twice is idempotent | Blur same element twice. Only one `pb-blurred` class, no duplicate side effects. |
+| 9 | calling applyBlur twice is idempotent | Blur same element twice. Only one `bl-si-blurred` class, no duplicate side effects. |
 
 ### removeBlur (6 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 10 | removes pb-blurred class | Blur then unblur any element. Class disappears, visual blur gone. |
-| 11 | clears --pb-radius custom property | Blur with custom radius, unblur. `--pb-radius` gone from styles. |
+| 10 | removes bl-si-blurred class | Blur then unblur any element. Class disappears, visual blur gone. |
+| 11 | clears --bl-si-radius custom property | Blur with custom radius, unblur. `--bl-si-radius` gone from styles. |
 | 12 | removes canvas overlay from DOM for video | Blur a video (canvas appears), unblur — canvas removed from DOM. |
 | 13 | cancels rAF loop on video removeBlur | Blur+unblur video. Performance panel shows RAF callbacks stop. |
 | 14 | does not throw on null element | `PrivacyBlurEngine.removeBlur(null)` — no error. |
@@ -65,14 +65,14 @@
 | 28 | removes blur from all blurred elements | Blur several elements, `unblurAll()`. All return to normal. |
 | 29 | does not affect non-blurred elements | Note unblurred element state, `unblurAll()`, verify unchanged. |
 | 30 | does not throw on empty DOM | `about:blank`, `unblurAll()` — no error. |
-| 31 | cleans up orphaned canvas overlays | Manually insert `<canvas class="pb-canvas-overlay">`, `unblurAll()` — canvas removed. |
-| 32 | cleans up orphaned text-node wrappers | Insert `<span class="pb-text-node-wrapper">text</span>`, `unblurAll()` — span replaced by text. |
+| 31 | cleans up orphaned canvas overlays | Manually insert `<canvas class="bl-si-canvas-overlay">`, `unblurAll()` — canvas removed. |
+| 32 | cleans up orphaned text-node wrappers | Insert `<span class="bl-si-text-node-wrapper">text</span>`, `unblurAll()` — span replaced by text. |
 
 ### Text content handling (3 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 33 | wraps bare text nodes in span | Find `<div>` with only text, blur it. DOM shows text inside `<span class="pb-text-node-wrapper">`. |
+| 33 | wraps bare text nodes in span | Find `<div>` with only text, blur it. DOM shows text inside `<span class="bl-si-text-node-wrapper">`. |
 | 34 | unwraps text nodes when removing blur | Blur then unblur text div. Wrapper disappears, text restored. |
 | 35 | does not wrap whitespace-only text nodes | Create `<div>   </div>`, blur — no wrapper appears. |
 
@@ -80,7 +80,7 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 36 | applies blur class to elements with background-image | Find div with CSS `background-image` (hero banner), blur. Class `pb-blurred` applied. |
+| 36 | applies blur class to elements with background-image | Find div with CSS `background-image` (hero banner), blur. Class `bl-si-blurred` applied. |
 | 37 | does not apply direct style.filter on background-image elements | Same element — `style.filter` should NOT be set inline. Blur via CSS class only. |
 
 ### Video blur edge cases (3 tests)
@@ -88,7 +88,7 @@
 | # | Test | Manual Replication |
 |---|---|---|
 | 38 | handles detached video gracefully | `let v = document.createElement('video'); PrivacyBlurEngine.applyBlur(v, 8)` — no throw, class added. |
-| 39 | no duplicate canvases on re-apply | Blur a video, count `.pb-canvas-overlay` — should be 1. |
+| 39 | no duplicate canvases on re-apply | Blur a video, count `.bl-si-canvas-overlay` — should be 1. |
 | 40 | removeBlur on img clears inline filter | Blur img (filter visible), unblur — `style.filter` cleared. |
 
 ### blurAllContent advanced (5 tests)
@@ -107,24 +107,24 @@
 |---|---|---|
 | 46 | does not throw on null | `PrivacyBlurEngine.toggleBlur(null)` — no error. |
 | 47 | does not throw on non-Element | `PrivacyBlurEngine.toggleBlur('hello')` — no error. |
-| 48 | uses custom radius when toggling on | `toggleBlur(el, 15)` — check `--pb-radius: 15px`. |
+| 48 | uses custom radius when toggling on | `toggleBlur(el, 15)` — check `--bl-si-radius: 15px`. |
 
 ### Zone overlay engine (12 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 49 | createZoneOverlay injects overlay div into document.body | Call `PrivacyBlurEngine.createZoneOverlay({id:'z1', x:10, y:20, width:100, height:50})`. Inspect DOM — `document.body` has a child with `data-pb-zone="z1"`. |
+| 49 | createZoneOverlay injects overlay div into document.body | Call `PrivacyBlurEngine.createZoneOverlay({id:'z1', x:10, y:20, width:100, height:50})`. Inspect DOM — `document.body` has a child with `data-bl-si-zone="z1"`. |
 | 50 | createZoneOverlay sets position styles from coordinates | Same as above. Inspect styles — `position:fixed`, `left:10px`, `top:20px`, `width:100px`, `height:50px`. |
-| 51 | createZoneOverlay overlay has pb-zone-overlay class | Same overlay. Element has `class="pb-zone-overlay"`. |
+| 51 | createZoneOverlay overlay has bl-si-zone-overlay class | Same overlay. Element has `class="bl-si-zone-overlay"`. |
 | 52 | createZoneOverlay returns null for missing id | `createZoneOverlay({x:0, y:0, width:10, height:10})` — returns `null`. |
-| 53 | createZoneOverlay replaces existing overlay with same id | Create overlay with id `z1`, then create another with same id. Only one `[data-pb-zone="z1"]` in DOM. |
-| 54 | removeZoneOverlay removes overlay from DOM and tracking | Create overlay `z1`, call `removeZoneOverlay('z1')`. No `[data-pb-zone="z1"]` in DOM. `getZoneOverlays()` returns empty. |
+| 53 | createZoneOverlay replaces existing overlay with same id | Create overlay with id `z1`, then create another with same id. Only one `[data-bl-si-zone="z1"]` in DOM. |
+| 54 | removeZoneOverlay removes overlay from DOM and tracking | Create overlay `z1`, call `removeZoneOverlay('z1')`. No `[data-bl-si-zone="z1"]` in DOM. `getZoneOverlays()` returns empty. |
 | 55 | removeZoneOverlay no-op for unknown id | `removeZoneOverlay('nonexistent')` — no error, no DOM change. |
 | 56 | getZoneOverlays returns all active overlays | Create 3 overlays. `getZoneOverlays().length === 3`. |
 | 57 | getZoneOverlays returns empty array when none exist | No overlays created. `getZoneOverlays()` returns `[]`. |
 | 58 | removeAllZoneOverlays removes all overlays | Create 3 overlays, call `removeAllZoneOverlays()`. `getZoneOverlays()` returns `[]`, no overlay elements in DOM. |
-| 59 | unblurAll removes zone overlays along with data-pb-blur elements | Blur elements and create zone overlays. `unblurAll()`. Both blurred elements and zone overlays removed. |
-| 60 | _isExtensionUI excludes zones: zone overlay not treated as blur target | Create zone overlay, call `blurAllContent()`. Zone overlay does not get `pb-blurred` class. |
+| 59 | unblurAll removes zone overlays along with data-bl-si-blur elements | Blur elements and create zone overlays. `unblurAll()`. Both blurred elements and zone overlays removed. |
+| 60 | _isExtensionUI excludes zones: zone overlay not treated as blur target | Create zone overlay, call `blurAllContent()`. Zone overlay does not get `bl-si-blurred` class. |
 
 ---
 
@@ -134,16 +134,16 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 1 | adds pb-picker-active class to html | Press Alt+Shift+P. Crosshair cursor appears. `<html>` has `pb-picker-active`. |
-| 2 | creates toolbar element in DOM | Toolbar appears at top with "Click to blur" instructions. `#pb-picker-toolbar` in DOM. |
+| 1 | adds bl-si-picker-active class to html | Press Alt+Shift+P. Crosshair cursor appears. `<html>` has `bl-si-picker-active`. |
+| 2 | creates toolbar element in DOM | Toolbar appears at top with "Click to blur" instructions. `#bl-si-picker-toolbar` in DOM. |
 | 3 | calling activate twice is safe | Press Alt+Shift+P twice. Only one toolbar exists. |
 
 ### hover highlight (3 tests)
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 4 | adds pb-hover-highlight on mouseover | Activate picker, hover over a paragraph. Outline highlight appears. |
-| 5 | removes pb-hover-highlight on mouseout | Move mouse away from element. Highlight disappears. |
+| 4 | adds bl-si-hover-highlight on mouseover | Activate picker, hover over a paragraph. Outline highlight appears. |
+| 5 | removes bl-si-hover-highlight on mouseout | Move mouse away from element. Highlight disappears. |
 | 6 | does not throw if target is null on mouseover | Edge case — cursor enters from outside viewport. No crash. |
 
 ### click (4 tests)
@@ -151,7 +151,7 @@
 | # | Test | Manual Replication |
 |---|---|---|
 | 7 | calls onBlur when element is not blurred | Click any unblurred element in picker mode. Element gets blurred. |
-| 8 | calls onUnblur when element has pb-blurred | Click a blurred element in picker mode. Blur removed (toggle). |
+| 8 | calls onUnblur when element has bl-si-blurred | Click a blurred element in picker mode. Blur removed (toggle). |
 | 9 | click prevents default event | Click a link in picker mode. Page does NOT navigate. |
 | 10 | click stops event propagation | Click a button with page handlers. Button blurred, handler does not fire. |
 
@@ -166,7 +166,7 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 13 | removes pb-picker-active class | Deactivate picker. Normal cursor restored. |
+| 13 | removes bl-si-picker-active class | Deactivate picker. Normal cursor restored. |
 | 14 | removes toolbar from DOM | Toolbar disappears from page. |
 | 15 | calls onDeactivate callback | Content script notified of deactivation. |
 | 16 | no blur/unblur after deactivation | Click elements after deactivating. No blur occurs — normal page interaction. |
@@ -200,7 +200,7 @@
 
 | # | Test | Manual Replication |
 |---|---|---|
-| 27 | toolbar has correct ID and class | Inspect toolbar: `id="pb-picker-toolbar"`, `class="pb-toolbar"`. |
+| 27 | toolbar has correct ID and class | Inspect toolbar: `id="bl-si-picker-toolbar"`, `class="bl-si-toolbar"`. |
 | 28 | toolbar removed on Escape | Press Escape. Toolbar gone from DOM. |
 
 ### click boundary conditions (2 tests)
@@ -272,10 +272,10 @@
 | # | Test | Manual Replication |
 |---|---|---|
 | 1 | returns #id when element has unique ID | `PrivacyBlurSelectorUtils.getSelector(document.querySelector('#content'))` — returns `'#content'`. |
-| 2 | no ID selector for duplicate IDs | Inject two elements with same ID. `getSelector` returns `[data-pb-id="..."]` instead. |
-| 3 | stamps data-pb-id on ID-less element | Pick any ID-less element, call `getSelector`. Element gets `data-pb-id` attribute in DOM. |
-| 4 | returns data-pb-id attribute selector | Same — returned string matches `[data-pb-id="..."]` format. |
-| 5 | reuses existing data-pb-id on repeat calls | Call `getSelector` twice on same element. Same selector both times. |
+| 2 | no ID selector for duplicate IDs | Inject two elements with same ID. `getSelector` returns `[data-bl-si-id="..."]` instead. |
+| 3 | stamps data-bl-si-id on ID-less element | Pick any ID-less element, call `getSelector`. Element gets `data-bl-si-id` attribute in DOM. |
+| 4 | returns data-bl-si-id attribute selector | Same — returned string matches `[data-bl-si-id="..."]` format. |
+| 5 | reuses existing data-bl-si-id on repeat calls | Call `getSelector` twice on same element. Same selector both times. |
 | 6 | returns null for body element | `getSelector(document.body)` — `null`. |
 | 7 | returns null for null input | `getSelector(null)` — `null`. |
 | 8 | generated selector round-trips via querySelector | Get selector, use it with `document.querySelector()`. Returns same element. |
@@ -297,7 +297,7 @@
 | 14 | returns null for invalid CSS selector | `restoreSelector('##bad!!!')` — `null`, no error. |
 | 15 | returns null for null input | `restoreSelector(null)` — `null`. |
 | 16 | returns null for empty string | `restoreSelector('')` — `null`. |
-| 17 | returns element by data-pb-id selector | Create element with `data-pb-id="abc12345"`, restore — found. |
+| 17 | returns element by data-bl-si-id selector | Create element with `data-bl-si-id="abc12345"`, restore — found. |
 
 ### restoreAllSelectors (6 tests)
 
@@ -318,9 +318,9 @@
 | 25 | returns null for undefined | `getSelector(undefined)` — `null`. |
 | 26 | handles special characters in ID | Element with `id="my:special.id"` — CSS-escaped selector works. |
 | 27 | handles numeric-starting ID | Element with `id="123numeric"` — CSS-escaped selector works. |
-| 28 | whitespace-only ID falls back to data-pb-id | `id="   "` treated as absent. Uses `data-pb-id`. |
-| 29 | does not re-stamp existing data-pb-id | Pre-set `data-pb-id`, call `getSelector` — value unchanged. |
-| 30 | different elements get different IDs | Two elements get different `data-pb-id` values. |
+| 28 | whitespace-only ID falls back to data-bl-si-id | `id="   "` treated as absent. Uses `data-bl-si-id`. |
+| 29 | does not re-stamp existing data-bl-si-id | Pre-set `data-bl-si-id`, call `getSelector` — value unchanged. |
+| 30 | different elements get different IDs | Two elements get different `data-bl-si-id` values. |
 
 ### restoreSelector edge cases (3 tests)
 
@@ -466,40 +466,40 @@ Tests added for the category-aware `blurAllContent(radius, options)` API.
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 1 | exposes all storage message types | `GET_BLUR_ITEMS`, `SAVE_BLUR_ITEM`, `REMOVE_BLUR_ITEM`, `CLEAR_HOST`, `CLEAR_ALL`, `GET_SETTINGS`, `SAVE_SETTINGS`, `GET_RULES`, `SAVE_RULES` | `pb.STORAGE.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'` in DevTools |
-| 2 | exposes all command message types | `TOGGLE_BLUR_ALL`, `TOGGLE_PICKER`, `CLEAR_ALL_BLUR`, `RESTORE`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` | `pb.COMMAND.TOGGLE_BLUR_ALL` in DevTools |
-| 3 | exposes all popup message types | `UPDATE_SETTINGS`, `GET_STATUS`, `UNBLUR_ITEM` | `pb.POPUP.UNBLUR_ITEM === 'UNBLUR_ITEM'` in DevTools |
+| 1 | exposes all storage message types | `GET_BLUR_ITEMS`, `SAVE_BLUR_ITEM`, `REMOVE_BLUR_ITEM`, `CLEAR_HOST`, `CLEAR_ALL`, `GET_SETTINGS`, `SAVE_SETTINGS`, `GET_RULES`, `SAVE_RULES` | `blsi.STORAGE.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'` in DevTools |
+| 2 | exposes all command message types | `TOGGLE_BLUR_ALL`, `TOGGLE_PICKER`, `CLEAR_ALL_BLUR`, `RESTORE`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` | `blsi.COMMAND.TOGGLE_BLUR_ALL` in DevTools |
+| 3 | exposes all popup message types | `UPDATE_SETTINGS`, `GET_STATUS`, `UNBLUR_ITEM` | `blsi.POPUP.UNBLUR_ITEM === 'UNBLUR_ITEM'` in DevTools |
 
 ### Flat shorthand access (1 test)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 4 | all message types accessible at top level | `pb.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'`, plus command and popup types | `pb.SAVE_BLUR_ITEM` in DevTools |
+| 4 | all message types accessible at top level | `blsi.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'`, plus command and popup types | `blsi.SAVE_BLUR_ITEM` in DevTools |
 
 ### isValid (3 tests)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 5 | returns true for known message types | `isValid('GET_BLUR_ITEMS')` etc. return `true` | `pb.isValid('GET_BLUR_ITEMS')` in DevTools |
-| 6 | returns false for unknown strings | `isValid('UNKNOWN_TYPE')` returns `false` | `pb.isValid('FOO')` in DevTools |
-| 7 | returns false for non-string input | `isValid(null)`, `isValid(42)` return `false` | `pb.isValid(null)` in DevTools |
+| 5 | returns true for known message types | `isValid('GET_BLUR_ITEMS')` etc. return `true` | `blsi.isValid('GET_BLUR_ITEMS')` in DevTools |
+| 6 | returns false for unknown strings | `isValid('UNKNOWN_TYPE')` returns `false` | `blsi.isValid('FOO')` in DevTools |
+| 7 | returns false for non-string input | `isValid(null)`, `isValid(42)` return `false` | `blsi.isValid(null)` in DevTools |
 
 ### categoryOf (4 tests)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 8 | returns correct category for storage types | `categoryOf('SAVE_BLUR_ITEM')` returns `'STORAGE'` | `pb.categoryOf('SAVE_BLUR_ITEM')` in DevTools |
-| 9 | returns correct category for command types | `categoryOf('TOGGLE_BLUR_ALL')` returns `'COMMAND'` | `pb.categoryOf('TOGGLE_BLUR_ALL')` in DevTools |
-| 10 | returns correct category for popup types | `categoryOf('UPDATE_SETTINGS')` returns `'POPUP'` | `pb.categoryOf('UPDATE_SETTINGS')` in DevTools |
-| 11 | returns null for unknown types | `categoryOf('UNKNOWN')` returns `null` | `pb.categoryOf('FOO')` in DevTools |
+| 8 | returns correct category for storage types | `categoryOf('SAVE_BLUR_ITEM')` returns `'STORAGE'` | `blsi.categoryOf('SAVE_BLUR_ITEM')` in DevTools |
+| 9 | returns correct category for command types | `categoryOf('TOGGLE_BLUR_ALL')` returns `'COMMAND'` | `blsi.categoryOf('TOGGLE_BLUR_ALL')` in DevTools |
+| 10 | returns correct category for popup types | `categoryOf('UPDATE_SETTINGS')` returns `'POPUP'` | `blsi.categoryOf('UPDATE_SETTINGS')` in DevTools |
+| 11 | returns null for unknown types | `categoryOf('UNKNOWN')` returns `null` | `blsi.categoryOf('FOO')` in DevTools |
 
 ### DEFAULT_SETTINGS (4 tests)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 12 | contains all expected top-level keys | BLUR_RADIUS=10, TRANSITION_DURATION=200, etc. | `pb.DEFAULT_SETTINGS` in DevTools |
-| 13 | is frozen (immutable) | `Object.isFrozen` returns `true` | `Object.isFrozen(pb.DEFAULT_SETTINGS)` in DevTools |
-| 14 | SHORTCUTS is frozen with 3 actions | 3 keys, all defined | Check `Object.keys(pb.DEFAULT_SETTINGS.SHORTCUTS).length` |
+| 12 | contains all expected top-level keys | BLUR_RADIUS=10, TRANSITION_DURATION=200, etc. | `blsi.DEFAULT_SETTINGS` in DevTools |
+| 13 | is frozen (immutable) | `Object.isFrozen` returns `true` | `Object.isFrozen(blsi.DEFAULT_SETTINGS)` in DevTools |
+| 14 | SHORTCUTS is frozen with 3 actions | 3 keys, all defined | Check `Object.keys(blsi.DEFAULT_SETTINGS.SHORTCUTS).length` |
 | 15 | each shortcut has primaryModifier and keys array | all shortcuts have required shape | Inspect each shortcut object |
 
 ### DEFAULT_SETTINGS.BLUR_CATEGORIES (3 tests)
@@ -521,7 +521,7 @@ Tests added for the category-aware `blurAllContent(radius, options)` API.
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 21 | merges flat keys | `{A:1,B:2}` + `{B:3}` = `{A:1,B:3}` | `pb.deepMerge({A:1},{A:2})` in DevTools |
+| 21 | merges flat keys | `{A:1,B:2}` + `{B:3}` = `{A:1,B:3}` | `blsi.deepMerge({A:1},{A:2})` in DevTools |
 | 22 | merges nested objects | nested override replaces inner key only | Test with nested objects |
 | 23 | blocks prototype pollution keys | `__proto__` and `constructor` ignored | Attempt pollution, verify safe |
 | 24 | does not mutate base | frozen base survives merge | Merge over frozen object |
@@ -530,37 +530,37 @@ Tests added for the category-aware `blurAllContent(radius, options)` API.
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 25 | returns full defaults for null input | null yields complete defaults | `pb.validateSettings(null)` in DevTools |
+| 25 | returns full defaults for null input | null yields complete defaults | `blsi.validateSettings(null)` in DevTools |
 | 26 | preserves valid values | custom values kept | Pass valid overrides, check preserved |
-| 27 | replaces out-of-range BLUR_RADIUS with default | 999, -1, 'abc' all reset to 10 | `pb.validateSettings({BLUR_RADIUS:999})` |
+| 27 | replaces out-of-range BLUR_RADIUS with default | 999, -1, 'abc' all reset to 10 | `blsi.validateSettings({BLUR_RADIUS:999})` |
 | 28 | replaces invalid REVEAL_MODE with default | 'invalid', 42 reset to 'hover' | Test with bad REVEAL_MODE |
 | 29 | replaces invalid HIGHLIGHT_COLOR with default | 'red', '#fff' reset to '#f59e0b' | Test with bad color |
 | 30 | replaces non-boolean category values with defaults | 'yes', 1 reset to boolean defaults | Test with non-boolean categories |
 | 31 | replaces broken shortcut binding with default | missing keys restored | Test with broken shortcut shape |
-| 32 | fills missing keys with defaults | empty object gets all defaults | `pb.validateSettings({})` |
+| 32 | fills missing keys with defaults | empty object gets all defaults | `blsi.validateSettings({})` |
 
 ### Immutability (2 tests)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
 | 33 | top-level pb namespace is extensible | `typeof pb === 'object'` | Modules attach to pb at runtime |
-| 34 | category objects are frozen | STORAGE, COMMAND, POPUP all frozen | Check `Object.isFrozen(pb.STORAGE)` |
+| 34 | category objects are frozen | STORAGE, COMMAND, POPUP all frozen | Check `Object.isFrozen(blsi.STORAGE)` |
 
 ### validateSettings boundary values (10 tests)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
-| 35 | BLUR_RADIUS accepts min boundary (2) | radius 2 accepted | `pb.validateSettings({BLUR_RADIUS:2})` |
-| 36 | BLUR_RADIUS accepts max boundary (30) | radius 30 accepted | `pb.validateSettings({BLUR_RADIUS:30})` |
-| 37 | BLUR_RADIUS rejects below min (1) | radius 1 reset to default | `pb.validateSettings({BLUR_RADIUS:1})` |
-| 38 | BLUR_RADIUS rejects above max (31) | radius 31 reset to default | `pb.validateSettings({BLUR_RADIUS:31})` |
+| 35 | BLUR_RADIUS accepts min boundary (2) | radius 2 accepted | `blsi.validateSettings({BLUR_RADIUS:2})` |
+| 36 | BLUR_RADIUS accepts max boundary (30) | radius 30 accepted | `blsi.validateSettings({BLUR_RADIUS:30})` |
+| 37 | BLUR_RADIUS rejects below min (1) | radius 1 reset to default | `blsi.validateSettings({BLUR_RADIUS:1})` |
+| 38 | BLUR_RADIUS rejects above max (31) | radius 31 reset to default | `blsi.validateSettings({BLUR_RADIUS:31})` |
 | 39 | SHORTCUTS rejects empty keys array | empty keys falls back to default | Test with `keys: []` |
 | 40 | SHORTCUTS rejects keys exceeding limit (11) | 11 keys falls back to default | Test with 11-element keys array |
 | 41 | deepMerge stops at depth limit | depth 6+ returns override directly | Test with deeply nested object |
-| 42 | PICKER_MODE defaults to sticky | `DEFAULT_SETTINGS.PICKER_MODE === 'sticky'` | `pb.DEFAULT_SETTINGS.PICKER_MODE` in DevTools |
-| 43 | PICKER_MODE validates against enum | 'sticky' and 'dynamic' accepted, 'invalid' rejected | `pb.validateSettings({PICKER_MODE:'invalid'})` resets to default |
-| 44 | PICKER_MODES enum exists | `PICKER_MODES.STICKY === 'sticky'`, `PICKER_MODES.DYNAMIC === 'dynamic'` | `pb.PICKER_MODES.STICKY` in DevTools |
-| 45 | BLUR_MODE validates against enum | 'gaussian' and 'frosted' accepted, 'invalid' rejected | `pb.validateSettings({BLUR_MODE:'invalid'})` resets to default |
+| 42 | PICKER_MODE defaults to sticky | `DEFAULT_SETTINGS.PICKER_MODE === 'sticky'` | `blsi.DEFAULT_SETTINGS.PICKER_MODE` in DevTools |
+| 43 | PICKER_MODE validates against enum | 'sticky' and 'dynamic' accepted, 'invalid' rejected | `blsi.validateSettings({PICKER_MODE:'invalid'})` resets to default |
+| 44 | PICKER_MODES enum exists | `PICKER_MODES.STICKY === 'sticky'`, `PICKER_MODES.DYNAMIC === 'dynamic'` | `blsi.PICKER_MODES.STICKY` in DevTools |
+| 45 | BLUR_MODE validates against enum | 'gaussian' and 'frosted' accepted, 'invalid' rejected | `blsi.validateSettings({BLUR_MODE:'invalid'})` resets to default |
 
 ## Category Storage Tests (storage_manager.test.js)
 

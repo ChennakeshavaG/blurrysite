@@ -1,4 +1,4 @@
-# PrivacyBlur — Developer & Debugging Guide
+# Blurry Site — Developer & Debugging Guide
 
 ## Quick Start
 
@@ -20,12 +20,12 @@ There are **three independent entry points** that run in different contexts:
 **Files loaded in order** (defined in `manifest.json` → `content_scripts`):
 
 ```
-src/constants.js         → globalThis.PrivacyBlur (message types, DEFAULTS)
-src/selector_utils.js    → window.PrivacyBlurSelectorUtils
-src/storage_manager.js   → window.PrivacyBlurStorage
-src/blur_engine.js       → window.PrivacyBlurEngine
-src/shortcut_handler.js  → window.PrivacyBlurShortcuts
-src/picker.js            → window.PrivacyBlurPicker
+src/constants.js         → globalThis.BlurrySite (message types, DEFAULTS)
+src/selector_utils.js    → blsi.SelectorUtils
+src/storage_manager.js   → blsi.Storage
+src/blur_engine.js       → blsi.BlurEngine
+src/shortcut_handler.js  → blsi.Shortcuts
+src/picker.js            → blsi.Picker
 src/content_script.js    → orchestrator (no global)
 ```
 
@@ -35,7 +35,7 @@ src/content_script.js    → orchestrator (no global)
 init()
 ├── Bind module aliases (Engine, Store, Selector, Picker, Shortcuts)
 ├── Load settings from storage via Store.getSettings()
-├── Apply CSS custom properties (--pb-radius, etc.)
+├── Apply CSS custom properties (--bl-si-radius, etc.)
 ├── Register chrome.runtime.onMessage.addListener(handleMessage)
 ├── If enabled:
 │   ├── Shortcuts.init() — attach keyboard chord listener
@@ -159,15 +159,15 @@ SPA URL changes detected via `popstate` + `hashchange` → re-resolve settings.
 | `none` | no | No reveal — blurred content stays blurred until manually unblurred via picker or clear. |
 
 Both click and hover modes use the same ancestor chain mechanism: when an element
-is revealed, JS walks up the DOM and adds `pb-ancestor-reveal` to blurred ancestors
+is revealed, JS walks up the DOM and adds `bl-si-ancestor-reveal` to blurred ancestors
 so the revealed content is visible through the ancestor chain.
 
 **CSS classes:**
-- `pb-revealed` — added by click mode (JS-toggled)
-- `pb-reveal-on-hover` — added by hover mode (CSS `:hover` drives it)
-- `pb-ancestor-reveal` — added to blurred ancestors in both modes
+- `bl-si-revealed` — added by click mode (JS-toggled)
+- `bl-si-reveal-on-hover` — added by hover mode (CSS `:hover` drives it)
+- `bl-si-ancestor-reveal` — added to blurred ancestors in both modes
 
-**`will-change: filter` was removed** from `.pb-blurred` because it creates a
+**`will-change: filter` was removed** from `.bl-si-blurred` because it creates a
 permanent stacking context that breaks `position: fixed/sticky` children and
 z-index hover elevation on sites.
 
@@ -238,7 +238,7 @@ Each entry point has its **own DevTools**:
 | Context | How to open DevTools |
 |---|---|
 | **Content script** | F12 on any page → Sources tab → find files under `content_scripts/` in the file tree. Or use the Console context dropdown to switch to the extension world. |
-| **Background service worker** | `chrome://extensions` → find PrivacyBlur → click **"Service worker"** link |
+| **Background service worker** | `chrome://extensions` → find BlurrySite → click **"Service worker"** link |
 | **Popup** | Right-click the popup → **Inspect** |
 
 ### Step 3: Set breakpoints visually
@@ -307,7 +307,7 @@ PrivacyBlurPicker.deactivate()
 
 // Count blurred elements by tag
 const counts = {};
-document.querySelectorAll('.pb-blurred').forEach(el => {
+document.querySelectorAll('.bl-si-blurred').forEach(el => {
   const tag = el.tagName.toLowerCase();
   counts[tag] = (counts[tag] || 0) + 1;
 });
@@ -350,8 +350,8 @@ chrome.tabs.query({active: true, currentWindow: true}, ([tab]) => {
 3. Click Blur All again
 
 ### "Content layer stays blurred on hover"
-1. Check that dynamically added elements have `pb-reveal-on-hover` class
-2. Run: `document.querySelectorAll('.pb-blurred:not(.pb-reveal-on-hover)').length`
+1. Check that dynamically added elements have `bl-si-reveal-on-hover` class
+2. Run: `document.querySelectorAll('.bl-si-blurred:not(.bl-si-reveal-on-hover)').length`
 3. If > 0: elements were blurred by the MutationObserver before RAF chunk added the class
 4. Check that `settings.REVEAL_MODE` is set correctly
 
@@ -382,7 +382,7 @@ chrome.tabs.query({active: true, currentWindow: true}, ([tab]) => {
 ## File Map
 
 ```
-privacyblur/
+blurrysite/
 ├── manifest.json           ← Extension config, permissions, content script load order
 ├── background.js           ← Service worker: storage, commands, context menu
 ├── src/
@@ -403,7 +403,7 @@ privacyblur/
 │   └── fonts/                      ← Inter font woff2 files
 ├── _locales/en/popup.json          ← English strings for i18n
 ├── styles/
-│   └── content.css         ← Injected page styles (pb-blurred, pb-ancestor-reveal, etc.)
+│   └── content.css         ← Injected page styles (bl-si-blurred, bl-si-ancestor-reveal, etc.)
 ├── tests/
 │   ├── setup.js            ← Jest mocks for chrome.*, canvas, rAF
 │   ├── unit/               ← 215 unit tests (6 test files)

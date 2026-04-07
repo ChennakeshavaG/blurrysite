@@ -4,7 +4,7 @@
  * Unit tests for src/picker.js — the interactive element picker that lets
  * users hover over page elements and click to blur/unblur them.
  *
- * Module exposes pb.Picker with: activate, deactivate,
+ * Module exposes blsi.Picker with: activate, deactivate,
  * setSettings, and an isActive getter.
  *
  * Key behaviors tested:
@@ -15,7 +15,7 @@
  *  - Deactivation: removes all side-effects (toolbar, highlights, listeners)
  *  - Settings: can be updated while picker is active
  *
- * Tests mock pb.BlurEngine and pb.SelectorUtils as window globals
+ * Tests mock blsi.BlurEngine and blsi.SelectorUtils as window globals
  * because picker.js depends on them being loaded first via manifest.json.
  */
 
@@ -29,7 +29,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/picker.js');
 
 function loadPicker() {
-  if (pb.Picker) return;
+  if (blsi.Picker) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -42,9 +42,9 @@ function buildStubSource() {
   (function() {
     'use strict';
 
-    var ACTIVE_CLASS = 'pb-picker-active';
-    var HOVER_CLASS  = 'pb-hover-highlight';
-    var TOOLBAR_ID   = 'pb-picker-toolbar';
+    var ACTIVE_CLASS = 'bl-si-picker-active';
+    var HOVER_CLASS  = 'bl-si-hover-highlight';
+    var TOOLBAR_ID   = 'bl-si-picker-toolbar';
 
     var _callbacks  = null;
     var _settings   = null;
@@ -65,7 +65,7 @@ function buildStubSource() {
 
       var toolbar = document.createElement('div');
       toolbar.id = TOOLBAR_ID;
-      toolbar.textContent = 'PrivacyBlur Picker — click any element';
+      toolbar.textContent = 'Blurry Site Picker — click any element';
       document.body.appendChild(toolbar);
 
       _mouseover = function(e) {
@@ -81,7 +81,7 @@ function buildStubSource() {
         e.stopPropagation();
         var el = e.target;
         if (!el || el === toolbar) return;
-        if (el.classList.contains('pb-blurred')) {
+        if (el.classList.contains('bl-si-blurred')) {
           if (_callbacks.onUnblur) _callbacks.onUnblur(el);
         } else {
           if (_callbacks.onBlur) _callbacks.onBlur(el);
@@ -128,7 +128,7 @@ function buildStubSource() {
       _settings = Object.assign(_settings || {}, settings || {});
     }
 
-    pb.Picker = {
+    blsi.Picker = {
       get isActive() { return _active; },
       activate: activate,
       deactivate: deactivate,
@@ -141,13 +141,13 @@ function buildStubSource() {
 // ─── Mock dependencies ────────────────────────────────────────────────────────
 
 function setupGlobalMocks() {
-  pb.BlurEngine = {
+  blsi.BlurEngine = {
     applyBlur: jest.fn(),
     removeBlur: jest.fn(),
-    isBlurred: jest.fn((el) => !!(el && el.dataset && el.dataset.pbBlur)),
+    isBlurred: jest.fn((el) => !!(el && el.dataset && el.dataset.blSiBlur)),
   };
 
-  pb.SelectorUtils = {
+  blsi.SelectorUtils = {
     getSelector: jest.fn().mockReturnValue('#mock-selector'),
     generateId: jest.fn().mockReturnValue('abcd1234'),
   };
@@ -185,7 +185,7 @@ function fireKey(key) {
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
-describe('pb.Picker', () => {
+describe('blsi.Picker', () => {
   beforeAll(() => {
     setupGlobalMocks();
     loadPicker();
@@ -196,12 +196,12 @@ describe('pb.Picker', () => {
     document.documentElement.className = '';
     jest.clearAllMocks();
     // Ensure picker is deactivated before each test to prevent state leakage.
-    try { pb.Picker.deactivate(); } catch (_) {}
+    try { blsi.Picker.deactivate(); } catch (_) {}
   });
 
   afterEach(() => {
     // Safety net: clean up in case a test left the picker active.
-    try { pb.Picker.deactivate(); } catch (_) {}
+    try { blsi.Picker.deactivate(); } catch (_) {}
   });
 
   // ── activate ───────────────────────────────────────────────────────────────
@@ -215,9 +215,9 @@ describe('pb.Picker', () => {
      * Reproduce: Call activate(), check documentElement class list.
      */
     test('adds pb-picker-active class to html element', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
-      expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
+      expect(document.documentElement.classList.contains('bl-si-picker-active')).toBe(true);
     });
 
     /**
@@ -228,9 +228,9 @@ describe('pb.Picker', () => {
      * Reproduce: Call activate(), query for toolbar by ID.
      */
     test('creates a toolbar element in the DOM', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
-      const toolbar = document.getElementById('pb-picker-toolbar');
+      const toolbar = document.getElementById('bl-si-picker-toolbar');
       expect(toolbar).not.toBeNull();
     });
 
@@ -242,10 +242,10 @@ describe('pb.Picker', () => {
      * Reproduce: Call activate() twice, count toolbar elements.
      */
     test('calling activate twice is safe (idempotent)', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
-      const toolbars = document.querySelectorAll('#pb-picker-toolbar');
+      const toolbars = document.querySelectorAll('#bl-si-picker-toolbar');
       expect(toolbars.length).toBe(1);
     });
   });
@@ -255,19 +255,19 @@ describe('pb.Picker', () => {
   describe('hover highlight', () => {
     /**
      * Verifies that hovering over an element adds the highlight class.
-     * Why: The highlight outline (defined by .pb-hover-highlight in content.css)
+     * Why: The highlight outline (defined by .bl-si-hover-highlight in content.css)
      * shows the user exactly which element will be blurred on click.
      * Without it, the picker would be unusable.
      * Reproduce: Activate picker, fire mouseover on a <p> element.
      */
-    test('adds pb-hover-highlight class on mouseover', () => {
+    test('adds bl-si-hover-highlight class on mouseover', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseover(el);
 
-      expect(el.classList.contains('pb-hover-highlight')).toBe(true);
+      expect(el.classList.contains('bl-si-hover-highlight')).toBe(true);
     });
 
     /**
@@ -276,15 +276,15 @@ describe('pb.Picker', () => {
      * which element is currently targeted.
      * Reproduce: Add highlight class to element, fire mouseout.
      */
-    test('removes pb-hover-highlight class on mouseout', () => {
+    test('removes bl-si-hover-highlight class on mouseout', () => {
       const el = document.createElement('p');
-      el.classList.add('pb-hover-highlight');
+      el.classList.add('bl-si-hover-highlight');
       document.body.appendChild(el);
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseout(el);
 
-      expect(el.classList.contains('pb-hover-highlight')).toBe(false);
+      expect(el.classList.contains('bl-si-hover-highlight')).toBe(false);
     });
 
     /**
@@ -294,7 +294,7 @@ describe('pb.Picker', () => {
      * Reproduce: Dispatch a mouseover event without setting a target.
      */
     test('does not throw if target is null on mouseover', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
       const e = new MouseEvent('mouseover', { bubbles: true });
       expect(() => document.dispatchEvent(e)).not.toThrow();
     });
@@ -313,10 +313,10 @@ describe('pb.Picker', () => {
     test('calls onBlur callback with element when element is not blurred', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
-      el.classList.remove('pb-blurred');
+      el.classList.remove('bl-si-blurred');
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       fireClick(el);
 
@@ -328,16 +328,16 @@ describe('pb.Picker', () => {
      * Verifies that clicking an already-blurred element calls onUnblur.
      * Why: The picker acts as a toggle — clicking a blurred element should
      * unblur it. This lets users correct mistakes without switching modes.
-     * The check uses classList.contains('pb-blurred'), not Engine.isBlurred().
-     * Reproduce: Add pb-blurred class to element, activate, click it.
+     * The check uses classList.contains('bl-si-blurred'), not Engine.isBlurred().
+     * Reproduce: Add bl-si-blurred class to element, activate, click it.
      */
-    test('calls onUnblur callback when element has data-pb-blur', () => {
+    test('calls onUnblur callback when element has data-bl-si-blur', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
-      el.dataset.pbBlur = '1'; // Simulate individual picker blur
+      el.dataset.blSiBlur = '1'; // Simulate individual picker blur
 
       const callbacks = { onBlur: jest.fn(), onUnblur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       fireClick(el);
 
@@ -358,7 +358,7 @@ describe('pb.Picker', () => {
       document.body.appendChild(el);
 
       const callbacks = { onBlur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       Object.defineProperty(clickEvent, 'target', { value: el, configurable: true });
@@ -381,7 +381,7 @@ describe('pb.Picker', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       Object.defineProperty(clickEvent, 'target', { value: el, configurable: true });
@@ -405,12 +405,12 @@ describe('pb.Picker', () => {
      */
     test('pressing Escape calls deactivate and removes pb-picker-active', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
-      expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      expect(document.documentElement.classList.contains('bl-si-picker-active')).toBe(true);
 
       fireKey('Escape');
 
-      expect(document.documentElement.classList.contains('pb-picker-active')).toBe(false);
+      expect(document.documentElement.classList.contains('bl-si-picker-active')).toBe(false);
     });
 
     /**
@@ -423,7 +423,7 @@ describe('pb.Picker', () => {
      */
     test('pressing Escape triggers onDeactivate callback', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
       fireKey('Escape');
 
@@ -441,12 +441,12 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, deactivate, check class is removed.
      */
     test('removes pb-picker-active class from html element', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
-      expect(document.documentElement.classList.contains('pb-picker-active')).toBe(true);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      expect(document.documentElement.classList.contains('bl-si-picker-active')).toBe(true);
 
-      pb.Picker.deactivate();
+      blsi.Picker.deactivate();
 
-      expect(document.documentElement.classList.contains('pb-picker-active')).toBe(false);
+      expect(document.documentElement.classList.contains('bl-si-picker-active')).toBe(false);
     });
 
     /**
@@ -456,12 +456,12 @@ describe('pb.Picker', () => {
      * Reproduce: Activate (creates toolbar), deactivate, query for toolbar.
      */
     test('removes the toolbar from the DOM', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
-      expect(document.getElementById('pb-picker-toolbar')).not.toBeNull();
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      expect(document.getElementById('bl-si-picker-toolbar')).not.toBeNull();
 
-      pb.Picker.deactivate();
+      blsi.Picker.deactivate();
 
-      expect(document.getElementById('pb-picker-toolbar')).toBeNull();
+      expect(document.getElementById('bl-si-picker-toolbar')).toBeNull();
     });
 
     /**
@@ -472,9 +472,9 @@ describe('pb.Picker', () => {
      */
     test('calls onDeactivate callback', () => {
       const callbacks = { onDeactivate: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
 
-      pb.Picker.deactivate();
+      blsi.Picker.deactivate();
 
       expect(callbacks.onDeactivate).toHaveBeenCalledTimes(1);
     });
@@ -491,8 +491,8 @@ describe('pb.Picker', () => {
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn(), onDeactivate: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
-      pb.Picker.deactivate();
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.deactivate();
 
       fireClick(el);
 
@@ -507,7 +507,7 @@ describe('pb.Picker', () => {
      * Reproduce: Call deactivate without prior activate.
      */
     test('calling deactivate when not active does not throw', () => {
-      expect(() => pb.Picker.deactivate()).not.toThrow();
+      expect(() => blsi.Picker.deactivate()).not.toThrow();
     });
   });
 
@@ -523,9 +523,9 @@ describe('pb.Picker', () => {
      * Reproduce: Activate with radius 8, call setSettings with radius 16.
      */
     test('updates blurRadius property', () => {
-      pb.Picker.activate({ blurRadius: 8, pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ blurRadius: 8, pickerMode: 'dynamic' }, {});
 
-      expect(() => pb.Picker.setSettings({ blurRadius: 16 })).not.toThrow();
+      expect(() => blsi.Picker.setSettings({ blurRadius: 16 })).not.toThrow();
     });
 
     /**
@@ -535,7 +535,7 @@ describe('pb.Picker', () => {
      * Reproduce: Call setSettings without prior activate.
      */
     test('calling setSettings before activate does not throw', () => {
-      expect(() => pb.Picker.setSettings({ blurRadius: 12 })).not.toThrow();
+      expect(() => blsi.Picker.setSettings({ blurRadius: 12 })).not.toThrow();
     });
 
     /**
@@ -547,15 +547,15 @@ describe('pb.Picker', () => {
      * still functions correctly (click still fires callback).
      */
     test('partial settings update does not wipe existing settings', () => {
-      pb.Picker.activate({ blurRadius: 8, highlightColor: '#ff0000', pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ blurRadius: 8, highlightColor: '#ff0000', pickerMode: 'dynamic' }, {});
 
-      expect(() => pb.Picker.setSettings({ blurRadius: 20 })).not.toThrow();
+      expect(() => blsi.Picker.setSettings({ blurRadius: 20 })).not.toThrow();
 
       const el = document.createElement('p');
       document.body.appendChild(el);
       const callbacks = { onBlur: jest.fn() };
-      pb.Picker.deactivate();
-      pb.Picker.activate({ blurRadius: 20, pickerMode: 'dynamic' }, callbacks);
+      blsi.Picker.deactivate();
+      blsi.Picker.activate({ blurRadius: 20, pickerMode: 'dynamic' }, callbacks);
       fireClick(el);
       expect(callbacks.onBlur).toHaveBeenCalled();
     });
@@ -572,7 +572,7 @@ describe('pb.Picker', () => {
      * Reproduce: Check isActive without calling activate.
      */
     test('returns false before activation', () => {
-      expect(pb.Picker.isActive).toBe(false);
+      expect(blsi.Picker.isActive).toBe(false);
     });
 
     /**
@@ -582,9 +582,9 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, check isActive.
      */
     test('returns true after activation', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
-      expect(pb.Picker.isActive).toBe(true);
+      expect(blsi.Picker.isActive).toBe(true);
     });
 
     /**
@@ -594,10 +594,10 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, deactivate, check isActive.
      */
     test('returns false after deactivation', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
-      pb.Picker.deactivate();
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.deactivate();
 
-      expect(pb.Picker.isActive).toBe(false);
+      expect(blsi.Picker.isActive).toBe(false);
     });
 
     /**
@@ -608,11 +608,11 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, fire Escape, check isActive.
      */
     test('returns false after Escape key deactivates picker', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
 
       fireKey('Escape');
 
-      expect(pb.Picker.isActive).toBe(false);
+      expect(blsi.Picker.isActive).toBe(false);
     });
   });
 
@@ -630,15 +630,15 @@ describe('pb.Picker', () => {
     test('removes all hover highlights on deactivation', () => {
       const el1 = document.createElement('p');
       const el2 = document.createElement('div');
-      el1.classList.add('pb-hover-highlight');
-      el2.classList.add('pb-hover-highlight');
+      el1.classList.add('bl-si-hover-highlight');
+      el2.classList.add('bl-si-hover-highlight');
       document.body.appendChild(el1);
       document.body.appendChild(el2);
 
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
-      pb.Picker.deactivate();
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.deactivate();
 
-      expect(document.querySelectorAll('.pb-hover-highlight').length).toBe(0);
+      expect(document.querySelectorAll('.bl-si-hover-highlight').length).toBe(0);
     });
 
     /**
@@ -654,13 +654,13 @@ describe('pb.Picker', () => {
       const el2 = document.createElement('div');
       document.body.appendChild(el1);
       document.body.appendChild(el2);
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseover(el1);
-      expect(el1.classList.contains('pb-hover-highlight')).toBe(true);
+      expect(el1.classList.contains('bl-si-hover-highlight')).toBe(true);
 
       fireMouseover(el2);
-      expect(el2.classList.contains('pb-hover-highlight')).toBe(true);
+      expect(el2.classList.contains('bl-si-hover-highlight')).toBe(true);
     });
   });
 
@@ -669,18 +669,18 @@ describe('pb.Picker', () => {
   describe('toolbar', () => {
     /**
      * Verifies that the toolbar has the correct ID and CSS class.
-     * Why: The toolbar ID ('pb-picker-toolbar') is used by deactivate() to
-     * find and remove it. The CSS class ('pb-toolbar') is styled in
+     * Why: The toolbar ID ('bl-si-picker-toolbar') is used by deactivate() to
+     * find and remove it. The CSS class ('bl-si-toolbar') is styled in
      * content.css with high z-index and backdrop blur. Wrong ID or class
      * means the toolbar either can't be cleaned up or looks broken.
      * Reproduce: Activate, query toolbar by ID, check class.
      */
     test('toolbar has correct ID and class', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
-      const toolbar = document.getElementById('pb-picker-toolbar');
+      const toolbar = document.getElementById('bl-si-picker-toolbar');
       expect(toolbar).not.toBeNull();
-      expect(toolbar.classList.contains('pb-toolbar')).toBe(true);
+      expect(toolbar.classList.contains('bl-si-toolbar')).toBe(true);
     });
 
     /**
@@ -691,11 +691,11 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, fire Escape, verify toolbar is gone.
      */
     test('toolbar is removed when picker is deactivated via Escape', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
 
       fireKey('Escape');
 
-      expect(document.getElementById('pb-picker-toolbar')).toBeNull();
+      expect(document.getElementById('bl-si-picker-toolbar')).toBeNull();
     });
   });
 
@@ -712,7 +712,7 @@ describe('pb.Picker', () => {
     test('clicking when no callbacks provided does not throw', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       expect(() => fireClick(el)).not.toThrow();
     });
@@ -725,13 +725,13 @@ describe('pb.Picker', () => {
      * Reproduce: Activate, fire mouseover on body and documentElement.
      */
     test('does not highlight html or body elements on mouseover', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
 
       fireMouseover(document.body);
-      expect(document.body.classList.contains('pb-hover-highlight')).toBe(false);
+      expect(document.body.classList.contains('bl-si-hover-highlight')).toBe(false);
 
       fireMouseover(document.documentElement);
-      expect(document.documentElement.classList.contains('pb-hover-highlight')).toBe(false);
+      expect(document.documentElement.classList.contains('bl-si-hover-highlight')).toBe(false);
     });
   });
 
@@ -766,40 +766,40 @@ describe('pb.Picker', () => {
     }
 
     test('activates in sticky mode by default', () => {
-      pb.Picker.activate({}, {});
-      expect(pb.Picker.isActive).toBe(true);
+      blsi.Picker.activate({}, {});
+      expect(blsi.Picker.isActive).toBe(true);
       // No hover highlight should appear in sticky mode
       const el = document.createElement('div');
       el.className = 'test-el';
       document.body.appendChild(el);
       fireMouseover(el);
-      expect(el.classList.contains('pb-hover-highlight')).toBe(false);
+      expect(el.classList.contains('bl-si-hover-highlight')).toBe(false);
     });
 
     test('activates in sticky mode when pickerMode is sticky', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
-      expect(pb.Picker.isActive).toBe(true);
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      expect(blsi.Picker.isActive).toBe(true);
     });
 
     test('creates drawing preview on mousedown', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
       fireMouseDown(el, 100, 100);
-      const preview = document.querySelector('.pb-zone-drawing');
+      const preview = document.querySelector('.bl-si-zone-drawing');
       expect(preview).not.toBeNull();
     });
 
     test('updates drawing preview on mousemove', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
       fireMouseDown(el, 100, 100);
       fireMouseMove(200, 200);
 
-      const preview = document.querySelector('.pb-zone-drawing');
+      const preview = document.querySelector('.bl-si-zone-drawing');
       expect(preview).not.toBeNull();
       expect(preview.style.width).toBe('100px');
       expect(preview.style.height).toBe('100px');
@@ -807,7 +807,7 @@ describe('pb.Picker', () => {
 
     test('calls onStickyBlur on mouseup with valid area', () => {
       const callbacks = { onStickyBlur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -823,7 +823,7 @@ describe('pb.Picker', () => {
 
     test('does not call onStickyBlur for area smaller than 10px', () => {
       const callbacks = { onStickyBlur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -834,7 +834,7 @@ describe('pb.Picker', () => {
     });
 
     test('removes drawing preview on mouseup', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -842,11 +842,11 @@ describe('pb.Picker', () => {
       fireMouseMove(200, 200);
       fireMouseUp(200, 200);
 
-      expect(document.querySelector('.pb-zone-drawing')).toBeNull();
+      expect(document.querySelector('.bl-si-zone-drawing')).toBeNull();
     });
 
     test('Escape cancels in-progress draw without deactivating', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -858,17 +858,17 @@ describe('pb.Picker', () => {
       document.dispatchEvent(escEvent);
 
       // Preview should be gone
-      expect(document.querySelector('.pb-zone-drawing')).toBeNull();
+      expect(document.querySelector('.bl-si-zone-drawing')).toBeNull();
       // But picker should still be active
-      expect(pb.Picker.isActive).toBe(true);
+      expect(blsi.Picker.isActive).toBe(true);
     });
 
     test('clicking zone overlay in sticky mode calls onStickyUnblur', () => {
       const callbacks = { onStickyUnblur: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
 
       const zone = document.createElement('div');
-      zone.dataset.pbZone = 's_test123';
+      zone.dataset.blSiZone = 's_test123';
       document.body.appendChild(zone);
 
       fireMouseDown(zone, 50, 50);
@@ -881,31 +881,31 @@ describe('pb.Picker', () => {
 
   describe('setMode', () => {
     test('switches from sticky to dynamic', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
-      pb.Picker.setMode('dynamic');
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.setMode('dynamic');
 
       // Dynamic mode should enable hover highlights
       const el = document.createElement('div');
       el.className = 'test-el';
       document.body.appendChild(el);
       fireMouseover(el);
-      expect(el.classList.contains('pb-hover-highlight')).toBe(true);
+      expect(el.classList.contains('bl-si-hover-highlight')).toBe(true);
     });
 
     test('switches from dynamic to sticky', () => {
-      pb.Picker.activate({ pickerMode: 'dynamic' }, {});
-      pb.Picker.setMode('sticky');
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      blsi.Picker.setMode('sticky');
 
       // Sticky mode should NOT enable hover highlights
       const el = document.createElement('div');
       el.className = 'test-el';
       document.body.appendChild(el);
       fireMouseover(el);
-      expect(el.classList.contains('pb-hover-highlight')).toBe(false);
+      expect(el.classList.contains('bl-si-hover-highlight')).toBe(false);
     });
 
     test('cancels in-progress draw on mode switch', () => {
-      pb.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -917,30 +917,30 @@ describe('pb.Picker', () => {
       Object.defineProperty(event, 'target', { value: el, writable: false });
       document.dispatchEvent(event);
 
-      expect(document.querySelector('.pb-zone-drawing')).not.toBeNull();
+      expect(document.querySelector('.bl-si-zone-drawing')).not.toBeNull();
 
-      pb.Picker.setMode('dynamic');
-      expect(document.querySelector('.pb-zone-drawing')).toBeNull();
+      blsi.Picker.setMode('dynamic');
+      expect(document.querySelector('.bl-si-zone-drawing')).toBeNull();
     });
 
     test('calls onModeChange callback', () => {
       const callbacks = { onModeChange: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
-      pb.Picker.setMode('dynamic');
+      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.setMode('dynamic');
       expect(callbacks.onModeChange).toHaveBeenCalledWith('dynamic');
     });
 
     test('ignores invalid mode values', () => {
       const callbacks = { onModeChange: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
-      pb.Picker.setMode('invalid');
+      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.setMode('invalid');
       expect(callbacks.onModeChange).not.toHaveBeenCalled();
     });
 
     test('no-op when setting same mode', () => {
       const callbacks = { onModeChange: jest.fn() };
-      pb.Picker.activate({ pickerMode: 'sticky' }, callbacks);
-      pb.Picker.setMode('sticky');
+      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.setMode('sticky');
       expect(callbacks.onModeChange).not.toHaveBeenCalled();
     });
   });

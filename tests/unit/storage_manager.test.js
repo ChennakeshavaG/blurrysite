@@ -2,7 +2,7 @@
  * tests/unit/storage_manager.test.js
  *
  * Unit tests for src/storage_manager.js
- * Module exposes pb.Storage with:
+ * Module exposes blsi.Storage with:
  *   saveBlurItem, removeBlurItem, getBlurItems,
  *   clearHost, clearAll, getSettings, saveSettings
  *
@@ -20,7 +20,7 @@ const path = require('path');
 const MODULE_PATH = path.resolve(__dirname, '../../src/storage_manager.js');
 
 function loadStorageManager() {
-  if (pb.Storage) return;
+  if (blsi.Storage) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -50,7 +50,7 @@ function mockStorageSet() {
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
-describe('pb.Storage', () => {
+describe('blsi.Storage', () => {
   beforeAll(() => {
     loadStorageManager();
   });
@@ -66,7 +66,7 @@ describe('pb.Storage', () => {
       mockStorageGet({ blurred_items: {} });
 
       const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#target' };
-      await pb.Storage.saveBlurItem('example.com', item);
+      await blsi.Storage.saveBlurItem('example.com', item);
 
       expect(chrome.storage.local.set).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -81,7 +81,7 @@ describe('pb.Storage', () => {
       mockStorageGet({ blurred_items: { 'example.com': [existing] } });
 
       const newItem = { type: 'dynamic', name: 'Dynamic 2', selector: '#b' };
-      await pb.Storage.saveBlurItem('example.com', newItem);
+      await blsi.Storage.saveBlurItem('example.com', newItem);
 
       expect(chrome.storage.local.set).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -96,7 +96,7 @@ describe('pb.Storage', () => {
       mockStorageGet({ blurred_items: { 'x.com': [existing] } });
 
       const dupe = { type: 'dynamic', name: 'Dynamic 2', selector: '#target' };
-      await pb.Storage.saveBlurItem('x.com', dupe);
+      await blsi.Storage.saveBlurItem('x.com', dupe);
 
       const setCall = chrome.storage.local.set.mock.calls[0][0];
       expect(setCall.blurred_items['x.com']).toHaveLength(1);
@@ -108,7 +108,7 @@ describe('pb.Storage', () => {
       }));
       mockStorageGet({ blurred_items: { 'x.com': items } });
 
-      await pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'D11', selector: '#el11' });
+      await blsi.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'D11', selector: '#el11' });
 
       expect(chrome.storage.local.set).not.toHaveBeenCalled();
     });
@@ -116,7 +116,7 @@ describe('pb.Storage', () => {
     test('does not use chrome.runtime.sendMessage', async () => {
       mockStorageGet({ blurred_items: {} });
 
-      await pb.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'D1', selector: '#a' });
+      await blsi.Storage.saveBlurItem('x.com', { type: 'dynamic', name: 'D1', selector: '#a' });
 
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
@@ -132,7 +132,7 @@ describe('pb.Storage', () => {
       ];
       mockStorageGet({ blurred_items: { 'x.com': items } });
 
-      await pb.Storage.removeBlurItem('x.com', '#a');
+      await blsi.Storage.removeBlurItem('x.com', '#a');
 
       const setCall = chrome.storage.local.set.mock.calls[0][0];
       expect(setCall.blurred_items['x.com']).toHaveLength(1);
@@ -142,7 +142,7 @@ describe('pb.Storage', () => {
     test('deletes hostname key when last item removed', async () => {
       mockStorageGet({ blurred_items: { 'x.com': [{ type: 'dynamic', name: 'D1', selector: '#a' }] } });
 
-      await pb.Storage.removeBlurItem('x.com', '#a');
+      await blsi.Storage.removeBlurItem('x.com', '#a');
 
       const setCall = chrome.storage.local.set.mock.calls[0][0];
       expect(setCall.blurred_items['x.com']).toBeUndefined();
@@ -159,24 +159,24 @@ describe('pb.Storage', () => {
       ];
       mockStorageGet({ blurred_items: { 'example.com': items } });
 
-      const result = await pb.Storage.getBlurItems('example.com');
+      const result = await blsi.Storage.getBlurItems('example.com');
       expect(result).toEqual(items);
     });
 
     test('returns empty array when no items for hostname', async () => {
       mockStorageGet({ blurred_items: {} });
-      const result = await pb.Storage.getBlurItems('example.com');
+      const result = await blsi.Storage.getBlurItems('example.com');
       expect(result).toHaveLength(0);
     });
 
     test('returns empty array when blurred_items is null', async () => {
       mockStorageGet({ blurred_items: null });
-      expect(await pb.Storage.getBlurItems('x.com')).toEqual([]);
+      expect(await blsi.Storage.getBlurItems('x.com')).toEqual([]);
     });
 
     test('does not use chrome.runtime.sendMessage', async () => {
       mockStorageGet({ blurred_items: {} });
-      await pb.Storage.getBlurItems('x.com');
+      await blsi.Storage.getBlurItems('x.com');
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
   });
@@ -187,7 +187,7 @@ describe('pb.Storage', () => {
     test('deletes hostname from blurred_items', async () => {
       mockStorageGet({ blurred_items: { 'x.com': [{ type: 'dynamic', name: 'D1', selector: '#a' }], 'y.com': [] } });
 
-      await pb.Storage.clearHost('x.com');
+      await blsi.Storage.clearHost('x.com');
 
       const setCall = chrome.storage.local.set.mock.calls[0][0];
       expect(setCall.blurred_items['x.com']).toBeUndefined();
@@ -199,7 +199,7 @@ describe('pb.Storage', () => {
 
   describe('clearAll', () => {
     test('overwrites blurred_items with empty object', async () => {
-      await pb.Storage.clearAll();
+      await blsi.Storage.clearAll();
 
       expect(chrome.storage.local.set).toHaveBeenCalledWith(
         { blurred_items: {} },
@@ -213,14 +213,14 @@ describe('pb.Storage', () => {
   describe('getSettings', () => {
     test('returns merged settings from storage', async () => {
       mockStorageGet({ settings: { BLUR_RADIUS: 12 } });
-      const settings = await pb.Storage.getSettings();
+      const settings = await blsi.Storage.getSettings();
       expect(settings.BLUR_RADIUS).toBe(12);
       expect(settings.ENABLED).toBe(true); // default merged in
     });
 
     test('returns full defaults when no settings in storage', async () => {
       mockStorageGet({ settings: null });
-      const settings = await pb.Storage.getSettings();
+      const settings = await blsi.Storage.getSettings();
       expect(settings.BLUR_RADIUS).toBe(10);
       expect(settings.HIGHLIGHT_COLOR).toBe('#f59e0b');
     });
@@ -230,9 +230,9 @@ describe('pb.Storage', () => {
 
   describe('saveSettings', () => {
     test('validates and writes settings to storage', async () => {
-      const fullSettings = pb.buildDefaultSettings();
+      const fullSettings = blsi.buildDefaultSettings();
       fullSettings.BLUR_RADIUS = 20;
-      await pb.Storage.saveSettings(fullSettings);
+      await blsi.Storage.saveSettings(fullSettings);
 
       expect(chrome.storage.local.set).toHaveBeenCalled();
       const saved = chrome.storage.local.set.mock.calls[0][0].settings;
@@ -241,7 +241,7 @@ describe('pb.Storage', () => {
     });
 
     test('does not use chrome.runtime.sendMessage', async () => {
-      await pb.Storage.saveSettings(pb.buildDefaultSettings());
+      await blsi.Storage.saveSettings(blsi.buildDefaultSettings());
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
   });
@@ -251,21 +251,21 @@ describe('pb.Storage', () => {
   describe('getRules', () => {
     test('returns rules array from storage', async () => {
       mockStorageGet({ rules: [{ id: 'r1', pattern: '*.test.com' }] });
-      const rules = await pb.Storage.getRules();
+      const rules = await blsi.Storage.getRules();
       expect(rules).toHaveLength(1);
       expect(rules[0].id).toBe('r1');
     });
 
     test('returns empty array when no rules saved', async () => {
       mockStorageGet({ rules: null });
-      expect(await pb.Storage.getRules()).toEqual([]);
+      expect(await blsi.Storage.getRules()).toEqual([]);
     });
   });
 
   describe('saveRules', () => {
     test('sanitizes and writes rules to storage', async () => {
       const rules = [{ id: 'r1', pattern: '*.example.com', patternType: 'wildcard', settings: {} }];
-      await pb.Storage.saveRules(rules);
+      await blsi.Storage.saveRules(rules);
 
       expect(chrome.storage.local.set).toHaveBeenCalled();
       const saved = chrome.storage.local.set.mock.calls[0][0].rules;
@@ -279,7 +279,7 @@ describe('pb.Storage', () => {
   describe('getBlurState', () => {
     test('returns blur state from background', async () => {
       mockStorageGet({ blur_all_hosts: { 'example.com': true } });
-      const result = await pb.Storage.getBlurState('example.com');
+      const result = await blsi.Storage.getBlurState('example.com');
       expect(result).toBe(true);
     });
   });
@@ -287,7 +287,7 @@ describe('pb.Storage', () => {
   describe('saveBlurState', () => {
     test('writes blur state to storage', async () => {
       mockStorageGet({ blur_all_hosts: {} });
-      await pb.Storage.saveBlurState('example.com', true);
+      await blsi.Storage.saveBlurState('example.com', true);
 
       const setCall = chrome.storage.local.set.mock.calls[0][0];
       expect(setCall.blur_all_hosts['example.com']).toBe(true);
@@ -299,13 +299,13 @@ describe('pb.Storage', () => {
   describe('error handling', () => {
     test('getBlurItems returns empty array when storage returns null', async () => {
       mockStorageGet({ blurred_items: null });
-      const result = await pb.Storage.getBlurItems('x.com');
+      const result = await blsi.Storage.getBlurItems('x.com');
       expect(result).toEqual([]);
     });
 
     test('getSettings returns defaults when storage returns null', async () => {
       mockStorageGet({ settings: null });
-      const result = await pb.Storage.getSettings();
+      const result = await blsi.Storage.getSettings();
       expect(result.BLUR_RADIUS).toBe(10);
     });
   });
@@ -314,47 +314,47 @@ describe('pb.Storage', () => {
 
   describe('guard clauses', () => {
     test('saveBlurItem returns early for empty hostname', async () => {
-      await pb.Storage.saveBlurItem('', { type: 'dynamic', name: 'D1', selector: '#el' });
+      await blsi.Storage.saveBlurItem('', { type: 'dynamic', name: 'D1', selector: '#el' });
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('saveBlurItem returns early for null item', async () => {
-      await pb.Storage.saveBlurItem('example.com', null);
+      await blsi.Storage.saveBlurItem('example.com', null);
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('saveBlurItem returns early for invalid item type', async () => {
-      await pb.Storage.saveBlurItem('example.com', { type: 'bad', name: 'X' });
+      await blsi.Storage.saveBlurItem('example.com', { type: 'bad', name: 'X' });
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('removeBlurItem returns early for empty hostname', async () => {
-      await pb.Storage.removeBlurItem('', '#el');
+      await blsi.Storage.removeBlurItem('', '#el');
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('getBlurItems returns empty array for empty hostname', async () => {
-      expect(await pb.Storage.getBlurItems('')).toEqual([]);
+      expect(await blsi.Storage.getBlurItems('')).toEqual([]);
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('clearHost returns early for empty hostname', async () => {
-      await pb.Storage.clearHost('');
+      await blsi.Storage.clearHost('');
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('saveSettings returns early for null input', async () => {
-      await pb.Storage.saveSettings(null);
+      await blsi.Storage.saveSettings(null);
       expect(chrome.storage.local.set).not.toHaveBeenCalled();
     });
 
     test('saveSettings returns early for non-object input', async () => {
-      await pb.Storage.saveSettings('not an object');
+      await blsi.Storage.saveSettings('not an object');
       expect(chrome.storage.local.set).not.toHaveBeenCalled();
     });
 
     test('saveBlurItem rejects prototype pollution hostname', async () => {
-      await pb.Storage.saveBlurItem('__proto__', { type: 'dynamic', name: 'D1', selector: '#x' });
+      await blsi.Storage.saveBlurItem('__proto__', { type: 'dynamic', name: 'D1', selector: '#x' });
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
   });

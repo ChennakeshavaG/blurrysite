@@ -79,7 +79,7 @@ toggles and rebuilt only when `invalidateSelectorCache()` is called.
 |---|---|
 | `img` | Direct `style.filter` on the element |
 | `video` | Canvas overlay + `requestAnimationFrame` loop (bypasses DRM/cross-origin) |
-| `canvas` | CSS class. Engine's own `pb-canvas-overlay` canvases are excluded by guard. |
+| `canvas` | CSS class. Engine's own `bl-si-canvas-overlay` canvases are excluded by guard. |
 
 **Excluded:**
 

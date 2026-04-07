@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * build.js — PrivacyBlur extension packager
+ * build.js — Blurry Site extension packager
  *
- * Produces dist/privacyblur.zip ready for Chrome Web Store / Firefox Add-ons.
+ * Produces dist/blurrysite.zip ready for Chrome Web Store / Firefox Add-ons.
  * No compile step needed — this is vanilla JS. This script only zips the files.
  *
  * Usage: node build.js
- * Output: dist/privacyblur-<version>.zip
+ * Output: dist/blurrysite-<version>.zip
  */
 
 const fs   = require('fs');
@@ -17,7 +17,7 @@ const ROOT    = __dirname;
 const DIST    = path.join(ROOT, 'dist');
 const MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
 const VERSION  = MANIFEST.version;
-const OUT_FILE = path.join(DIST, `privacyblur-${VERSION}.zip`);
+const OUT_FILE = path.join(DIST, `blurrysite-${VERSION}.zip`);
 
 // Files and directories to include in the extension zip
 const INCLUDE = [
@@ -42,4 +42,4 @@ if (fs.existsSync(OUT_FILE)) {
 const args = INCLUDE.map(f => `"${f}"`).join(' ');
 execSync(`zip -r "${OUT_FILE}" ${args}`, { cwd: ROOT, stdio: 'inherit' });
 
-console.log(`\nBuilt: dist/privacyblur-${VERSION}.zip`);
+console.log(`\nBuilt: dist/blurry_site-${VERSION}.zip`);

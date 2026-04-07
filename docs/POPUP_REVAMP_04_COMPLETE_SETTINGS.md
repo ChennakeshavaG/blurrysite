@@ -117,8 +117,8 @@ Per-hostname array of CSS selectors for individually blurred elements.
 
 ```js
 {
-  "example.com": ["#sensitive-div", "[data-pb-id='a1b2c3d4']"],
-  "mail.google.com": ["[data-pb-id='e5f6g7h8']"]
+  "example.com": ["#sensitive-div", "[data-bl-si-id='a1b2c3d4']"],
+  "mail.google.com": ["[data-bl-si-id='e5f6g7h8']"]
 }
 ```
 
@@ -154,14 +154,14 @@ Max 500 selectors per hostname. Max 2000 chars per selector.
 
 | Constant | Value | Used for |
 |---|---|---|
-| `CSS.BLURRED` | `'pb-blurred'` | Core blur class |
-| `CSS.FROSTED` | `'pb-frosted'` | Frosted mode overlay class |
-| `CSS.REVEALED` | `'pb-revealed'` | Click-reveal active state |
-| `CSS.REVEAL_ON_HOVER` | `'pb-reveal-on-hover'` | Hover-reveal target |
-| `CSS.ANCESTOR_REVEAL` | `'pb-ancestor-reveal'` | Ancestor chain unblur |
-| `CSS.CANVAS_OVERLAY` | `'pb-canvas-overlay'` | Video canvas overlay |
-| `CSS.TEXT_WRAPPER` | `'pb-text-node-wrapper'` | Text node wrapper span |
-| `CSS.HOVER_HIGHLIGHT` | `'pb-hover-highlight'` | Picker hover outline |
-| `CSS.PICKER_ACTIVE` | `'pb-picker-active'` | Picker mode active on html |
-| `CSS.TOAST` | `'pb-toast'` | Toast notification |
-| `CSS.TOOLBAR` | `'pb-toolbar'` | Picker toolbar |
+| `CSS.BLURRED` | `'bl-si-blurred'` | Core blur class |
+| `CSS.FROSTED` | `'bl-si-frosted'` | Frosted mode overlay class |
+| `CSS.REVEALED` | `'bl-si-revealed'` | Click-reveal active state |
+| `CSS.REVEAL_ON_HOVER` | `'bl-si-reveal-on-hover'` | Hover-reveal target |
+| `CSS.ANCESTOR_REVEAL` | `'bl-si-ancestor-reveal'` | Ancestor chain unblur |
+| `CSS.CANVAS_OVERLAY` | `'bl-si-canvas-overlay'` | Video canvas overlay |
+| `CSS.TEXT_WRAPPER` | `'bl-si-text-node-wrapper'` | Text node wrapper span |
+| `CSS.HOVER_HIGHLIGHT` | `'bl-si-hover-highlight'` | Picker hover outline |
+| `CSS.PICKER_ACTIVE` | `'bl-si-picker-active'` | Picker mode active on html |
+| `CSS.TOAST` | `'bl-si-toast'` | Toast notification |
+| `CSS.TOOLBAR` | `'bl-si-toolbar'` | Picker toolbar |

@@ -138,7 +138,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
   /**
    * Evaluate an expression in the content script's isolated world via CDP.
-   * This gives us access to pb.BlurEngine and other globals.
+   * This gives us access to blsi.BlurEngine and other globals.
    */
   async function evalInContentScript(expression) {
     const client = await page.createCDPSession();
@@ -182,30 +182,30 @@ describeFn('PrivacyBlur extension — E2E', () => {
     const expressions = {
       TOGGLE_BLUR_ALL: `
         (function() {
-          var blurred = document.querySelectorAll('[data-pb-blur]');
+          var blurred = document.querySelectorAll('[data-bl-si-blur]');
           if (blurred.length > 0) {
-            pb.BlurEngine.unblurAll();
+            blsi.BlurEngine.unblurAll();
           } else {
-            pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
-            pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
+            blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
+            blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
           }
         })()
       `,
       TOGGLE_PICKER: `
         (function() {
-          if (document.documentElement.classList.contains('pb-picker-active')) {
-            pb.Picker.deactivate();
+          if (document.documentElement.classList.contains('bl-si-picker-active')) {
+            blsi.Picker.deactivate();
           } else {
-            pb.Picker.activate(
+            blsi.Picker.activate(
               { blurRadius: 8, highlightColor: '#f59e0b' },
               {
                 onBlur: function(el) {
-                  pb.BlurEngine.applyBlur(el);
-                  var sel = pb.SelectorUtils.getSelector(el);
-                  if (sel) pb.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
+                  blsi.BlurEngine.applyBlur(el);
+                  var sel = blsi.SelectorUtils.getSelector(el);
+                  if (sel) blsi.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
                 },
                 onUnblur: function(el) {
-                  pb.BlurEngine.removeBlur(el);
+                  blsi.BlurEngine.removeBlur(el);
                 },
                 onDeactivate: function() {}
               }
@@ -215,7 +215,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
       `,
       CLEAR_ALL_BLUR: `
         (function() {
-          pb.BlurEngine.unblurAll();
+          blsi.BlurEngine.unblurAll();
         })()
       `,
     };
@@ -229,14 +229,14 @@ describeFn('PrivacyBlur extension — E2E', () => {
     return page.evaluate(
       (sel) => {
         const el = document.querySelector(sel);
-        return el ? el.hasAttribute('data-pb-blur') : false;
+        return el ? el.hasAttribute('data-bl-si-blur') : false;
       },
       selector
     );
   }
 
   async function countBlurred() {
-    return page.evaluate(() => document.querySelectorAll('[data-pb-blur]').length);
+    return page.evaluate(() => document.querySelectorAll('[data-bl-si-blur]').length);
   }
 
   // ── Tests ─────────────────────────────────────────────────────────────────
@@ -247,7 +247,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
     // Content script sets CSS custom properties on :root.
     const hasCustomProp = await page.evaluate(() => {
-      const val = getComputedStyle(document.documentElement).getPropertyValue('--pb-radius');
+      const val = getComputedStyle(document.documentElement).getPropertyValue('--bl-si-radius');
       return val.trim().length > 0;
     });
     expect(hasCustomProp).toBe(true);
@@ -275,17 +275,17 @@ describeFn('PrivacyBlur extension — E2E', () => {
     expect(imgBlurred).toBe(false);
   });
 
-  test('picker activates and adds pb-picker-active class', async () => {
+  test('picker activates and adds bl-si-picker-active class', async () => {
     await sendCommand('TOGGLE_PICKER');
     await new Promise((r) => setTimeout(r, 300));
 
     const pickerActive = await page.evaluate(() =>
-      document.documentElement.classList.contains('pb-picker-active')
+      document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(pickerActive).toBe(true);
   });
 
-  test('clicking an image in picker mode applies data-pb-blur', async () => {
+  test('clicking an image in picker mode applies data-bl-si-blur', async () => {
     await sendCommand('TOGGLE_PICKER');
     await new Promise((r) => setTimeout(r, 300));
 
@@ -304,7 +304,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await new Promise((r) => setTimeout(r, 300));
 
     const pickerActive = await page.evaluate(() =>
-      document.documentElement.classList.contains('pb-picker-active')
+      document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(pickerActive).toBe(false);
   });
@@ -335,8 +335,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
   test('clear all blur removes everything', async () => {
     // Directly blur some elements to ensure there is something to clear.
     await evalInContentScript(`
-      pb.BlurEngine.applyBlur(document.querySelector('#test-img'));
-      pb.BlurEngine.applyBlur(document.querySelector('#test-para'));
+      blsi.BlurEngine.applyBlur(document.querySelector('#test-img'));
+      blsi.BlurEngine.applyBlur(document.querySelector('#test-para'));
     `);
     await new Promise((r) => setTimeout(r, 300));
 
@@ -358,7 +358,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
     // Verify content script set CSS custom properties on google.com.
     const hasCustomProp = await page.evaluate(() => {
-      const val = getComputedStyle(document.documentElement).getPropertyValue('--pb-radius');
+      const val = getComputedStyle(document.documentElement).getPropertyValue('--bl-si-radius');
       return val.trim().length > 0;
     });
     expect(hasCustomProp).toBe(true);
@@ -376,8 +376,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
       await client.send('Runtime.evaluate', {
         expression: `
-          pb.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
-          pb.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
+          blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
+          blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
         `,
         contextId,
         returnByValue: true,
@@ -390,7 +390,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await new Promise((r) => setTimeout(r, 500));
 
     const blurredCount = await page.evaluate(
-      () => document.querySelectorAll('[data-pb-blur]').length
+      () => document.querySelectorAll('[data-bl-si-blur]').length
     );
     expect(blurredCount).toBeGreaterThan(0);
   });
@@ -407,11 +407,11 @@ describeFn('PrivacyBlur extension — E2E', () => {
       // Activate picker via content script world.
       await client.send('Runtime.evaluate', {
         expression: `
-          pb.Picker.activate(
+          blsi.Picker.activate(
             { blurRadius: 8, highlightColor: '#f59e0b' },
             {
-              onBlur: function(el) { pb.BlurEngine.applyBlur(el); },
-              onUnblur: function(el) { pb.BlurEngine.removeBlur(el); },
+              onBlur: function(el) { blsi.BlurEngine.applyBlur(el); },
+              onUnblur: function(el) { blsi.BlurEngine.removeBlur(el); },
               onDeactivate: function() {}
             }
           );
@@ -427,7 +427,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await new Promise((r) => setTimeout(r, 300));
 
     const pickerActive = await page.evaluate(() =>
-      document.documentElement.classList.contains('pb-picker-active')
+      document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(pickerActive).toBe(true);
 
@@ -436,7 +436,7 @@ describeFn('PrivacyBlur extension — E2E', () => {
     await new Promise((r) => setTimeout(r, 300));
 
     const pickerAfter = await page.evaluate(() =>
-      document.documentElement.classList.contains('pb-picker-active')
+      document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(pickerAfter).toBe(false);
   });

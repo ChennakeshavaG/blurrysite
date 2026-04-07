@@ -1,5 +1,5 @@
 {
-  "popup_title": "Privacy Blur",
+  "popup_title": "Blurry Site",
   "toggle_on": "On",
   "toggle_off": "Off",
 
@@ -87,8 +87,8 @@
   "site_elements_blurred": "{{count}} blurred",
   "site_rule_active": "Rule: {{name}}",
 
-  "toast_enabled": "Privacy Blur enabled",
-  "toast_disabled": "Privacy Blur disabled",
+  "toast_enabled": "Blurry Site enabled",
+  "toast_disabled": "Blurry Site disabled",
   "toast_blur_all": "All elements blurred",
   "toast_cleared": "Page cleared",
   "toast_all_sites_cleared": "All sites cleared",

@@ -34,11 +34,11 @@ Corrupted `popupTheme` value (e.g., 'DARK' in caps) not caught.
 
 ## 9. Light mode CSS missing token overrides
 **File:** `popup/popup.css:76-89`
-`--pb-accent-hover`, `--pb-danger`, `--pb-success`, `--pb-btn-blur-active` not overridden in light mode.
+`--bl-si-accent-hover`, `--bl-si-danger`, `--bl-si-success`, `--bl-si-btn-blur-active` not overridden in light mode.
 
 ## 10. GET_STATUS misses CSS-blurred elements in count
 **File:** `src/content_script.js:588`
-Counts only `[data-pb-blur]` elements. Always-blur tags (p, h1, img) blurred by CSS rules are not counted.
+Counts only `[data-bl-si-blur]` elements. Always-blur tags (p, h1, img) blurred by CSS rules are not counted.
 
 ## 11. Unused i18n keys
 **File:** `_locales/en/popup.json`

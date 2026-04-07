@@ -1,5 +1,5 @@
 /**
- * popup_settings_renderer.js — PrivacyBlur Reusable Settings Component
+ * popup_settings_renderer.js — Blurry Site Reusable Settings Component
  *
  * POJO-driven renderer that takes config arrays and a settings object,
  * and builds the DOM for any settings panel. Used for:
@@ -10,13 +10,13 @@
  * The renderer dispatches to type-specific creators (toggle, range, select, etc.)
  * and maintains a control map for bi-directional sync.
  *
- * Exposed as pb.SettingsRenderer (IIFE — no ES module syntax).
+ * Exposed as blsi.SettingsRenderer (IIFE — no ES module syntax).
  */
 
 const SettingsRenderer = (() => {
   'use strict';
 
-  const I18n = () => pb.I18n;
+  const I18n = () => blsi.I18n;
 
   // ── Control registry ───────────────────────────────────────────────────────
   // Maps setting key → { control: HTMLElement, display: HTMLElement|null, config }
@@ -80,7 +80,7 @@ const SettingsRenderer = (() => {
       if (config.group && config.group !== currentGroup) {
         currentGroup = config.group;
         const header = document.createElement('div');
-        header.className = 'pb-setting-group';
+        header.className = 'bl-si-setting-group';
         header.textContent = I18n().t('group_' + config.group);
         container.appendChild(header);
       }
@@ -114,17 +114,17 @@ const SettingsRenderer = (() => {
 
   function _renderRow(config, settings, onChange, ruleMode, globalSettings) {
     const row = document.createElement('div');
-    row.className = 'pb-setting pb-setting--' + config.type;
+    row.className = 'bl-si-setting bl-si-setting--' + config.type;
     row.dataset.key = config.key;
 
     // Label
     const label = document.createElement('label');
-    label.className = 'pb-setting__label';
+    label.className = 'bl-si-setting__label';
     label.textContent = I18n().t(config.i18nKey);
 
     if (config.i18nHintKey) {
       const hint = document.createElement('span');
-      hint.className = 'pb-setting__hint';
+      hint.className = 'bl-si-setting__hint';
       hint.textContent = I18n().t(config.i18nHintKey);
       label.appendChild(hint);
     }
@@ -184,7 +184,7 @@ const SettingsRenderer = (() => {
     const checked = isBool ? !!value : (value === config.options.trueValue);
 
     const wrapper = document.createElement('label');
-    wrapper.className = 'pb-toggle';
+    wrapper.className = 'bl-si-toggle';
 
     const input = document.createElement('input');
     input.type = 'checkbox';
@@ -197,9 +197,9 @@ const SettingsRenderer = (() => {
     });
 
     const track = document.createElement('span');
-    track.className = 'pb-toggle__track';
+    track.className = 'bl-si-toggle__track';
     const thumb = document.createElement('span');
-    thumb.className = 'pb-toggle__thumb';
+    thumb.className = 'bl-si-toggle__thumb';
     track.appendChild(thumb);
 
     wrapper.appendChild(input);
@@ -209,15 +209,15 @@ const SettingsRenderer = (() => {
 
   function _createRange(config, value, onChange) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'pb-range-wrapper';
+    wrapper.className = 'bl-si-range-wrapper';
 
     const display = document.createElement('span');
-    display.className = 'pb-setting__value';
+    display.className = 'bl-si-setting__value';
     display.textContent = value + (config.options.unit || '');
 
     const input = document.createElement('input');
     input.type = 'range';
-    input.className = 'pb-slider';
+    input.className = 'bl-si-slider';
     input.min = config.options.min;
     input.max = config.options.max;
     input.step = config.options.step;
@@ -237,7 +237,7 @@ const SettingsRenderer = (() => {
 
   function _createSelect(config, value, onChange) {
     const select = document.createElement('select');
-    select.className = 'pb-select';
+    select.className = 'bl-si-select';
 
     for (const opt of config.options.values) {
       const option = document.createElement('option');
@@ -257,7 +257,7 @@ const SettingsRenderer = (() => {
   function _createColor(config, value, onChange) {
     const input = document.createElement('input');
     input.type = 'color';
-    input.className = 'pb-color';
+    input.className = 'bl-si-color';
     input.value = value || '#f59e0b';
 
     input.addEventListener('input', () => {
@@ -269,15 +269,15 @@ const SettingsRenderer = (() => {
 
   function _createNumber(config, value, onChange) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'pb-number-wrapper';
+    wrapper.className = 'bl-si-number-wrapper';
 
     const display = document.createElement('span');
-    display.className = 'pb-setting__value';
+    display.className = 'bl-si-setting__value';
     display.textContent = value === 0 ? '0' : String(value);
 
     const input = document.createElement('input');
     input.type = 'number';
-    input.className = 'pb-number';
+    input.className = 'bl-si-number';
     input.min = config.options.min;
     input.max = config.options.max;
     input.step = config.options.step;
@@ -296,14 +296,14 @@ const SettingsRenderer = (() => {
 
   function _createShortcutDisplay(config, value, onChange) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'pb-shortcut';
+    wrapper.className = 'bl-si-shortcut';
 
     const keysEl = document.createElement('span');
-    keysEl.className = 'pb-shortcut__keys';
+    keysEl.className = 'bl-si-shortcut__keys';
     _renderShortcutKeys(keysEl, value);
 
     const btn = document.createElement('button');
-    btn.className = 'pb-shortcut__customize';
+    btn.className = 'bl-si-shortcut__customize';
     btn.textContent = I18n().t('shortcut_customize');
     btn.addEventListener('click', () => {
       // Fire onChange with a special signal — popup.js handles modal opening
@@ -338,14 +338,14 @@ const SettingsRenderer = (() => {
 
   function _createRuleOverride(config, value, onChange, globalSettings) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'pb-rule-override';
+    wrapper.className = 'bl-si-rule-override';
 
     const hasOverride = value !== undefined && value !== null;
 
     if (config.type === 'toggle') {
       // Three-state select: Global default / On / Off
       const select = document.createElement('select');
-      select.className = 'pb-select pb-select--sm';
+      select.className = 'bl-si-select bl-si-select--sm';
 
       const optDefault = document.createElement('option');
       optDefault.value = '';
@@ -382,7 +382,7 @@ const SettingsRenderer = (() => {
 
     if (config.type === 'select') {
       const select = document.createElement('select');
-      select.className = 'pb-select pb-select--sm';
+      select.className = 'bl-si-select bl-si-select--sm';
 
       const optDefault = document.createElement('option');
       optDefault.value = '';
@@ -410,11 +410,11 @@ const SettingsRenderer = (() => {
       // Checkbox to enable override + control
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.className = 'pb-rule-override__check';
+      checkbox.className = 'bl-si-rule-override__check';
       checkbox.checked = hasOverride;
 
       const controlContainer = document.createElement('div');
-      controlContainer.className = 'pb-rule-override__control';
+      controlContainer.className = 'bl-si-rule-override__control';
       controlContainer.style.display = hasOverride ? '' : 'none';
 
       let innerControl;
@@ -459,7 +459,7 @@ const SettingsRenderer = (() => {
     if (config.type === 'color') {
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.className = 'pb-rule-override__check';
+      checkbox.className = 'bl-si-rule-override__check';
       checkbox.checked = hasOverride;
 
       const globalColorVal = globalSettings ? getByPath(globalSettings, config.key) : null;
@@ -511,7 +511,7 @@ const SettingsRenderer = (() => {
       const input = control.querySelector ? control.querySelector('input[type="color"]') : control;
       if (input && input.type === 'color') input.value = value;
     } else if (config.type === 'shortcut') {
-      const keysEl = control.querySelector('.pb-shortcut__keys');
+      const keysEl = control.querySelector('.bl-si-shortcut__keys');
       if (keysEl) _renderShortcutKeys(keysEl, value);
     }
   }
@@ -529,4 +529,4 @@ const SettingsRenderer = (() => {
   };
 })();
 
-pb.SettingsRenderer = SettingsRenderer;
+blsi.SettingsRenderer = SettingsRenderer;

@@ -464,7 +464,7 @@ displacement. Brute-force search is computationally infeasible.
 
 ```html
 <svg style="display:none">
-  <filter id="pb-frosted">
+  <filter id="bl-si-frosted">
     <feTurbulence type="turbulence" baseFrequency="0.05"
                   numOctaves="3" seed="42" result="noise" />
     <feDisplacementMap in="SourceGraphic" in2="noise"
@@ -475,8 +475,8 @@ displacement. Brute-force search is computationally infeasible.
 ```
 
 ```css
-.pb-frosted {
-  filter: url(#pb-frosted);
+.bl-si-frosted {
+  filter: url(#bl-si-frosted);
 }
 ```
 

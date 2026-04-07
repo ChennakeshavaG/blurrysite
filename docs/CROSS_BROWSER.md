@@ -1,8 +1,8 @@
-# PrivacyBlur — Cross-Browser Compatibility
+# Blurry Site — Cross-Browser Compatibility
 
 ## Summary
 
-PrivacyBlur targets Manifest V3 (MV3) on both Chrome/Edge and Firefox 109+. The extension is architecturally browser-agnostic: it uses the `chrome.*` API namespace throughout, which Firefox exposes as a compatibility shim since Firefox 109 (alongside its native `browser.*` namespace).
+BlurrySite targets Manifest V3 (MV3) on both Chrome/Edge and Firefox 109+. The extension is architecturally browser-agnostic: it uses the `chrome.*` API namespace throughout, which Firefox exposes as a compatibility shim since Firefox 109 (alongside its native `browser.*` namespace).
 
 ---
 
@@ -28,7 +28,7 @@ Every manifest key in this extension works identically in Chrome and Firefox:
 ```json
 "browser_specific_settings": {
   "gecko": {
-    "id": "privacyblur@extension",
+    "id": "blurrysite@extension",
     "strict_min_version": "109.0"
   }
 }
@@ -70,7 +70,7 @@ Firefox 109+ provides the `chrome.*` namespace as a wrapper over its native `bro
 | Worker can call `chrome.storage` | ✓ | ✓ |
 | Worker can call `chrome.tabs` | ✓ | ✓ |
 
-**Note:** Service workers in Firefox 109–115 had intermittent lifecycle issues where the worker could be terminated more aggressively than in Chrome. Any state that must survive across message cycles should be in `chrome.storage.local`, not in module-level variables. PrivacyBlur's `background.js` is already stateless by design — all persistent state is in storage.
+**Note:** Service workers in Firefox 109–115 had intermittent lifecycle issues where the worker could be terminated more aggressively than in Chrome. Any state that must survive across message cycles should be in `chrome.storage.local`, not in module-level variables. BlurrySite's `background.js` is already stateless by design — all persistent state is in storage.
 
 ---
 
@@ -100,7 +100,7 @@ The stylesheet provides fallbacks for `color-mix()`:
 /* Fallback for Chrome < 111, Firefox < 113 */
 box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25), ...;
 /* Preferred with color-mix() */
-box-shadow: 0 0 0 4px color-mix(in srgb, var(--pb-highlight-color, #f59e0b) 25%, transparent), ...;
+box-shadow: 0 0 0 4px color-mix(in srgb, var(--bl-si-highlight-color, #f59e0b) 25%, transparent), ...;
 ```
 
 `-webkit-filter` prefixes are included alongside `filter` for Safari (though Safari is not a primary target).
@@ -136,7 +136,7 @@ Firefox may fire `contextMenus.onClicked` with a `frameId` property in `info`. T
 
 ### 5.2 Canvas DRM restrictions
 
-Both Chrome and Firefox prevent `ctx.drawImage()` from reading frames of DRM-encrypted `<video>` elements. PrivacyBlur handles this with a try-catch that falls back to a dark fill rectangle:
+Both Chrome and Firefox prevent `ctx.drawImage()` from reading frames of DRM-encrypted `<video>` elements. BlurrySite handles this with a try-catch that falls back to a dark fill rectangle:
 
 ```javascript
 try {
@@ -175,7 +175,7 @@ if (
 | **Module separation** | Each module is a self-contained IIFE with a clear single responsibility. Adding a new feature (e.g., a whitelist/blacklist mode) means adding a new module without modifying existing ones. |
 | **Message protocol** | All inter-component communication is via typed string messages. New message types can be added to background.js and content_script.js without breaking existing handlers. |
 | **Storage schema** | The `blurred_items` map is open-ended — any hostname can have typed blur items (dynamic selectors + sticky zones, max 10 per host). The `settings` object supports `deepMerge` so new settings keys can be added to `DEFAULT_SETTINGS` and they will be automatically backfilled for existing users. |
-| **CSS custom properties** | `--pb-radius`, `--pb-highlight-color`, and `--pb-transition-duration` are set on `:root` by content_script. Any new CSS rules in `content.css` can consume these without touching JavaScript. |
+| **CSS custom properties** | `--bl-si-radius`, `--bl-si-highlight-color`, and `--bl-si-transition-duration` are set on `:root` by content_script. Any new CSS rules in `content.css` can consume these without touching JavaScript. |
 | **Blur engine dispatch** | The element-type dispatch in `applyBlur` (video / img / background-image / generic) is an explicit if-chain that is easy to extend with new element types (e.g., `<canvas>`, `<iframe>`) without refactoring existing paths. |
 | **No build step** | Vanilla JS with no bundler means zero toolchain debt. New files are added to manifest.json's `content_scripts.js` array and they work immediately. |
 
@@ -202,9 +202,9 @@ There is currently no migration path for settings schema changes. If a new requi
 
 #### 6.3 Selector staleness on SPAs
 
-The current selector strategy (ID → `data-pb-id`) works well for static pages but can produce stale selectors on React/Vue/Angular apps that re-render elements. Options to improve:
+The current selector strategy (ID → `data-bl-si-id`) works well for static pages but can produce stale selectors on React/Vue/Angular apps that re-render elements. Options to improve:
 
-- Add a `data-testid` / `data-cy` priority tier before stamping `data-pb-id` (already present in `UNIQUE_DATA_ATTRS` but not active since nth-child was removed).
+- Add a `data-testid` / `data-cy` priority tier before stamping `data-bl-si-id` (already present in `UNIQUE_DATA_ATTRS` but not active since nth-child was removed).
 - Store both the selector AND a content fingerprint (e.g., trimmed text content, first 32 chars) so the restore logic can fuzzy-match when the selector misses.
 
 #### 6.4 Cross-frame blur
@@ -241,4 +241,4 @@ When the user presses `Escape` inside `picker.js`, the picker calls `deactivate(
 | `color-mix()` CSS | Chrome 111+ | Edge 111+ | Firefox 113+ | Safari 16.2+ |
 | `all_frames: true` (future) | ✓ | ✓ | ✓ | N/A |
 
-**Safari:** Safari's WebExtension support (Safari 14+) uses a different toolchain (`xcrun safari-web-extension-converter`) and has incomplete MV3 support. PrivacyBlur does not currently target Safari and would require non-trivial changes to run there.
+**Safari:** Safari's WebExtension support (Safari 14+) uses a different toolchain (`xcrun safari-web-extension-converter`) and has incomplete MV3 support. BlurrySite does not currently target Safari and would require non-trivial changes to run there.

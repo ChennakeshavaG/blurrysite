@@ -42,7 +42,7 @@ if (typeof importScripts === 'function') {
 **File:** `src/blur_engine.js:269-273`
 **Severity:** HIGH
 
-`removeBlur()` only deletes `data-pb-blur` attribute. If blur-all is active, CSS tag rules (`p { filter: blur() }`) still apply. The element remains visually blurred despite calling removeBlur.
+`removeBlur()` only deletes `data-bl-si-blur` attribute. If blur-all is active, CSS tag rules (`p { filter: blur() }`) still apply. The element remains visually blurred despite calling removeBlur.
 
 **Affects:** Picker X button, context menu unblur, UNBLUR_SELECTOR message.
 
@@ -76,26 +76,26 @@ If a `chrome.storage.local` callback never fires (error/crash), the Promise neve
 **File:** `tests/e2e/observer_pipeline.spec.js:139`, `tests/e2e/mutation_loop.spec.js`
 **Severity:** CRITICAL (tests)
 
-Tests call `pb.BlurEngine.blurAllContent()` which no longer exists. Should use `injectBlurRules()` + `blurTextCheckElements()`.
+Tests call `blsi.BlurEngine.blurAllContent()` which no longer exists. Should use `injectBlurRules()` + `blurTextCheckElements()`.
 
 ---
 
-## 6. E2E tests check dead class .pb-blurred
+## 6. E2E tests check dead class .bl-si-blurred
 **File:** `tests/e2e/blur.spec.js` (10+ assertions)
 **Severity:** CRITICAL (tests)
 
-Tests verify `classList.contains('pb-blurred')` but new system uses `data-pb-blur` attribute.
+Tests verify `classList.contains('bl-si-blurred')` but new system uses `data-bl-si-blur` attribute.
 
 ---
 
-## 7. Print CSS references dead .pb-blurred class
+## 7. Print CSS references dead .bl-si-blurred class
 **File:** `styles/content.css:285-288`
 **Severity:** MEDIUM
 
 ```css
-@media print { .pb-blurred { ... } }
+@media print { .bl-si-blurred { ... } }
 ```
-Should be `[data-pb-blur]`.
+Should be `[data-bl-si-blur]`.
 
 ---
 
@@ -119,4 +119,4 @@ Opening the rule modal twice without closing adds duplicate `click` listeners to
 **File:** `src/picker.js:199`
 **Severity:** HIGH
 
-Picker checks `target.dataset.pbBlur` only. Elements blurred by CSS tag rules (blur-all) have no data attribute — picker sees them as "not blurred" and offers to blur again.
+Picker checks `target.dataset.blSiBlur` only. Elements blurred by CSS tag rules (blur-all) have no data attribute — picker sees them as "not blurred" and offers to blur again.

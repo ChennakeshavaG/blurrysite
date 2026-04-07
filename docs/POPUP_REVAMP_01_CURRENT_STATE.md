@@ -4,7 +4,7 @@
 
 | # | Section | Type | Collapsible | Key elements |
 |---|---|---|---|---|
-| 1 | Header | Sticky bar | No | Brand icon + "PrivacyBlur" title, enable/disable toggle |
+| 1 | Header | Sticky bar | No | Brand icon + "BlurrySite" title, enable/disable toggle |
 | 2 | Toast | Fixed overlay | N/A | Auto-hide notifications (1800ms) |
 | 3 | Page Status | Card | No | Hostname, blur count badge, Blur All button, Clear Page button |
 | 4 | Keyboard Shortcuts | Card | No | 3 shortcut rows (blur all, picker, clear) with customize buttons |

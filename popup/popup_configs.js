@@ -1,10 +1,10 @@
 /**
- * popup_configs.js — PrivacyBlur Settings Classification
+ * popup_configs.js — Blurry Site Settings Classification
  *
  * Two arrays: SHORTCUTS (own section) and SETTINGS (single collapsible section).
  * Settings groups: Appearance → Behavior → Categories → Advanced.
  *
- * Exposed as pb.PopupConfigs (IIFE — no ES module syntax).
+ * Exposed as blsi.PopupConfigs (IIFE — no ES module syntax).
  */
 
 const PopupConfigs = (() => {
@@ -73,4 +73,4 @@ const PopupConfigs = (() => {
   return Object.freeze({ SHORTCUTS, SETTINGS, ALL });
 })();
 
-pb.PopupConfigs = PopupConfigs;
+blsi.PopupConfigs = PopupConfigs;

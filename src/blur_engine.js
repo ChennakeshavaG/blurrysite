@@ -1,23 +1,23 @@
 /**
- * blur_engine.js — PrivacyBlur Core Blur Engine
+ * blur_engine.js — Blurry Site Core Blur Engine
  *
  * Hybrid CSS + data-attribute blur system:
  *  - Always-blur tags (h1, p, img, etc.) → injected <style> with tag selectors
- *  - Text-check tags (div, span, li, etc.) → data-pb-blur attribute after text gate
- *  - Picker/context menu → data-pb-blur on individual elements
+ *  - Text-check tags (div, span, li, etc.) → data-bl-si-blur attribute after text gate
+ *  - Picker/context menu → data-bl-si-blur on individual elements
  *
  * CSS auto-applies to always-blur elements (present + future). No per-element
- * DOM mutations for those tags. Text-check elements use data-pb-blur attribute
+ * DOM mutations for those tags. Text-check elements use data-bl-si-blur attribute
  * which doesn't trigger framework re-render loops (unlike classList).
  *
- * Exposed as pb.BlurEngine (IIFE — no ES module syntax).
+ * Exposed as blsi.BlurEngine (IIFE — no ES module syntax).
  */
 
 const BlurEngine = (() => {
   'use strict';
 
-  const SVG_FILTER_ID = pb.IDS.SVG_FILTERS;
-  const STYLE_ID      = 'pb-blur-styles';
+  const SVG_FILTER_ID = blsi.IDS.SVG_FILTERS;
+  const STYLE_ID      = 'bl-si-blur-styles';
 
   // ── Category selector definitions ──────────────────────────────────────────
 
@@ -52,7 +52,7 @@ const BlurEngine = (() => {
     }),
   });
 
-  const DEFAULT_CATS = pb.DEFAULT_SETTINGS.BLUR_CATEGORIES;
+  const DEFAULT_CATS = blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES;
   const CATEGORY_ORDER = Object.freeze(['TEXT','MEDIA','FORM','TABLE','STRUCTURE']);
 
   // ── Selector cache ─────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ const BlurEngine = (() => {
     svg.setAttribute('style', 'position:absolute;width:0;height:0');
 
     const filter = document.createElementNS(svgNS, 'filter');
-    filter.setAttribute('id', 'pb-frosted-filter');
+    filter.setAttribute('id', 'bl-si-frosted-filter');
 
     const turbulence = document.createElementNS(svgNS, 'feTurbulence');
     turbulence.setAttribute('type', 'turbulence');
@@ -169,28 +169,28 @@ const BlurEngine = (() => {
   let _styleEl = null;
 
   // Extension UI exclusion — prevents our own toolbar/toast from being blurred
-  const EXCLUDE = ':not(#pb-picker-toolbar):not(#pb-picker-toolbar *)' +
-                  ':not(.pb-toast):not(.pb-toast *)' +
-                  ':not(.pb-toolbar):not(.pb-toolbar *)';
+  const EXCLUDE = ':not(#bl-si-picker-toolbar):not(#bl-si-picker-toolbar *)' +
+                  ':not(.bl-si-toast):not(.bl-si-toast *)' +
+                  ':not(.bl-si-toolbar):not(.bl-si-toolbar *)';
 
   /**
    * Inject CSS rules for blur-all mode.
    * Always-blur tags get tag-based CSS selectors.
    * Text-check elements are handled by blurTextCheckElements() via data attribute.
-   * Also injects the [data-pb-blur] rule for text-check and picker elements.
+   * Also injects the [data-bl-si-blur] rule for text-check and picker elements.
    */
   function injectBlurRules(categories, mode) {
     removeBlurRules();
 
-    if (mode === pb.BLUR_MODES.FROSTED) ensureSvgFilter();
+    if (mode === blsi.BLUR_MODES.FROSTED) ensureSvgFilter();
 
     const cats = categories || DEFAULT_CATS;
     const { alwaysBlurSelector } = getSelectors(cats);
     _rebuildTextCheckSet(cats);
 
-    const filterValue = mode === pb.BLUR_MODES.FROSTED
-      ? 'url(#pb-frosted-filter)'
-      : 'blur(var(--pb-radius, 10px))';
+    const filterValue = mode === blsi.BLUR_MODES.FROSTED
+      ? 'url(#bl-si-frosted-filter)'
+      : 'blur(var(--bl-si-radius, 10px))';
 
     const blurDecl = `filter: ${filterValue} !important; user-select: none !important;`;
 
@@ -203,7 +203,7 @@ const BlurEngine = (() => {
     }
 
     // Data attribute rule — for text-check elements and individual picker blurs
-    rules.push(`[data-pb-blur] { ${blurDecl} }`);
+    rules.push(`[data-bl-si-blur] { ${blurDecl} }`);
 
     if (rules.length === 0) return;
 
@@ -228,23 +228,23 @@ const BlurEngine = (() => {
 
   /**
    * One-time scan: find all text-check elements with meaningful text and
-   * stamp data-pb-blur on them. Called once on blur-all toggle.
+   * stamp data-bl-si-blur on them. Called once on blur-all toggle.
    */
   function blurTextCheckElements(categories, thorough) {
     const { textCheckSelector } = getSelectors(categories || DEFAULT_CATS);
     if (!textCheckSelector) return;
 
     document.querySelectorAll(textCheckSelector).forEach(el => {
-      if (el.dataset.pbBlur) return; // already stamped
+      if (el.dataset.blSiBlur) return; // already stamped
       if (_isExtensionUI(el)) return;
       // Structural containers (div, section, etc.) always require the text gate —
       // blurring wrappers creates nested blur that breaks hover reveal.
       // Thorough mode only bypasses the gate for inline content elements.
       const needsTextGate = _structuralTags.has(el.tagName.toLowerCase());
       if (needsTextGate) {
-        if (hasMeaningfulTextContent(el)) el.dataset.pbBlur = '1';
+        if (hasMeaningfulTextContent(el)) el.dataset.blSiBlur = '1';
       } else if (thorough || hasMeaningfulTextContent(el)) {
-        el.dataset.pbBlur = '1';
+        el.dataset.blSiBlur = '1';
       }
     });
   }
@@ -255,38 +255,38 @@ const BlurEngine = (() => {
    */
   function tryBlurTextCheck(element, thorough) {
     if (!element || !(element instanceof Element)) return;
-    if (element.dataset.pbBlur) return;
+    if (element.dataset.blSiBlur) return;
     if (_isExtensionUI(element)) return;
     const tag = element.tagName.toLowerCase();
     if (!_textCheckSet.has(tag)) return;
     const needsTextGate = _structuralTags.has(tag);
     if (needsTextGate) {
-      if (hasMeaningfulTextContent(element)) element.dataset.pbBlur = '1';
+      if (hasMeaningfulTextContent(element)) element.dataset.blSiBlur = '1';
     } else if (thorough || hasMeaningfulTextContent(element)) {
-      element.dataset.pbBlur = '1';
+      element.dataset.blSiBlur = '1';
     }
   }
 
   function _isExtensionUI(element) {
-    const toolbarId = pb.IDS.PICKER_TOOLBAR;
+    const toolbarId = blsi.IDS.PICKER_TOOLBAR;
     return element.id === toolbarId || element.closest('#' + toolbarId) ||
-           element.classList.contains(pb.CSS.TOAST) || element.closest('.' + pb.CSS.TOAST) ||
-           element.classList.contains(pb.CSS.TOOLBAR) ||
-           element.dataset.pbZone !== undefined;
+           element.classList.contains(blsi.CSS.TOAST) || element.closest('.' + blsi.CSS.TOAST) ||
+           element.classList.contains(blsi.CSS.TOOLBAR) ||
+           element.dataset.blSiZone !== undefined;
   }
 
   // ── Individual element blur (picker / context menu) ────────────────────────
 
   function applyBlur(element) {
     if (!element || !(element instanceof Element)) return;
-    if (element.dataset.pbBlur) return;
+    if (element.dataset.blSiBlur) return;
     if (_isExtensionUI(element)) return;
-    element.dataset.pbBlur = '1';
+    element.dataset.blSiBlur = '1';
   }
 
   function removeBlur(element) {
     if (!element || !(element instanceof Element)) return;
-    delete element.dataset.pbBlur;
+    delete element.dataset.blSiBlur;
   }
 
   function toggleBlur(element) {
@@ -301,7 +301,7 @@ const BlurEngine = (() => {
   function isBlurred(element) {
     if (!element || !(element instanceof Element)) return false;
     // Individual data attribute blur
-    if (element.dataset.pbBlur) return true;
+    if (element.dataset.blSiBlur) return true;
     // Blur-all CSS rule: check if tag matches an always-blur selector
     if (isBlurAllActive() && selectorCache) {
       const tag = element.tagName.toLowerCase();
@@ -315,8 +315,8 @@ const BlurEngine = (() => {
 
   function unblurAll() {
     removeBlurRules();
-    document.querySelectorAll('[data-pb-blur]').forEach(el => {
-      delete el.dataset.pbBlur;
+    document.querySelectorAll('[data-bl-si-blur]').forEach(el => {
+      delete el.dataset.blSiBlur;
     });
     removeAllZoneOverlays();
   }
@@ -369,9 +369,9 @@ const BlurEngine = (() => {
     }
 
     const el = document.createElement('div');
-    el.className = pb.CSS.ZONE_OVERLAY;
-    el.dataset.pbZone = zoneData.id;
-    el.dataset.pbZoneName = zoneData.name || '';
+    el.className = blsi.CSS.ZONE_OVERLAY;
+    el.dataset.blSiZone = zoneData.id;
+    el.dataset.blSiZoneName = zoneData.name || '';
 
     el.style.cssText = [
       'position: absolute',
@@ -450,4 +450,4 @@ const BlurEngine = (() => {
   };
 })();
 
-pb.BlurEngine = BlurEngine;
+blsi.BlurEngine = BlurEngine;

@@ -30,7 +30,7 @@ for `position: fixed/sticky` descendants. Even `filter: blur(0px)` creates one.
 ### `will-change: filter` verdict
 
 **Removing it was correct.** It pre-promotes layers (permanent VRAM cost) but
-PrivacyBlur uses static toggle, not animation. Memory savings outweigh the
+BlurrySite uses static toggle, not animation. Memory savings outweigh the
 potential one-frame jank on first blur.
 
 ### Repaint vs recomposite
@@ -95,7 +95,7 @@ Each blurred element = own compositing layer = GPU texture memory.
 
 ### Transition: fine for single elements, bad for bulk
 
-Do NOT add `transition: filter` to `.pb-blurred` — simultaneous transitions on
+Do NOT add `transition: filter` to `.bl-si-blurred` — simultaneous transitions on
 hundreds of elements cause severe jank. Current approach (no transition on bulk
 blur) is correct.
 
@@ -105,7 +105,7 @@ blur) is correct.
 |---|---|---|
 | `text-shadow` trick | Text-only elements | Zero compositing layers, excellent perf |
 | Pixelation (`image-rendering: pixelated`) | Images | Cheaper than Gaussian, more secure |
-| `contain: paint` on `.pb-blurred` | All | Reduces repaint invalidation |
+| `contain: paint` on `.bl-si-blurred` | All | Reduces repaint invalidation |
 
 ### Avoid
 
@@ -125,7 +125,7 @@ is NOT clickable.
 ### Text selection: blurred text IS selectable and copyable
 
 Clipboard receives raw unblurred text. **Recommend adding `user-select: none`
-to `.pb-blurred`** to prevent casual copy (still bypassable via DevTools).
+to `.bl-si-blurred`** to prevent casual copy (still bypassable via DevTools).
 
 ### Find-in-page (Ctrl+F): matches blurred text
 
@@ -257,13 +257,13 @@ CSS blur IS effective against screen-sharing-based visual observation.
 
 ---
 
-## 7. Actionable Recommendations for PrivacyBlur
+## 7. Actionable Recommendations for BlurrySite
 
 ### Immediate (CSS changes)
 
 1. **Remove `-webkit-filter`** from all CSS rules — unnecessary for MV3 targets
-2. **Add `user-select: none`** to `.pb-blurred` — prevents casual text copy
-3. **Add `contain: paint`** to `.pb-blurred` — reduces repaint invalidation
+2. **Add `user-select: none`** to `.bl-si-blurred` — prevents casual text copy
+3. **Add `contain: paint`** to `.bl-si-blurred` — reduces repaint invalidation
 4. **Raise default `BLUR_RADIUS`** from 8 to 10 — below 8px, OCR can still read text
 5. **Add `position: sticky` breakage** to Known Limitations documentation
 

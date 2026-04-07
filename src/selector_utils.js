@@ -1,14 +1,14 @@
 /**
- * selector_utils.js — PrivacyBlur CSS Selector Utilities
+ * selector_utils.js — Blurry Site CSS Selector Utilities
  *
  * Generates stable, unique CSS selectors for DOM elements so that blur state
  * can be persisted and restored across page loads.
  *
  * Selector strategy (most-specific first):
  *  1. Unique ID attribute  → #escaped-id
- *  2. Fallback             → stamp a generated data-pb-id UUID on the element
+ *  2. Fallback             → stamp a generated data-bl-si-id UUID on the element
  *
- * Exposed as pb.SelectorUtils (IIFE — no ES module syntax).
+ * Exposed as blsi.SelectorUtils (IIFE — no ES module syntax).
  */
 
 const SelectorUtils = (() => {
@@ -98,8 +98,8 @@ const SelectorUtils = (() => {
     // ---- Strategy 2: class-based selector (stable across reloads) ----
     if (element.className && typeof element.className === 'string' && element.className.trim().length > 0) {
       const tag = element.tagName.toLowerCase();
-      // Filter out transient extension classes (pb-hover-highlight, pb-blurred, etc.)
-      const classes = element.className.trim().split(/\s+/).filter(c => !c.startsWith('pb-'));
+      // Filter out transient extension classes (bl-si-hover-highlight, etc.)
+      const classes = element.className.trim().split(/\s+/).filter(c => !c.startsWith('bl-si-'));
       if (classes.length > 0) {
         const classSelector = tag + '.' + classes.map(c => cssEscape(c)).join('.');
         if (isUnique(classSelector)) {
@@ -180,4 +180,4 @@ const SelectorUtils = (() => {
 })();
 
 // Attach to window so content_script.js and other injected scripts can access it
-pb.SelectorUtils = SelectorUtils;
+blsi.SelectorUtils = SelectorUtils;

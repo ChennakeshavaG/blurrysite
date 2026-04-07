@@ -1,21 +1,21 @@
 /**
- * constants.js — PrivacyBlur Constants & Settings
+ * constants.js — Blurry Site Constants & Settings
  *
  * Single source of truth for message types, default settings, and utility
  * functions used across the extension (background worker, content scripts, popup).
  *
  * Usage:
- *   pb.STORAGE.SAVE_BLUR_ITEM          // namespaced access
- *   pb.SAVE_BLUR_ITEM                  // flat shorthand
- *   pb.isValid('SAVE_BLUR_ITEM')       // true — validates a type string
- *   pb.DEFAULT_SETTINGS                // frozen settings object
- *   pb.BlurEngine.applyBlur(el)        // module access (Java-style)
- *   pb.Storage.getSettings()           // module access
+ *   blsi.STORAGE.SAVE_BLUR_ITEM          // namespaced access
+ *   blsi.SAVE_BLUR_ITEM                  // flat shorthand
+ *   blsi.isValid('SAVE_BLUR_ITEM')       // true — validates a type string
+ *   blsi.DEFAULT_SETTINGS                // frozen settings object
+ *   blsi.BlurEngine.applyBlur(el)        // module access (Java-style)
+ *   blsi.Storage.getSettings()           // module access
  *
- * Exposed as globalThis.pb (IIFE — no ES module syntax).
+ * Exposed as globalThis.blsi (IIFE — no ES module syntax).
  * Uses globalThis so it works in both window (content scripts) and
- * self (service worker) contexts. Other modules attach to pb:
- *   pb.BlurEngine, pb.Storage, pb.SelectorUtils, pb.Shortcuts, pb.Picker
+ * self (service worker) contexts. Other modules attach to blsi:
+ *   blsi.BlurEngine, blsi.Storage, blsi.SelectorUtils, blsi.Shortcuts, blsi.Picker
  */
 
 const Constants = (() => {
@@ -111,26 +111,26 @@ const Constants = (() => {
   // Must match the class names in styles/content.css exactly.
 
   const CSS = Object.freeze({
-    CANVAS_OVERLAY:   'pb-canvas-overlay',
-    HOVER_HIGHLIGHT:  'pb-hover-highlight',
-    PICKER_ACTIVE:    'pb-picker-active',
-    TOAST:            'pb-toast',
-    TOAST_MESSAGE:    'pb-toast__message',
-    TOAST_EXITING:    'pb-toast--exiting',
-    TOOLBAR:          'pb-toolbar',
-    TOOLBAR_LABEL:    'pb-toolbar-label',
-    TOOLBAR_BTN:      'pb-toolbar-btn',
-    TOOLBAR_BTN_CLEAR:'pb-toolbar-btn--clear',
-    TOOLBAR_BTN_CLOSE:'pb-toolbar-btn--close',
-    ZONE_OVERLAY:     'pb-zone-overlay',
-    ZONE_DRAWING:     'pb-zone-drawing',
-    ZONE_HIGHLIGHT:   'pb-zone-highlight',
-    ZONE_LABEL:       'pb-zone-label',
+    CANVAS_OVERLAY:   'bl-si-canvas-overlay',
+    HOVER_HIGHLIGHT:  'bl-si-hover-highlight',
+    PICKER_ACTIVE:    'bl-si-picker-active',
+    TOAST:            'bl-si-toast',
+    TOAST_MESSAGE:    'bl-si-toast__message',
+    TOAST_EXITING:    'bl-si-toast--exiting',
+    TOOLBAR:          'bl-si-toolbar',
+    TOOLBAR_LABEL:    'bl-si-toolbar-label',
+    TOOLBAR_BTN:      'bl-si-toolbar-btn',
+    TOOLBAR_BTN_CLEAR:'bl-si-toolbar-btn--clear',
+    TOOLBAR_BTN_CLOSE:'bl-si-toolbar-btn--close',
+    ZONE_OVERLAY:     'bl-si-zone-overlay',
+    ZONE_DRAWING:     'bl-si-zone-drawing',
+    ZONE_HIGHLIGHT:   'bl-si-zone-highlight',
+    ZONE_LABEL:       'bl-si-zone-label',
   });
 
   const IDS = Object.freeze({
-    PICKER_TOOLBAR: 'pb-picker-toolbar',
-    SVG_FILTERS:    'pb-svg-filters',
+    PICKER_TOOLBAR: 'bl-si-picker-toolbar',
+    SVG_FILTERS:    'bl-si-svg-filters',
   });
 
   // ── Default settings ────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ const Constants = (() => {
       MEDIA:     true,
       FORM:      false,
       TABLE:     true,
-      STRUCTURE: true, // Safe with data-pb-blur (no classList = no framework loops)
+      STRUCTURE: true, // Safe with data-bl-si-blur (no classList = no framework loops)
     }),
 
   });
@@ -294,7 +294,7 @@ const Constants = (() => {
     Object.assign(flat, catObj);
   }
 
-  // Not frozen — other modules attach to pb (pb.BlurEngine, pb.Storage, etc.)
+  // Not frozen — other modules attach to blsi (blsi.BlurEngine, blsi.Storage, etc.)
   return Object.assign(flat, categories, {
     REVEAL_MODES,
     BLUR_MODES,
@@ -311,4 +311,4 @@ const Constants = (() => {
   });
 })();
 
-globalThis.pb = Constants;
+globalThis.blsi = Constants;

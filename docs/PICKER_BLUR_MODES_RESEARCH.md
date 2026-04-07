@@ -20,7 +20,7 @@ Today, when a user picks an element to blur, we:
 
 | Failure mode | Frequency | Example |
 |---|---|---|
-| Element has no ID or class; `data-pb-id` stamp is session-only | Very common | `<div>` wrappers in React/Vue apps |
+| Element has no ID or class; `data-bl-si-id` stamp is session-only | Very common | `<div>` wrappers in React/Vue apps |
 | CSS class renamed by framework rebuild or A/B test | Common | Tailwind hash classes, CSS modules |
 | DOM restructured by SPA navigation | Common | React Router replaces route subtree |
 | Multiple elements match the same selector | Occasional | `.card` matches 50 cards, user wanted one |
@@ -82,7 +82,7 @@ The selected mode is remembered in settings (`settings.PICKER_MODE: 'sticky' | '
 
 ### 3.2 Sticky Mode (new, default)
 
-1. **Cursor changes to crosshair** (already have `pb-picker-active` with crosshair)
+1. **Cursor changes to crosshair** (already have `bl-si-picker-active` with crosshair)
 2. **User presses and drags** to draw a rectangle
 3. **While dragging**: semi-transparent overlay shows the selected region (like a screenshot selection tool)
 4. **On mouseup**:
@@ -169,20 +169,20 @@ Both absolute and proportional coordinates are stored. On restore, proportional 
 Each sticky blur creates a DOM element:
 
 ```html
-<div class="pb-zone-overlay"
-     data-pb-zone="s_a3f92c1b"
-     data-pb-zone-name="Sticky 1"
+<div class="bl-si-zone-overlay"
+     data-bl-si-zone="s_a3f92c1b"
+     data-bl-si-zone-name="Sticky 1"
      style="position: absolute;
             left: 120px; top: 340px;
             width: 400px; height: 200px;
-            backdrop-filter: blur(var(--pb-radius, 10px));
-            -webkit-backdrop-filter: blur(var(--pb-radius, 10px));
+            backdrop-filter: blur(var(--bl-si-radius, 10px));
+            -webkit-backdrop-filter: blur(var(--bl-si-radius, 10px));
             z-index: 2147483640;
             pointer-events: none;">
 </div>
 ```
 
-When frosted glass mode is enabled by the user, the overlay uses `filter: url(#pb-frosted-filter)` instead — same behavior as dynamic blur, no special handling.
+When frosted glass mode is enabled by the user, the overlay uses `filter: url(#bl-si-frosted-filter)` instead — same behavior as dynamic blur, no special handling.
 
 **Key design decisions:**
 
@@ -258,10 +258,10 @@ STORAGE.REMOVE_BLUR_ITEM = 'REMOVE_BLUR_ITEM';
 STORAGE.GET_BLUR_ITEMS = 'GET_BLUR_ITEMS';
 
 // New CSS classes
-CSS.ZONE_OVERLAY = 'pb-zone-overlay';
-CSS.ZONE_DRAWING = 'pb-zone-drawing';
-CSS.ZONE_HIGHLIGHT = 'pb-zone-highlight';
-CSS.ZONE_LABEL = 'pb-zone-label';
+CSS.ZONE_OVERLAY = 'bl-si-zone-overlay';
+CSS.ZONE_DRAWING = 'bl-si-zone-drawing';
+CSS.ZONE_HIGHLIGHT = 'bl-si-zone-highlight';
+CSS.ZONE_LABEL = 'bl-si-zone-label';
 ```
 
 #### `src/picker.js`
@@ -328,7 +328,7 @@ Remove `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors` (unre
 - `restoreBlurredElements()` → `restoreBlurItems()`: dispatch on `item.type`
 - Picker activation passes `currentMode` to `Picker.activate()`
 - New callback `onStickyBlur(zoneData)` alongside existing `onBlur(element)`
-- MutationObserver: skip nodes with `data-pb-zone` attribute
+- MutationObserver: skip nodes with `data-bl-si-zone` attribute
 
 #### `popup/popup.js`
 
@@ -340,41 +340,41 @@ Remove `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors` (unre
 
 ```css
 /* Sticky zone overlay — blurs content behind it */
-.pb-zone-overlay {
+.bl-si-zone-overlay {
   position: absolute;
-  backdrop-filter: blur(var(--pb-radius, 10px));
-  -webkit-backdrop-filter: blur(var(--pb-radius, 10px));
+  backdrop-filter: blur(var(--bl-si-radius, 10px));
+  -webkit-backdrop-filter: blur(var(--bl-si-radius, 10px));
   background: rgba(128, 128, 128, 0.05);
   border: 1px dashed rgba(128, 128, 128, 0.3);
   z-index: 2147483640;
   pointer-events: none;
-  transition: opacity var(--pb-transition-duration, 200ms);
+  transition: opacity var(--bl-si-transition-duration, 200ms);
 }
 
 /* In picker mode, zones become interactive */
-.pb-picker-active .pb-zone-overlay {
+.bl-si-picker-active .bl-si-zone-overlay {
   pointer-events: auto;
   cursor: pointer;
-  border-color: var(--pb-highlight-color, #f59e0b);
+  border-color: var(--bl-si-highlight-color, #f59e0b);
 }
 
 /* Drawing preview while dragging */
-.pb-zone-drawing {
+.bl-si-zone-drawing {
   position: fixed;
   background: rgba(245, 158, 11, 0.15);
-  border: 2px solid var(--pb-highlight-color, #f59e0b);
+  border: 2px solid var(--bl-si-highlight-color, #f59e0b);
   z-index: 2147483645;
   pointer-events: none;
 }
 
 /* Hover highlight on existing zone in picker mode */
-.pb-zone-overlay.pb-zone-highlight {
+.bl-si-zone-overlay.bl-si-zone-highlight {
   border-color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
 }
 
 /* Zone name label (shown on hover in picker mode) */
-.pb-zone-label {
+.bl-si-zone-label {
   position: absolute;
   top: -24px;
   left: 0;
@@ -390,7 +390,7 @@ Remove `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors` (unre
 
 /* Print: hide all zones */
 @media print {
-  .pb-zone-overlay { display: none; }
+  .bl-si-zone-overlay { display: none; }
 }
 ```
 
@@ -412,7 +412,7 @@ Remove `saveBlurredElement`, `removeBlurredElement`, `getBlurredSelectors` (unre
 | Page has `transform` on an ancestor | Mitigated by appending overlays directly to `document.body` |
 | Print / reader mode | Hidden via `@media print` rule |
 | Zoom level changes | Browser zoom scales proportionally; zones scale with it |
-| Frosted glass mode enabled | Zone uses `filter: url(#pb-frosted-filter)` — same SVG filter as dynamic blur |
+| Frosted glass mode enabled | Zone uses `filter: url(#bl-si-frosted-filter)` — same SVG filter as dynamic blur |
 
 ### 5.2 Dynamic Blur (existing issues, unchanged)
 
@@ -442,7 +442,7 @@ Current reveal modes (hover, click, none) work with sticky zones:
 | `click` | Existing: unblur on click | On click on zone overlay: toggle revealed state |
 | `none` | Existing: no reveal | Zone always blurred |
 
-Implementation: Zone overlays get the same `data-pb-revealed` attribute handling as blurred elements.
+Implementation: Zone overlays get the same `data-bl-si-revealed` attribute handling as blurred elements.
 
 ---
 
@@ -452,7 +452,7 @@ Implementation: Zone overlays get the same `data-pb-revealed` attribute handling
 |---|---|
 | `backdrop-filter` cost | GPU-composited; modern browsers handle well. 10 zones is well within budget. |
 | Zone overlay count limit | Cap at 10 per hostname. |
-| MutationObserver interaction | Zone overlays excluded from observer via `data-pb-zone` attribute check |
+| MutationObserver interaction | Zone overlays excluded from observer via `data-bl-si-zone` attribute check |
 | Storage size | Each zone item ~200 bytes JSON (with proportional coords). 10 zones = 2KB. Negligible. |
 | Restore performance | Zone restore is O(n) inject — faster than selector restore which requires DOM queries |
 
@@ -474,7 +474,7 @@ Implementation: Zone overlays get the same `data-pb-revealed` attribute handling
 ### Phase 2: Sticky Overlay Engine
 
 1. Add `createZoneOverlay` / `removeZoneOverlay` / `getZoneOverlays` to `blur_engine.js`
-2. Add CSS for `.pb-zone-overlay`, `.pb-zone-drawing`, `.pb-zone-label`
+2. Add CSS for `.bl-si-zone-overlay`, `.bl-si-zone-drawing`, `.bl-si-zone-label`
 3. Add zone restore logic to `content_script.js` (proportional scaling, path matching)
 4. Add reveal mode support for zones
 5. Exclude zone overlays from MutationObserver

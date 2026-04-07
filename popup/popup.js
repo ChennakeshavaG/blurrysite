@@ -1,5 +1,5 @@
 /**
- * popup.js — PrivacyBlur Popup Orchestrator
+ * popup.js — Blurry Site Popup Orchestrator
  *
  * From-scratch rewrite. Manages the extension popup UI:
  * settings sync via POJO-driven renderer, action buttons,
@@ -13,10 +13,10 @@
   'use strict';
 
   // ── Module aliases ─────────────────────────────────────────────────────────
-  const MSG      = pb;
-  const I18n     = pb.I18n;
-  const Configs  = pb.PopupConfigs;
-  const Renderer = pb.SettingsRenderer;
+  const MSG = blsi;
+  const I18n = blsi.I18n;
+  const Configs = blsi.PopupConfigs;
+  const Renderer = blsi.SettingsRenderer;
 
   const DEBOUNCE_MS   = 300;
   const TOAST_MS      = 2000;
@@ -106,8 +106,8 @@
   function showToast(message) {
     clearTimeout(toastTimer);
     ui.toast.textContent = message;
-    ui.toast.classList.add('pb-toast--visible');
-    toastTimer = setTimeout(() => ui.toast.classList.remove('pb-toast--visible'), TOAST_MS);
+    ui.toast.classList.add('bl-si-toast--visible');
+    toastTimer = setTimeout(() => ui.toast.classList.remove('bl-si-toast--visible'), TOAST_MS);
   }
 
   function extractHostname(url) {
@@ -148,7 +148,7 @@
 
     // Update dynamic background when BLUR_RADIUS changes
     if (key === 'BLUR_RADIUS') {
-      document.documentElement.style.setProperty('--pb-bg-blur-radius', value + 'px');
+      document.documentElement.style.setProperty('--bl-si-bg-blur-radius', value + 'px');
     }
 
     // Debounce sliders/colors, immediate for toggles/selects
@@ -178,14 +178,14 @@
 
     for (const item of blurredItems) {
       const li = document.createElement('li');
-      li.className = 'pb-blur-item';
+      li.className = 'bl-si-blur-item';
 
       const nameSpan = document.createElement('span');
-      nameSpan.className = 'pb-blur-item__name';
+      nameSpan.className = 'bl-si-blur-item__name';
       nameSpan.textContent = item.name || (item.type === 'dynamic' ? 'Dynamic' : 'Sticky');
 
       const detailSpan = document.createElement('span');
-      detailSpan.className = 'pb-blur-item__selector';
+      detailSpan.className = 'bl-si-blur-item__selector';
       if (item.type === 'dynamic') {
         detailSpan.textContent = item.selector;
       } else {
@@ -195,7 +195,7 @@
       detailSpan.title = detailSpan.textContent;
 
       const btn = document.createElement('button');
-      btn.className = 'pb-blur-item__remove';
+      btn.className = 'bl-si-blur-item__remove';
       btn.textContent = '\u00d7';
       btn.title = 'Remove blur';
       btn.dataset.itemId = item.type === 'dynamic' ? item.selector : item.id;
@@ -215,24 +215,24 @@
 
     for (const rule of urlRules) {
       const li = document.createElement('li');
-      li.className = 'pb-rule-item';
+      li.className = 'bl-si-rule-item';
 
       const name = document.createElement('span');
-      name.className = 'pb-rule-item__name';
+      name.className = 'bl-si-rule-item__name';
       name.textContent = rule.name || 'Untitled';
 
       const pattern = document.createElement('span');
-      pattern.className = 'pb-rule-item__pattern';
+      pattern.className = 'bl-si-rule-item__pattern';
       pattern.textContent = rule.pattern || '';
       pattern.title = `${rule.patternType || 'wildcard'}: ${rule.pattern || ''}`;
 
       const editBtn = document.createElement('button');
-      editBtn.className = 'pb-rule-item__btn';
+      editBtn.className = 'bl-si-rule-item__btn';
       editBtn.textContent = 'edit';
       editBtn.addEventListener('click', () => openRuleModal(rule));
 
       const delBtn = document.createElement('button');
-      delBtn.className = 'pb-rule-item__btn pb-rule-item__btn--delete';
+      delBtn.className = 'bl-si-rule-item__btn bl-si-rule-item__btn--delete';
       delBtn.textContent = 'del';
       delBtn.addEventListener('click', async () => {
         urlRules = urlRules.filter(r => r.id !== rule.id);
@@ -345,7 +345,7 @@
 
     // Blur list remove (event delegation)
     ui.blurList.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.pb-blur-item__remove');
+      const btn = e.target.closest('.bl-si-blur-item__remove');
       if (!btn) return;
       const itemId = btn.dataset.itemId;
       if (!itemId) return;
@@ -406,7 +406,7 @@
             settings = resp.settings;
             renderHeader();
             Renderer.updateAll(settings);
-            document.documentElement.style.setProperty('--pb-bg-blur-radius', settings.BLUR_RADIUS + 'px');
+            document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
           }
         }
 
@@ -451,7 +451,7 @@
     scKeyCodes = new Set();
     ui.scModalSave.disabled = true;
     ui.captureDisplay.textContent = I18n.t('shortcut_modal_placeholder');
-    ui.captureDisplay.className = 'pb-capture pb-capture--listening';
+    ui.captureDisplay.className = 'bl-si-capture bl-si-capture--listening';
     ui.shortcutModal.hidden = false;
 
     if (scKeydownHandler) document.removeEventListener('keydown', scKeydownHandler, true);
@@ -486,7 +486,7 @@
         }
         scKeys.push({ key: e.key, code: e.code });
         scKeyCodes.add(e.code);
-        ui.captureDisplay.className = 'pb-capture pb-capture--done';
+        ui.captureDisplay.className = 'bl-si-capture bl-si-capture--done';
         ui.scModalSave.disabled = false;
         updateDisplay();
       }
@@ -696,7 +696,7 @@
     renderHeader();
 
     // Set dynamic background blur
-    document.documentElement.style.setProperty('--pb-bg-blur-radius', settings.BLUR_RADIUS + 'px');
+    document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
 
     // Render settings sections via POJO renderer
     Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, settings, onSettingChanged);

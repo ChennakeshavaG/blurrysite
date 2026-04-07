@@ -16,7 +16,7 @@ When the picker is active and the user clicks an already-blurred element, the el
 `picker.js:175-186` — When the user clicks an element, the picker walks UP the DOM to find the nearest parent with a CSS class (for stable selector persistence):
 
 ```
-User clicks: <span data-pb-blur="1">email@test.com</span>
+User clicks: <span data-bl-si-blur="1">email@test.com</span>
                    ↑ this is blurred
 
 findClassedParent walks up to: <div class="card">
@@ -27,7 +27,7 @@ The isBlurred check then runs on `<div class="card">` → returns `false` → pi
 
 ### Why this worked before
 
-Before the thorough blur rework, structural containers like `<div class="card">` were also stamped with `data-pb-blur` in thorough mode. So `findClassedParent` returning the div still resulted in `isBlurred` returning true. After we stopped stamping structural containers (commit `da2ad7b`), the parent div no longer has `data-pb-blur`, exposing this bug.
+Before the thorough blur rework, structural containers like `<div class="card">` were also stamped with `data-bl-si-blur` in thorough mode. So `findClassedParent` returning the div still resulted in `isBlurred` returning true. After we stopped stamping structural containers (commit `da2ad7b`), the parent div no longer has `data-bl-si-blur`, exposing this bug.
 
 ### Hover-click mismatch
 
@@ -37,9 +37,9 @@ Before the thorough blur rework, structural containers like `<div class="card">`
 
 ```
 onClick(e)
-  → target = resolveTarget(e.target)     // <span data-pb-blur="1">
+  → target = resolveTarget(e.target)     // <span data-bl-si-blur="1">
   → target = findClassedParent(target)   // walks up to <div class="card">
-  → isBlurred(target)                    // false — div has no data-pb-blur
+  → isBlurred(target)                    // false — div has no data-bl-si-blur
   → onBlur(target)                       // WRONG: blurs the div instead of unblurring the span
 ```
 
@@ -53,8 +53,8 @@ onClick(e)
 
 ```
 onClick(e)
-  → target = resolveTarget(e.target)     // <span data-pb-blur="1">
-  → isBlurred(target)                    // true — has data-pb-blur
+  → target = resolveTarget(e.target)     // <span data-bl-si-blur="1">
+  → isBlurred(target)                    // true — has data-bl-si-blur
   → (skip findClassedParent)
   → onUnblur(target)                     // CORRECT: unblurs the span
 ```

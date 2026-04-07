@@ -1,8 +1,8 @@
-# PrivacyBlur — High-Level Design
+# Blurry Site — High-Level Design
 
 ## 1. Overview
 
-PrivacyBlur is a Manifest V3 browser extension targeting Chrome, Edge, and Firefox. It applies a CSS `filter: blur()` to DOM elements on demand. Users can blur entire pages with a keyboard shortcut or select individual elements with an interactive picker. Blur state is persisted per hostname and automatically restored on subsequent visits.
+BlurrySite is a Manifest V3 browser extension targeting Chrome, Edge, and Firefox. It applies a CSS `filter: blur()` to DOM elements on demand. Users can blur entire pages with a keyboard shortcut or select individual elements with an interactive picker. Blur state is persisted per hostname and automatically restored on subsequent visits.
 
 ---
 
@@ -96,22 +96,22 @@ Applies and removes blur from DOM elements. Handles three element categories dif
 | Category | Method |
 |---|---|
 | `<video>` | `<canvas>` overlay + `requestAnimationFrame` loop |
-| `<img>` | `.pb-blurred` CSS class (CSS rule applies `blur(var(--pb-radius))`) |
-| Everything else | `.pb-blurred` CSS class |
+| `<img>` | `.bl-si-blurred` CSS class (CSS rule applies `blur(var(--bl-si-radius))`) |
+| Everything else | `.bl-si-blurred` CSS class |
 
 Exposes `applyBlur`, `removeBlur`, `toggleBlur`, `blurAllContent`, `unblurAll`, `isBlurred`, `invalidateSelectorCache`, `matchesActiveCategories`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS`.
 
 **Category-based blurring:** `blurAllContent` accepts an `options.categories` object to control which element groups are blurred. Five categories are supported: **text**, **media**, **form**, **table**, and **structure**. Selector strings for each category are cached internally and rebuilt only when the active categories change.
 
-**Zone overlays (sticky blur):** The engine can create position-fixed overlay `<div>` elements that blur arbitrary rectangular regions of the viewport. Overlays are appended to `document.body`, identified by `data-pb-zone` attribute, and tracked internally. `unblurAll()` removes all zone overlays in addition to element-level blur. Zone overlay elements are excluded from blur targeting via `_isExtensionUI`.
+**Zone overlays (sticky blur):** The engine can create position-fixed overlay `<div>` elements that blur arbitrary rectangular regions of the viewport. Overlays are appended to `document.body`, identified by `data-bl-si-zone` attribute, and tracked internally. `unblurAll()` removes all zone overlays in addition to element-level blur. Zone overlay elements are excluded from blur targeting via `_isExtensionUI`.
 
 ### 3.4 selector_utils.js — Selector Generation
 
 Generates and resolves CSS selectors for DOM elements so blur state can be saved and re-applied across page loads. Selector strategy:
 
 1. Unique `id` attribute → `#escaped-id`
-2. Existing `data-pb-id` or other stable data attributes → `[attr="value"]`
-3. Fallback: stamp a random 8-hex UUID as `data-pb-id` → `[data-pb-id="..."]`
+2. Existing `data-bl-si-id` or other stable data attributes → `[attr="value"]`
+3. Fallback: stamp a random 8-hex UUID as `data-bl-si-id` → `[data-bl-si-id="..."]`
 
 ### 3.5 storage_manager.js — Storage Abstraction
 
@@ -131,9 +131,9 @@ Also handles `Escape` to exit picker mode (only fires when `_isPickerActive` is 
 
 A mode where the user can interactively select elements to blur. When active:
 
-- Adds `pb-picker-active` to `<html>` (enables crosshair cursor via CSS)
+- Adds `bl-si-picker-active` to `<html>` (enables crosshair cursor via CSS)
 - Injects a fixed toolbar at the top of the page
-- Capture-phase `mouseover` / `mouseout` listeners add/remove `.pb-hover-highlight`
+- Capture-phase `mouseover` / `mouseout` listeners add/remove `.bl-si-hover-highlight`
 - Capture-phase `click` listener calls `onBlur` or `onUnblur` based on element state
 - `Escape` or toolbar × button deactivates the picker
 
@@ -198,7 +198,7 @@ User presses B while Alt+Shift still held
         → content_script.js handleMessage({ type: "TOGGLE_BLUR_ALL" })
             → PrivacyBlurEngine.blurAllContent(radius, options)
                or PrivacyBlurEngine.unblurAll()
-        → showToast("PrivacyBlur: Blur All triggered")
+        → showToast("BlurrySite: Blur All triggered")
 ```
 
 ### 4.4 Settings change from popup
@@ -208,7 +208,7 @@ User changes blur radius slider
   → popup.js sends UPDATE_SETTINGS to content script
       → content_script.js handleMessage("UPDATE_SETTINGS")
           → updates local settings object
-          → document.documentElement.style.setProperty("--pb-radius", ...)
+          → document.documentElement.style.setProperty("--bl-si-radius", ...)
           → PrivacyBlurShortcuts.init(settings.SHORTCUTS, ...)
           → PrivacyBlurPicker.setSettings(newSettings)
   → popup.js also sends SAVE_SETTINGS to background
@@ -223,7 +223,7 @@ User changes blur radius slider
 ```json
 {
   "blurred_items": {
-    "example.com": [{ "selector": "[data-pb-id=\"a3f92c1b\"]", "type": "picker" }, { "selector": "#main-header", "type": "picker" }],
+    "example.com": [{ "selector": "[data-bl-si-id=\"a3f92c1b\"]", "type": "picker" }, { "selector": "#main-header", "type": "picker" }],
     "news.ycombinator.com": [{ "selector": ".athing:nth-child(1) > .title", "type": "picker" }]
   },
   "settings": {
@@ -289,5 +289,5 @@ All inter-component communication uses typed message objects.
 - Content scripts use `document.createElement` for all DOM construction.
 - The extension requests only the minimum permissions: `storage`, `activeTab`, `scripting`, `contextMenus`.
 - No external network requests are made from any extension component.
-- CSS class and custom property names are `pb-` prefixed to minimise collision risk with page styles.
+- CSS class and custom property names are `bl-si-` prefixed to minimise collision risk with page styles.
 - The picker toolbar uses `all: initial` to prevent page CSS from breaking extension UI.

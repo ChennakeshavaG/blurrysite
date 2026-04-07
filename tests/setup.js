@@ -12,12 +12,12 @@
 // Jest's jsdom environment sets global properties (document, navigator, etc.)
 // but vm.runInThisContext runs in Node's V8 context where `window` is not a
 // default global. Aliasing it here makes extension IIFEs that assign to
-// `window.pb.*` work correctly in both vm and eval contexts.
+// `window.blsi.*` work correctly in both vm and eval contexts.
 global.window = global;
 
 // ─── Load message type constants ─────────────────────────────────────────────
 // constants.js assigns to globalThis.pb — must be loaded before any
-// source module that references pb.*.
+// source module that references blsi.*.
 // Using require() so Jest's Istanbul transform instruments it for coverage.
 require('../src/constants.js');
 

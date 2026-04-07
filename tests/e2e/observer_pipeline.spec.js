@@ -4,7 +4,7 @@
  * E2E tests for the observer pipeline:
  * - Blur-all doesn't crash (pendingRefresh removal)
  * - All elements stay blurred regardless of scroll position
- * - CSS tag rules + data-pb-blur attributes work together
+ * - CSS tag rules + data-bl-si-blur attributes work together
  */
 
 'use strict';
@@ -126,8 +126,8 @@ describeFn('Observer Pipeline — E2E', () => {
     // Toggle blur-all ON — should not throw
     const result = await evalInContentScript(`
       try {
-        pb.BlurEngine.injectBlurRules(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
-        pb.BlurEngine.blurTextCheckElements(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
+        blsi.BlurEngine.injectBlurRules(blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
+        blsi.BlurEngine.blurTextCheckElements(blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
         'ok';
       } catch (e) {
         'error: ' + e.message;
@@ -135,29 +135,29 @@ describeFn('Observer Pipeline — E2E', () => {
     `);
     expect(result).toBe('ok');
 
-    // Verify elements are blurred (text-check elements get data-pb-blur attribute)
-    const topBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
+    // Verify elements are blurred (text-check elements get data-bl-si-blur attribute)
+    const topBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-bl-si-blur'));
     expect(topBlurred).toBe(true);
   }, 15000);
 
   // ── Test: Perf mode ON — off-screen elements ─────────────────────────────
 
-  test('blur-all stamps data-pb-blur on text-check elements above and below fold', async () => {
+  test('blur-all stamps data-bl-si-blur on text-check elements above and below fold', async () => {
     await page.goto(testPageUrl, { waitUntil: 'load' });
     await new Promise((r) => setTimeout(r, 1000));
 
     // Enable blur-all via content script
     await evalInContentScript(`
-      pb.BlurEngine.injectBlurRules(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
-      pb.BlurEngine.blurTextCheckElements(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
+      blsi.BlurEngine.injectBlurRules(blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
+      blsi.BlurEngine.blurTextCheckElements(blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
     `);
 
-    // Verify top element is blurred initially (text-check elements get data-pb-blur)
-    const topBlurredBefore = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
+    // Verify top element is blurred initially (text-check elements get data-bl-si-blur)
+    const topBlurredBefore = await page.$eval('#top-item p', (el) => el.hasAttribute('data-bl-si-blur'));
     expect(topBlurredBefore).toBe(true);
 
     // Verify bottom element is also blurred
-    const bottomBlurredBefore = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-pb-blur'));
+    const bottomBlurredBefore = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-bl-si-blur'));
     expect(bottomBlurredBefore).toBe(true);
   }, 15000);
 
@@ -169,13 +169,13 @@ describeFn('Observer Pipeline — E2E', () => {
 
     // Blur everything
     await evalInContentScript(`
-      pb.BlurEngine.injectBlurRules(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
-      pb.BlurEngine.blurTextCheckElements(pb.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
+      blsi.BlurEngine.injectBlurRules(blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES, 'gaussian');
+      blsi.BlurEngine.blurTextCheckElements(blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES, false);
     `);
 
-    // All elements should be blurred (text-check elements get data-pb-blur)
-    const topBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
-    const bottomBlurred = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-pb-blur'));
+    // All elements should be blurred (text-check elements get data-bl-si-blur)
+    const topBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-bl-si-blur'));
+    const bottomBlurred = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-bl-si-blur'));
     expect(topBlurred).toBe(true);
     expect(bottomBlurred).toBe(true);
 
@@ -184,11 +184,11 @@ describeFn('Observer Pipeline — E2E', () => {
     await new Promise((r) => setTimeout(r, 500));
 
     // Top element should STILL be blurred (data attribute persists regardless of scroll)
-    const topStillBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-pb-blur'));
+    const topStillBlurred = await page.$eval('#top-item p', (el) => el.hasAttribute('data-bl-si-blur'));
     expect(topStillBlurred).toBe(true);
 
     // Bottom element also blurred
-    const bottomStillBlurred = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-pb-blur'));
+    const bottomStillBlurred = await page.$eval('#bottom-item p', (el) => el.hasAttribute('data-bl-si-blur'));
     expect(bottomStillBlurred).toBe(true);
   }, 15000);
 });

@@ -1,5 +1,5 @@
 /**
- * shortcut_handler.js — PrivacyBlur Keyboard Shortcut Handler
+ * shortcut_handler.js — Blurry Site Keyboard Shortcut Handler
  *
  * Handles user-configurable shortcuts with a primary modifier + N additional
  * keys pressed simultaneously. Shortcuts are dynamically inferred from the
@@ -17,13 +17,13 @@
  *  3. Escape always calls onExitPicker when picker is active.
  *  4. Window blur clears the heldKeys Set (prevents phantom held keys).
  *
- * Exposed as pb.Shortcuts (IIFE — no ES module syntax).
+ * Exposed as blsi.Shortcuts (IIFE — no ES module syntax).
  */
 
 const Shortcuts = (() => {
   'use strict';
 
-  const _CSS = (pb.CSS) || {};
+  const _CSS = (blsi.CSS) || {};
 
   // -------------------------------------------------------------------------
   // Internal state
@@ -114,12 +114,12 @@ const Shortcuts = (() => {
     }
 
     const toast = document.createElement("div");
-    toast.className = _CSS.TOAST || "pb-toast";
+    toast.className = _CSS.TOAST || "bl-si-toast";
     toast.setAttribute("role", "status");
     toast.setAttribute("aria-live", "polite");
 
     const msgSpan = document.createElement("span");
-    msgSpan.className = _CSS.TOAST_MESSAGE || "pb-toast__message";
+    msgSpan.className = _CSS.TOAST_MESSAGE || "bl-si-toast__message";
     msgSpan.textContent = text;
     toast.appendChild(msgSpan);
 
@@ -127,7 +127,7 @@ const Shortcuts = (() => {
     currentToastEl = toast;
 
     const removeTimer = setTimeout(() => {
-      toast.classList.add(_CSS.TOAST_EXITING || "pb-toast--exiting");
+      toast.classList.add(_CSS.TOAST_EXITING || "bl-si-toast--exiting");
       setTimeout(() => {
         if (toast.parentNode) toast.parentNode.removeChild(toast);
         if (currentToastEl === toast) currentToastEl = null;
@@ -215,7 +215,7 @@ const Shortcuts = (() => {
         }
 
         const label = ACTION_LABELS[sc.actionName] || sc.actionName;
-        showToast('PrivacyBlur: ' + label, 1500);
+        showToast('Blurry Site: ' + label, 1500);
         return;
       }
     }
@@ -279,4 +279,4 @@ const Shortcuts = (() => {
   };
 })();
 
-pb.Shortcuts = Shortcuts;
+blsi.Shortcuts = Shortcuts;

@@ -1,5 +1,5 @@
 /**
- * storage_manager.js — PrivacyBlur Storage Manager
+ * storage_manager.js — Blurry Site Storage Manager
  *
  * Provides a clean async API for reading and writing persisted blur state.
  *
@@ -18,13 +18,13 @@
  *   "blur_all_hosts": { "hostname": true }
  * }
  *
- * Exposed as pb.Storage (IIFE — no ES module syntax).
+ * Exposed as blsi.Storage (IIFE — no ES module syntax).
  */
 
 const Storage = (() => {
   'use strict';
 
-  const MSG = pb;
+  const MSG = blsi;
 
   // -------------------------------------------------------------------------
   // Private: validation helpers (mirrored from background.js)
@@ -244,4 +244,4 @@ const Storage = (() => {
   };
 })();
 
-pb.Storage = Storage;
+blsi.Storage = Storage;

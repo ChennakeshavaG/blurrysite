@@ -84,7 +84,7 @@ Popup should expose Gaussian and Frosted now, with room to add others.
 
 ### Security model (clear and prominent)
 
-"PrivacyBlur hides content visually during screen sharing. It does NOT
+"BlurrySite hides content visually during screen sharing. It does NOT
 protect against DevTools, browser extensions, or JavaScript. For
 compliance (GDPR/HIPAA), use server-side data redaction."
 
