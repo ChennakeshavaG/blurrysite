@@ -27,27 +27,6 @@ const Storage = (() => {
   const MSG = pb;
 
   // -------------------------------------------------------------------------
-  // Private: send a message to the background worker and return a Promise
-  // Used for READ operations only.
-  // -------------------------------------------------------------------------
-
-  function send(message) {
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.runtime.sendMessage(message, (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-          resolve(response);
-        });
-      } catch (err) {
-        reject(err);
-      }
-    });
-  }
-
-  // -------------------------------------------------------------------------
   // Private: validation helpers (mirrored from background.js)
   // -------------------------------------------------------------------------
 
@@ -161,26 +140,26 @@ const Storage = (() => {
   }
 
   // -------------------------------------------------------------------------
-  // Public API — blur items READ (message-based, background merges defaults)
+  // Public API — blur items READ (direct storage — no merging needed)
   // -------------------------------------------------------------------------
 
   async function getBlurItems(hostname) {
     if (!hostname) return [];
-    const response = await send({ type: MSG.GET_BLUR_ITEMS, hostname });
-    return (response && Array.isArray(response.items)) ? response.items : [];
+    const result = await _storageGet('blurred_items');
+    const map = result.blurred_items || {};
+    return map[hostname] || [];
   }
 
   // -------------------------------------------------------------------------
   // Public API — settings
-  // READ: message-based (background merges defaults + validates)
-  // WRITE: direct chrome.storage.local (validated locally)
+  // READ + WRITE: direct chrome.storage.local (merge defaults + validate locally)
   // -------------------------------------------------------------------------
 
   async function getSettings() {
-    const response = await send({ type: MSG.GET_SETTINGS });
-    return (response && response.settings)
-      ? response.settings
-      : MSG.buildDefaultSettings();
+    const result = await _storageGet('settings');
+    const saved = result.settings || {};
+    const merged = MSG.deepMerge(MSG.DEFAULT_SETTINGS, saved);
+    return MSG.validateSettings(merged);
   }
 
   async function saveSettings(fullSettings) {
@@ -196,8 +175,8 @@ const Storage = (() => {
   // -------------------------------------------------------------------------
 
   async function getRules() {
-    const response = await send({ type: MSG.GET_RULES });
-    return (response && Array.isArray(response.rules)) ? response.rules : [];
+    const result = await _storageGet('rules');
+    return Array.isArray(result.rules) ? result.rules : [];
   }
 
   async function saveRules(rules) {
@@ -228,8 +207,9 @@ const Storage = (() => {
 
   async function getBlurState(hostname) {
     if (!hostname) return false;
-    const response = await send({ type: MSG.GET_BLUR_STATE, hostname });
-    return !!(response && response.blurAll);
+    const result = await _storageGet('blur_all_hosts');
+    const hosts = result.blur_all_hosts || {};
+    return !!hosts[hostname];
   }
 
   async function saveBlurState(hostname, blurAll) {

@@ -30,29 +30,7 @@ function loadStorageManager() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Mock chrome.runtime.sendMessage for READ operations. */
-function mockSendMessageResponse(responseValue) {
-  chrome.runtime.sendMessage.mockImplementation((_msg, cb) => {
-    if (cb) cb(responseValue);
-  });
-}
-
-function mockSendMessageError(errorMessage) {
-  chrome.runtime.sendMessage.mockImplementation((_msg, cb) => {
-    const originalLastError = chrome.runtime.lastError;
-    Object.defineProperty(chrome.runtime, 'lastError', {
-      value: { message: errorMessage },
-      configurable: true,
-    });
-    if (cb) cb(undefined);
-    Object.defineProperty(chrome.runtime, 'lastError', {
-      value: originalLastError,
-      configurable: true,
-    });
-  });
-}
-
-/** Mock chrome.storage.local.get for WRITE operations (read-modify-write). */
+/** Mock chrome.storage.local.get for read-modify-write operations. */
 function mockStorageGet(data) {
   chrome.storage.local.get.mockImplementation((key, cb) => {
     if (typeof key === 'string') {
@@ -171,38 +149,35 @@ describe('pb.Storage', () => {
     });
   });
 
-  // ── getBlurItems (message-based read) ─────────────────────────────────
+  // ── getBlurItems (direct storage read) ────────────────────────────────
 
   describe('getBlurItems', () => {
-    test('resolves with items array from background response', async () => {
+    test('returns items array from storage', async () => {
       const items = [
         { type: 'dynamic', name: 'Dynamic 1', selector: '#foo' },
         { type: 'dynamic', name: 'Dynamic 2', selector: '.bar' },
       ];
-      mockSendMessageResponse({ items });
+      mockStorageGet({ blurred_items: { 'example.com': items } });
 
       const result = await pb.Storage.getBlurItems('example.com');
       expect(result).toEqual(items);
     });
 
-    test('resolves with empty array when background returns no items', async () => {
-      mockSendMessageResponse({});
+    test('returns empty array when no items for hostname', async () => {
+      mockStorageGet({ blurred_items: {} });
       const result = await pb.Storage.getBlurItems('example.com');
       expect(result).toHaveLength(0);
     });
 
-    test('sends GET_BLUR_ITEMS message with correct hostname', async () => {
-      mockSendMessageResponse({ items: [] });
-      await pb.Storage.getBlurItems('news.example.org');
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'GET_BLUR_ITEMS', hostname: 'news.example.org' }),
-        expect.any(Function)
-      );
+    test('returns empty array when blurred_items is null', async () => {
+      mockStorageGet({ blurred_items: null });
+      expect(await pb.Storage.getBlurItems('x.com')).toEqual([]);
     });
 
-    test('resolves with empty array when response is null', async () => {
-      mockSendMessageResponse(null);
-      expect(await pb.Storage.getBlurItems('x.com')).toEqual([]);
+    test('does not use chrome.runtime.sendMessage', async () => {
+      mockStorageGet({ blurred_items: {} });
+      await pb.Storage.getBlurItems('x.com');
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -233,25 +208,21 @@ describe('pb.Storage', () => {
     });
   });
 
-  // ── getSettings (message-based read) ──────────────────────────────────
+  // ── getSettings (direct storage read + merge defaults) ─────────────────
 
   describe('getSettings', () => {
-    test('returns settings from background response', async () => {
-      mockSendMessageResponse({ settings: { BLUR_RADIUS: 12, ENABLED: true } });
+    test('returns merged settings from storage', async () => {
+      mockStorageGet({ settings: { BLUR_RADIUS: 12 } });
       const settings = await pb.Storage.getSettings();
       expect(settings.BLUR_RADIUS).toBe(12);
+      expect(settings.ENABLED).toBe(true); // default merged in
     });
 
-    test('falls back to defaults when response has no settings', async () => {
-      mockSendMessageResponse({});
+    test('returns full defaults when no settings in storage', async () => {
+      mockStorageGet({ settings: null });
       const settings = await pb.Storage.getSettings();
       expect(settings.BLUR_RADIUS).toBe(10);
-    });
-
-    test('falls back to defaults when response is null', async () => {
-      mockSendMessageResponse(null);
-      const settings = await pb.Storage.getSettings();
-      expect(settings.BLUR_RADIUS).toBe(10);
+      expect(settings.HIGHLIGHT_COLOR).toBe('#f59e0b');
     });
   });
 
@@ -278,15 +249,15 @@ describe('pb.Storage', () => {
   // ── getRules / saveRules ──────────────────────────────────────────────
 
   describe('getRules', () => {
-    test('returns rules array from background', async () => {
-      mockSendMessageResponse({ rules: [{ id: 'r1', pattern: '*.test.com' }] });
+    test('returns rules array from storage', async () => {
+      mockStorageGet({ rules: [{ id: 'r1', pattern: '*.test.com' }] });
       const rules = await pb.Storage.getRules();
       expect(rules).toHaveLength(1);
       expect(rules[0].id).toBe('r1');
     });
 
     test('returns empty array when no rules saved', async () => {
-      mockSendMessageResponse({});
+      mockStorageGet({ rules: null });
       expect(await pb.Storage.getRules()).toEqual([]);
     });
   });
@@ -307,7 +278,7 @@ describe('pb.Storage', () => {
 
   describe('getBlurState', () => {
     test('returns blur state from background', async () => {
-      mockSendMessageResponse({ blurAll: true });
+      mockStorageGet({ blur_all_hosts: { 'example.com': true } });
       const result = await pb.Storage.getBlurState('example.com');
       expect(result).toBe(true);
     });
@@ -326,14 +297,16 @@ describe('pb.Storage', () => {
   // ── Error handling ────────────────────────────────────────────────────
 
   describe('error handling', () => {
-    test('getBlurItems rejects on sendMessage error', async () => {
-      mockSendMessageError('Background not ready');
-      await expect(pb.Storage.getBlurItems('x.com')).rejects.toBeTruthy();
+    test('getBlurItems returns empty array when storage returns null', async () => {
+      mockStorageGet({ blurred_items: null });
+      const result = await pb.Storage.getBlurItems('x.com');
+      expect(result).toEqual([]);
     });
 
-    test('getSettings rejects on sendMessage error', async () => {
-      mockSendMessageError('SW suspended');
-      await expect(pb.Storage.getSettings()).rejects.toBeTruthy();
+    test('getSettings returns defaults when storage returns null', async () => {
+      mockStorageGet({ settings: null });
+      const result = await pb.Storage.getSettings();
+      expect(result.BLUR_RADIUS).toBe(10);
     });
   });
 
@@ -362,7 +335,7 @@ describe('pb.Storage', () => {
 
     test('getBlurItems returns empty array for empty hostname', async () => {
       expect(await pb.Storage.getBlurItems('')).toEqual([]);
-      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+      expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
 
     test('clearHost returns early for empty hostname', async () => {
