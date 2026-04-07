@@ -138,7 +138,9 @@ let writeQueue = Promise.resolve();
 const SERIAL_WRITE_TIMEOUT_MS = 10000;
 
 function serialWrite(fn) {
+  log.log('serialWrite: queuing write');
   writeQueue = writeQueue.then(() => {
+    log.log('serialWrite: executing write fn');
     return Promise.race([
       fn(),
       new Promise((_, reject) =>
@@ -146,7 +148,7 @@ function serialWrite(fn) {
       ),
     ]);
   }).catch((err) => {
-    console.warn('[PrivacyBlur] serialWrite error:', err?.message || err);
+    console.error('[PrivacyBlur] serialWrite error:', err?.message || err);
   });
   return writeQueue;
 }
@@ -172,18 +174,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case MSG.SAVE_BLUR_ITEM: {
-      if (!isValidHostname(message.hostname) || !isValidBlurItem(message.item)) {
+      log.log('SAVE_BLUR_ITEM: hostname=', message.hostname, 'item=', message.item);
+      if (!isValidHostname(message.hostname)) {
+        log.log('SAVE_BLUR_ITEM: invalid hostname');
         sendResponse({ success: false, error: "invalid input" });
         return true;
       }
-      // Respond immediately — MV3 service worker may suspend before async write completes
+      if (!isValidBlurItem(message.item)) {
+        log.log('SAVE_BLUR_ITEM: invalid item, type=', message.item?.type,
+          'id=', message.item?.id, 'name=', message.item?.name,
+          'x=', typeof message.item?.x, 'y=', typeof message.item?.y,
+          'w=', typeof message.item?.width, 'h=', typeof message.item?.height);
+        sendResponse({ success: false, error: "invalid input" });
+        return true;
+      }
       sendResponse({ success: true });
+      log.log('SAVE_BLUR_ITEM: entering serialWrite');
       serialWrite(() => new Promise((resolve) => {
+        log.log('SAVE_BLUR_ITEM: inside serialWrite, reading storage');
         chrome.storage.local.get("blurred_items", (result) => {
+          log.log('SAVE_BLUR_ITEM: storage read complete, result=', JSON.stringify(result));
           const map = result.blurred_items || {};
           const list = map[message.hostname] || [];
 
           if (list.length >= PER_HOST_ITEM_LIMIT) {
+            log.log('SAVE_BLUR_ITEM: per-host limit reached');
             resolve();
             return;
           }
@@ -194,7 +209,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           map[message.hostname] = list;
-          chrome.storage.local.set({ blurred_items: map }, resolve);
+          log.log('SAVE_BLUR_ITEM: writing to storage, items for host:', list.length);
+          chrome.storage.local.set({ blurred_items: map }, () => {
+            log.log('SAVE_BLUR_ITEM: storage write complete');
+            resolve();
+          });
         });
       }));
       return true;
