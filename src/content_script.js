@@ -53,54 +53,104 @@
   const Picker    = pb.Picker;
   const Shortcuts = pb.Shortcuts;
 
-  // ─── Restore blur items ──────────────────────────────────────────────────────
+  // ─── Repaint: single source of truth ──────────────────────────────────────────
+  // Reads ALL blur state from storage and re-renders the DOM to match.
+  // Called after every storage write. Storage is the authority; DOM derives from it.
 
-  async function restoreBlurItems() {
+  async function repaint() {
     try {
-      const items = await Store.getBlurItems(hostname);
-      log.log('restoreBlurItems:', hostname, 'found', items ? items.length : 0, 'items');
-      if (!items || items.length === 0) return;
+      // 1. Capture transient reveal state before clearing
+      const revealSnapshot = Array.from(_revealedElements);
+      const wasClickRevealed = clickRevealedEl;
+      const wasHoverRevealed = _hoverRevealedEl;
 
-      for (const item of items) {
-        if (item.type === 'dynamic') {
-          const el = Selector.restoreSelector(item.selector);
-          if (el) {
-            Engine.applyBlur(el);
+      // 2. Read current blur state from storage
+      const [items, blurAllActive] = await Promise.all([
+        Store.getBlurItems(hostname),
+        Store.getBlurState(hostname),
+      ]);
+
+      // 3. Clean slate — remove all blur artifacts from DOM
+      dismissClickReveal();
+      _unrevealAll();
+      _hoverRevealedEl = null;
+      clickRevealedEl = null;
+      stopDomObserver();
+      Engine.unblurAll();
+
+      // 4. Seed counters from stored items
+      dynamicCounter = 0;
+      stickyCounter = 0;
+
+      // 5. Restore dynamic items (selector-based)
+      if (items && items.length > 0) {
+        for (const item of items) {
+          if (item.type === 'dynamic') {
+            try {
+              const el = Selector.restoreSelector(item.selector);
+              if (el) Engine.applyBlur(el);
+            } catch (_e) { /* invalid selector */ }
+            const num = parseInt((item.name || '').replace('Dynamic ', ''), 10);
+            if (!isNaN(num) && num > dynamicCounter) dynamicCounter = num;
           }
-          const num = parseInt((item.name || '').replace('Dynamic ', ''), 10);
-          if (!isNaN(num) && num >= dynamicCounter) dynamicCounter = num;
+        }
+      }
 
-        } else if (item.type === 'sticky') {
-          // Exact path match (trailing-slash tolerant) — zone from /dashboard doesn't show on /settings
+      // 6. Restore sticky items (coordinate-based)
+      if (items && items.length > 0) {
+        const curW = document.documentElement.scrollWidth || window.innerWidth;
+        const curH = document.documentElement.scrollHeight || window.innerHeight;
+
+        for (const item of items) {
+          if (item.type !== 'sticky') continue;
+
+          // Path-tolerance check
           if (item.path) {
             const stored = item.path.replace(/\/+$/, '') || '/';
             const current = location.pathname.replace(/\/+$/, '') || '/';
             if (stored !== current) continue;
           }
 
-          // Proportional coordinate scaling (fallback to viewport if doc not sized)
-          const curW = document.documentElement.scrollWidth || window.innerWidth;
-          const curH = document.documentElement.scrollHeight || window.innerHeight;
           const x = (typeof item.xPct === 'number') ? item.xPct * curW : item.x;
           const y = (typeof item.yPct === 'number') ? item.yPct * curH : item.y;
           const w = (typeof item.widthPct === 'number') ? item.widthPct * curW : item.width;
           const h = (typeof item.heightPct === 'number') ? item.heightPct * curH : item.height;
 
           Engine.createZoneOverlay({
-            id: item.id,
-            name: item.name,
-            x: Math.round(x),
-            y: Math.round(y),
-            width: Math.round(w),
-            height: Math.round(h),
+            id: item.id, name: item.name,
+            x: Math.round(x), y: Math.round(y),
+            width: Math.round(w), height: Math.round(h),
           });
 
           const num = parseInt((item.name || '').replace('Sticky ', ''), 10);
-          if (!isNaN(num) && num >= stickyCounter) stickyCounter = num;
+          if (!isNaN(num) && num > stickyCounter) stickyCounter = num;
         }
       }
+
+      // 7. If blur-all active, inject CSS rules + stamp text-check elements
+      if (blurAllActive) {
+        Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
+        Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
+        startDomObserver();
+        isPageBlurred = true;
+      } else {
+        isPageBlurred = false;
+      }
+
+      // 8. Restore transient reveal state (inline style overrides survive repaint)
+      for (const el of revealSnapshot) {
+        if (!document.contains(el)) continue;
+        _revealElement(el);
+      }
+      if (wasClickRevealed && document.contains(wasClickRevealed)) {
+        clickRevealedEl = wasClickRevealed;
+      }
+      if (wasHoverRevealed && document.contains(wasHoverRevealed)) {
+        _hoverRevealedEl = wasHoverRevealed;
+      }
+
     } catch (err) {
-      // Storage unavailable or context invalidated — fail silently.
+      log.warn('repaint error:', err.message);
     }
   }
 
@@ -157,25 +207,23 @@
   }
 
   const pickerCallbacks = {
-    onBlur(el) {
-      Engine.applyBlur(el);
+    async onBlur(el) {
       const selector = Selector.getSelector(el);
-      if (selector) {
-        dynamicCounter++;
-        const item = { type: 'dynamic', name: 'Dynamic ' + dynamicCounter, selector };
-        Store.saveBlurItem(hostname, item).catch(() => {});
-      }
+      if (!selector) return;
+      dynamicCounter++;
+      const item = { type: 'dynamic', name: 'Dynamic ' + dynamicCounter, selector };
+      await Store.saveBlurItem(hostname, item);
+      await repaint();
     },
 
-    onUnblur(el) {
-      Engine.removeBlur(el);
+    async onUnblur(el) {
       const selector = Selector.getSelector(el);
-      if (selector) {
-        Store.removeBlurItem(hostname, selector).catch(() => {});
-      }
+      if (!selector) return;
+      await Store.removeBlurItem(hostname, selector);
+      await repaint();
     },
 
-    onStickyBlur(zoneRect) {
+    async onStickyBlur(zoneRect) {
       stickyCounter++;
       const id = _generateZoneId();
       const name = 'Sticky ' + stickyCounter;
@@ -183,35 +231,30 @@
       const scrollH = zoneRect.scrollHeight;
 
       const item = {
-        type: 'sticky',
-        name: name,
-        id: id,
-        x: zoneRect.x,
-        y: zoneRect.y,
-        width: zoneRect.width,
-        height: zoneRect.height,
+        type: 'sticky', name: name, id: id,
+        x: zoneRect.x, y: zoneRect.y,
+        width: zoneRect.width, height: zoneRect.height,
         xPct: scrollW ? zoneRect.x / scrollW : 0,
         yPct: scrollH ? zoneRect.y / scrollH : 0,
         widthPct: scrollW ? zoneRect.width / scrollW : 0,
         heightPct: scrollH ? zoneRect.height / scrollH : 0,
-        scrollWidth: scrollW,
-        scrollHeight: scrollH,
+        scrollWidth: scrollW, scrollHeight: scrollH,
         path: location.pathname,
       };
 
-      Engine.createZoneOverlay({ id, name, x: item.x, y: item.y, width: item.width, height: item.height });
-      Store.saveBlurItem(hostname, item).catch(e => log.warn('saveBlurItem:', e.message));
+      await Store.saveBlurItem(hostname, item);
+      await repaint();
       Shortcuts.showToast(name);
     },
 
-    onStickyUnblur(zoneId) {
-      Engine.removeZoneOverlay(zoneId);
-      Store.removeBlurItem(hostname, zoneId).catch(() => {});
+    async onStickyUnblur(zoneId) {
+      await Store.removeBlurItem(hostname, zoneId);
+      await repaint();
     },
 
     onModeChange(mode) {
       settings.PICKER_MODE = mode;
-      Store.saveSettings(settings).catch(() => {});
+      Store.saveSettings(settings);
     },
 
     onDeactivate() {
@@ -679,21 +722,12 @@
     switch (type) {
       // ── Toggle blur-all mode ──────────────────────────────────────────────
       case MSG.TOGGLE_BLUR_ALL: {
-        if (isPageBlurred) {
-          dismissClickReveal();
-          stopDomObserver();
-          Engine.unblurAll();
-          isPageBlurred = false;
-        } else {
-          Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
-          Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
-          startDomObserver();
-          isPageBlurred = true;
-        }
-        // Persist blur-all state for this hostname so it survives page reload
-        Store.saveBlurState(hostname, isPageBlurred).catch(() => {});
-        if (sendResponse) sendResponse({ isPageBlurred });
-        break;
+        (async () => {
+          await Store.saveBlurState(hostname, !isPageBlurred);
+          await repaint();
+          if (sendResponse) sendResponse({ isPageBlurred });
+        })();
+        return true; // async
       }
 
       // ── Toggle element picker ─────────────────────────────────────────────
@@ -717,22 +751,21 @@
 
       // ── Clear all blur on this page ───────────────────────────────────────
       case MSG.CLEAR_ALL_BLUR: {
-        dismissClickReveal();
-        stopDomObserver();
-        Engine.unblurAll();
-        isPageBlurred = false;
-        Store.clearHost(hostname).catch(() => {});
-        Store.saveBlurState(hostname, false).catch(() => {});
-        if (sendResponse) sendResponse({ ok: true });
-        break;
+        (async () => {
+          await Store.clearHost(hostname);
+          await Store.saveBlurState(hostname, false);
+          await repaint();
+          if (sendResponse) sendResponse({ ok: true });
+        })();
+        return true; // async
       }
 
       // ── Re-apply persisted blur items ──────────────────────────────────
       case MSG.RESTORE: {
-        restoreBlurItems().then(() => {
+        repaint().then(() => {
           if (sendResponse) sendResponse({ ok: true });
         });
-        return true; // async response
+        return true; // async
       }
 
       // ── Status query ──────────────────────────────────────────────────────
@@ -754,17 +787,9 @@
             const resolved = resolveSettings(location.href, globalSettings, rules);
             applyState(resolved, prev);
 
-            // Restore blur-all when re-enabled
+            // Restore blur state when re-enabled
             if (!wasEnabled && settings.ENABLED) {
-              try {
-                const wasBlurAll = await Store.getBlurState(hostname);
-                if (wasBlurAll && !isPageBlurred) {
-                  isPageBlurred = true;
-                  Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
-                  Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
-                  startDomObserver();
-                }
-              } catch (_e) {}
+              await repaint();
             }
 
             if (sendResponse) sendResponse({ ok: true });
@@ -775,56 +800,52 @@
 
       // ── Context menu: blur the right-clicked element ─────────────────────
       case MSG.CONTEXT_BLUR: {
-        const target = lastContextMenuTarget;
-        if (target) {
-          Engine.applyBlur(target);
-          const sel = Selector.getSelector(target);
-          if (sel) {
-            dynamicCounter++;
-            const item = { type: 'dynamic', name: 'Dynamic ' + dynamicCounter, selector: sel };
-            Store.saveBlurItem(hostname, item).catch(() => {});
+        (async () => {
+          const target = lastContextMenuTarget;
+          lastContextMenuTarget = null;
+          if (target) {
+            const sel = Selector.getSelector(target);
+            if (sel) {
+              dynamicCounter++;
+              const item = { type: 'dynamic', name: 'Dynamic ' + dynamicCounter, selector: sel };
+              await Store.saveBlurItem(hostname, item);
+              await repaint();
+            }
           }
-        }
-        lastContextMenuTarget = null;
-        if (sendResponse) sendResponse({ ok: true });
-        break;
+          if (sendResponse) sendResponse({ ok: true });
+        })();
+        return true; // async
       }
 
       // ── Context menu: unblur the right-clicked element ────────────────────
       case MSG.CONTEXT_UNBLUR: {
-        const target = lastContextMenuTarget;
-        if (!target) {
+        (async () => {
+          const target = lastContextMenuTarget;
           lastContextMenuTarget = null;
-          if (sendResponse) sendResponse({ ok: false, reason: 'no_target' });
-          break;
-        }
-        const unblurTarget = findBlurredTarget(target);
-        if (unblurTarget) {
-          Engine.removeBlur(unblurTarget);
-          const sel = Selector.getSelector(unblurTarget);
-          if (sel) {
-            Store.removeBlurItem(hostname, sel).catch(() => {});
+          if (!target) {
+            if (sendResponse) sendResponse({ ok: false, reason: 'no_target' });
+            return;
           }
-        }
-        lastContextMenuTarget = null;
-        if (sendResponse) sendResponse({ ok: true });
-        break;
+          const unblurTarget = findBlurredTarget(target);
+          if (unblurTarget) {
+            const sel = Selector.getSelector(unblurTarget);
+            if (sel) {
+              await Store.removeBlurItem(hostname, sel);
+              await repaint();
+            }
+          }
+          if (sendResponse) sendResponse({ ok: true });
+        })();
+        return true; // async
       }
 
       // ── Unblur a specific item (from popup remove button) ────────────────
       case MSG.UNBLUR_ITEM: {
-        if (message.item) {
-          if (message.item.type === 'dynamic' && message.item.selector) {
-            try {
-              const el = document.querySelector(message.item.selector);
-              if (el) Engine.removeBlur(el);
-            } catch (_e) { /* invalid selector — skip */ }
-          } else if (message.item.type === 'sticky' && message.item.id) {
-            Engine.removeZoneOverlay(message.item.id);
-          }
-        }
-        if (sendResponse) sendResponse({ ok: true });
-        break;
+        // Item already removed from storage by popup — just repaint
+        repaint().then(() => {
+          if (sendResponse) sendResponse({ ok: true });
+        });
+        return true; // async
       }
 
       default:
@@ -882,15 +903,11 @@
       }
     }
 
-    // 5. Re-inject blur rules when config changed while blur-all is active
+    // 5. Re-render when blur-related config changes while blur-all is active
     const modeChanged = old.BLUR_MODE !== settings.BLUR_MODE;
     const thoroughChanged = old.THOROUGH_BLUR !== settings.THOROUGH_BLUR;
     if (isPageBlurred && (catsChanged || modeChanged || thoroughChanged)) {
-      Engine.unblurAll();
-      Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
-      Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
-      stopDomObserver();
-      startDomObserver();
+      repaint();
     }
 
     // 6. Clear stale reveal state on mode change
@@ -952,25 +969,10 @@
     // 6. Initialise keyboard shortcut handler.
     Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
 
-    // 7. Restore previously blurred items for this hostname.
-    await restoreBlurItems();
+    // 7. Repaint: restore all blur state from storage (items + blur-all + zones).
+    await repaint();
 
-    // 8. Restore blur-all state for this hostname.
-    try {
-      const wasBlurAll = await Store.getBlurState(hostname);
-      if (wasBlurAll && !isPageBlurred) {
-        Engine.injectBlurRules(settings.BLUR_CATEGORIES, settings.BLUR_MODE);
-        Engine.blurTextCheckElements(settings.BLUR_CATEGORIES, settings.THOROUGH_BLUR);
-        isPageBlurred = true;
-      }
-    } catch (_e) {
-      // Storage unavailable — skip restore
-    }
-
-    // 9. Start DOM observer for dynamic content.
-    startDomObserver();
-
-    // 9. Register reveal handlers (both modes use event delegation on document).
+    // 8. Register reveal handlers (both modes use event delegation on document).
     document.addEventListener('click', onRevealClick);
     document.addEventListener('keydown', onRevealKeydown);
     document.addEventListener('mouseover', onRevealMouseOver);
@@ -1041,6 +1043,11 @@
     if (needsResolve) {
       const resolved = resolveSettings(location.href, globalSettings, rules);
       applyState(resolved, prev);
+    }
+
+    // Repaint when blur items or blur-all state change (cross-tab sync)
+    if (changes.blurred_items || changes.blur_all_hosts) {
+      repaint();
     }
   });
 
