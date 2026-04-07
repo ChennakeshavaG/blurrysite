@@ -70,6 +70,7 @@ const SettingsRenderer = (() => {
    */
   function renderSection(container, configs, settings, onChange, opts) {
     const ruleMode = opts && opts.ruleMode;
+    const globalSettings = (opts && opts.globalSettings) || null;
     let currentGroup = null;
 
     for (let i = 0; i < configs.length; i++) {
@@ -84,7 +85,7 @@ const SettingsRenderer = (() => {
         container.appendChild(header);
       }
 
-      const row = _renderRow(config, settings, onChange, ruleMode);
+      const row = _renderRow(config, settings, onChange, ruleMode, globalSettings);
       container.appendChild(row);
     }
   }
@@ -111,7 +112,7 @@ const SettingsRenderer = (() => {
 
   // ── Row rendering ──────────────────────────────────────────────────────────
 
-  function _renderRow(config, settings, onChange, ruleMode) {
+  function _renderRow(config, settings, onChange, ruleMode, globalSettings) {
     const row = document.createElement('div');
     row.className = 'pb-setting pb-setting--' + config.type;
     row.dataset.key = config.key;
@@ -136,7 +137,7 @@ const SettingsRenderer = (() => {
 
     if (ruleMode && config.type !== 'shortcut') {
       // Rule mode: wrap with "Global default" / override select
-      const result = _createRuleOverride(config, value, onChange);
+      const result = _createRuleOverride(config, value, onChange, globalSettings);
       controlEl = result.wrapper;
       displayEl = result.display || null;
     } else {
@@ -335,7 +336,7 @@ const SettingsRenderer = (() => {
   // In rule mode, each setting gets a "Global default" / custom value selector.
   // null/undefined in rule.settings means "inherit global."
 
-  function _createRuleOverride(config, value, onChange) {
+  function _createRuleOverride(config, value, onChange, globalSettings) {
     const wrapper = document.createElement('div');
     wrapper.className = 'pb-rule-override';
 
@@ -420,14 +421,16 @@ const SettingsRenderer = (() => {
       let display = null;
 
       if (config.type === 'range') {
-        const defaultVal = (value !== null && value !== undefined) ? value : config.options.min;
+        const globalVal = globalSettings ? getByPath(globalSettings, config.key) : null;
+        const defaultVal = (value !== null && value !== undefined) ? value : (globalVal != null ? globalVal : config.options.min);
         const r = _createRange(config, defaultVal, (key, val) => {
           onChange(key, val);
         });
         innerControl = r.wrapper;
         display = r.display;
       } else {
-        const defaultVal = (value !== null && value !== undefined) ? value : config.options.min;
+        const globalVal = globalSettings ? getByPath(globalSettings, config.key) : null;
+        const defaultVal = (value !== null && value !== undefined) ? value : (globalVal != null ? globalVal : config.options.min);
         const n = _createNumber(config, defaultVal, (key, val) => {
           onChange(key, val);
         });
@@ -459,7 +462,8 @@ const SettingsRenderer = (() => {
       checkbox.className = 'pb-rule-override__check';
       checkbox.checked = hasOverride;
 
-      const input = _createColor(config, value || '#f59e0b', (key, val) => {
+      const globalColorVal = globalSettings ? getByPath(globalSettings, config.key) : null;
+      const input = _createColor(config, value || globalColorVal || '#f59e0b', (key, val) => {
         onChange(key, val);
       });
       input.style.display = hasOverride ? '' : 'none';

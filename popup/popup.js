@@ -579,7 +579,7 @@
     ui.ruleOverrides.textContent = '';
     // Filter out shortcut configs — shortcuts aren't overridable per rule
     const overridableConfigs = Configs.ALL.filter(c => c.type !== 'shortcut');
-    Renderer.renderSection(ui.ruleOverrides, overridableConfigs, ruleSettings, onRuleSettingChanged, { ruleMode: true });
+    Renderer.renderSection(ui.ruleOverrides, overridableConfigs, ruleSettings, onRuleSettingChanged, { ruleMode: true, globalSettings: settings });
 
     ui.ruleModal.hidden = false;
 
