@@ -47,6 +47,30 @@ const SelectorUtils = (() => {
     }
   }
 
+  /**
+   * Build an nth-child path from element up to body.
+   * Example: "body > div:nth-child(2) > main:nth-child(1) > p:nth-child(3)"
+   * Survives page reload but fragile to DOM insertions.
+   */
+  function buildNthChildPath(element) {
+    var parts = [];
+    var node = element;
+    while (node && node !== document.body && node !== document.documentElement) {
+      var tag = node.tagName.toLowerCase();
+      var parent = node.parentElement;
+      if (!parent) break;
+      var idx = 1;
+      for (var i = 0; i < parent.children.length; i++) {
+        if (parent.children[i] === node) break;
+        if (parent.children[i].tagName === node.tagName) idx++;
+      }
+      parts.unshift(tag + ':nth-of-type(' + idx + ')');
+      node = parent;
+    }
+    if (parts.length === 0) return null;
+    return 'body > ' + parts.join(' > ');
+  }
+
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
@@ -73,28 +97,27 @@ const SelectorUtils = (() => {
 
     // ---- Strategy 2: class-based selector (stable across reloads) ----
     if (element.className && typeof element.className === 'string' && element.className.trim().length > 0) {
-      // Use the first class name as a selector, combined with tag for specificity
       const tag = element.tagName.toLowerCase();
-      const classes = element.className.trim().split(/\s+/);
-      const classSelector = tag + '.' + classes.map(c => cssEscape(c)).join('.');
-      if (isUnique(classSelector)) {
-        return classSelector;
-      }
-      // If tag.class isn't unique, try with parent context
-      const parent = element.parentElement;
-      if (parent && parent.id) {
-        const contextSelector = `#${cssEscape(parent.id)} > ${classSelector}`;
-        if (isUnique(contextSelector)) {
-          return contextSelector;
+      // Filter out transient extension classes (pb-hover-highlight, pb-blurred, etc.)
+      const classes = element.className.trim().split(/\s+/).filter(c => !c.startsWith('pb-'));
+      if (classes.length > 0) {
+        const classSelector = tag + '.' + classes.map(c => cssEscape(c)).join('.');
+        if (isUnique(classSelector)) {
+          return classSelector;
+        }
+        // Try with parent ID context
+        const parent = element.parentElement;
+        if (parent && parent.id) {
+          const contextSelector = `#${cssEscape(parent.id)} > ${classSelector}`;
+          if (isUnique(contextSelector)) {
+            return contextSelector;
+          }
         }
       }
     }
 
-    // ---- Strategy 3: stamp data-pb-id (session-only fallback) ----
-    if (!element.dataset.pbId) {
-      element.dataset.pbId = generateId();
-    }
-    return `[data-pb-id="${element.dataset.pbId}"]`;
+    // ---- Strategy 3: nth-child path (survives reload, fragile to DOM changes) ----
+    return buildNthChildPath(element);
   }
 
   /**

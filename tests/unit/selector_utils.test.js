@@ -114,22 +114,23 @@ describe('pb.SelectorUtils', () => {
       expect(selector).not.toBe('#shared');
     });
 
-    test('stamps data-pb-id on element when no unique identifier found', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-
-      pb.SelectorUtils.getSelector(div);
-
-      expect(div.dataset.pbId).toBeTruthy();
-    });
-
-    test('returns data-pb-id attribute selector when element has no ID', () => {
+    test('returns nth-of-type path when no unique identifier found', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
 
       const selector = pb.SelectorUtils.getSelector(div);
 
-      expect(selector).toMatch(/\[data-pb-id="/);
+      expect(selector).toMatch(/^body > /);
+      expect(selector).toContain('nth-of-type');
+    });
+
+    test('returns nth-of-type path when element has no ID', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+
+      const selector = pb.SelectorUtils.getSelector(div);
+
+      expect(selector).toMatch(/^body > div:nth-of-type/);
     });
 
     test('reuses existing data-pb-id when called twice on same element', () => {
@@ -326,26 +327,25 @@ describe('pb.SelectorUtils', () => {
       expect(found).toBe(div);
     });
 
-    test('handles element with whitespace-only ID (falls back to data-pb-id)', () => {
+    test('handles element with whitespace-only ID (falls back to nth-of-type)', () => {
       const div = document.createElement('div');
       div.setAttribute('id', '   ');
       document.body.appendChild(div);
 
       const selector = pb.SelectorUtils.getSelector(div);
 
-      // Whitespace ID should be skipped, use data-pb-id
-      expect(selector).toMatch(/\[data-pb-id="/);
+      // Whitespace ID should be skipped, use nth-of-type path
+      expect(selector).toMatch(/^body > /);
     });
 
-    test('does not re-stamp data-pb-id if element already has one', () => {
+    test('nth-of-type path can re-find the element', () => {
       const div = document.createElement('div');
-      div.dataset.pbId = 'existing123';
       document.body.appendChild(div);
 
       const selector = pb.SelectorUtils.getSelector(div);
+      const found = document.querySelector(selector);
 
-      expect(div.dataset.pbId).toBe('existing123');
-      expect(selector).toBe('[data-pb-id="existing123"]');
+      expect(found).toBe(div);
     });
 
     test('different elements get different data-pb-id values', () => {
