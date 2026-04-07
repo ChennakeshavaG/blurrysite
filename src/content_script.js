@@ -38,6 +38,9 @@
   /** MutationObserver watching for dynamically added nodes */
   let domObserver = null;
 
+  /** Guard: skip storage.onChanged repaint when we just wrote the data ourselves */
+  let _ownStorageWrite = false;
+
   /** Hostname used as the storage key for persisted blur items */
   const hostname = location.hostname;
 
@@ -58,6 +61,10 @@
   // Called after every storage write. Storage is the authority; DOM derives from it.
 
   async function repaint() {
+    // Mark that we're doing a local repaint — suppress storage.onChanged echo
+    _ownStorageWrite = true;
+    setTimeout(() => { _ownStorageWrite = false; }, 100);
+
     try {
       // 1. Capture transient reveal state before clearing
       const revealSnapshot = Array.from(_revealedElements);
@@ -1045,8 +1052,8 @@
       applyState(resolved, prev);
     }
 
-    // Repaint when blur items or blur-all state change (cross-tab sync)
-    if (changes.blurred_items || changes.blur_all_hosts) {
+    // Repaint when blur items or blur-all state change (cross-tab sync only)
+    if ((changes.blurred_items || changes.blur_all_hosts) && !_ownStorageWrite) {
       repaint();
     }
   });
