@@ -73,7 +73,8 @@ interface PrivacyBlurEngine {
   toggleBlur(element: Element, radius?: number, mode?: BlurMode): void;
   blurAllContent(radius?: number, options?: { categories?: BlurCategories, thoroughBlur?: boolean, blurMode?: BlurMode }): void;
   unblurAll(): void;
-  isBlurred(element: Element): boolean;
+  isBlurred(element: Element): boolean;          // stamped OR tag-rule
+  isVisuallyBlurred(element: Element): boolean;  // isBlurred + role-rule (reveal-only)
   invalidateSelectorCache(): void;
   matchesActiveCategories(element: Element, categories?: BlurCategories): boolean;
   ensureSvgFilter(): void;
@@ -582,6 +583,70 @@ All handlers return `true` to keep the message channel open for the async `sendR
 ### deepMerge
 
 Sourced from `constants.js` (`BlurrySite.deepMerge`). Recursive object merge (second wins) with depth limit (5). Arrays are replaced, not concatenated. Non-object values are assigned directly. Prototype-pollution safe (skips `__proto__`, `constructor`, `prototype`).
+
+---
+
+## 8b. logger.js — flow logging
+
+### State
+
+```ts
+let _enabled: boolean;          // false until storage read or enable()
+const PREFIX = '[BLSI]';
+const STORAGE_KEY = 'blsi_debug';
+```
+
+### Public API
+
+```ts
+interface Logger {
+  log(...args: any[]): void;        // gated
+  warn(...args: any[]): void;       // gated
+  error(...args: any[]): void;      // ALWAYS logs
+  flow(tag: string, data?: any): void; // gated
+  scope(name: string): ScopedLogger;
+  enable(): void;                   // sets _enabled, persists blsi_debug=true
+  disable(): void;                  // sets _enabled, persists blsi_debug=false
+  readonly enabled: boolean;
+}
+
+interface ScopedLogger {
+  log/warn/error/flow: same as above
+  readonly enabled: boolean;
+}
+```
+
+### Cross-context sync
+
+On load, every context (background SW, content script, popup) reads `chrome.storage.local.blsi_debug` and registers a `chrome.storage.onChanged` listener that flips `_enabled` whenever the key changes in the `local` area. This means flipping the toggle in any context propagates to every other live context within one onChanged tick — no reload required.
+
+### Flow log call sites
+
+The following call sites emit `flow()` events when the toggle is on. Format: `[BLSI] HH:MM:SS.mmm [scope] ⟶ tag {data}`.
+
+| Scope | Event | Where | Payload |
+|---|---|---|---|
+| `content` | `init.start` | `content_script.init` | `{ href, hostname }` |
+| `content` | `init.done` | `content_script.init` end | `{ enabled, revealMode, pickerMode, ruleCount }` |
+| `content` | `settings.apply` | `content_script.applyState` | `{ changed: string[] }` |
+| `content` | `storage.settingsChanged` | `onSettingsChanged` | — |
+| `content` | `storage.rulesChanged` | `onRulesChanged` | `{ count }` |
+| `content` | `spa.urlChange` | `onUrlChange` | `{ from, to }` |
+| `content` | `msg.in` | `handleMessage` | `{ type }` |
+| `content` | `trigger.toggleBlurAll` | `TOGGLE_BLUR_ALL` | `{ nextState, hostname }` |
+| `content` | `trigger.togglePicker` | `TOGGLE_PICKER` | `{ nextState, mode }` |
+| `content` | `trigger.clearAll` | `CLEAR_ALL_BLUR` / shortcut | `{ source, hostname }` |
+| `content` | `trigger.contextBlur` / `trigger.contextUnblur` | context menu handlers | `{ name?, selector }` |
+| `content` | `picker.blur` / `picker.unblur` | picker callbacks | `{ name?, selector }` |
+| `content` | `picker.stickyBlur` / `picker.stickyUnblur` | sticky callbacks | `{ id, name?, rect? }` |
+| `content` | `picker.modeChange` / `picker.deactivate` | picker callbacks | `{ mode? }` |
+| `engine` | `blurAll` | `blur_engine.blurAll` end | `{ pageActive, pageWideChanged, added, removed, totalActive }` |
+| `bg` | `onInstalled` / `onStartup` | background lifecycle | `{ reason? }` |
+| `bg` | `command.relay` | `chrome.commands.onCommand` | `{ command, type, tabId }` |
+| `bg` | `contextMenu` | `chrome.contextMenus.onClicked` | `{ menuItemId, tabId }` |
+| `popup` | `init` | `popup.init` | — |
+
+The toggle button in `popup/popup.html` (`#debugToggle`) flips `Logger.enable()` / `Logger.disable()`. State is mirrored to `data-active` and `aria-pressed`.
 
 ---
 

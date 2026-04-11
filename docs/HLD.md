@@ -263,9 +263,12 @@ User changes blur radius slider
   },
   "rules": [
     { "id": "abc123", "name": "Social media", "pattern": "*://twitter.com/*", "patternType": "wildcard", "settings": { "BLUR_RADIUS": 12, "THOROUGH_BLUR": true } }
-  ]
+  ],
+  "blsi_debug": false
 }
 ```
+
+`blsi_debug` is the persistent toggle for `blsi.Logger` flow logging. Every context (background SW, content scripts, popup) reads it on load and observes `chrome.storage.onChanged` so a flip from any UI propagates to all live contexts without reload. See `LLD.md §8b`.
 
 ---
 

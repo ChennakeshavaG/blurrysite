@@ -38,7 +38,7 @@ Rules:
 
 ```
 0. constants.js          → globalThis.blsi (message types + DEFAULTS)
-1. logger.js             → blsi.Logger
+1. logger.js             → blsi.Logger (flow logger; toggle persisted at chrome.storage.local.blsi_debug; cross-context sync via storage.onChanged)
 2. url_matcher.js        → blsi.UrlMatcher
 3. selector_utils.js     → blsi.SelectorUtils
 4. storage_manager.js    → blsi.Storage
@@ -57,7 +57,10 @@ A module may only depend on modules loaded before it.
 ## Module-Specific Rules
 
 ### blur_engine.js
-- `applyBlur` is idempotent — always guard with `if (isBlurred(el)) return`.
+- `applyBlur` is idempotent — guards via direct `element.dataset.blSiBlur` attribute check, NOT `isBlurred()`. `isBlurred()` is used by picker / context-menu unblur paths to check whether a clicked element has a stored item; those paths intentionally ignore role-only matches because there is no storage entry to remove.
+- Two blur checks:
+  - `isBlurred(el)` — "is this stamped or tag-rule blurred?" Used by picker.js, content_script.js (context-menu ancestor walk), and the internal `toggleBlur`.
+  - `isVisuallyBlurred(el)` — same as `isBlurred` PLUS role-based CSS matches (`<button role="tab">` under FORM, etc.). Used by reveal_controller.js for ancestor / descendant walks so hover reveal can clear filter on role-matched parents. Do NOT widen `isBlurred` to subsume this — it would route picker clicks on role-blurred elements into unblur paths that silently no-op against storage.
 - Video elements use `videoOverlayMap` (WeakMap) to track canvas + RAF handle. Never store canvas on `el._pbCanvas` — that was a previous iteration.
 - Canvas class must be `"bl-si-canvas-overlay"` exactly. CSS in `styles/content.css` references this.
 - IMG blur: `data-bl-si-blur` attribute + CSS rule `[data-bl-si-blur] { filter: blur(var(--bl-si-radius)) }`. No inline `style.filter`.

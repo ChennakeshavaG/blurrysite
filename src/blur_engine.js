@@ -313,7 +313,16 @@ const BlurEngine = (() => {
         ? "url(#bl-si-frosted-filter)"
         : "blur(var(--bl-si-radius, 10px))";
 
-    const blurDecl = `filter: ${filterValue} !important; user-select: none !important;`;
+    // transition: filter is declared alongside the filter itself so hover/click
+    // reveal (reveal_controller sets inline `filter: none !important`) animates
+    // smoothly in both directions. Initial blur-all apply/remove still snaps
+    // because the rule itself appears/disappears in the same style recalc as
+    // the filter value change — CSS transitions require the transition property
+    // to be in effect before the animated property changes.
+    const blurDecl =
+      `filter: ${filterValue} !important; ` +
+      `transition: filter var(--bl-si-transition-duration, 200ms) ease !important; ` +
+      `user-select: none !important;`;
 
     const rules = [];
 
@@ -438,6 +447,37 @@ const BlurEngine = (() => {
       // Only always-blur tags are covered by CSS. Text-check tags need data attr.
       for (let i = 0; i < selectorCache.alwaysBlurTags.length; i++) {
         if (selectorCache.alwaysBlurTags[i] === tag) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Reveal-only helper: returns true for everything `isBlurred` returns true
+   * for, PLUS elements blurred via the role-based CSS selectors of an active
+   * blur-all category (e.g. `<button role="tab">` under FORM). reveal_controller
+   * uses this on its ancestor / descendant walks so a role-matched parent's
+   * filter gets cleared during hover or click reveal — without it, the inner
+   * picker reveal succeeds but the parent's CSS filter still applies blur to
+   * the same subtree, producing a "dual blur / no reveal" effect.
+   *
+   * Kept separate from `isBlurred` because `isBlurred` is also used by picker
+   * and context-menu unblur paths to decide whether a stored item exists for
+   * a clicked element. Role-matched elements have NO stored item (they are
+   * blurred by CSS rule alone), so widening `isBlurred` would route those
+   * clicks through unblur paths that silently no-op against storage.
+   */
+  function isVisuallyBlurred(element) {
+    if (!element || !(element instanceof Element)) return false;
+    if (element.dataset.blSiBlur) return true;
+    if (isBlurAllActive() && selectorCache) {
+      const tag = element.tagName.toLowerCase();
+      for (let i = 0; i < selectorCache.alwaysBlurTags.length; i++) {
+        if (selectorCache.alwaysBlurTags[i] === tag) return true;
+      }
+      if (selectorCache.roleSet && selectorCache.roleSet.size > 0) {
+        const role = element.getAttribute("role");
+        if (role != null && selectorCache.roleSet.has(role)) return true;
       }
     }
     return false;
@@ -810,15 +850,29 @@ const BlurEngine = (() => {
     const desired = Array.isArray(items) ? items : [];
     const desiredById = new Map(desired.map((i) => [_itemId(i), i]));
 
+    let added = 0, removed = 0;
     for (const [id, item] of Array.from(_activeItems)) {
       if (!desiredById.has(id)) {
         removeItem(item);
         _activeItems.delete(id);
+        removed++;
       }
     }
     for (const [id, item] of desiredById) {
+      const isNew = !_activeItems.has(id);
       applyItem(item);
       _activeItems.set(id, item);
+      if (isNew) added++;
+    }
+
+    if (blsi.Logger && blsi.Logger.enabled) {
+      blsi.Logger.scope('engine').flow('blurAll', {
+        pageActive: isActive,
+        pageWideChanged,
+        added,
+        removed,
+        totalActive: _activeItems.size,
+      });
     }
   }
 
@@ -844,6 +898,7 @@ const BlurEngine = (() => {
 
     // Queries
     isBlurred,
+    isVisuallyBlurred,
     matchesActiveCategories,
     shouldBlurElement,
 

@@ -1,6 +1,25 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-**267 unit tests across 8 test files.** Last updated 2026-04-11 after the content_script slim refactor.
+**277 unit tests across 9 test files.** Last updated 2026-04-11 after the flow logging work.
+
+## N4. logger.test.js (10 tests) — `tests/unit/logger.test.js`
+
+Covers `blsi.Logger`:
+
+| Test | Asserts | Manual replication |
+|---|---|---|
+| `log/warn/flow are silent by default` | gated methods do not call console when toggle is off | DevTools on any page. With toggle off, `blsi.Logger.flow('x')` produces no output. |
+| `error() always writes regardless of toggle` | `console.error` fires even when disabled, prefix `[BLSI]` | `blsi.Logger.error('boom')` → console error appears with `[BLSI]` prefix. |
+| `enable() flips state and persists to storage` | sets `_enabled=true`, writes `blsi_debug=true` | Click popup debug button. Reload page → flow logs still on. `chrome.storage.local.get('blsi_debug', console.log)` → `{blsi_debug:true}`. |
+| `disable() flips state off and persists` | sets `_enabled=false`, writes `blsi_debug=false` | Click button again → logs go silent. |
+| `flow() emits the event tag and payload when enabled` | output contains tag + data object | Enable, then `blsi.Logger.flow('test', {a:1})` → `[BLSI] HH:MM:SS.mmm ⟶ test {a:1}`. |
+| `scope() prefixes with the scope tag and respects the gate` | scoped flow output contains `[name]` | Enable, then `blsi.Logger.scope('foo').flow('hi')` → `[BLSI] ts [foo] ⟶ hi`. |
+| `scope().error always writes` | scoped error fires regardless of toggle | Disable, then `blsi.Logger.scope('foo').error('x')` → still appears. |
+| `chrome.storage.onChanged listener syncs cross-context state` | flipping `blsi_debug` updates `Logger.enabled` in other contexts | Tab A: `chrome.storage.local.set({blsi_debug:true})`. Tab B without reload: `blsi.Logger.enabled` → `true`. |
+| `onChanged listener ignores non-local areas and unrelated keys` | non-local area / other key changes do not affect state | (automated only) |
+| `initial state read from storage when blsi_debug=true` | enable persists across page reload | Enable in popup → reload page → first content_script `init.start` flow event appears in console. |
+
+---
 
 New test files added in the 2026-04-11 refactor:
 

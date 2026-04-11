@@ -64,6 +64,7 @@
     ui.blurListCount     = $('blurListCount');
     // Footer
     ui.clearAllSitesBtn  = $('clearAllSitesBtn');
+    ui.debugToggle       = $('debugToggle');
     ui.extVersion        = $('extVersion');
     // Shortcut modal
     ui.shortcutModal     = $('shortcutModal');
@@ -386,6 +387,30 @@
       renderBlurList();
       showToast(I18n.t('toast_all_sites_cleared'));
     });
+
+    // Debug flow-log toggle.
+    ui.debugToggle.addEventListener('click', () => {
+      const Logger = blsi && blsi.Logger;
+      if (!Logger) return;
+      const next = !Logger.enabled;
+      if (next) Logger.enable(); else Logger.disable();
+      ui.debugToggle.dataset.active = String(next);
+      ui.debugToggle.setAttribute('aria-pressed', String(next));
+      showToast(next ? 'Flow logs ON' : 'Flow logs OFF');
+    });
+  }
+
+  async function syncDebugToggleState() {
+    try {
+      const result = await new Promise((resolve) =>
+        chrome.storage.local.get('blsi_debug', resolve)
+      );
+      const on = result && result.blsi_debug === true;
+      if (ui.debugToggle) {
+        ui.debugToggle.dataset.active = String(on);
+        ui.debugToggle.setAttribute('aria-pressed', String(on));
+      }
+    } catch (_) {}
   }
 
   function wireAccordion(toggle, body) {
@@ -656,6 +681,9 @@
 
   async function init() {
     bindUI();
+    syncDebugToggleState();
+    const popupLog = (blsi && blsi.Logger) ? blsi.Logger.scope('popup') : null;
+    if (popupLog) popupLog.flow('init');
 
     // Theme
     await initTheme();

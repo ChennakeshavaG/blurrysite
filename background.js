@@ -3,7 +3,7 @@
 importScripts("src/constants.js", "src/logger.js");
 
 const MSG = self.blsi;
-const log = blsi.Logger;
+const log = blsi.Logger.scope('bg');
 
 /**
  * background.js — Blurry Site MV3 Service Worker
@@ -37,7 +37,8 @@ function createContextMenus() {
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+  log.flow('onInstalled', { reason: details && details.reason });
   createContextMenus();
 
   // Clean up stale storage key from pre-refactor versions
@@ -57,6 +58,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  log.flow('onStartup');
   createContextMenus();
 });
 
@@ -65,6 +67,7 @@ chrome.runtime.onStartup.addListener(() => {
 // ---------------------------------------------------------------------------
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) return;
+  log.flow('contextMenu', { menuItemId: info.menuItemId, tabId: tab.id });
 
   if (info.menuItemId === "bl-si-blur-element") {
     chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_BLUR }).catch(() => {});
@@ -90,6 +93,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 
   const message = messageMap[command];
   if (message) {
+    log.flow('command.relay', { command, type: message.type, tabId: tab.id });
     chrome.tabs.sendMessage(tab.id, message).catch(() => {});
   }
 });

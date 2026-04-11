@@ -34,6 +34,16 @@ const BlurrySiteReveal = (() => {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
+  // Reveal walks need the broader "visually blurred" check so role-matched
+  // parents (e.g. <button role="tab"> under the FORM category) are cleared
+  // alongside tag-matched and data-attribute-stamped elements. Fall back to
+  // Engine.isBlurred for older builds of blur_engine that don't expose the
+  // helper yet.
+  const _isVisuallyBlurred = (el) =>
+    typeof Engine.isVisuallyBlurred === 'function'
+      ? Engine.isVisuallyBlurred(el)
+      : Engine.isBlurred(el);
+
   function clearRevealedAncestors() {
     for (let i = 0; i < revealedAncestors.length; i++) {
       revealedAncestors[i].style.removeProperty('filter');
@@ -45,7 +55,7 @@ const BlurrySiteReveal = (() => {
     clearRevealedAncestors();
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
-      if (Engine.isBlurred(node)) {
+      if (_isVisuallyBlurred(node)) {
         node.style.setProperty('filter', 'none', 'important');
         revealedAncestors.push(node);
       }
@@ -56,7 +66,7 @@ const BlurrySiteReveal = (() => {
   function findBlurredTarget(el) {
     let node = el;
     while (node && node !== document.documentElement) {
-      if (node instanceof Element && Engine.isBlurred(node)) return node;
+      if (node instanceof Element && _isVisuallyBlurred(node)) return node;
       node = node.parentElement;
     }
     return null;
@@ -73,7 +83,7 @@ const BlurrySiteReveal = (() => {
     } else {
       el.style.setProperty('filter', 'none', 'important');
       el.querySelectorAll('*').forEach(child => {
-        if (Engine.isBlurred(child)) {
+        if (_isVisuallyBlurred(child)) {
           child.style.setProperty('filter', 'none', 'important');
           _revealedElements.add(child);
         }

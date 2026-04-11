@@ -54,7 +54,7 @@
   const Shortcuts = blsi.Shortcuts;
 
   // ── Logger alias ──────────────────────────────────────────────────────────
-  const log = blsi.Logger;
+  const log = blsi.Logger.scope('content');
 
   // ─── Picker callbacks ─────────────────────────────────────────────────────────
 
@@ -68,6 +68,7 @@
       if (!selector) return;
       const name = Engine.allocateDynamicName();
       const item = { type: 'dynamic', name, selector };
+      log.flow('picker.blur', { name, selector });
       await Store.saveBlurItem(hostname, item);
       await Engine.blurAll();
     },
@@ -75,6 +76,7 @@
     async onUnblur(el) {
       const selector = Selector.getSelector(el);
       if (!selector) return;
+      log.flow('picker.unblur', { selector });
       await Store.removeBlurItem(hostname, selector);
       await Engine.blurAll();
     },
@@ -97,17 +99,20 @@
         path: location.pathname,
       };
 
+      log.flow('picker.stickyBlur', { name, id, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height } });
       await Store.saveBlurItem(hostname, item);
       await Engine.blurAll();
       Shortcuts.showToast(name);
     },
 
     async onStickyUnblur(zoneId) {
+      log.flow('picker.stickyUnblur', { zoneId });
       await Store.removeBlurItem(hostname, zoneId);
       await Engine.blurAll();
     },
 
     onModeChange(mode) {
+      log.flow('picker.modeChange', { mode });
       // Save only the picker mode change to globalSettings (not resolved settings,
       // which would leak URL-rule overrides into global storage).
       globalSettings.PICKER_MODE = mode;
@@ -115,6 +120,7 @@
     },
 
     onDeactivate() {
+      log.flow('picker.deactivate');
       setPickerActive(false);
     },
   };
@@ -129,6 +135,7 @@
       handleMessage({ type: MSG.TOGGLE_PICKER }, null, () => {});
     },
     async CLEAR_ALL() {
+      log.flow('trigger.clearAll', { source: 'shortcut', hostname });
       await Store.clearHost(hostname);
       await Store.saveBlurState(hostname, false);
       await Engine.blurAll();
@@ -152,7 +159,7 @@
 
   function handleMessage(message, _sender, sendResponse) {
     const { type } = message;
-    log.log('handleMessage:', type);
+    log.flow('msg.in', { type });
 
     // Dedup toggle commands that fire from both manifest and JS handler
     if (type === MSG.TOGGLE_BLUR_ALL || type === MSG.TOGGLE_PICKER || type === MSG.CLEAR_ALL_BLUR) {
@@ -174,6 +181,7 @@
       // Write storage, then reconcile DOM via Engine.blurAll().
       case MSG.TOGGLE_BLUR_ALL: {
         const newState = !Engine.isPageBlurred;
+        log.flow('trigger.toggleBlurAll', { nextState: newState, hostname });
         (async () => {
           await Store.saveBlurState(hostname, newState);
           await Engine.blurAll();
@@ -184,6 +192,7 @@
 
       // ── Toggle element picker ─────────────────────────────────────────────
       case MSG.TOGGLE_PICKER: {
+        log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: settings.PICKER_MODE });
         if (isPickerActive) {
           Picker.deactivate();
           setPickerActive(false);
@@ -208,6 +217,7 @@
 
       // ── Clear all blur on this page (Alt+Shift+U keyboard relay) ──────────
       case MSG.CLEAR_ALL_BLUR: {
+        log.flow('trigger.clearAll', { source: 'message', hostname });
         (async () => {
           await Store.clearHost(hostname);
           await Store.saveBlurState(hostname, false);
@@ -232,6 +242,7 @@
         }
         const name = Engine.allocateDynamicName();
         const item = { type: 'dynamic', name, selector: sel };
+        log.flow('trigger.contextBlur', { name, selector: sel });
         (async () => {
           await Store.saveBlurItem(hostname, item);
           await Engine.blurAll();
@@ -264,6 +275,7 @@
           if (sendResponse) sendResponse({ ok: false, reason: 'no_selector' });
           return false;
         }
+        log.flow('trigger.contextUnblur', { selector: sel });
         (async () => {
           await Store.removeBlurItem(hostname, sel);
           await Engine.blurAll();
@@ -294,6 +306,11 @@
 
   async function applyState(newSettings, prev) {
     const old = prev || settings;
+    const changedKeys = [];
+    for (const k of Object.keys(newSettings)) {
+      if (JSON.stringify(old[k]) !== JSON.stringify(newSettings[k])) changedKeys.push(k);
+    }
+    if (changedKeys.length) log.flow('settings.apply', { changed: changedKeys });
     settings = newSettings;
 
     // CSS custom properties (cheap, idempotent)
@@ -331,7 +348,7 @@
   // ─── Initialisation ───────────────────────────────────────────────────────────
 
   async function init() {
-    log.log('init() starting');
+    log.flow('init.start', { href: location.href, hostname });
 
     // 1. Populate storage cache (single read of all tracked keys).
     try {
@@ -388,6 +405,13 @@
     // 10. Subscribe AFTER initial restore so we don't race with cross-tab events
     //     during the cold-start window.
     Store.onChange(handleStorageChange);
+
+    log.flow('init.done', {
+      enabled: settings.ENABLED,
+      revealMode: settings.REVEAL_MODE,
+      pickerMode: settings.PICKER_MODE,
+      ruleCount: rules.length,
+    });
   }
 
   // ─── Storage change subscriber ────────────────────────────────────────────────
@@ -412,6 +436,7 @@
   }
 
   async function onSettingsChanged(newRawSettings) {
+    log.flow('storage.settingsChanged');
     const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
     // Merge incoming raw settings over defaults, then validate. Replaces
     // globalSettings entirely so removed/renamed keys don't accumulate.
@@ -422,6 +447,7 @@
   }
 
   async function onRulesChanged(newRules) {
+    log.flow('storage.rulesChanged', { count: Array.isArray(newRules) ? newRules.length : 0 });
     const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
     rules = Array.isArray(newRules) ? newRules : [];
     const resolved = UrlMatcher.resolveSettings(location.href, globalSettings, rules);
@@ -438,7 +464,7 @@
     if (!Engine) return;
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
-    log.log('URL change:', lastUrl, '→', currentUrl);
+    log.flow('spa.urlChange', { from: lastUrl, to: currentUrl });
     lastUrl = currentUrl;
 
     try {

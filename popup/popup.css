@@ -1071,6 +1071,23 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+.bl-si-footer__debug {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  margin: 0 6px 0 auto;
+  cursor: pointer;
+  color: var(--bl-si-text-dim);
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 120ms, background 120ms;
+}
+
+.bl-si-footer__debug:hover { color: var(--bl-si-text); background: rgba(255,255,255,0.06); }
+.bl-si-footer__debug[data-active="true"] { color: var(--bl-si-accent, #4ade80); }
+.bl-si-footer__debug[data-active="true"]:hover { color: var(--bl-si-accent, #4ade80); }
+
 /* ---------- Reduced Motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

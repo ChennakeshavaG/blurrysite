@@ -29,6 +29,7 @@
  */
 [data-bl-si-blur] {
   filter: blur(var(--bl-si-radius, 10px)) !important;
+  transition: filter var(--bl-si-transition-duration, 200ms) ease !important;
   user-select: none !important;
 }
 
@@ -321,6 +322,7 @@
 @media print {
   [data-bl-si-blur] {
     filter: blur(var(--bl-si-radius, 10px)) !important;
+    transition: filter var(--bl-si-transition-duration, 200ms) ease !important;
     user-select: none !important;
   }
 

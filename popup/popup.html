@@ -6,6 +6,7 @@
   <title>Blurry Site</title>
   <link rel="stylesheet" href="popup.css" />
   <script src="../src/constants.js" defer></script>
+  <script src="../src/logger.js" defer></script>
   <script src="../src/storage_manager.js" defer></script>
   <script src="popup_i18n.js" defer></script>
   <script src="popup_configs.js" defer></script>
@@ -181,6 +182,12 @@
   <!-- ===== FOOTER ===== -->
   <footer class="bl-si-footer bl-si-frost">
     <button class="bl-si-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all">Clear all sites</button>
+    <button class="bl-si-footer__debug" id="debugToggle" data-active="false" title="Toggle flow logs" aria-label="Toggle flow logs" aria-pressed="false">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 2v4M16 2v4M3 10h18M5 6h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>
+        <path d="M9 14l2 2 4-4"/>
+      </svg>
+    </button>
     <span class="bl-si-footer__version" id="extVersion">v1.0.0</span>
   </footer>
 </body>
