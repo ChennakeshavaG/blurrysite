@@ -23,15 +23,20 @@
   const TOAST_MS      = 2000;
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let settings      = MSG.buildDefaultSettings();
-  let currentTab    = null;
-  let currentHost   = '';
-  let isPageBlurred = false;
+  //
+  // The popup is storage-first. Every render reads from blsi.Storage on
+  // demand (see renderAll). Module-level state is reserved for things that
+  // are NOT in storage: the current tab/host, the toast timer, the
+  // currently-editing rule id, picker-active (queried from content script
+  // once), and a debounced write buffer for sliders/colors.
+  //
+  // No mirrors of settings / rules / blurred_items / blur_all_hosts live
+  // here — those are read fresh from storage every render.
+  let currentTab     = null;
+  let currentHost    = '';
   let isPickerActive = false;
-  let urlRules      = [];
-  let blurredItems  = [];
-  let toastTimer    = null;
-  let editingRuleId = null;
+  let toastTimer     = null;
+  let editingRuleId  = null;
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -118,74 +123,98 @@
     catch { return url || '--'; }
   }
 
-  // ── Settings persistence ───────────────────────────────────────────────────
+  // ── Settings write path (debounced, write-through to storage) ─────────────
+  //
+  // patchSettings is the ONE place the popup mutates settings. It reads the
+  // current settings from storage, applies the patch, and writes them back.
+  // For sliders and the color picker we debounce the write so a drag doesn't
+  // produce 100 storage writes. The pending-write buffer is NEVER read by the
+  // renderer — it's strictly write-side scratch space that represents
+  // "changes the user has made that haven't hit storage yet".
+  //
+  // After the write flushes, storage.onChange fires renderAll which re-reads
+  // storage and updates every view.
 
-  // Settings persistence — pure storage write. Content script picks up the
-  // change via Store.onChange (cross-context) — no tabMessage needed.
-  const _debouncedSave = debounce(async () => {
+  let _pendingWrite = null;
+  let _writeTimer = null;
+
+  async function _flushPendingWrite() {
+    clearTimeout(_writeTimer);
+    _writeTimer = null;
+    if (!_pendingWrite) return;
+    const toWrite = _pendingWrite;
+    _pendingWrite = null;
     try {
-      await Store.saveSettings(settings);
+      await Store.saveSettings(toWrite);
     } catch (err) {
       console.error('[BlurrySite popup] saveSettings:', err);
       showToast('Failed to save settings');
     }
-  }, DEBOUNCE_MS);
+  }
 
-  async function saveSettings(immediate) {
+  async function patchSettings(key, value, immediate) {
+    // Start from the latest stored settings the first time through, so we
+    // never stomp on concurrent writes from another context.
+    if (!_pendingWrite) _pendingWrite = await Store.getSettings();
+    Renderer.setByPath(_pendingWrite, key, value);
+
+    clearTimeout(_writeTimer);
     if (immediate) {
-      try {
-        await Store.saveSettings(settings);
-      } catch (err) {
-        console.error('[BlurrySite popup] saveSettings:', err);
-        showToast('Failed to save settings');
-      }
+      await _flushPendingWrite();
     } else {
-      _debouncedSave();
+      _writeTimer = setTimeout(() => { _flushPendingWrite(); }, DEBOUNCE_MS);
     }
   }
 
   // ── Setting changed callback (from Renderer) ──────────────────────────────
 
   function onSettingChanged(key, value) {
-    // Shortcut capture signal
+    // Shortcut capture signal — a magic object tells the popup to open the
+    // capture modal instead of writing to storage.
     if (value && typeof value === 'object' && value._openCapture) {
       openShortcutModal(value.action);
       return;
     }
 
-    Renderer.setByPath(settings, key, value);
-
-    // Update dynamic background when BLUR_RADIUS changes
+    // Immediate display update for live-preview fields. The actual storage
+    // write + renderAll happens below. For BLUR_RADIUS we also update the
+    // dynamic background CSS var so the user sees the change without waiting
+    // for the debounce to flush.
     if (key === 'BLUR_RADIUS') {
       document.documentElement.style.setProperty('--bl-si-bg-blur-radius', value + 'px');
     }
 
-    // Debounce sliders/colors, immediate for toggles/selects
+    // Debounce sliders/colors, immediate for toggles/selects.
     const isSliderOrColor = key === 'BLUR_RADIUS' || key === 'HIGHLIGHT_COLOR';
-    saveSettings(!isSliderOrColor);
+    patchSettings(key, value, !isSliderOrColor);
   }
 
-  // ── Render helpers ─────────────────────────────────────────────────────────
+  // ── Render helpers — pure functions of the state they're given ───────────
+  //
+  // None of these read module-level state. They take the piece of state
+  // they render as a parameter. They're called from renderAll (which reads
+  // storage) and sometimes directly with a fresh snapshot — never with a
+  // mirror.
 
-  function renderHeader() {
+  function renderHeader(settings) {
     ui.enableToggle.checked = settings.ENABLED;
     ui.enableLabel.textContent = settings.ENABLED ? I18n.t('toggle_on') : I18n.t('toggle_off');
   }
 
-  function renderBlurCount() {
-    ui.blurAllBtn.dataset.active = String(isPageBlurred);
+  function renderBlurCount(isPageBlurred) {
+    ui.blurAllBtn.dataset.active = String(!!isPageBlurred);
   }
 
-  function renderBlurList() {
-    const count = blurredItems.length;
+  function renderBlurList(items) {
+    const list = Array.isArray(items) ? items : [];
+    const count = list.length;
     ui.blurListCount.textContent = count;
-    // Hide entire section when no blurred elements
     const sectionEl = document.getElementById('sectionBlurred');
     if (sectionEl) sectionEl.style.display = count > 0 ? '' : 'none';
     ui.blurEmpty.classList.toggle('is-visible', count === 0);
     ui.blurList.textContent = '';
 
-    for (const item of blurredItems) {
+    for (const item of list) {
       const li = document.createElement('li');
       li.className = 'bl-si-blur-item';
 
@@ -215,13 +244,14 @@
     }
   }
 
-  function renderRulesList() {
-    const count = urlRules.length;
+  function renderRulesList(rules) {
+    const list = Array.isArray(rules) ? rules : [];
+    const count = list.length;
     ui.rulesEmpty.classList.toggle('is-visible', count === 0);
     ui.rulesList.style.display = count > 0 ? '' : 'none';
     ui.rulesList.textContent = '';
 
-    for (const rule of urlRules) {
+    for (const rule of list) {
       const li = document.createElement('li');
       li.className = 'bl-si-rule-item';
 
@@ -243,21 +273,58 @@
       delBtn.className = 'bl-si-rule-item__btn bl-si-rule-item__btn--delete';
       delBtn.textContent = 'del';
       delBtn.addEventListener('click', async () => {
-        urlRules = urlRules.filter(r => r.id !== rule.id);
         try {
-          await Store.saveRules(urlRules);
+          const fresh = await Store.getRules();
+          const next = fresh.filter(r => r.id !== rule.id);
+          await Store.saveRules(next);
+          await renderAll();
+          showToast(I18n.t('rule_deleted'));
         } catch (err) {
           console.error('[BlurrySite popup] saveRules:', err);
           showToast('Failed to delete rule');
-          return;
         }
-        renderRulesList();
-        showToast(I18n.t('rule_deleted'));
       });
 
       li.append(name, pattern, editBtn, delBtn);
       ui.rulesList.appendChild(li);
     }
+  }
+
+  // ── renderAll: the reconciler ─────────────────────────────────────────────
+  //
+  // Reads every piece of state the popup cares about directly from storage
+  // and updates every view. Idempotent; safe to call any number of times.
+  // This is the popup equivalent of blur_engine.blurAll() — a reconciler
+  // that treats storage as the single source of truth and recomputes the
+  // UI on every invocation.
+  //
+  // Called from:
+  //   - init() after bootstrap
+  //   - Store.onChange (cross-context storage writes)
+  //   - every user action after its storage write resolves
+  async function renderAll() {
+    const popupLog = (blsi && blsi.Logger) ? blsi.Logger.scope('popup') : null;
+    if (popupLog) popupLog.flow('renderAll');
+
+    let settings, rules, items, pageBlurred;
+    try {
+      [settings, rules] = await Promise.all([Store.getSettings(), Store.getRules()]);
+      items = currentHost ? await Store.getBlurItems(currentHost) : [];
+      pageBlurred = currentHost ? Store.getCachedBlurState(currentHost) : false;
+    } catch (err) {
+      console.error('[BlurrySite popup] renderAll read failed:', err);
+      return;
+    }
+
+    // Update every view with fresh state.
+    Renderer.updateAll(settings);
+    renderHeader(settings);
+    renderBlurCount(pageBlurred);
+    renderBlurList(items);
+    renderRulesList(rules);
+
+    // Derived display (dynamic background blur radius).
+    document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
   }
 
   // ── i18n DOM update ────────────────────────────────────────────────────────
@@ -297,27 +364,28 @@
   // ── Control wiring ─────────────────────────────────────────────────────────
 
   function wireControls() {
-    // Enable toggle
+    // Enable toggle — write ENABLED to storage, reconcile.
     ui.enableToggle.addEventListener('change', async () => {
-      settings.ENABLED = ui.enableToggle.checked;
-      ui.enableLabel.textContent = settings.ENABLED ? I18n.t('toggle_on') : I18n.t('toggle_off');
-      await saveSettings(true);
-      showToast(settings.ENABLED ? I18n.t('toast_enabled') : I18n.t('toast_disabled'));
+      const nextEnabled = ui.enableToggle.checked;
+      // Optimistic label update so the toast text matches user intent even
+      // if the reconcile is still in-flight.
+      ui.enableLabel.textContent = nextEnabled ? I18n.t('toggle_on') : I18n.t('toggle_off');
+      await patchSettings('ENABLED', nextEnabled, true);
+      await renderAll();
+      showToast(nextEnabled ? I18n.t('toast_enabled') : I18n.t('toast_disabled'));
     });
 
     // Theme toggle
     ui.themeToggle.addEventListener('click', toggleTheme);
 
-    // Blur All — flip blur_all_hosts; content_script reacts via Store.onChange.
-    // Local UI state will be updated via the popup's own Store.onChange subscriber.
+    // Blur All — flip blur_all_hosts. Content_script reacts via Store.onChange.
     ui.blurAllBtn.addEventListener('click', async () => {
       if (!currentHost) return;
       ui.blurAllBtn.disabled = true;
       try {
         const newState = !Store.getCachedBlurState(currentHost);
         await Store.saveBlurState(currentHost, newState);
-        isPageBlurred = newState;
-        renderBlurCount();
+        await renderAll();
       } catch (err) {
         console.error('[BlurrySite popup] saveBlurState:', err);
         showToast('Failed to toggle blur');
@@ -326,27 +394,27 @@
       showToast(I18n.t('toast_blur_all'));
     });
 
-    // Clear All — clear current host's items + blur-all state. Storage writes
-    // trigger Store.onChange in content_script (cross-tab) and in popup itself.
+    // Clear All — clear current host's items + blur-all state.
     ui.clearAllBtn.addEventListener('click', async () => {
       if (!currentHost) return;
       ui.clearAllBtn.disabled = true;
       try {
         await Store.clearHost(currentHost);
         await Store.saveBlurState(currentHost, false);
+        await renderAll();
       } catch (err) {
         console.error('[BlurrySite popup] clear host:', err);
         showToast('Failed to clear blur items');
         ui.clearAllBtn.disabled = false;
         return;
       }
-      isPageBlurred = false;
-      renderBlurCount();
       ui.clearAllBtn.disabled = false;
       showToast(I18n.t('toast_cleared'));
     });
 
-    // Picker — fire-and-forget since popup may close before response arrives
+    // Picker — fire-and-forget since popup may close before response arrives.
+    // isPickerActive is NOT a storage value — it's content-script runtime
+    // state the popup queries once at open, so we toggle it locally here.
     ui.pickerBtn.addEventListener('click', () => {
       if (!currentTab) return;
       chrome.tabs.sendMessage(currentTab.id, { type: MSG.TOGGLE_PICKER }).catch(() => {});
@@ -361,7 +429,7 @@
     // Rules
     ui.addRuleBtn.addEventListener('click', () => openRuleModal(null));
 
-    // Blur list remove (event delegation) — storage write only.
+    // Blur list remove (event delegation) — write, reconcile.
     ui.blurList.addEventListener('click', async (e) => {
       const btn = e.target.closest('.bl-si-blur-item__remove');
       if (!btn) return;
@@ -369,15 +437,12 @@
       if (!itemId) return;
       try {
         await Store.removeBlurItem(currentHost, itemId);
+        await renderAll();
+        showToast(I18n.t('toast_blur_removed'));
       } catch (err) {
         console.error('[BlurrySite popup] removeBlurItem:', err);
         showToast('Failed to remove blur item');
-        return;
       }
-      // Optimistic local update; Store.onChange will reconcile if cross-tab race.
-      blurredItems = blurredItems.filter(i => (i.type === 'dynamic' ? i.selector : i.id) !== itemId);
-      renderBlurList();
-      showToast(I18n.t('toast_blur_removed'));
     });
 
     // Clear all sites — wipes blurred_items map across all hostnames.
@@ -385,14 +450,12 @@
       if (!confirm(I18n.t('confirm_clear_all'))) return;
       try {
         await Store.clearAll();
+        await renderAll();
+        showToast(I18n.t('toast_all_sites_cleared'));
       } catch (err) {
         console.error('[BlurrySite popup] clearAll:', err);
         showToast('Failed to clear all sites');
-        return;
       }
-      blurredItems = [];
-      renderBlurList();
-      showToast(I18n.t('toast_all_sites_cleared'));
     });
 
     // Debug flow-log toggle.
@@ -415,10 +478,16 @@
     }
   }
 
-  function renderHelpOverlay() {
+  async function renderHelpOverlay() {
     if (!ui.helpOverlayList || !blsi.Actions || !blsi.ShortcutLabel) return;
     ui.helpOverlayList.textContent = '';
-    const shortcuts = (settings && settings.SHORTCUTS) || {};
+    // Pull shortcuts fresh from storage so the help list always reflects
+    // the latest bindings — no mirror required.
+    let shortcuts = {};
+    try {
+      const fresh = await Store.getSettings();
+      shortcuts = fresh.SHORTCUTS || {};
+    } catch (_) {}
     for (const action of blsi.Actions.list()) {
       const li = document.createElement('li');
       li.className = 'bl-si-help-list__item';
@@ -480,29 +549,12 @@
   // Receives non-self-echo changes from Store. Self-echo (popup's own writes)
   // is filtered by storage_manager via cache comparison.
 
-  function handleStorageChange(key, _newValue, _oldValue) {
-    if (key === 'settings') {
-      // Re-read via Store so we get merged + validated settings.
-      Store.getSettings().then((s) => {
-        settings = s;
-        renderHeader();
-        Renderer.updateAll(settings);
-        document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
-      });
-    } else if (key === 'rules') {
-      Store.getRules().then((r) => {
-        urlRules = r;
-        renderRulesList();
-      });
-    } else if (key === 'blurred_items') {
-      Store.getBlurItems(currentHost).then((items) => {
-        blurredItems = items;
-        renderBlurList();
-      });
-    } else if (key === 'blur_all_hosts') {
-      isPageBlurred = Store.getCachedBlurState(currentHost);
-      renderBlurCount();
-    }
+  // Any storage change (self-echo is already filtered by storage_manager
+  // via cache comparison) triggers a full reconcile. Matches how
+  // content_script's handleStorageChange collapses blurred_items and
+  // blur_all_hosts changes to Engine.blurAll().
+  function handleStorageChange(_key, _newValue, _oldValue) {
+    renderAll();
   }
 
   // ── Shortcut capture modal (v2) ────────────────────────────────────────────
@@ -518,9 +570,19 @@
   let scKeydownHandler    = null;
   let scCleanup           = null;
 
-  function openShortcutModal(actionId) {
+  async function openShortcutModal(actionId) {
     scAction = actionId;
     scCandidate = null;
+
+    // Snapshot the stored SHORTCUTS so the collision-detection logic below
+    // can compare against a stable copy. Refreshed on save; any concurrent
+    // write from another context is caught by the save path reading fresh
+    // settings before patching.
+    let storedShortcuts = {};
+    try {
+      const fresh = await Store.getSettings();
+      storedShortcuts = fresh.SHORTCUTS || {};
+    } catch (_) {}
 
     const title = (blsi.Actions && blsi.Actions.get(actionId))
       ? 'Customize: ' + blsi.Actions.get(actionId).label
@@ -578,9 +640,9 @@
 
       const notes = [];
 
-      // Conflict with another action in the current settings.
+      // Conflict with another action in the stored shortcuts snapshot.
       const myKey = Label.chordKey(candidate);
-      for (const [otherId, other] of Object.entries(settings.SHORTCUTS || {})) {
+      for (const [otherId, other] of Object.entries(storedShortcuts || {})) {
         if (otherId === scAction) continue;
         if (!other || !Array.isArray(other.binding) || other.binding.length !== 1) continue;
         if (Label.chordKey(other.binding[0]) === myKey) {
@@ -649,11 +711,14 @@
     const onSave = async () => {
       try {
         if (!scCandidate) return;
-        Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, {
+        // Read-modify-write against fresh storage so a concurrent write
+        // from another context isn't clobbered.
+        const fresh = await Store.getSettings();
+        Renderer.setByPath(fresh, 'SHORTCUTS.' + scAction, {
           binding: [{ code: scCandidate.code, mods: [...scCandidate.mods] }],
         });
-        await saveSettings(true);
-        Renderer.updateAll(settings);
+        await Store.saveSettings(fresh);
+        await renderAll();
         closeShortcutModal();
         showToast(I18n.t('shortcut_saved'));
       } finally {
@@ -665,11 +730,12 @@
       try {
         const action = blsi.Actions && blsi.Actions.get(scAction);
         if (action) {
-          Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, {
+          const fresh = await Store.getSettings();
+          Renderer.setByPath(fresh, 'SHORTCUTS.' + scAction, {
             binding: action.defaultBinding.map((c) => ({ code: c.code, mods: [...c.mods] })),
           });
-          await saveSettings(true);
-          Renderer.updateAll(settings);
+          await Store.saveSettings(fresh);
+          await renderAll();
         }
         closeShortcutModal();
         showToast(I18n.t('shortcut_reset_done'));
@@ -708,7 +774,7 @@
   let _ruleModalOnSave = null;
   let _ruleModalOnCancel = null;
 
-  function openRuleModal(existingRule) {
+  async function openRuleModal(existingRule) {
     // Remove stale listeners from any previous open
     if (_ruleModalOnSave) {
       ui.ruleModalSave.removeEventListener('click', _ruleModalOnSave);
@@ -728,11 +794,19 @@
     // Build rule settings for overrides panel
     ruleSettings = existingRule ? JSON.parse(JSON.stringify(existingRule.settings || {})) : {};
 
+    // Pull the global settings fresh from storage — the overrides panel
+    // shows each row's "Global default" next to the override control, and
+    // we want those defaults to be current.
+    let globalSettingsSnapshot = {};
+    try {
+      globalSettingsSnapshot = await Store.getSettings();
+    } catch (_) {}
+
     // Render overrides using the renderer in ruleMode
     ui.ruleOverrides.textContent = '';
     // Filter out shortcut configs — shortcuts aren't overridable per rule
     const overridableConfigs = Configs.ALL.filter(c => c.type !== 'shortcut');
-    Renderer.renderSection(ui.ruleOverrides, overridableConfigs, ruleSettings, onRuleSettingChanged, { ruleMode: true, globalSettings: settings });
+    Renderer.renderSection(ui.ruleOverrides, overridableConfigs, ruleSettings, onRuleSettingChanged, { ruleMode: true, globalSettings: globalSettingsSnapshot });
 
     ui.ruleModal.hidden = false;
 
@@ -760,13 +834,25 @@
         }
       }
 
+      // Read-modify-write against fresh storage so a concurrent rule edit
+      // from another context isn't clobbered.
+      let rules;
+      try {
+        rules = await Store.getRules();
+      } catch (err) {
+        console.error('[BlurrySite popup] getRules:', err);
+        showToast('Failed to save rule');
+        return;
+      }
+      rules = Array.isArray(rules) ? rules.slice() : [];
+
       if (editingRuleId) {
-        const idx = urlRules.findIndex(r => r.id === editingRuleId);
+        const idx = rules.findIndex(r => r.id === editingRuleId);
         if (idx >= 0) {
-          urlRules[idx] = { ...urlRules[idx], name, pattern, patternType: ui.rulePatternType.value, settings: cleanSettings };
+          rules[idx] = { ...rules[idx], name, pattern, patternType: ui.rulePatternType.value, settings: cleanSettings };
         }
       } else {
-        urlRules.push({
+        rules.push({
           id: 'r_' + Math.random().toString(36).slice(2, 10),
           name, pattern,
           patternType: ui.rulePatternType.value,
@@ -775,13 +861,13 @@
       }
 
       try {
-        await Store.saveRules(urlRules);
+        await Store.saveRules(rules);
       } catch (err) {
         console.error('[BlurrySite popup] saveRules:', err);
         showToast('Failed to save rule');
         return;
       }
-      renderRulesList();
+      await renderAll();
       closeRuleModal();
       showToast(I18n.t('rule_saved'));
       cleanup();
@@ -842,31 +928,22 @@
     // Populate storage cache (single read of all tracked keys).
     try { await Store.initCache(); } catch (_e) {}
 
-    // Fetch settings, rules, blur items, blur-all state (all from cache).
-    settings = await Store.getSettings();
-    urlRules = await Store.getRules();
-    blurredItems = currentHost ? await Store.getBlurItems(currentHost) : [];
-    isPageBlurred = currentHost ? Store.getCachedBlurState(currentHost) : false;
+    // One-time scaffolding: render the settings/shortcut section DOM once
+    // with a throwaway settings snapshot. Row values are filled in by
+    // renderAll() → Renderer.updateAll() on the next call.
+    const bootstrapSettings = await Store.getSettings();
+    Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, bootstrapSettings, onSettingChanged);
+    Renderer.renderSection(ui.bodySettings, Configs.SETTINGS, bootstrapSettings, onSettingChanged);
 
-    // Wire controls FIRST
+    // First full reconcile — reads storage and populates every view.
+    await renderAll();
+
+    // Wire controls after the initial render so handlers aren't attached
+    // to stale DOM nodes from the renderSection pass.
     wireControls();
 
-    // Render header
-    renderHeader();
-
-    // Set dynamic background blur
-    document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
-
-    // Render settings sections via POJO renderer
-    Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, settings, onSettingChanged);
-    Renderer.renderSection(ui.bodySettings, Configs.SETTINGS, settings, onSettingChanged);
-
-    // Render lists
-    try { renderRulesList(); } catch (e) { console.warn('[PB] renderRulesList:', e); }
-    try { renderBlurList(); } catch (e) { console.warn('[PB] renderBlurList:', e); }
-    renderBlurCount();
-
-    // Query picker state from content script (in-memory, not in storage)
+    // Query picker state from content script (in-memory, not in storage).
+    // This is the one piece of state the popup can't read from Store.
     if (currentTab) {
       try {
         const status = await tabMessage(currentTab.id, { type: MSG.GET_STATUS });
@@ -877,7 +954,8 @@
       } catch (e) { console.warn('[PB] GET_STATUS:', e); }
     }
 
-    // Subscribe to storage changes from other contexts (content_script, other tabs).
+    // Subscribe to storage changes from other contexts (content_script,
+    // other tabs). Every change triggers a full renderAll reconcile.
     Store.onChange(handleStorageChange);
   }
 
