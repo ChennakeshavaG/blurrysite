@@ -97,18 +97,21 @@ const Picker = (() => {
 
   // ─── Toolbar (fixed overlay) ──────────────────────────────────────────────────
 
-  // Short label shown on the mode chip.
+  // Short label shown on the mode chip. Reads as a completion of the
+  // "Blur An:" prefix label in the pill — "Blur An: Element" /
+  // "Blur An: Area on page" / "Blur An: Area on screen". Keeping these in
+  // the same grammatical form makes the picker feel like a single sentence.
   function _modeChipLabel(mode) {
     if (mode === PM.STICKY_PAGE) return 'Area on page';
     if (mode === PM.STICKY_SCREEN) return 'Area on screen';
-    return 'Tap to blur';
+    return 'Element';
   }
 
   // Long description shown in the chip's tooltip (hover).
   function _modeChipDescription(mode) {
     if (mode === PM.STICKY_PAGE) return 'Sketch a box over a region of the page. Scrolls with the content. Click to switch mode.';
     if (mode === PM.STICKY_SCREEN) return 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode.';
-    return 'Tap any element on the page to blur it. Click to switch mode.';
+    return 'Tap an element on the page to blur it. The blur follows that item. Click to switch mode.';
   }
 
   function _cycleMode(mode) {
@@ -197,15 +200,23 @@ const Picker = (() => {
     // the drag handler below needs to see them to start a drag.
 
     // ── Drag handle (the ONLY draggable surface on the pill) ───────────
+    // Anchor glyph (⚓, U+2693) — visually hints that the pill is pinned to
+    // the viewport and can be re-anchored by dragging.
     const dragHandle = document.createElement('div');
     dragHandle.className = 'bl-si-toolbar-drag';
     dragHandle.setAttribute('aria-label', 'Drag to move picker');
     dragHandle.title = 'Drag to move';
-    dragHandle.textContent = '\u2630'; // ☰ trigram
+    dragHandle.textContent = '\u2693'; // ⚓ anchor
     // Drag is wired at CAPTURE phase on the grip so it fires before any
     // bubble handlers on inner elements. The grip has no children, so this
     // is effectively "mousedown on the grip".
     _wireDrag(dragHandle);
+
+    // ── Static "Blur An:" prefix label — reads as one sentence with chip ─
+    // Not interactive, not draggable, not affected by mode changes.
+    const prefixLabel = document.createElement('span');
+    prefixLabel.className = 'bl-si-toolbar-prefix';
+    prefixLabel.textContent = 'Blur An:';
 
     // ── Mode chip — click to cycle, hover for description ─────────────
     // Single button replaces the native <select> dropdown so the pill never
@@ -262,8 +273,9 @@ const Picker = (() => {
     });
     closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    // Pill layout: [grip] [mode chip] [Clear] [×]  (no long label)
+    // Pill layout: [⚓ grip] [Blur An:] [mode chip] [Clear] [×]
     toolbarEl.appendChild(dragHandle);
+    toolbarEl.appendChild(prefixLabel);
     toolbarEl.appendChild(modeSelectEl);
     toolbarEl.appendChild(clearBtn);
     toolbarEl.appendChild(closeBtn);

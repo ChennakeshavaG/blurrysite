@@ -178,6 +178,20 @@
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
+/* ── Static "Blur An:" prefix label — reads as one sentence with chip ── */
+.bl-si-toolbar-prefix {
+  all: initial;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: rgba(229, 231, 235, 0.75) !important;
+  line-height: 1.4 !important;
+  white-space: nowrap !important;
+  user-select: none !important;
+  flex-shrink: 0 !important;
+  cursor: default !important;
+}
+
 /* ── Instant custom tooltip for the mode chip ───────────────────────────
    Native `title` has a ~500ms browser delay that we cannot override. This
    tooltip is shown immediately on mouseenter via picker.js _showChipTooltip.
