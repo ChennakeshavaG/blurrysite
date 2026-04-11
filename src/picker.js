@@ -124,13 +124,16 @@ const Picker = (() => {
     // NOTE: we intentionally do NOT stopPropagation on mousedown/mouseup —
     // the drag handler below needs to see them to start a drag.
 
-    // ── Drag handle (also acts as the pill's "grab surface") ─────────────
+    // ── Drag handle (visual affordance — whole pill is draggable) ───────
+    // The ☰ icon hints to the user that the pill is movable. The actual
+    // drag logic is wired to the WHOLE pill via _wireDrag(toolbarEl) below,
+    // so clicking anywhere on the pill's non-interactive surface starts a
+    // drag. This matches how OS floating windows behave.
     const dragHandle = document.createElement('div');
     dragHandle.className = 'bl-si-toolbar-drag';
     dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
-    dragHandle.title = 'Drag to move';
-    dragHandle.textContent = '\u2630'; // ☰ trigram for stable characters
-    _wireDrag(dragHandle);
+    dragHandle.title = 'Drag to move (or drag anywhere on the pill)';
+    dragHandle.textContent = '\u2630'; // ☰ trigram
 
     // ── Mode selector ──────────────────────────────────────────────────────
     modeSelectEl = document.createElement('select');
@@ -200,33 +203,63 @@ const Picker = (() => {
 
     document.body.appendChild(toolbarEl);
 
+    // Wire drag on the WHOLE pill so the user can grab it from anywhere.
+    // Interactive children (select, buttons) bail out of the drag path so
+    // their own events (open dropdown, click) still fire.
+    _wireDrag(toolbarEl);
+
     // Restore saved position, or default to top-right corner.
     _restorePillPosition();
   }
 
   // ── Pill drag handling ─────────────────────────────────────────────────────
-  // Uses fixed positioning with {top, left} in viewport coordinates. On drag
-  // end the position is clamped to the viewport and persisted to
-  // chrome.storage.local under `picker_toolbar_pos`.
+  // Fixed positioning with {top, left} in viewport coordinates. Drag is wired
+  // at CAPTURE phase on the pill so it runs before any bubble-phase handlers
+  // on children, but AFTER the picker's document-level capture handlers
+  // (document > toolbarEl in the capture chain). The picker's onMouseDown
+  // already bails on toolbar-contained targets, so sticky zone drawing
+  // never starts when the user is trying to move the pill.
 
-  let _dragCtx = null; // { pointerId, offsetX, offsetY }
+  let _dragCtx = null; // { offsetX, offsetY } — viewport-relative offset from pill origin
 
-  function _wireDrag(handle) {
-    handle.addEventListener('mousedown', _onDragStart);
-    handle.addEventListener('mousedown', (e) => e.stopPropagation());
+  function _wireDrag(pill) {
+    pill.addEventListener('mousedown', _onDragStart, true);
+  }
+
+  /**
+   * Return true if the target is an interactive control that should handle
+   * its own mousedown (open the select, click the button) instead of being
+   * hijacked by the drag-start handler.
+   */
+  function _isInteractiveInToolbar(target) {
+    if (!target) return false;
+    if (target.tagName === 'SELECT' || target.tagName === 'OPTION') return true;
+    if (typeof target.closest === 'function') {
+      if (target.closest('select')) return true;
+      if (target.closest('.bl-si-toolbar-btn')) return true;
+      if (target.closest('.bl-si-toolbar-btn--close')) return true;
+    }
+    return false;
   }
 
   function _onDragStart(e) {
     if (!toolbarEl) return;
     if (e.button !== 0) return; // left click only
+    // Let interactive children handle their own mousedown.
+    if (_isInteractiveInToolbar(e.target)) return;
+
+    // Stop propagation so the picker's sticky-zone-draw handler (registered
+    // at capture phase on document, earlier in the chain) never sees this.
     e.preventDefault();
     e.stopPropagation();
+
     const rect = toolbarEl.getBoundingClientRect();
     _dragCtx = {
       offsetX: e.clientX - rect.left,
       offsetY: e.clientY - rect.top,
     };
     // Switch to {top,left} anchoring regardless of the current anchor side.
+    // Freeze the pill's current viewport position before we start moving it.
     toolbarEl.style.left = rect.left + 'px';
     toolbarEl.style.top = rect.top + 'px';
     toolbarEl.style.right = 'auto';

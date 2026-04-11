@@ -112,15 +112,26 @@
   line-height: 1.4 !important;
   color: #f3f4f6 !important;
   pointer-events: auto !important;
+  /* Whole pill is draggable from anywhere — interactive children override
+     cursor via explicit rules below. */
+  cursor: grab !important;
   /* Smooth transition into view when the picker activates */
   transition: box-shadow 150ms ease, border-color 150ms ease !important;
 }
 
-.bl-si-toolbar--dragging {
+.bl-si-toolbar--dragging,
+.bl-si-toolbar--dragging * {
   cursor: grabbing !important;
+}
+.bl-si-toolbar--dragging {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
+
+/* Label inherits grab cursor from the pill. Reset only for interactive
+   children (select, buttons) — those get explicit cursor rules below. */
+.bl-si-toolbar-label { cursor: grab !important; }
+.bl-si-toolbar-drag  { cursor: grab !important; }
 
 .bl-si-toolbar-drag {
   all: initial;
