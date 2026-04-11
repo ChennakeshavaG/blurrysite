@@ -225,15 +225,15 @@ const Picker = (() => {
     //
     // Tooltip shows INSTANTLY on hover via a custom _chipTooltipEl — the
     // native `title` attribute has a browser-imposed ~500ms delay we can't
-    // override. The `title` is kept as a fallback for screen readers and
-    // situations where our JS tooltip may have been removed from the DOM.
+    // override, so we do NOT set `title` here. Screen readers get the
+    // description via aria-describedby pointing at the tooltip element,
+    // which is shown on focus for keyboard users.
     modeSelectEl = document.createElement('button');
     modeSelectEl.type = 'button';
     modeSelectEl.className = 'bl-si-toolbar-chip';
-    modeSelectEl.setAttribute('aria-label', 'Picker mode');
+    modeSelectEl.setAttribute('aria-label', 'Picker mode — click to cycle');
     modeSelectEl.setAttribute('aria-describedby', 'bl-si-chip-tooltip');
     modeSelectEl.textContent = _modeChipLabel(currentMode);
-    modeSelectEl.title = _modeChipDescription(currentMode);
     modeSelectEl.addEventListener('click', (e) => {
       e.stopPropagation();
       setMode(_cycleMode(currentMode));
@@ -446,7 +446,6 @@ const Picker = (() => {
     // Update the mode chip's label + tooltip to match the new mode.
     if (modeSelectEl) {
       modeSelectEl.textContent = _modeChipLabel(mode);
-      modeSelectEl.title = _modeChipDescription(mode);
     }
 
     // Notify content_script for settings persistence.
