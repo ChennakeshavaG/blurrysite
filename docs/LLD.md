@@ -6,14 +6,41 @@ Each source module is an IIFE that assigns exactly one global on `window`. Modul
 
 **Load order:**
 ```
-constants.js       → globalThis.BlurrySite (message types + DEFAULTS)
-selector_utils.js  → blsi.SelectorUtils
-storage_manager.js → blsi.Storage
-blur_engine.js     → blsi.BlurEngine
-shortcut_handler.js→ blsi.Shortcuts
-picker.js          → blsi.Picker
-content_script.js  → (orchestrator, no global)
+constants.js         → globalThis.blsi (message types + DEFAULTS)
+logger.js            → blsi.Logger
+url_matcher.js       → blsi.UrlMatcher
+selector_utils.js    → blsi.SelectorUtils
+storage_manager.js   → blsi.Storage
+blur_engine.js       → blsi.BlurEngine
+reveal_controller.js → blsi.Reveal
+shortcut_handler.js  → blsi.Shortcuts
+picker.js            → blsi.Picker
+content_script.js    → (orchestrator, no global)
 ```
+
+### Modules added in the 2026-04 content_script slim refactor
+
+**`blsi.UrlMatcher`** (`src/url_matcher.js`) — pure URL pattern matching:
+```ts
+interface UrlMatcher {
+  matchesPattern(url: string, pattern: string, patternType: 'wildcard' | 'regex'): boolean;
+  resolveSettings(url: string, globalSettings: object, rules: Rule[]): object;
+  MAX_PATTERN_LENGTH: 500;
+}
+```
+Wildcard mode: parse-then-match (scheme / hostname / port / path) with domain-boundary awareness — `"example.com"` does not match `"notexample.com"`. Regex mode rejects nested quantifiers (`(a+)+`, `a**`) to block ReDoS. `resolveSettings` deep-merges `DEFAULT_SETTINGS` → `globalSettings` → first matching rule's partial settings.
+
+**`blsi.Reveal`** (`src/reveal_controller.js`) — temporary reveal-on-click / reveal-on-hover subsystem:
+```ts
+interface Reveal {
+  init(opts: { getMode: () => 'click'|'hover'|'none', isPickerActive: () => boolean }): void;
+  destroy(): void;
+  clearAll(): void;
+}
+```
+Owns all reveal state (click target, hover target, ancestor chain, 50ms mouseout debounce, revealed descendants Set). `getMode` and `isPickerActive` are **functions** so the caller never re-inits on settings change. `clearAll()` wipes every piece of state and is called from `applyState` on REVEAL_MODE change or disable.
+
+**Folded into `blsi.BlurEngine`** (previously lived in content_script): `applyItem`, `removeItem`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `enableBlurAll`, `disableBlurAll`, `refreshBlurAll`, `get isPageBlurred`, `_setPickerActiveForObserver`. Private state: `_isPageBlurred`, `_domObserver`, `_dynamicCounter`, `_stickyCounter`, `_pickerActive`, `_currentSettings`. The MutationObserver is gated by `_pickerActive` (set via `_setPickerActiveForObserver(v)` from content_script) and reads `_currentSettings.THOROUGH_BLUR` fresh on every callback.
 
 ---
 

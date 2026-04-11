@@ -6,6 +6,7 @@
   <title>Blurry Site</title>
   <link rel="stylesheet" href="popup.css" />
   <script src="../src/constants.js" defer></script>
+  <script src="../src/storage_manager.js" defer></script>
   <script src="popup_i18n.js" defer></script>
   <script src="popup_configs.js" defer></script>
   <script src="popup_settings_renderer.js" defer></script>
@@ -78,6 +79,18 @@
     <span class="bl-si-site-info__rule" id="activeRule"></span>
   </section>
 
+  <!-- ===== BLURRED ELEMENTS ===== -->
+  <section class="bl-si-section" id="sectionBlurred">
+    <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
+      <span>Blurred Elements</span>
+      <span class="bl-si-list-count" id="blurListCount">0</span>
+    </div>
+    <div class="bl-si-blur-list-wrapper">
+      <ul class="bl-si-blur-list" id="blurList"></ul>
+      <p class="bl-si-blur-empty" id="blurEmpty">No blurred elements on this page.</p>
+    </div>
+  </section>
+
   <!-- ===== KEYBOARD SHORTCUTS (always visible) ===== -->
   <section class="bl-si-section" id="sectionShortcuts">
     <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
@@ -110,18 +123,6 @@
       <ul class="bl-si-rules-list" id="rulesList"></ul>
       <p class="bl-si-rules-empty" id="rulesEmpty" data-i18n="rule_no_rules">No URL rules configured.</p>
       <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add">+ Add Rule</button>
-    </div>
-  </section>
-
-  <!-- ===== BLURRED ELEMENTS ===== -->
-  <section class="bl-si-section" id="sectionBlurred">
-    <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
-      <span>Blurred Elements</span>
-      <span class="bl-si-list-count" id="blurListCount">0</span>
-    </div>
-    <div class="bl-si-blur-list-wrapper">
-      <ul class="bl-si-blur-list" id="blurList"></ul>
-      <p class="bl-si-blur-empty" id="blurEmpty">No blurred elements on this page.</p>
     </div>
   </section>
 

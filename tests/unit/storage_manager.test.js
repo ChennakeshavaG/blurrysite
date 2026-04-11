@@ -57,6 +57,8 @@ describe('blsi.Storage', () => {
 
   beforeEach(() => {
     mockStorageSet();
+    // Reset internal cache so each test re-reads from the (mocked) storage.
+    if (blsi.Storage._resetCache) blsi.Storage._resetCache();
   });
 
   // ── saveBlurItem (direct storage write) ─────────────────────────────────
@@ -221,7 +223,7 @@ describe('blsi.Storage', () => {
     test('returns full defaults when no settings in storage', async () => {
       mockStorageGet({ settings: null });
       const settings = await blsi.Storage.getSettings();
-      expect(settings.BLUR_RADIUS).toBe(10);
+      expect(settings.BLUR_RADIUS).toBe(6);
       expect(settings.HIGHLIGHT_COLOR).toBe('#f59e0b');
     });
   });
@@ -306,7 +308,7 @@ describe('blsi.Storage', () => {
     test('getSettings returns defaults when storage returns null', async () => {
       mockStorageGet({ settings: null });
       const result = await blsi.Storage.getSettings();
-      expect(result.BLUR_RADIUS).toBe(10);
+      expect(result.BLUR_RADIUS).toBe(6);
     });
   });
 

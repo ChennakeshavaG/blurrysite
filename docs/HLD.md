@@ -83,11 +83,13 @@ Injected into every page. Initialises on `DOMContentLoaded` (or immediately if t
 - `settings` — current settings snapshot
 
 Delegates to:
-- `PrivacyBlurEngine` for all DOM manipulation
-- `PrivacyBlurStorage` for all persistent state (which proxies to background.js)
-- `PrivacyBlurSelectorUtils` for selector generation
-- `PrivacyBlurShortcuts` for keyboard handling
-- `PrivacyBlurPicker` for the interactive picker UI
+- `blsi.BlurEngine` for all DOM manipulation **and** blur-all lifecycle state (counters, MutationObserver, `isPageBlurred`)
+- `blsi.Storage` for all persistent state (direct `chrome.storage.local` + reactive `onChange` subscription)
+- `blsi.SelectorUtils` for selector generation
+- `blsi.Shortcuts` for keyboard handling
+- `blsi.Picker` for the interactive picker UI
+- `blsi.UrlMatcher` for URL pattern matching + per-site settings resolution
+- `blsi.Reveal` for click / hover / ancestor reveal state
 
 ### 3.3 blur_engine.js — Blur Core
 
@@ -147,6 +149,25 @@ HTML/CSS/JS popup opened via the browser action icon. Communicates exclusively v
 - Toggle blur categories, thorough blur mode
 - Manage URL rules (per-site settings overrides)
 - Clear all saved blur data
+
+### 3.9 url_matcher.js — URL Pattern Matching
+
+Pure module (no DOM, no storage). Exposes `blsi.UrlMatcher` with:
+
+- `matchesPattern(url, pattern, patternType)` — wildcard mode parses scheme / hostname / port / path with domain-boundary awareness; regex mode rejects nested quantifiers (`(a+)+`, `a**`) to mitigate ReDoS.
+- `resolveSettings(url, globalSettings, rules)` — deep-merge over `DEFAULT_SETTINGS`, apply the first matching rule's overrides. Tolerates non-array / null `rules`.
+
+`MAX_PATTERN_LENGTH = 500`. Loaded at manifest position 2 (right after `constants.js`) so every downstream module can resolve per-URL settings without cycles.
+
+### 3.10 reveal_controller.js — Click / Hover / Ancestor Reveal
+
+Owns all reveal state extracted from `content_script.js`: click-revealed element, hover-revealed element, ancestor chain, mouseout debounce timer. Exposes `blsi.Reveal` with:
+
+- `init({ getMode, isPickerActive })` — both are **functions**, read on every event. Caller never re-inits on settings change.
+- `clearAll()` — resets every piece of reveal state. Called from `applyState` on `REVEAL_MODE` change and on `!settings.ENABLED`.
+- `destroy()` — removes all document listeners + `clearAll()`.
+
+Listeners are bubble-phase on `document` (click / keydown / mouseover / mouseout). Form-field targets (input / textarea / select / button / contenteditable) are skipped inside `onRevealClick`. Hover mode uses a 50ms mouseout debounce to avoid flicker across element boundaries.
 
 ---
 

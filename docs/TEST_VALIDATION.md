@@ -1,6 +1,42 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-**227 unit tests across 6 test files.** All validated 2026-04-07.
+**267 unit tests across 8 test files.** Last updated 2026-04-11 after the content_script slim refactor.
+
+New test files added in the 2026-04-11 refactor:
+
+## N1. url_matcher.test.js (20 tests) — `tests/unit/url_matcher.test.js`
+
+Covers the extracted `blsi.UrlMatcher`:
+
+| Group | Cases | Manual replication |
+|---|---|---|
+| Wildcard hostname | exact, subdomain, domain-boundary attack (`notexample.com`), `*.example.com` root-skip | DevTools on any page: `blsi.UrlMatcher.matchesPattern(location.href, 'example.com', 'wildcard')` — expect `true` only on example.com + subdomains |
+| Scheme + port + path | scheme restriction, `:8080` port, `/app*` prefix wildcard, trailing-slash tolerance, default port normalization | `matchesPattern('https://example.com:8080/app/home', 'example.com:8080/app*', 'wildcard')` → `true` |
+| Regex mode | valid pattern, case insensitivity, ReDoS guard (`(a+)+`, `a**`), invalid regex fallback | `matchesPattern('https://example.com/', '(a+)+', 'regex')` → `false` (not a timeout) |
+| MAX_PATTERN_LENGTH | 501-char pattern rejected | `matchesPattern(url, 'a'.repeat(501), 'wildcard')` → `false` |
+| resolveSettings | deep merge, first-match-wins, non-matching fall-through, null rules tolerated | Create two rules with same pattern, different `BLUR_RADIUS`. Open a matching page. Popup "Current page" shows the FIRST rule's radius |
+
+## N2. reveal_controller.test.js (10 tests) — `tests/unit/reveal_controller.test.js`
+
+Covers the extracted `blsi.Reveal`:
+
+| Group | Cases | Manual replication |
+|---|---|---|
+| Click mode | reveal on click, dismiss on second click, dismiss on Escape, input/textarea skip, picker-active block, mode=none disables | Popup: set REVEAL_MODE=click. Blur a `<div>`, click it → unblurs. Click again → re-blurs. Click a form `<input>` that is blurred → stays blurred |
+| Hover mode | reveal on mouseover, 50ms mouseout debounce | Set REVEAL_MODE=hover. Mouseover blurred element → reveals. Move away → stays revealed ~50ms then hides |
+| Lifecycle | clearAll wipes reveal state, destroy removes listeners | Toggle reveal mode in popup — any active reveal snaps back |
+
+## N3. blur_engine.test.js — 18 new tests for folded-in controller APIs
+
+Added under `applyItem / removeItem`, `counters`, `enableBlurAll / disableBlurAll / refreshBlurAll`. Covers:
+
+- Dynamic item apply/remove via selector, sticky item zone creation + path-mismatch skip, null-item no-op.
+- `allocateDynamicName` / `allocateStickyName` increment + `resetCounters` zeroes both.
+- `applyItem` seeds counters from item name (high-water mark) so session counters never collide with persisted names.
+- `enableBlurAll` injects rules + sets `isPageBlurred=true`; `disableBlurAll` removes rules + clears state; `refreshBlurAll` is a no-op when inactive and re-renders when active.
+- `_setPickerActiveForObserver` is exposed as a public method (MutationObserver gate).
+
+**Manual replication for folded APIs:** Load the extension, Alt+Shift+B to enable blur-all, then `blsi.BlurEngine.isPageBlurred` in DevTools → `true`. Alt+Shift+B again → `false`. Blur a specific element via the picker, then Alt+Shift+B twice — the picker item survives the blur-all toggle.
 
 ---
 

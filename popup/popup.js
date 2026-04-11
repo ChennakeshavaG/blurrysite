@@ -17,6 +17,7 @@
   const I18n = blsi.I18n;
   const Configs = blsi.PopupConfigs;
   const Renderer = blsi.SettingsRenderer;
+  const Store = blsi.Storage;
 
   const DEBOUNCE_MS   = 300;
   const TOAST_MS      = 2000;
@@ -25,7 +26,6 @@
   let settings      = MSG.buildDefaultSettings();
   let currentTab    = null;
   let currentHost   = '';
-  let blurredCount  = 0;
   let isPageBlurred = false;
   let isPickerActive = false;
   let urlRules      = [];
@@ -84,11 +84,6 @@
 
   // ── Utilities ──────────────────────────────────────────────────────────────
 
-  async function bgMessage(msg) {
-    try { return await chrome.runtime.sendMessage(msg); }
-    catch (err) { console.warn('[PB popup] bgMessage:', err.message); return null; }
-  }
-
   async function tabMessage(tabId, msg) {
     try {
       return await Promise.race([
@@ -117,21 +112,27 @@
 
   // ── Settings persistence ───────────────────────────────────────────────────
 
-  const _debouncedSave = debounce(async (notifyTab) => {
-    await bgMessage({ type: MSG.SAVE_SETTINGS, settings });
-    if (notifyTab && currentTab) {
-      await tabMessage(currentTab.id, { type: MSG.UPDATE_SETTINGS, settings });
+  // Settings persistence — pure storage write. Content script picks up the
+  // change via Store.onChange (cross-context) — no tabMessage needed.
+  const _debouncedSave = debounce(async () => {
+    try {
+      await Store.saveSettings(settings);
+    } catch (err) {
+      console.error('[BlurrySite popup] saveSettings:', err);
+      showToast('Failed to save settings');
     }
   }, DEBOUNCE_MS);
 
-  async function saveSettings(notifyTab, immediate) {
+  async function saveSettings(immediate) {
     if (immediate) {
-      await bgMessage({ type: MSG.SAVE_SETTINGS, settings });
-      if (notifyTab && currentTab) {
-        await tabMessage(currentTab.id, { type: MSG.UPDATE_SETTINGS, settings });
+      try {
+        await Store.saveSettings(settings);
+      } catch (err) {
+        console.error('[BlurrySite popup] saveSettings:', err);
+        showToast('Failed to save settings');
       }
     } else {
-      _debouncedSave(notifyTab);
+      _debouncedSave();
     }
   }
 
@@ -153,7 +154,7 @@
 
     // Debounce sliders/colors, immediate for toggles/selects
     const isSliderOrColor = key === 'BLUR_RADIUS' || key === 'HIGHLIGHT_COLOR';
-    saveSettings(true, !isSliderOrColor);
+    saveSettings(!isSliderOrColor);
   }
 
   // ── Render helpers ─────────────────────────────────────────────────────────
@@ -200,7 +201,6 @@
       btn.title = 'Remove blur';
       btn.dataset.itemId = item.type === 'dynamic' ? item.selector : item.id;
       btn.dataset.itemType = item.type;
-      btn.dataset.itemData = JSON.stringify(item);
 
       li.append(nameSpan, detailSpan, btn);
       ui.blurList.appendChild(li);
@@ -236,8 +236,13 @@
       delBtn.textContent = 'del';
       delBtn.addEventListener('click', async () => {
         urlRules = urlRules.filter(r => r.id !== rule.id);
-        await bgMessage({ type: MSG.SAVE_RULES, rules: urlRules });
-        if (currentTab) await tabMessage(currentTab.id, { type: MSG.UPDATE_SETTINGS, settings });
+        try {
+          await Store.saveRules(urlRules);
+        } catch (err) {
+          console.error('[BlurrySite popup] saveRules:', err);
+          showToast('Failed to delete rule');
+          return;
+        }
         renderRulesList();
         showToast(I18n.t('rule_deleted'));
       });
@@ -288,42 +293,47 @@
     ui.enableToggle.addEventListener('change', async () => {
       settings.ENABLED = ui.enableToggle.checked;
       ui.enableLabel.textContent = settings.ENABLED ? I18n.t('toggle_on') : I18n.t('toggle_off');
-      await saveSettings(true, true);
+      await saveSettings(true);
       showToast(settings.ENABLED ? I18n.t('toast_enabled') : I18n.t('toast_disabled'));
     });
 
     // Theme toggle
     ui.themeToggle.addEventListener('click', toggleTheme);
 
-    // Blur All
+    // Blur All — flip blur_all_hosts; content_script reacts via Store.onChange.
+    // Local UI state will be updated via the popup's own Store.onChange subscriber.
     ui.blurAllBtn.addEventListener('click', async () => {
-      if (!currentTab) return;
+      if (!currentHost) return;
       ui.blurAllBtn.disabled = true;
-      await tabMessage(currentTab.id, { type: MSG.TOGGLE_BLUR_ALL });
-      // Query fresh status
-      const status = await tabMessage(currentTab.id, { type: MSG.GET_STATUS });
-      if (status) {
-        blurredCount = status.count || 0;
-        isPageBlurred = status.isPageBlurred || false;
+      try {
+        const newState = !Store.getCachedBlurState(currentHost);
+        await Store.saveBlurState(currentHost, newState);
+        isPageBlurred = newState;
+        renderBlurCount();
+      } catch (err) {
+        console.error('[BlurrySite popup] saveBlurState:', err);
+        showToast('Failed to toggle blur');
       }
-      blurredItems = await fetchBlurItems();
-      renderBlurCount();
-      renderBlurList();
       ui.blurAllBtn.disabled = false;
       showToast(I18n.t('toast_blur_all'));
     });
 
-    // Clear All
+    // Clear All — clear current host's items + blur-all state. Storage writes
+    // trigger Store.onChange in content_script (cross-tab) and in popup itself.
     ui.clearAllBtn.addEventListener('click', async () => {
-      if (!currentTab) return;
+      if (!currentHost) return;
       ui.clearAllBtn.disabled = true;
-      await bgMessage({ type: MSG.CLEAR_HOST, hostname: currentHost });
-      await tabMessage(currentTab.id, { type: MSG.CLEAR_ALL_BLUR });
-      blurredItems = [];
-      blurredCount = 0;
+      try {
+        await Store.clearHost(currentHost);
+        await Store.saveBlurState(currentHost, false);
+      } catch (err) {
+        console.error('[BlurrySite popup] clear host:', err);
+        showToast('Failed to clear blur items');
+        ui.clearAllBtn.disabled = false;
+        return;
+      }
       isPageBlurred = false;
       renderBlurCount();
-      renderBlurList();
       ui.clearAllBtn.disabled = false;
       showToast(I18n.t('toast_cleared'));
     });
@@ -343,33 +353,37 @@
     // Rules
     ui.addRuleBtn.addEventListener('click', () => openRuleModal(null));
 
-    // Blur list remove (event delegation)
+    // Blur list remove (event delegation) — storage write only.
     ui.blurList.addEventListener('click', async (e) => {
       const btn = e.target.closest('.bl-si-blur-item__remove');
       if (!btn) return;
       const itemId = btn.dataset.itemId;
       if (!itemId) return;
-      await bgMessage({ type: MSG.REMOVE_BLUR_ITEM, hostname: currentHost, itemId });
-      let item = {};
-      try { item = JSON.parse(btn.dataset.itemData || '{}'); } catch (_e) {}
-      if (currentTab) await tabMessage(currentTab.id, { type: MSG.UNBLUR_ITEM, item });
+      try {
+        await Store.removeBlurItem(currentHost, itemId);
+      } catch (err) {
+        console.error('[BlurrySite popup] removeBlurItem:', err);
+        showToast('Failed to remove blur item');
+        return;
+      }
+      // Optimistic local update; Store.onChange will reconcile if cross-tab race.
       blurredItems = blurredItems.filter(i => (i.type === 'dynamic' ? i.selector : i.id) !== itemId);
-      blurredCount = Math.max(0, blurredCount - 1);
-      renderBlurCount();
       renderBlurList();
       showToast(I18n.t('toast_blur_removed'));
     });
 
-    // Clear all sites
+    // Clear all sites — wipes blurred_items map across all hostnames.
     ui.clearAllSitesBtn.addEventListener('click', async () => {
       if (!confirm(I18n.t('confirm_clear_all'))) return;
-      await bgMessage({ type: MSG.CLEAR_ALL });
+      try {
+        await Store.clearAll();
+      } catch (err) {
+        console.error('[BlurrySite popup] clearAll:', err);
+        showToast('Failed to clear all sites');
+        return;
+      }
       blurredItems = [];
-      blurredCount = 0;
-      isPageBlurred = false;
-      renderBlurCount();
       renderBlurList();
-      if (currentTab) await tabMessage(currentTab.id, { type: MSG.CLEAR_ALL_BLUR });
       showToast(I18n.t('toast_all_sites_cleared'));
     });
   }
@@ -381,53 +395,33 @@
     });
   }
 
-  // ── Fetch helpers ──────────────────────────────────────────────────────────
+  // ── Storage change subscriber ──────────────────────────────────────────────
+  // Receives non-self-echo changes from Store. Self-echo (popup's own writes)
+  // is filtered by storage_manager via cache comparison.
 
-  async function fetchBlurItems() {
-    if (!currentHost) return [];
-    const resp = await bgMessage({ type: MSG.GET_BLUR_ITEMS, hostname: currentHost });
-    return (resp && Array.isArray(resp.items)) ? resp.items : [];
-  }
-
-  // ── Storage change listener ────────────────────────────────────────────────
-
-  let _processingStorageChange = false;
-
-  function setupStorageListener() {
-    chrome.storage.onChanged.addListener(async (changes, area) => {
-      if (area !== 'local') return;
-      if (_processingStorageChange) return; // Prevent re-entrant saves
-      _processingStorageChange = true;
-
-      try {
-        if (changes.settings) {
-          const resp = await bgMessage({ type: MSG.GET_SETTINGS });
-          if (resp && resp.settings) {
-            settings = resp.settings;
-            renderHeader();
-            Renderer.updateAll(settings);
-            document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
-          }
-        }
-
-      if (changes.rules) {
-        const resp = await bgMessage({ type: MSG.GET_RULES });
-        if (resp && Array.isArray(resp.rules)) {
-          urlRules = resp.rules;
-          renderRulesList();
-        }
-      }
-
-        if (changes.blurred_items) {
-          blurredItems = await fetchBlurItems();
-          blurredCount = blurredItems.length;
-          renderBlurCount();
-          renderBlurList();
-        }
-      } finally {
-        _processingStorageChange = false;
-      }
-    });
+  function handleStorageChange(key, _newValue, _oldValue) {
+    if (key === 'settings') {
+      // Re-read via Store so we get merged + validated settings.
+      Store.getSettings().then((s) => {
+        settings = s;
+        renderHeader();
+        Renderer.updateAll(settings);
+        document.documentElement.style.setProperty('--bl-si-bg-blur-radius', settings.BLUR_RADIUS + 'px');
+      });
+    } else if (key === 'rules') {
+      Store.getRules().then((r) => {
+        urlRules = r;
+        renderRulesList();
+      });
+    } else if (key === 'blurred_items') {
+      Store.getBlurItems(currentHost).then((items) => {
+        blurredItems = items;
+        renderBlurList();
+      });
+    } else if (key === 'blur_all_hosts') {
+      isPageBlurred = Store.getCachedBlurState(currentHost);
+      renderBlurCount();
+    }
   }
 
   // ── Shortcut capture modal ─────────────────────────────────────────────────
@@ -502,7 +496,7 @@
           primaryModifier: scPrimaryMod,
           keys: scKeys.map(k => ({ key: k.key, code: k.code })),
         });
-        await saveSettings(true, true);
+        await saveSettings(true);
         Renderer.updateAll(settings);
         closeShortcutModal();
         showToast(I18n.t('shortcut_saved'));
@@ -516,7 +510,7 @@
         const defaults = MSG.DEFAULT_SETTINGS.SHORTCUTS[scAction];
         if (defaults) {
           Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, JSON.parse(JSON.stringify(defaults)));
-          await saveSettings(true, true);
+          await saveSettings(true);
           Renderer.updateAll(settings);
         }
         closeShortcutModal();
@@ -621,8 +615,13 @@
         });
       }
 
-      await bgMessage({ type: MSG.SAVE_RULES, rules: urlRules });
-      if (currentTab) await tabMessage(currentTab.id, { type: MSG.UPDATE_SETTINGS, settings });
+      try {
+        await Store.saveRules(urlRules);
+      } catch (err) {
+        console.error('[BlurrySite popup] saveRules:', err);
+        showToast('Failed to save rule');
+        return;
+      }
       renderRulesList();
       closeRuleModal();
       showToast(I18n.t('rule_saved'));
@@ -678,16 +677,14 @@
     ui.hostname.textContent = currentHost || '--';
     ui.hostname.title = currentHost;
 
-    // Fetch settings
-    const resp = await bgMessage({ type: MSG.GET_SETTINGS });
-    if (resp && resp.settings) settings = resp.settings;
+    // Populate storage cache (single read of all tracked keys).
+    try { await Store.initCache(); } catch (_e) {}
 
-    // Fetch rules
-    const rulesResp = await bgMessage({ type: MSG.GET_RULES });
-    if (rulesResp && Array.isArray(rulesResp.rules)) urlRules = rulesResp.rules;
-
-    // Fetch blurred selectors
-    blurredItems = await fetchBlurItems();
+    // Fetch settings, rules, blur items, blur-all state (all from cache).
+    settings = await Store.getSettings();
+    urlRules = await Store.getRules();
+    blurredItems = currentHost ? await Store.getBlurItems(currentHost) : [];
+    isPageBlurred = currentHost ? Store.getCachedBlurState(currentHost) : false;
 
     // Wire controls FIRST
     wireControls();
@@ -705,23 +702,21 @@
     // Render lists
     try { renderRulesList(); } catch (e) { console.warn('[PB] renderRulesList:', e); }
     try { renderBlurList(); } catch (e) { console.warn('[PB] renderBlurList:', e); }
+    renderBlurCount();
 
-    // Query actual status from tab
+    // Query picker state from content script (in-memory, not in storage)
     if (currentTab) {
       try {
         const status = await tabMessage(currentTab.id, { type: MSG.GET_STATUS });
         if (status) {
-          blurredCount = status.count || 0;
-          isPageBlurred = status.isPageBlurred || false;
           isPickerActive = status.isPickerActive || false;
-          renderBlurCount();
           ui.pickerBtn.dataset.active = String(isPickerActive);
         }
       } catch (e) { console.warn('[PB] GET_STATUS:', e); }
     }
 
-    // Storage change listener
-    setupStorageListener();
+    // Subscribe to storage changes from other contexts (content_script, other tabs).
+    Store.onChange(handleStorageChange);
   }
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────

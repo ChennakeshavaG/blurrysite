@@ -26,9 +26,11 @@
       "js": [
         "src/constants.js",
         "src/logger.js",
+        "src/url_matcher.js",
         "src/selector_utils.js",
         "src/storage_manager.js",
         "src/blur_engine.js",
+        "src/reveal_controller.js",
         "src/shortcut_handler.js",
         "src/picker.js",
         "src/content_script.js"

@@ -107,7 +107,7 @@ describe('BlurrySite constants', () => {
 
   describe('DEFAULT_SETTINGS', () => {
     test('contains all expected top-level keys', () => {
-      expect(PB.DEFAULT_SETTINGS.BLUR_RADIUS).toBe(10);
+      expect(PB.DEFAULT_SETTINGS.BLUR_RADIUS).toBe(6);
       expect(PB.DEFAULT_SETTINGS.TRANSITION_DURATION).toBe(200);
       expect(PB.DEFAULT_SETTINGS.HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(PB.DEFAULT_SETTINGS.REVEAL_MODE).toBe('hover');
@@ -161,11 +161,11 @@ describe('BlurrySite constants', () => {
   describe('buildDefaultSettings', () => {
     test('returns a mutable deep clone', () => {
       const s = PB.buildDefaultSettings();
-      expect(s.BLUR_RADIUS).toBe(10);
+      expect(s.BLUR_RADIUS).toBe(6);
       s.BLUR_RADIUS = 20;
       expect(s.BLUR_RADIUS).toBe(20);
       // Original unchanged
-      expect(PB.DEFAULT_SETTINGS.BLUR_RADIUS).toBe(10);
+      expect(PB.DEFAULT_SETTINGS.BLUR_RADIUS).toBe(6);
     });
 
     test('nested objects are also cloned', () => {
@@ -211,7 +211,7 @@ describe('BlurrySite constants', () => {
   describe('validateSettings', () => {
     test('returns full defaults for null input', () => {
       const result = PB.validateSettings(null);
-      expect(result.BLUR_RADIUS).toBe(10);
+      expect(result.BLUR_RADIUS).toBe(6);
       expect(result.ENABLED).toBe(true);
       expect(result.BLUR_CATEGORIES.TEXT).toBe(true);
       expect(result.SHORTCUTS.TOGGLE_BLUR_ALL).toBeDefined();
@@ -229,9 +229,9 @@ describe('BlurrySite constants', () => {
     });
 
     test('replaces out-of-range BLUR_RADIUS with default', () => {
-      expect(PB.validateSettings({ BLUR_RADIUS: 999 }).BLUR_RADIUS).toBe(10);
-      expect(PB.validateSettings({ BLUR_RADIUS: -1 }).BLUR_RADIUS).toBe(10);
-      expect(PB.validateSettings({ BLUR_RADIUS: 'abc' }).BLUR_RADIUS).toBe(10);
+      expect(PB.validateSettings({ BLUR_RADIUS: 999 }).BLUR_RADIUS).toBe(6);
+      expect(PB.validateSettings({ BLUR_RADIUS: -1 }).BLUR_RADIUS).toBe(6);
+      expect(PB.validateSettings({ BLUR_RADIUS: 'abc' }).BLUR_RADIUS).toBe(6);
     });
 
     test('replaces invalid REVEAL_MODE with default', () => {
@@ -258,7 +258,7 @@ describe('BlurrySite constants', () => {
 
     test('fills missing keys with defaults', () => {
       const result = PB.validateSettings({});
-      expect(result.BLUR_RADIUS).toBe(10);
+      expect(result.BLUR_RADIUS).toBe(6);
       expect(result.TRANSITION_DURATION).toBe(200);
       expect(result.HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(result.REVEAL_MODE).toBe('hover');
