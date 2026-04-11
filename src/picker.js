@@ -121,6 +121,64 @@ const Picker = (() => {
   const DEFAULT_PILL_POS = { top: 16, left: null, right: 16, bottom: null };
   const PILL_POS_KEY = 'picker_toolbar_pos';
 
+  // ── Custom instant tooltip for the mode chip ───────────────────────────
+  // Native `title` has a ~500ms browser delay. We render our own tooltip
+  // element so it appears instantly on mouseenter. Position is computed
+  // from modeSelectEl's bounding rect; the tooltip itself uses
+  // `position: fixed` so page scroll doesn't misalign it.
+  let _chipTooltipEl = null;
+
+  function _ensureChipTooltip() {
+    if (_chipTooltipEl) return;
+    _chipTooltipEl = document.createElement('div');
+    _chipTooltipEl.id = 'bl-si-chip-tooltip';
+    _chipTooltipEl.className = 'bl-si-toolbar-tooltip';
+    _chipTooltipEl.setAttribute('role', 'tooltip');
+    _chipTooltipEl.dataset.blSiVisible = 'false';
+    _chipTooltipEl.style.setProperty('display', 'none', 'important');
+    document.body.appendChild(_chipTooltipEl);
+  }
+
+  function _showChipTooltip() {
+    _ensureChipTooltip();
+    if (!modeSelectEl || !_chipTooltipEl) return;
+    _chipTooltipEl.textContent = _modeChipDescription(currentMode);
+
+    // Show first so getBoundingClientRect reports non-zero dimensions.
+    _chipTooltipEl.style.setProperty('display', 'block', 'important');
+    _chipTooltipEl.dataset.blSiVisible = 'true';
+
+    const chipRect = modeSelectEl.getBoundingClientRect();
+    const tipRect = _chipTooltipEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Prefer below the chip. If it wouldn't fit, render above.
+    let top = chipRect.bottom + 6;
+    if (top + tipRect.height + 8 > vh) {
+      top = chipRect.top - tipRect.height - 6;
+    }
+    // Horizontally center on the chip, clamped to the viewport.
+    let left = chipRect.left + chipRect.width / 2 - tipRect.width / 2;
+    left = Math.max(8, Math.min(left, vw - tipRect.width - 8));
+
+    _chipTooltipEl.style.setProperty('top', top + 'px', 'important');
+    _chipTooltipEl.style.setProperty('left', left + 'px', 'important');
+  }
+
+  function _hideChipTooltip() {
+    if (!_chipTooltipEl) return;
+    _chipTooltipEl.style.setProperty('display', 'none', 'important');
+    _chipTooltipEl.dataset.blSiVisible = 'false';
+  }
+
+  function _destroyChipTooltip() {
+    if (_chipTooltipEl && _chipTooltipEl.parentNode) {
+      _chipTooltipEl.parentNode.removeChild(_chipTooltipEl);
+    }
+    _chipTooltipEl = null;
+  }
+
   function buildToolbar() {
     if (toolbarEl) return;
 
@@ -153,17 +211,32 @@ const Picker = (() => {
     // Single button replaces the native <select> dropdown so the pill never
     // has to re-layout for a dropdown popup. Width is fixed in CSS so the
     // pill doesn't reflow when the chip's text changes across modes.
+    //
+    // Tooltip shows INSTANTLY on hover via a custom _chipTooltipEl — the
+    // native `title` attribute has a browser-imposed ~500ms delay we can't
+    // override. The `title` is kept as a fallback for screen readers and
+    // situations where our JS tooltip may have been removed from the DOM.
     modeSelectEl = document.createElement('button');
     modeSelectEl.type = 'button';
     modeSelectEl.className = 'bl-si-toolbar-chip';
     modeSelectEl.setAttribute('aria-label', 'Picker mode');
+    modeSelectEl.setAttribute('aria-describedby', 'bl-si-chip-tooltip');
     modeSelectEl.textContent = _modeChipLabel(currentMode);
     modeSelectEl.title = _modeChipDescription(currentMode);
     modeSelectEl.addEventListener('click', (e) => {
       e.stopPropagation();
       setMode(_cycleMode(currentMode));
+      // If the user is still hovering the chip after cycling, refresh the
+      // tooltip so the description matches the new mode.
+      if (_chipTooltipEl && _chipTooltipEl.dataset.blSiVisible === 'true') {
+        _showChipTooltip();
+      }
     });
     modeSelectEl.addEventListener('mousedown', (e) => e.stopPropagation());
+    modeSelectEl.addEventListener('mouseenter', _showChipTooltip);
+    modeSelectEl.addEventListener('mouseleave', _hideChipTooltip);
+    modeSelectEl.addEventListener('focus', _showChipTooltip);
+    modeSelectEl.addEventListener('blur', _hideChipTooltip);
 
     // ── Action buttons ──────────────────────────────────────────────────
     const clearBtn = document.createElement('button');
@@ -318,6 +391,7 @@ const Picker = (() => {
   }
 
   function removeToolbar() {
+    _destroyChipTooltip();
     if (toolbarEl) {
       toolbarEl.remove();
       toolbarEl = null;
