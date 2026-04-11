@@ -10,5 +10,58 @@
   },
   "ctxUnblurElement": {
     "message": "இந்தக் கூறின் மங்கலை அகற்று"
+  },
+
+  "pickerPrefixLabel": {
+    "message": "",
+    "description": "Empty in Tamil — the chip label is self-contained."
+  },
+  "pickerChipLabelDynamic": {
+    "message": "கூறு"
+  },
+  "pickerChipLabelStickyPage": {
+    "message": "பக்கப் பகுதி"
+  },
+  "pickerChipLabelStickyScreen": {
+    "message": "திரைப் பகுதி"
+  },
+  "pickerChipDescDynamic": {
+    "message": "பக்கத்தில் ஒரு கூறைத் தட்டினால் அது மங்கும். மங்கல் அந்தக் கூறைப் பின்தொடரும். மோடை மாற்ற கிளிக் செய்யவும்."
+  },
+  "pickerChipDescStickyPage": {
+    "message": "பக்கத்தின் ஒரு பகுதியில் ஒரு பெட்டியை வரையவும். உள்ளடக்கத்துடன் ஸ்க்ரோல் ஆகும். மோடை மாற்ற கிளிக் செய்யவும்."
+  },
+  "pickerChipDescStickyScreen": {
+    "message": "உங்கள் திரையில் ஒரு நிலையான பெட்டியை வரையவும். ஸ்க்ரோல் செய்யும்போது இடம் மாறாது — திரைப் பகிர்வுக்கு சிறந்தது. மோடை மாற்ற கிளிக் செய்யவும்."
+  },
+  "pickerChipAria": {
+    "message": "பிக்கர் மோட் — மாற்ற கிளிக் செய்யவும்"
+  },
+  "pickerDragHandleAria": {
+    "message": "பிக்கரை இழுத்து நகர்த்து"
+  },
+  "pickerDragHandleTitle": {
+    "message": "இழுத்து நகர்த்து"
+  },
+  "pickerClearBtn": {
+    "message": "அழி"
+  },
+  "pickerClearBtnTip": {
+    "message": "இந்தப் பக்கத்திலிருந்து அனைத்து மங்கலையும் அகற்று"
+  },
+  "pickerCloseBtnTip": {
+    "message": "பிக்கர் மோடிலிருந்து வெளியேறு"
+  },
+  "pickerCloseBtnAria": {
+    "message": "பிக்கரை மூடு"
+  },
+  "pickerFlashBlurred": {
+    "message": "மங்கியது"
+  },
+  "pickerFlashUnblurred": {
+    "message": "தெளிவானது"
+  },
+  "pickerAreaTooSmall": {
+    "message": "பகுதி மிகச் சிறியது (குறைந்தது 10px)"
   }
 }

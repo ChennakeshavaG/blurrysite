@@ -10,5 +10,58 @@
   },
   "ctxUnblurElement": {
     "message": "इस तत्व का धुंधलापन हटाएँ"
+  },
+
+  "pickerPrefixLabel": {
+    "message": "",
+    "description": "Empty in Hindi — the chip label is self-contained."
+  },
+  "pickerChipLabelDynamic": {
+    "message": "तत्व"
+  },
+  "pickerChipLabelStickyPage": {
+    "message": "पेज क्षेत्र"
+  },
+  "pickerChipLabelStickyScreen": {
+    "message": "स्क्रीन क्षेत्र"
+  },
+  "pickerChipDescDynamic": {
+    "message": "पेज पर किसी तत्व पर टैप करके उसे धुंधला करें। धुंधलापन उस तत्व का अनुसरण करता है। मोड बदलने के लिए क्लिक करें।"
+  },
+  "pickerChipDescStickyPage": {
+    "message": "पेज के एक क्षेत्र पर एक बॉक्स बनाएँ। सामग्री के साथ स्क्रॉल होता है। मोड बदलने के लिए क्लिक करें।"
+  },
+  "pickerChipDescStickyScreen": {
+    "message": "अपनी स्क्रीन पर एक स्थिर बॉक्स बनाएँ। स्क्रॉल करते समय अपनी जगह पर रहता है — स्क्रीन-शेयरिंग के लिए बढ़िया। मोड बदलने के लिए क्लिक करें।"
+  },
+  "pickerChipAria": {
+    "message": "पिकर मोड — चक्र के लिए क्लिक करें"
+  },
+  "pickerDragHandleAria": {
+    "message": "पिकर को खींचकर हटाएँ"
+  },
+  "pickerDragHandleTitle": {
+    "message": "खींचकर हटाएँ"
+  },
+  "pickerClearBtn": {
+    "message": "साफ़"
+  },
+  "pickerClearBtnTip": {
+    "message": "इस पेज से सभी धुंधलापन हटाएँ"
+  },
+  "pickerCloseBtnTip": {
+    "message": "पिकर मोड से बाहर निकलें"
+  },
+  "pickerCloseBtnAria": {
+    "message": "पिकर बंद करें"
+  },
+  "pickerFlashBlurred": {
+    "message": "धुंधला"
+  },
+  "pickerFlashUnblurred": {
+    "message": "अधुंधला"
+  },
+  "pickerAreaTooSmall": {
+    "message": "क्षेत्र बहुत छोटा (न्यूनतम 10px)"
   }
 }

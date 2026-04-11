@@ -22,6 +22,7 @@ const PopupConfigs = (() => {
       blsi.Actions.list().map((action) => ({
         key: 'SHORTCUTS.' + action.id,
         i18nKey: 'shortcut_' + action.id.toLowerCase(),
+        i18nHintKey: 'shortcut_' + action.id.toLowerCase() + '_hint',
         label: action.label,
         description: action.description,
         type: 'shortcut',

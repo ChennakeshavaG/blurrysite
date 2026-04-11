@@ -57,9 +57,9 @@ Grouped by purpose:
 
 These strings are user-visible English literals **inside `src/`**, where `popup_i18n.js` is unavailable. They need `chrome.i18n.getMessage()` and corresponding entries in `messages.json`.
 
-### 3.1 `src/picker.js` (highest priority — most visible)
+### 3.1 `src/picker.js` — MIGRATED (Phase 2)
 
-Inventory refreshed after the main-branch picker rewrite (chip-based mode switcher, ⚓ anchor grip, "Blur An:" prefix, custom instant tooltip). Old "Sketch a box…" hints are gone — the chip's hover tooltip carries the description now.
+Inventory at the time of migration. Every entry below is now resolved via `blsi.ContentI18n.t(key, fallback)` with the English literal as the fallback so a missing helper degrades gracefully.
 
 | Where (line ≈) | String | Suggested key |
 |---|---|---|
@@ -106,13 +106,14 @@ See `§7 Known Limitations` and `UX_COPY_PLAN.md §5`. Do not promote this back 
 
 Ordered by impact / effort.
 
-### Tier 1 — finish the migration (Phase 2 of i18n-ux rollout)
+### Tier 1 — finish the migration (Phase 2 of i18n-ux rollout — SHIPPED)
 
-1. **Add `src/content_i18n.js` helper** — IIFE that fetches `_locales/<lang>/messages.json` via `chrome.runtime.getURL`. Exposes `blsi.ContentI18n.t(key, fallback)`. Solves the chrome.i18n runtime-override blocker so a popup-set LANGUAGE can reach content scripts.
-2. **Move `picker.js` strings to `messages.json`** + use `blsi.ContentI18n.t(...)`. 18 keys (toolbar labels, mode dropdown, drag handle, Clear/Close, flash badges, min-size toast). Big visibility win because the picker toolbar is what users see during the core action.
-3. **`shortcut_handler.js` toast prefix** stays English. Action labels stay English. See §3.3 — deferred indefinitely.
+1. ✅ **`src/content_i18n.js` helper** — IIFE in `manifest.json content_scripts` slot 1 (after `constants.js`, before `logger.js`). Fetches `_locales/<lang>/messages.json` via `chrome.runtime.getURL` + caches en as fallback. `blsi.ContentI18n.t(key, fallback)` — falls back through primary → en → fallback literal → key.
+2. ✅ **`picker.js` migration** — 16 strings replaced with `_t(key, fallback)` shim. New `Picker.rebuildToolbar()` for live language switching. `pickerPrefixLabel` may be empty (Hindi/Tamil), in which case the prefix span is omitted entirely.
+3. ✅ **`content_script.js` wiring** — `await ContentI18n.init(globalSettings.LANGUAGE)` on init; `onSettingsChanged` detects LANGUAGE flips, re-inits the helper, and calls `Picker.rebuildToolbar()` if active.
+4. **`shortcut_handler.js` toast prefix** stays English. Action labels stay English. See §3.3 — deferred indefinitely.
 
-After Tier 1: zero hardcoded user-visible English in popup AND picker. Action toast and help overlay rows remain English by design.
+After Phase 2: popup AND picker toolbar both honor LANGUAGE. Action toast and help overlay action rows remain English by design.
 
 ### Tier 2 — translation workflow (1 day)
 
@@ -163,6 +164,14 @@ Settled by precedent in `popup.json`. Document them so future keys stay consiste
 | `confirm_*` | Confirm dialog body text | `confirm_clear_all` |
 
 For `messages.json`, follow Chrome convention: camelCase, no underscores. Rationale: `chrome.i18n.getMessage('appName')` reads naturally, and the manifest substitution syntax (`__MSG_appName__`) doesn't tolerate underscores well.
+
+---
+
+## 6.5. Bug fixes shipped alongside Phase 2
+
+**Keyboard Shortcuts section showed English even when LANGUAGE=Hindi/Tamil.** Root cause: `popup_configs.js` SHORTCUTS builder generated i18n keys as `'shortcut_' + action.id.toLowerCase()` (→ `shortcut_toggle_blur_all`, `shortcut_toggle_picker`, `shortcut_clear_all`), but `popup.json` had been authored with shorter names (`shortcut_blur_all`, `shortcut_picker`, `shortcut_clear`). The keys never matched, so `popup_settings_renderer.js` always fell back to `config.label` (= `action.label` = English literal from `action_registry.js`). Hindi/Tamil never had a chance.
+
+Fix: renamed the keys in `_locales/{en,hi_IN,ta_IN}/popup.json` to match the builder. Also added `shortcut_*_hint` keys + wired `i18nHintKey` in `popup_configs.js` so the descriptions translate too. Now the Keyboard Shortcuts section is fully translated without touching `action_registry.js` (the deferred-indefinitely surface still applies to the shortcut TOAST and help overlay rows that read `action.label` directly).
 
 ---
 

@@ -400,6 +400,14 @@
       // Storage read failed — use defaults.
     }
 
+    // 2b. Initialize the content-script i18n helper with the user's chosen
+    //     LANGUAGE. Picker toolbar reads from blsi.ContentI18n at build time,
+    //     so this must complete before the picker is ever activated.
+    if (blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
+      try { await blsi.ContentI18n.init(globalSettings.LANGUAGE); }
+      catch (_e) { /* picker falls back to English literals */ }
+    }
+
     // 3. Apply CSS custom properties from settings.
     applySettingsToDom();
 
@@ -472,7 +480,21 @@
     // Merge incoming raw settings over defaults, then validate. Replaces
     // globalSettings entirely so removed/renamed keys don't accumulate.
     const merged = MSG.deepMerge(MSG.DEFAULT_SETTINGS, newRawSettings || {});
-    globalSettings = MSG.validateSettings(merged);
+    const nextGlobal = MSG.validateSettings(merged);
+    const langChanged = nextGlobal.LANGUAGE !== globalSettings.LANGUAGE;
+    globalSettings = nextGlobal;
+
+    // Re-init the content-script i18n helper if LANGUAGE flipped, then
+    // rebuild the picker toolbar in place if it's active so the new
+    // locale shows up without the user having to close + reopen.
+    if (langChanged && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
+      try { await blsi.ContentI18n.init(globalSettings.LANGUAGE); }
+      catch (_e) { /* keep stale strings, picker degrades to English literals */ }
+      if (Picker && typeof Picker.rebuildToolbar === 'function' && Picker.isActive) {
+        try { Picker.rebuildToolbar(); } catch (_e) {}
+      }
+    }
+
     const resolved = UrlMatcher.resolveSettings(location.href, globalSettings, rules);
     await applyState(resolved, prev);
   }

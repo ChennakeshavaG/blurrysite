@@ -25,6 +25,7 @@
       "matches": ["<all_urls>"],
       "js": [
         "src/constants.js",
+        "src/content_i18n.js",
         "src/logger.js",
         "src/action_registry.js",
         "src/shortcut_label.js",

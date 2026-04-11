@@ -56,7 +56,9 @@ Design principle: **default copy serves the streamer**. Advanced terms (regex, O
 | Failed to save settings | Couldn't save settings | Tone |
 | Flow logs ON / OFF | Activity log: on / off | "Flow log" is our word |
 | Shortcut > Customize | Shortcut > Change | Shorter; clearer |
-| (new) Display Language | Display Language | New row in Settings → Look. Lets users override `navigator.language`. Auto / English / हिन्दी (Hindi). |
+| (new) Display Language | Display Language | New row in Settings → Look. Lets users override `navigator.language`. Auto / English / हिन्दी / தமிழ். |
+| Shortcut row labels | Blur Everything / Pick an Element / Clear the Page (+ hint lines) | Layman verbs that match the action-bar buttons. Bug fix: keys had been mismatched against `popup_configs.js` and were silently falling back to English `action_registry` labels. See I18N_PLAN §6.5. |
+| (new) Picker chip labels | Element / Area on page / Area on screen | Self-contained labels in non-English locales. The "Blur An:" prefix is intentionally empty in Hindi/Tamil so the chip stands on its own — `pickerPrefixLabel` empty-string convention in `messages.json`. |
 
 Kept as-is because they already serve the audience:
 - Blur All, Clear All (action bar) — short, familiar from paint tools

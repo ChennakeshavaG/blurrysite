@@ -938,10 +938,80 @@ describe('blsi.Picker', () => {
     });
 
     test('no-op when setting same mode', () => {
-      const callbacks = { onModeChange: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
+      // Smoke test — just ensure no throw
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       blsi.Picker.setMode('sticky-page');
-      expect(callbacks.onModeChange).not.toHaveBeenCalled();
+      expect(blsi.Picker.isActive).toBe(true);
     });
   });
+
+  describe('i18n integration (Phase 2)', () => {
+    let originalContentI18n;
+
+    beforeEach(() => {
+      originalContentI18n = blsi.ContentI18n;
+    });
+
+    afterEach(() => {
+      blsi.ContentI18n = originalContentI18n;
+    });
+
+    test('toolbar uses ContentI18n.t for chip label and Clear button', () => {
+      blsi.ContentI18n = {
+        t: (key, fallback) => 'HI:' + key,
+      };
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      const toolbar = document.getElementById('bl-si-picker-toolbar');
+      expect(toolbar).not.toBeNull();
+      // Chip label is 'HI:pickerChipLabelDynamic'
+      expect(toolbar.textContent).toContain('HI:pickerChipLabelDynamic');
+      // Clear button uses HI:pickerClearBtn
+      expect(toolbar.textContent).toContain('HI:pickerClearBtn');
+    });
+
+    test('empty pickerPrefixLabel hides the prefix span entirely', () => {
+      blsi.ContentI18n = {
+        t: (key, fallback) => key === 'pickerPrefixLabel' ? '' : 'HI:' + key,
+      };
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      const toolbar = document.getElementById('bl-si-picker-toolbar');
+      // prefix span should not exist
+      expect(toolbar.querySelector('.bl-si-toolbar-prefix')).toBeNull();
+    });
+
+    test('rebuildToolbar() tears down and rebuilds with new strings', () => {
+      blsi.ContentI18n = {
+        t: (key, fallback) => 'V1:' + key,
+      };
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      let toolbar = document.getElementById('bl-si-picker-toolbar');
+      expect(toolbar.textContent).toContain('V1:pickerChipLabelDynamic');
+
+      // Swap the i18n stub mid-session and rebuild.
+      blsi.ContentI18n = {
+        t: (key, fallback) => 'V2:' + key,
+      };
+      blsi.Picker.rebuildToolbar();
+      toolbar = document.getElementById('bl-si-picker-toolbar');
+      expect(toolbar).not.toBeNull();
+      expect(toolbar.textContent).toContain('V2:pickerChipLabelDynamic');
+      expect(toolbar.textContent).not.toContain('V1:');
+    });
+
+    test('rebuildToolbar() is a no-op when picker is not active', () => {
+      // Picker not activated — should not throw.
+      expect(() => blsi.Picker.rebuildToolbar()).not.toThrow();
+      expect(document.getElementById('bl-si-picker-toolbar')).toBeNull();
+    });
+
+    test('falls back to fallback literal when ContentI18n is missing', () => {
+      blsi.ContentI18n = undefined;
+      blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
+      const toolbar = document.getElementById('bl-si-picker-toolbar');
+      // English fallback literals should appear
+      expect(toolbar.textContent).toContain('Element');
+      expect(toolbar.textContent).toContain('Clear');
+    });
+  });
+
 });

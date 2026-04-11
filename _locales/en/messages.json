@@ -10,5 +10,58 @@
   },
   "ctxUnblurElement": {
     "message": "Unblur this element"
+  },
+
+  "pickerPrefixLabel": {
+    "message": "Blur An:",
+    "description": "Static prefix label that reads as one sentence with the chip mode label. May be empty in locales where the sentence-fragment grammar doesn't carry."
+  },
+  "pickerChipLabelDynamic": {
+    "message": "Element"
+  },
+  "pickerChipLabelStickyPage": {
+    "message": "Area on page"
+  },
+  "pickerChipLabelStickyScreen": {
+    "message": "Area on screen"
+  },
+  "pickerChipDescDynamic": {
+    "message": "Tap an element on the page to blur it. The blur follows that item. Click to switch mode."
+  },
+  "pickerChipDescStickyPage": {
+    "message": "Sketch a box over a region of the page. Scrolls with the content. Click to switch mode."
+  },
+  "pickerChipDescStickyScreen": {
+    "message": "Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode."
+  },
+  "pickerChipAria": {
+    "message": "Picker mode — click to cycle"
+  },
+  "pickerDragHandleAria": {
+    "message": "Drag to move picker"
+  },
+  "pickerDragHandleTitle": {
+    "message": "Drag to move"
+  },
+  "pickerClearBtn": {
+    "message": "Clear"
+  },
+  "pickerClearBtnTip": {
+    "message": "Remove all blur from this page"
+  },
+  "pickerCloseBtnTip": {
+    "message": "Exit picker mode"
+  },
+  "pickerCloseBtnAria": {
+    "message": "Close picker"
+  },
+  "pickerFlashBlurred": {
+    "message": "Blurred"
+  },
+  "pickerFlashUnblurred": {
+    "message": "Unblurred"
+  },
+  "pickerAreaTooSmall": {
+    "message": "Area too small (min 10px)"
   }
 }

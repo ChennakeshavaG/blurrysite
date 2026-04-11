@@ -24,6 +24,17 @@ const Picker = (() => {
   };
   const MIN_ZONE_SIZE = 10;
 
+  // i18n shim — content_i18n.js (loaded earlier in the manifest) exposes
+  // blsi.ContentI18n.t(key, fallback). If the helper isn't initialized yet
+  // (race during cold start), `t()` returns the fallback literal so the
+  // toolbar still renders in English instead of crashing.
+  function _t(key, fallback) {
+    if (blsi && blsi.ContentI18n && typeof blsi.ContentI18n.t === 'function') {
+      return blsi.ContentI18n.t(key, fallback);
+    }
+    return fallback;
+  }
+
   /** True iff `mode` is either of the sticky variants. */
   function _isSticky(mode) {
     return mode === PM.STICKY_PAGE || mode === PM.STICKY_SCREEN;
@@ -102,16 +113,16 @@ const Picker = (() => {
   // "Blur An: Area on page" / "Blur An: Area on screen". Keeping these in
   // the same grammatical form makes the picker feel like a single sentence.
   function _modeChipLabel(mode) {
-    if (mode === PM.STICKY_PAGE) return 'Area on page';
-    if (mode === PM.STICKY_SCREEN) return 'Area on screen';
-    return 'Element';
+    if (mode === PM.STICKY_PAGE) return _t('pickerChipLabelStickyPage', 'Area on page');
+    if (mode === PM.STICKY_SCREEN) return _t('pickerChipLabelStickyScreen', 'Area on screen');
+    return _t('pickerChipLabelDynamic', 'Element');
   }
 
   // Long description shown in the chip's tooltip (hover).
   function _modeChipDescription(mode) {
-    if (mode === PM.STICKY_PAGE) return 'Sketch a box over a region of the page. Scrolls with the content. Click to switch mode.';
-    if (mode === PM.STICKY_SCREEN) return 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode.';
-    return 'Tap an element on the page to blur it. The blur follows that item. Click to switch mode.';
+    if (mode === PM.STICKY_PAGE) return _t('pickerChipDescStickyPage', 'Sketch a box over a region of the page. Scrolls with the content. Click to switch mode.');
+    if (mode === PM.STICKY_SCREEN) return _t('pickerChipDescStickyScreen', 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode.');
+    return _t('pickerChipDescDynamic', 'Tap an element on the page to blur it. The blur follows that item. Click to switch mode.');
   }
 
   function _cycleMode(mode) {
@@ -207,19 +218,26 @@ const Picker = (() => {
     // the viewport and can be re-anchored by dragging.
     const dragHandle = document.createElement('div');
     dragHandle.className = 'bl-si-toolbar-drag';
-    dragHandle.setAttribute('aria-label', 'Drag to move picker');
-    dragHandle.title = 'Drag to move';
+    dragHandle.setAttribute('aria-label', _t('pickerDragHandleAria', 'Drag to move picker'));
+    dragHandle.title = _t('pickerDragHandleTitle', 'Drag to move');
     dragHandle.textContent = '\u2693'; // ⚓ anchor
     // Drag is wired at CAPTURE phase on the grip so it fires before any
     // bubble handlers on inner elements. The grip has no children, so this
     // is effectively "mousedown on the grip".
     _wireDrag(dragHandle);
 
-    // ── Static "Blur An:" prefix label — reads as one sentence with chip ─
-    // Not interactive, not draggable, not affected by mode changes.
-    const prefixLabel = document.createElement('span');
-    prefixLabel.className = 'bl-si-toolbar-prefix';
-    prefixLabel.textContent = 'Blur An:';
+    // ── Static prefix label — "Blur An:" in English ──────────────────────
+    // Reads as one sentence with the chip mode label. The "Blur An: Element"
+    // sentence-fragment grammar doesn't carry to non-English locales, so the
+    // i18n value is allowed to be empty — when empty, we omit the element
+    // from the pill entirely so the chip stands on its own.
+    const prefixText = _t('pickerPrefixLabel', 'Blur An:');
+    let prefixLabel = null;
+    if (prefixText) {
+      prefixLabel = document.createElement('span');
+      prefixLabel.className = 'bl-si-toolbar-prefix';
+      prefixLabel.textContent = prefixText;
+    }
 
     // ── Mode chip — click to cycle, hover for description ─────────────
     // Single button replaces the native <select> dropdown so the pill never
@@ -234,7 +252,7 @@ const Picker = (() => {
     modeSelectEl = document.createElement('button');
     modeSelectEl.type = 'button';
     modeSelectEl.className = 'bl-si-toolbar-chip';
-    modeSelectEl.setAttribute('aria-label', 'Picker mode — click to cycle');
+    modeSelectEl.setAttribute('aria-label', _t('pickerChipAria', 'Picker mode — click to cycle'));
     modeSelectEl.setAttribute('aria-describedby', 'bl-si-chip-tooltip');
     modeSelectEl.textContent = _modeChipLabel(currentMode);
     modeSelectEl.addEventListener('click', (e) => {
@@ -256,8 +274,8 @@ const Picker = (() => {
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
     clearBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--clear';
-    clearBtn.textContent = 'Clear';
-    clearBtn.title = 'Remove all blur from this page';
+    clearBtn.textContent = _t('pickerClearBtn', 'Clear');
+    clearBtn.title = _t('pickerClearBtnTip', 'Remove all blur from this page');
     clearBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       clearAllFromPicker();
@@ -268,17 +286,18 @@ const Picker = (() => {
     closeBtn.type = 'button';
     closeBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--close';
     closeBtn.textContent = '\u00d7';
-    closeBtn.title = 'Exit picker mode';
-    closeBtn.setAttribute('aria-label', 'Close picker');
+    closeBtn.title = _t('pickerCloseBtnTip', 'Exit picker mode');
+    closeBtn.setAttribute('aria-label', _t('pickerCloseBtnAria', 'Close picker'));
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       deactivate();
     });
     closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    // Pill layout: [⚓ grip] [Blur An:] [mode chip] [Clear] [×]
+    // Pill layout: [⚓ grip] [(prefix)] [mode chip] [Clear] [×]
+    // prefix is optional — empty in non-English locales (see prefixLabel above).
     toolbarEl.appendChild(dragHandle);
-    toolbarEl.appendChild(prefixLabel);
+    if (prefixLabel) toolbarEl.appendChild(prefixLabel);
     toolbarEl.appendChild(modeSelectEl);
     toolbarEl.appendChild(clearBtn);
     toolbarEl.appendChild(closeBtn);
@@ -386,6 +405,19 @@ const Picker = (() => {
       toolbarLabelEl = null;
       modeSelectEl = null;
     }
+  }
+
+  /**
+   * Tear down the toolbar and rebuild it. Used by content_script.js when
+   * the LANGUAGE setting changes mid-session, so the chip / prefix /
+   * tooltips re-read from blsi.ContentI18n in the new locale. The pill's
+   * position is intentionally NOT preserved — buildToolbar() opens at
+   * top-center via the stylesheet, matching the standard activation flow.
+   */
+  function rebuildToolbar() {
+    if (!isActive) return;
+    removeToolbar();
+    buildToolbar();
   }
 
   function clearAllFromPicker() {
@@ -503,7 +535,7 @@ const Picker = (() => {
       if (dx > 2 || dy > 2) {
         // User tried to draw but too small — show feedback
         if (blsi.Shortcuts && blsi.Shortcuts.showToast) {
-          blsi.Shortcuts.showToast('Area too small (min ' + MIN_ZONE_SIZE + 'px)');
+          blsi.Shortcuts.showToast(_t('pickerAreaTooSmall', 'Area too small (min ' + MIN_ZONE_SIZE + 'px)'));
         }
       }
       return;
@@ -719,7 +751,7 @@ const Picker = (() => {
         blsi.BlurEngine.removeBlur(target);
       }
       selectedElements.delete(target);
-      flashElementIndicator(target, 'Unblurred');
+      flashElementIndicator(target, _t('pickerFlashUnblurred', 'Unblurred'));
     } else {
       if (typeof activeCallbacks.onBlur === 'function') {
         activeCallbacks.onBlur(target);
@@ -727,7 +759,7 @@ const Picker = (() => {
         blsi.BlurEngine.applyBlur(target, activeSettings.blurRadius);
       }
       selectedElements.add(target);
-      flashElementIndicator(target, 'Blurred');
+      flashElementIndicator(target, _t('pickerFlashBlurred', 'Blurred'));
     }
   }
 
@@ -824,6 +856,7 @@ const Picker = (() => {
     deactivate,
     setSettings,
     setMode,
+    rebuildToolbar,
   };
 
 })();
