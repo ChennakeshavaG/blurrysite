@@ -34,6 +34,16 @@ const PopupConfigs = (() => {
   const SETTINGS = Object.freeze([
     // Appearance
     {
+      key: 'LANGUAGE', i18nKey: 'setting_language', i18nHintKey: 'setting_language_hint',
+      type: 'select', group: 'appearance',
+      options: { values: [
+        { value: 'auto',  i18nKey: 'lang_auto'  },
+        { value: 'en',    i18nKey: 'lang_en'    },
+        { value: 'hi_IN', i18nKey: 'lang_hi_IN' },
+        { value: 'ta_IN', i18nKey: 'lang_ta_IN' },
+      ]},
+    },
+    {
       key: 'BLUR_RADIUS', i18nKey: 'setting_blur_radius', i18nHintKey: 'setting_blur_radius_hint',
       type: 'range', group: 'appearance', options: { min: 2, max: 30, step: 1, unit: 'px' },
     },

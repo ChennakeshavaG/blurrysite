@@ -1,0 +1,14 @@
+{
+  "appName": {
+    "message": "Blurry Site"
+  },
+  "appDescription": {
+    "message": "किसी भी वेबपेज पर संवेदनशील टेक्स्ट, छवियाँ और वीडियो को कीबोर्ड शॉर्टकट या तत्व पिकर से धुंधला करें।"
+  },
+  "ctxBlurElement": {
+    "message": "इस तत्व को धुंधला करें"
+  },
+  "ctxUnblurElement": {
+    "message": "इस तत्व का धुंधलापन हटाएँ"
+  }
+}

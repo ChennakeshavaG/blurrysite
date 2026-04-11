@@ -29,13 +29,13 @@ function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "bl-si-blur-element",
-      title: "Blur this element",
+      title: chrome.i18n.getMessage("ctxBlurElement") || "Blur this element",
       contexts: ["all"],
     });
 
     chrome.contextMenus.create({
       id: "bl-si-unblur-element",
-      title: "Unblur this element",
+      title: chrome.i18n.getMessage("ctxUnblurElement") || "Unblur this element",
       contexts: ["all"],
     });
   });

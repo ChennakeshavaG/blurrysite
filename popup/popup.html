@@ -31,7 +31,7 @@
       <span class="bl-si-header__title" data-i18n="popup_title">Blurry Site</span>
     </div>
     <div class="bl-si-header__controls">
-      <button class="bl-si-header__theme-btn" id="themeToggle" aria-label="Toggle theme">
+      <button class="bl-si-header__theme-btn" id="themeToggle" data-i18n-aria-label="tt_theme" data-i18n-title="tt_theme" aria-label="Toggle theme" title="Toggle theme">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
           <line x1="12" y1="1" x2="12" y2="3"/>
@@ -44,7 +44,7 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
         </svg>
       </button>
-      <label class="bl-si-toggle bl-si-toggle--master" title="Enable or disable Blurry Site">
+      <label class="bl-si-toggle bl-si-toggle--master" data-i18n-title="tt_master_toggle" title="Enable or disable Blurry Site">
         <input type="checkbox" id="enableToggle" />
         <span class="bl-si-toggle__track"><span class="bl-si-toggle__thumb"></span></span>
       </label>
@@ -54,26 +54,26 @@
 
   <!-- ===== ACTION BAR ===== -->
   <section class="bl-si-actions">
-    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--blur" id="blurAllBtn" data-active="false">
+    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--blur" id="blurAllBtn" data-active="false" data-i18n-title="tt_blur_all" title="Blur every supported element on this page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
         <circle cx="12" cy="12" r="3"/>
       </svg>
       <span data-i18n="btn_blur_all">Blur All</span>
     </button>
-    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--clear" id="clearAllBtn">
+    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--clear" id="clearAllBtn" data-i18n-title="tt_clear_all" title="Remove every blur on this page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18"/>
         <line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
       <span data-i18n="btn_clear_all">Clear All</span>
     </button>
-    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--picker" id="pickerBtn" data-active="false">
+    <button class="bl-si-actions__btn bl-si-frost bl-si-actions__btn--picker" id="pickerBtn" data-active="false" data-i18n-title="tt_picker" title="Pick a specific element or draw a zone to blur">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <span data-i18n="btn_picker">Picker</span>
+      <span data-i18n="btn_picker">Pick &amp; Blur</span>
     </button>
   </section>
 
@@ -86,19 +86,19 @@
   <!-- ===== BLURRED ELEMENTS ===== -->
   <section class="bl-si-section" id="sectionBlurred">
     <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
-      <span>Blurred Elements</span>
+      <span data-i18n="section_blurred_elements">Blurred on this page</span>
       <span class="bl-si-list-count" id="blurListCount">0</span>
     </div>
     <div class="bl-si-blur-list-wrapper">
       <ul class="bl-si-blur-list" id="blurList"></ul>
-      <p class="bl-si-blur-empty" id="blurEmpty">No blurred elements on this page.</p>
+      <p class="bl-si-blur-empty" id="blurEmpty" data-i18n="blur_empty">Nothing is blurred on this page yet.</p>
     </div>
   </section>
 
   <!-- ===== KEYBOARD SHORTCUTS (always visible) ===== -->
   <section class="bl-si-section" id="sectionShortcuts">
     <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
-      <span>Keyboard Shortcuts</span>
+      <span data-i18n="section_shortcuts_title">Keyboard Shortcuts</span>
     </div>
     <div class="bl-si-section__body is-open" id="bodyShortcuts">
       <!-- Populated by Renderer.renderSection() -->
@@ -108,7 +108,7 @@
   <!-- ===== SETTINGS (collapsible, collapsed by default) ===== -->
   <section class="bl-si-section" id="sectionSettings">
     <button class="bl-si-section__header bl-si-frost" id="settingsToggle" aria-expanded="false" aria-controls="bodySettings">
-      <span>Settings</span>
+      <span data-i18n="section_settings_title">Settings</span>
       <svg class="bl-si-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <div class="bl-si-section__body" id="bodySettings">
@@ -119,14 +119,14 @@
   <!-- ===== URL RULES ===== -->
   <section class="bl-si-section" id="sectionRules">
     <button class="bl-si-section__header bl-si-frost" id="rulesToggle" aria-expanded="false" aria-controls="bodyRules">
-      <span>URL Rules</span>
+      <span data-i18n="section_rules_title">Site Rules</span>
       <svg class="bl-si-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <div class="bl-si-section__body" id="bodyRules">
       <p class="bl-si-rules-hint" style="font-size:10px;color:var(--bl-si-text-dim);margin-bottom:6px" data-i18n="rule_hint">Per-URL settings overrides. First matching rule wins.</p>
       <ul class="bl-si-rules-list" id="rulesList"></ul>
       <p class="bl-si-rules-empty" id="rulesEmpty" data-i18n="rule_no_rules">No URL rules configured.</p>
-      <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add">+ Add Rule</button>
+      <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add" data-i18n-title="tt_add_rule" title="Create a site-specific rule">+ Add Site Rule</button>
     </div>
   </section>
 
@@ -143,9 +143,9 @@
         <div class="bl-si-capture__warning" id="captureWarning" hidden></div>
       </div>
       <div class="bl-si-modal__footer">
-        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalCancel">Cancel</button>
-        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalReset" data-i18n="shortcut_reset">Reset default</button>
-        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="scModalSave" disabled>Save</button>
+        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalCancel" data-i18n="modal_cancel">Cancel</button>
+        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalReset" data-i18n="shortcut_reset">Reset to default</button>
+        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="scModalSave" data-i18n="modal_save" disabled>Save</button>
       </div>
     </div>
   </div>
@@ -153,14 +153,14 @@
   <!-- ===== HELP OVERLAY MODAL ===== -->
   <div class="bl-si-modal-overlay" id="helpOverlayModal" hidden>
     <div class="bl-si-modal bl-si-frost">
-      <div class="bl-si-modal__header">Keyboard shortcuts</div>
+      <div class="bl-si-modal__header" data-i18n="help_overlay_title">Keyboard shortcuts</div>
       <div class="bl-si-modal__body">
         <ul class="bl-si-help-list" id="helpOverlayList">
           <!-- Populated from blsi.Actions.list() at open time -->
         </ul>
       </div>
       <div class="bl-si-modal__footer">
-        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="helpOverlayClose">Close</button>
+        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="helpOverlayClose" data-i18n="modal_close">Close</button>
       </div>
     </div>
   </div>
@@ -172,17 +172,17 @@
       <div class="bl-si-modal__body">
         <div style="margin-bottom:8px">
           <label class="bl-si-setting__label" for="ruleName" data-i18n="rule_name" style="margin-bottom:4px">Name</label>
-          <input type="text" class="bl-si-input" id="ruleName" placeholder="e.g. Banking sites" />
+          <input type="text" class="bl-si-input" id="ruleName" data-i18n-placeholder="rule_name_placeholder" placeholder="e.g. Banking sites" />
         </div>
         <div style="margin-bottom:8px">
           <label class="bl-si-setting__label" for="rulePattern" data-i18n="rule_pattern" style="margin-bottom:4px">URL Pattern</label>
-          <input type="text" class="bl-si-input" id="rulePattern" placeholder="*.bank.com/*" />
+          <input type="text" class="bl-si-input" id="rulePattern" data-i18n-placeholder="rule_pattern_placeholder" placeholder="*.bank.com/*" />
         </div>
         <div class="bl-si-setting" style="margin-top:8px">
           <label class="bl-si-setting__label" for="rulePatternType" data-i18n="rule_pattern_type">Pattern type</label>
           <select class="bl-si-select" id="rulePatternType">
-            <option value="wildcard">Wildcard</option>
-            <option value="regex">Regex</option>
+            <option value="wildcard" data-i18n="rule_pattern_wildcard">Simple (wildcards)</option>
+            <option value="regex" data-i18n="rule_pattern_regex">Advanced (regex)</option>
           </select>
         </div>
         <hr style="border:none;border-top:1px solid var(--bl-si-border);margin:8px 0" />
@@ -192,22 +192,22 @@
         </div>
       </div>
       <div class="bl-si-modal__footer">
-        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="ruleModalCancel">Cancel</button>
-        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="ruleModalSave">Save</button>
+        <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="ruleModalCancel" data-i18n="modal_cancel">Cancel</button>
+        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="ruleModalSave" data-i18n="modal_save">Save</button>
       </div>
     </div>
   </div>
 
   <!-- ===== FOOTER ===== -->
   <footer class="bl-si-footer bl-si-frost">
-    <button class="bl-si-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all">Clear all sites</button>
-    <button class="bl-si-footer__help" id="helpOverlayBtn" title="Keyboard shortcuts help" aria-label="Show keyboard shortcuts">
+    <button class="bl-si-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all" data-i18n-title="tt_clear_all_sites" title="Remove every blur on every site you've used">Clear every site</button>
+    <button class="bl-si-footer__help" id="helpOverlayBtn" data-i18n-title="tt_help" data-i18n-aria-label="tt_help" title="Show all keyboard shortcuts" aria-label="Show keyboard shortcuts">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="5" width="20" height="14" rx="2" />
         <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 13h10M6 17h.01M18 17h.01" />
       </svg>
     </button>
-    <button class="bl-si-footer__debug" id="debugToggle" data-active="false" title="Toggle flow logs" aria-label="Toggle flow logs" aria-pressed="false">
+    <button class="bl-si-footer__debug" id="debugToggle" data-active="false" data-i18n-title="tt_debug" data-i18n-aria-label="tt_debug" title="Show activity logs (for troubleshooting)" aria-label="Toggle flow logs" aria-pressed="false">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M8 2v4M16 2v4M3 10h18M5 6h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>
         <path d="M9 14l2 2 4-4"/>

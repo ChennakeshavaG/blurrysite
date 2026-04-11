@@ -113,6 +113,7 @@ describe('BlurrySite constants', () => {
       expect(PB.DEFAULT_SETTINGS.REVEAL_MODE).toBe('hover');
       expect(PB.DEFAULT_SETTINGS.ENABLED).toBe(true);
       expect(PB.DEFAULT_SETTINGS.THOROUGH_BLUR).toBe(false);
+      expect(PB.DEFAULT_SETTINGS.LANGUAGE).toBe('auto');
     });
 
     test('is frozen (immutable)', () => {
@@ -248,6 +249,28 @@ describe('BlurrySite constants', () => {
       expect(PB.validateSettings({ REVEAL_MODE: 42 }).REVEAL_MODE).toBe('hover');
     });
 
+    test('LANGUAGE accepts auto, en, hi_IN, ta_IN', () => {
+      expect(PB.validateSettings({ LANGUAGE: 'auto' }).LANGUAGE).toBe('auto');
+      expect(PB.validateSettings({ LANGUAGE: 'en' }).LANGUAGE).toBe('en');
+      expect(PB.validateSettings({ LANGUAGE: 'hi_IN' }).LANGUAGE).toBe('hi_IN');
+      expect(PB.validateSettings({ LANGUAGE: 'ta_IN' }).LANGUAGE).toBe('ta_IN');
+    });
+
+    test('LANGUAGE rejects unsupported codes and falls back to auto', () => {
+      expect(PB.validateSettings({ LANGUAGE: 'fr' }).LANGUAGE).toBe('auto');
+      expect(PB.validateSettings({ LANGUAGE: 'hi' }).LANGUAGE).toBe('auto'); // bare 'hi' is no longer supported, must be hi_IN
+      expect(PB.validateSettings({ LANGUAGE: 'hi-IN' }).LANGUAGE).toBe('auto'); // hyphen form rejected
+      expect(PB.validateSettings({ LANGUAGE: '' }).LANGUAGE).toBe('auto');
+      expect(PB.validateSettings({ LANGUAGE: null }).LANGUAGE).toBe('auto');
+      expect(PB.validateSettings({ LANGUAGE: 42 }).LANGUAGE).toBe('auto');
+    });
+
+    test('SUPPORTED_LANGUAGES is exposed and frozen', () => {
+      expect(Array.isArray(PB.SUPPORTED_LANGUAGES)).toBe(true);
+      expect(PB.SUPPORTED_LANGUAGES).toEqual(['auto', 'en', 'hi_IN', 'ta_IN']);
+      expect(Object.isFrozen(PB.SUPPORTED_LANGUAGES)).toBe(true);
+    });
+
     test('replaces invalid HIGHLIGHT_COLOR with default', () => {
       expect(PB.validateSettings({ HIGHLIGHT_COLOR: 'red' }).HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(PB.validateSettings({ HIGHLIGHT_COLOR: '#fff' }).HIGHLIGHT_COLOR).toBe('#f59e0b');
@@ -315,6 +338,7 @@ describe('BlurrySite constants', () => {
       expect(result.TRANSITION_DURATION).toBe(200);
       expect(result.HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(result.REVEAL_MODE).toBe('hover');
+      expect(result.LANGUAGE).toBe('auto');
       expect(result.ENABLED).toBe(true);
       expect(result.THOROUGH_BLUR).toBe(false);
       expect(Object.keys(result.BLUR_CATEGORIES)).toHaveLength(5);

@@ -33,19 +33,58 @@ const I18n = (() => {
   }
 
   /**
-   * Initialize the i18n system. Loads English as fallback,
-   * then attempts to load the browser's preferred language.
+   * Initialize the i18n system. Loads English as fallback, then loads the
+   * requested language as the primary string source.
+   *
+   * @param {string} [requestedLang] — 'auto' | 'en' | 'hi' (or undefined → 'auto')
+   *   'auto' resolves via navigator.language, clamped to the supported set.
+   *   May be called repeatedly — each call replaces _strings in place so the
+   *   popup's "switch language live" path can re-init without re-loading the
+   *   English fallback.
    */
-  async function init() {
-    _fallback = await _loadJSON('en');
+  async function init(requestedLang) {
+    // Load English fallback exactly once. Subsequent re-inits keep the cache.
     if (Object.keys(_fallback).length === 0) {
-      console.warn('[BlurrySite i18n] Failed to load English fallback — UI will show raw keys');
+      _fallback = await _loadJSON('en');
+      if (Object.keys(_fallback).length === 0) {
+        console.warn('[BlurrySite i18n] Failed to load English fallback — UI will show raw keys');
+      }
     }
 
-    const lang = (navigator.language || 'en').split('-')[0].toLowerCase();
-    if (lang !== 'en') {
-      _strings = await _loadJSON(lang);
+    const supported = (blsi && blsi.SUPPORTED_LANGUAGES) || ['auto', 'en'];
+    let lang = requestedLang || 'auto';
+    if (!supported.includes(lang)) lang = 'auto';
+    if (lang === 'auto') {
+      lang = _resolveAuto(supported);
     }
+
+    _strings = (lang === 'en') ? {} : await _loadJSON(lang);
+  }
+
+  /**
+   * Map navigator.language (BCP47, e.g. 'hi-IN', 'ta-IN-Latn', 'en') to a
+   * supported locale code (Chrome convention: 'hi_IN', 'ta_IN', 'en').
+   * Tries the full region match first, then falls back to the language alone,
+   * then to English.
+   */
+  function _resolveAuto(supported) {
+    const raw = (navigator.language || 'en');
+    const parts = raw.split('-');
+    const lang = parts[0].toLowerCase();
+    const region = parts[1] ? parts[1].toUpperCase() : '';
+
+    // Try language_REGION first (e.g. hi_IN)
+    if (region) {
+      const full = lang + '_' + region;
+      if (supported.includes(full)) return full;
+    }
+    // Try bare language code (e.g. 'en')
+    if (supported.includes(lang)) return lang;
+    // Try the first supported locale that starts with this language code
+    for (const code of supported) {
+      if (code.toLowerCase().startsWith(lang + '_')) return code;
+    }
+    return 'en';
   }
 
   /**

@@ -113,6 +113,14 @@ const Constants = (() => {
     REGEX:    'regex',
   });
 
+  // Display languages supported by the popup i18n loader. Codes follow Chrome's
+  // _locales convention: language code, optional `_REGION`. 'auto' follows the
+  // browser via navigator.language (with `-` → `_` normalization).
+  // Adding a new locale: append the code here, create `_locales/<code>/popup.json`
+  // and `_locales/<code>/messages.json`, and add a `lang_<code>` key to every
+  // existing popup.json so the picker label is translated everywhere.
+  const SUPPORTED_LANGUAGES = Object.freeze(['auto', 'en', 'hi_IN', 'ta_IN']);
+
   // ── CSS class and ID constants ─────────────────────────────────────────────
   // Shared across blur_engine, content_script, picker, shortcut_handler.
   // Must match the class names in styles/content.css exactly.
@@ -154,6 +162,7 @@ const Constants = (() => {
     THOROUGH_BLUR:        false,
     BLUR_MODE:            BLUR_MODES.GAUSSIAN,
     PICKER_MODE:          PICKER_MODES.STICKY_PAGE,
+    LANGUAGE:             'auto',
 
     // SHORTCUTS intentionally omitted here — built lazily by buildDefaultSettings()
     // from blsi.Actions.defaultBindings() (loaded by src/action_registry.js, which
@@ -272,6 +281,9 @@ const Constants = (() => {
     result.PICKER_MODE = (Object.values(PICKER_MODES).includes(legacyPicker))
       ? legacyPicker : defaults.PICKER_MODE;
 
+    result.LANGUAGE = (typeof settings.LANGUAGE === 'string' && SUPPORTED_LANGUAGES.includes(settings.LANGUAGE))
+      ? settings.LANGUAGE : defaults.LANGUAGE;
+
     // BLUR_CATEGORIES: each key must be boolean
     result.BLUR_CATEGORIES = {};
     const cats = (settings.BLUR_CATEGORIES && typeof settings.BLUR_CATEGORIES === 'object')
@@ -351,6 +363,7 @@ const Constants = (() => {
     BLUR_MODES,
     PICKER_MODES,
     PATTERN_TYPES,
+    SUPPORTED_LANGUAGES,
     CSS,
     IDS,
     DEFAULT_SETTINGS,

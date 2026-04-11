@@ -136,6 +136,10 @@
   // storage and updates every view.
 
   let _pendingWrite = null;
+  // Tracks the LANGUAGE we last initialized I18n with, so handleStorageChange
+  // can detect cross-context language switches and trigger applyLanguage()
+  // instead of just calling renderAll() (which won't rebuild option labels).
+  let _lastKnownLanguage = null;
   let _writeTimer = null;
 
   async function _flushPendingWrite() {
@@ -148,7 +152,7 @@
       await Store.saveSettings(toWrite);
     } catch (err) {
       console.error('[BlurrySite popup] saveSettings:', err);
-      showToast('Failed to save settings');
+      showToast(I18n.t('toast_failed_save_settings'));
     }
   }
 
@@ -184,9 +188,38 @@
       document.documentElement.style.setProperty('--bl-si-bg-blur-radius', value + 'px');
     }
 
+    // Language change: persist immediately, then re-init i18n and rebuild
+    // every translated surface. queueMicrotask defers the rebuild past the
+    // current change event so the live <select> isn't destroyed mid-dispatch.
+    if (key === 'LANGUAGE') {
+      patchSettings(key, value, true).then(() => queueMicrotask(applyLanguage));
+      return;
+    }
+
     // Debounce sliders/colors, immediate for toggles/selects.
     const isSliderOrColor = key === 'BLUR_RADIUS' || key === 'HIGHLIGHT_COLOR';
     patchSettings(key, value, !isSliderOrColor);
+  }
+
+  // ── Language switch — re-init i18n + rebuild every translated surface ────
+  //
+  // Renderer.updateAll only syncs values, not labels — so a language change
+  // requires destroying the renderer registry and re-running renderSection
+  // for both panels. After that, renderAll() refills the values from storage.
+  // _lastKnownLanguage is also updated so handleStorageChange's reconciler
+  // can detect cross-context language changes (popup re-opened with a new
+  // LANGUAGE applied from another tab).
+  async function applyLanguage() {
+    const fresh = await Store.getSettings();
+    _lastKnownLanguage = fresh.LANGUAGE;
+    await I18n.init(fresh.LANGUAGE);
+    applyI18nToDOM();
+    Renderer.destroy();
+    ui.bodyShortcuts.textContent = '';
+    ui.bodySettings.textContent = '';
+    Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, fresh, onSettingChanged);
+    Renderer.renderSection(ui.bodySettings,  Configs.SETTINGS,  fresh, onSettingChanged);
+    await renderAll();
   }
 
   // ── Render helpers — pure functions of the state they're given ───────────
@@ -220,7 +253,7 @@
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'bl-si-blur-item__name';
-      nameSpan.textContent = item.name || (item.type === 'dynamic' ? 'Dynamic' : 'Sticky');
+      nameSpan.textContent = item.name || I18n.t(item.type === 'dynamic' ? 'item_type_dynamic' : 'item_type_sticky');
 
       const detailSpan = document.createElement('span');
       detailSpan.className = 'bl-si-blur-item__selector';
@@ -235,7 +268,7 @@
       const btn = document.createElement('button');
       btn.className = 'bl-si-blur-item__remove';
       btn.textContent = '\u00d7';
-      btn.title = 'Remove blur';
+      btn.title = I18n.t('tt_remove_blur_item');
       btn.dataset.itemId = item.type === 'dynamic' ? item.selector : item.id;
       btn.dataset.itemType = item.type;
 
@@ -257,7 +290,7 @@
 
       const name = document.createElement('span');
       name.className = 'bl-si-rule-item__name';
-      name.textContent = rule.name || 'Untitled';
+      name.textContent = rule.name || I18n.t('rule_untitled');
 
       const pattern = document.createElement('span');
       pattern.className = 'bl-si-rule-item__pattern';
@@ -266,12 +299,14 @@
 
       const editBtn = document.createElement('button');
       editBtn.className = 'bl-si-rule-item__btn';
-      editBtn.textContent = 'edit';
+      editBtn.textContent = I18n.t('rule_edit_btn');
+      editBtn.title = I18n.t('tt_rule_edit');
       editBtn.addEventListener('click', () => openRuleModal(rule));
 
       const delBtn = document.createElement('button');
       delBtn.className = 'bl-si-rule-item__btn bl-si-rule-item__btn--delete';
-      delBtn.textContent = 'del';
+      delBtn.textContent = I18n.t('rule_delete_btn');
+      delBtn.title = I18n.t('tt_rule_delete');
       delBtn.addEventListener('click', async () => {
         try {
           const fresh = await Store.getRules();
@@ -281,7 +316,7 @@
           showToast(I18n.t('rule_deleted'));
         } catch (err) {
           console.error('[BlurrySite popup] saveRules:', err);
-          showToast('Failed to delete rule');
+          showToast(I18n.t('toast_failed_delete_rule'));
         }
       });
 
@@ -333,6 +368,18 @@
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.dataset.i18n;
       if (key) el.textContent = I18n.t(key);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+      const key = el.dataset.i18nTitle;
+      if (key) el.setAttribute('title', I18n.t(key));
+    });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+      const key = el.dataset.i18nAriaLabel;
+      if (key) el.setAttribute('aria-label', I18n.t(key));
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      const key = el.dataset.i18nPlaceholder;
+      if (key) el.setAttribute('placeholder', I18n.t(key));
     });
   }
 
@@ -388,7 +435,7 @@
         await renderAll();
       } catch (err) {
         console.error('[BlurrySite popup] saveBlurState:', err);
-        showToast('Failed to toggle blur');
+        showToast(I18n.t('toast_failed_toggle_blur'));
       }
       ui.blurAllBtn.disabled = false;
       showToast(I18n.t('toast_blur_all'));
@@ -404,7 +451,7 @@
         await renderAll();
       } catch (err) {
         console.error('[BlurrySite popup] clear host:', err);
-        showToast('Failed to clear blur items');
+        showToast(I18n.t('toast_failed_clear_host'));
         ui.clearAllBtn.disabled = false;
         return;
       }
@@ -442,7 +489,7 @@
         showToast(I18n.t('toast_blur_removed'));
       } catch (err) {
         console.error('[BlurrySite popup] removeBlurItem:', err);
-        showToast('Failed to remove blur item');
+        showToast(I18n.t('toast_failed_remove_item'));
       }
     });
 
@@ -455,7 +502,7 @@
         showToast(I18n.t('toast_all_sites_cleared'));
       } catch (err) {
         console.error('[BlurrySite popup] clearAll:', err);
-        showToast('Failed to clear all sites');
+        showToast(I18n.t('toast_failed_clear_all'));
       }
     });
 
@@ -467,7 +514,7 @@
       if (next) Logger.enable(); else Logger.disable();
       ui.debugToggle.dataset.active = String(next);
       ui.debugToggle.setAttribute('aria-pressed', String(next));
-      showToast(next ? 'Flow logs ON' : 'Flow logs OFF');
+      showToast(I18n.t(next ? 'toast_flow_logs_on' : 'toast_flow_logs_off'));
     });
 
     // Help overlay: list every action + its current binding.
@@ -554,7 +601,22 @@
   // via cache comparison) triggers a full reconcile. Matches how
   // content_script's handleStorageChange collapses blurred_items and
   // blur_all_hosts changes to Engine.blurAll().
-  function handleStorageChange(_key, _newValue, _oldValue) {
+  //
+  // Special case: a 'settings' change that flips LANGUAGE needs more than
+  // renderAll() — it must re-init i18n and rebuild renderer DOM (option
+  // labels are baked at renderSection time, not at updateAll time). Detect
+  // by reading settings and comparing to _lastKnownLanguage.
+  function handleStorageChange(key, _newValue, _oldValue) {
+    if (key === 'settings') {
+      Store.getSettings().then((s) => {
+        if (s.LANGUAGE !== _lastKnownLanguage) {
+          applyLanguage();
+        } else {
+          renderAll();
+        }
+      });
+      return;
+    }
     renderAll();
   }
 
@@ -586,7 +648,7 @@
     } catch (_) {}
 
     const title = (blsi.Actions && blsi.Actions.get(actionId))
-      ? 'Customize: ' + blsi.Actions.get(actionId).label
+      ? I18n.t('shortcut_modal_title') + ': ' + blsi.Actions.get(actionId).label
       : I18n.t('shortcut_modal_title');
     if (ui.scModalTitle) ui.scModalTitle.textContent = title;
 
@@ -689,14 +751,14 @@
 
       // Non-modifier keydown: commit the chord (requires at least one modifier).
       if (mods.length === 0) {
-        ui.captureDisplay.textContent = I18n.t('shortcut_modal_no_modifier') || 'Hold a modifier first';
+        ui.captureDisplay.textContent = I18n.t('shortcut_modal_no_modifier');
         return;
       }
 
       // Ctrl+Alt without another modifier collides with AltGr — reject.
       const modSet = new Set(mods);
       if (modSet.has('Control') && modSet.has('Alt') && !modSet.has('Shift') && !modSet.has('Meta')) {
-        ui.captureDisplay.textContent = 'Ctrl+Alt combos break European keyboard layouts';
+        ui.captureDisplay.textContent = I18n.t('shortcut_modal_ctrl_alt');
         return;
       }
 
@@ -865,7 +927,7 @@
         await Store.saveRules(rules);
       } catch (err) {
         console.error('[BlurrySite popup] saveRules:', err);
-        showToast('Failed to save rule');
+        showToast(I18n.t('toast_failed_save_rule'));
         return;
       }
       await renderAll();
@@ -909,8 +971,16 @@
     // Theme
     await initTheme();
 
-    // i18n
-    await I18n.init();
+    // Storage cache + settings must load before I18n.init so we can honor
+    // the user's chosen LANGUAGE on first paint instead of flashing the
+    // browser default. The bootstrapSettings snapshot is reused below by
+    // Renderer.renderSection — no second Store.getSettings call.
+    try { await Store.initCache(); } catch (_e) {}
+    const bootstrapSettings = await Store.getSettings();
+    _lastKnownLanguage = bootstrapSettings.LANGUAGE;
+
+    // i18n — initialised with the persisted LANGUAGE preference.
+    await I18n.init(bootstrapSettings.LANGUAGE);
     applyI18nToDOM();
 
     // Version
@@ -926,13 +996,9 @@
     ui.hostname.textContent = currentHost || '--';
     ui.hostname.title = currentHost;
 
-    // Populate storage cache (single read of all tracked keys).
-    try { await Store.initCache(); } catch (_e) {}
-
     // One-time scaffolding: render the settings/shortcut section DOM once
-    // with a throwaway settings snapshot. Row values are filled in by
-    // renderAll() → Renderer.updateAll() on the next call.
-    const bootstrapSettings = await Store.getSettings();
+    // with the bootstrap settings (already fetched above for I18n.init).
+    // Row values are filled in by renderAll() → Renderer.updateAll() next.
     Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, bootstrapSettings, onSettingChanged);
     Renderer.renderSection(ui.bodySettings, Configs.SETTINGS, bootstrapSettings, onSettingChanged);
 
