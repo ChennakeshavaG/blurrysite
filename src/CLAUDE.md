@@ -37,16 +37,19 @@ Rules:
 ## Module Load Order (enforced by manifest.json)
 
 ```
-0. constants.js          → globalThis.blsi (message types + DEFAULTS)
-1. logger.js             → blsi.Logger (flow logger; toggle persisted at chrome.storage.local.blsi_debug; cross-context sync via storage.onChanged)
-2. url_matcher.js        → blsi.UrlMatcher
-3. selector_utils.js     → blsi.SelectorUtils
-4. storage_manager.js    → blsi.Storage
-5. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
-6. reveal_controller.js  → blsi.Reveal
-7. shortcut_handler.js   → blsi.Shortcuts
-8. picker.js             → blsi.Picker
-9. content_script.js     → (no global, binds all above)
+ 0. constants.js          → globalThis.blsi (message types + DEFAULTS)
+ 1. logger.js             → blsi.Logger (flow logger; toggle persisted at chrome.storage.local.blsi_debug; cross-context sync via storage.onChanged)
+ 2. action_registry.js    → blsi.Actions (single source of truth for shortcut-driven actions)
+ 3. shortcut_label.js     → blsi.ShortcutLabel (platform-aware label rendering + canonical chord keys)
+ 4. shortcut_reserved.js  → blsi.ShortcutReserved (minimal browser-reserved chord warning list)
+ 5. url_matcher.js        → blsi.UrlMatcher
+ 6. selector_utils.js     → blsi.SelectorUtils
+ 7. storage_manager.js    → blsi.Storage
+ 8. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
+ 9. reveal_controller.js  → blsi.Reveal
+10. shortcut_handler.js   → blsi.Shortcuts
+11. picker.js             → blsi.Picker
+12. content_script.js     → (no global, binds all above)
 ```
 
 A module may only depend on modules loaded before it.
@@ -117,16 +120,35 @@ A module may only depend on modules loaded before it.
 - `getRules()` / `saveRules(rules)` — URL rules CRUD. Rules are an array of `{ id, name, pattern, patternType, settings }`.
 - `saveBlurItem` must `return send(...)` (not `await send(...)` without return) so callers get the response.
 
+### action_registry.js
+- Single source of truth for every shortcut-driven action. `blsi.Actions`.
+- Each entry: `{ id, label, description, defaultBinding, messageType, chromeCommand }`.
+- Adding an action: one entry here + one handler in `content_script.shortcutActionMap` + (optional) one entry in `manifest.json > commands`. Nothing else.
+- `defaultBindings()` returns a mutable clone in the new settings shape (`{ ACTION_ID: { binding: [{code, mods}] } }`). Consumed by `constants.buildDefaultSettings()`.
+- `ACTIONS` is frozen. Do not mutate the registry at runtime.
+
+### shortcut_label.js
+- Platform-aware chord label rendering. `blsi.ShortcutLabel`.
+- `IS_MAC` is computed once at module load from `navigator.platform`/`navigator.userAgent`.
+- Mac renders Unicode glyphs (`⌘⇧⌥⌃`) and concatenates without separators; Win/Linux spells out mods (`Ctrl`, `Shift`, `Alt`, `Win`) joined by `+`.
+- `chordKey(chord)` produces the canonical `"<sorted mods>|<code>"` string used for conflict detection. `bindingKey(binding)` joins chord keys with a space for sequence comparison.
+- `CODE_TO_LABEL` is the complete letter/digit/symbol/function/numpad map. Unknown codes fall back to the code string itself.
+
+### shortcut_reserved.js
+- Minimal (~12 entry) list of browser-reserved chords with per-platform filters (`any`, `mac`, `win`). `blsi.ShortcutReserved`.
+- `isReserved(chord)` / `lookup(chord)` match against the current platform only.
+- Not a deny list — capture UI shows a warning but always allows save.
+
 ### shortcut_handler.js
-- `init(shortcuts, callbacks)` accepts `{ ACTION_NAME: { primaryModifier, keys: [{ key, code }] } }`.
-- Tracks held keys via `Set<code>` on keydown/keyup. Window blur clears the Set.
-- Matches shortcuts by checking: is primaryModifier held? Are ALL keys in keys[] held simultaneously?
+- `init(shortcuts, callbacks)` accepts the v2 shape: `{ ACTION_ID: { binding: [{code, mods}] } }`. Multi-chord bindings (length > 1) are skipped in phase 1 with a logger warning.
+- Modifiers are read from `event.altKey/ctrlKey/metaKey/shiftKey` — side-agnostic. Do NOT reintroduce a held-keys Set.
 - Key matching uses `event.code` (physical key, layout-independent).
-- Early-exit guards: `event.repeat`, `event.isComposing`, `event.key === "Dead"`, `getModifierState("AltGraph")`.
-- Fires `callbacks[actionName]` for any matched shortcut (TOGGLE_BLUR_ALL, TOGGLE_PICKER, CLEAR_ALL).
-- Fires `callbacks.onExitPicker` on Escape when `_isPickerActive === true`.
-- Listeners registered at capture phase (`addEventListener("keydown"/"keyup", fn, true)`).
-- `_setPickerActive(v)` must be in the public return object.
+- Early-exit guards: `event.repeat`, `event.isComposing`, `event.key === 'Dead'`, `event.key === 'Process'`, `event.key === 'Unidentified'`, `getModifierState('AltGraph')`, and pure-modifier keydowns (via `blsi.MODIFIER_CODES`).
+- Fires `callbacks[actionId]` for any matched shortcut. Uses `blsi.Actions.get(actionId).label` for the toast text.
+- Fires `callbacks.onExitPicker` on Escape when `_isPickerActive === true`. Escape never dispatches to a bound shortcut.
+- Stamps `globalThis.__blsiShortcutFire[actionId]` with a monotonic timestamp on every match. `content_script.handleMessage` uses this as a fire-token to dedup the JS path against `chrome.commands` relays (500ms window).
+- Listeners registered at capture phase (`addEventListener('keydown', fn, true)`).
+- `_setPickerActive(v)` and `_getFireToken()` must be in the public return object.
 
 ### picker.js
 - Toolbar: `toolbarEl.id = "bl-si-picker-toolbar"` (tests use `getElementById`).

@@ -126,6 +126,10 @@
   };
 
   // ─── Keyboard shortcut action map ────────────────────────────────────────────
+  // Each entry is keyed by an action id from blsi.Actions. The shortcut handler
+  // fires the function for the matching action, and this dispatch table re-enters
+  // handleMessage so every trigger (JS shortcut, manifest command, popup relay)
+  // converges on the same message-handling code path.
 
   const shortcutActionMap = {
     TOGGLE_BLUR_ALL() {
@@ -150,25 +154,50 @@
 
   // ─── Message handler ──────────────────────────────────────────────────────────
 
-  // Debounce guard for toggle commands. Manifest commands (Alt+Shift+B) and JS
-  // shortcut handler both fire TOGGLE_BLUR_ALL for the same keypress — the JS
-  // handler fires synchronously, then background relays the manifest command
-  // asynchronously. Without dedup, the toggle fires twice (ON then OFF = no-op).
-  const lastToggleTime = {};
-  const TOGGLE_DEDUP_MS = 300;
+  // Dedup trigger messages against the JS shortcut matcher.
+  //
+  // Alt+Shift+B (or whatever chord is bound) can fire from TWO sources for the
+  // same keypress: (1) the JS matcher in shortcut_handler.js, synchronously,
+  // (2) the chrome.commands relay from background.js, asynchronously via a
+  // cross-process message round trip. The old implementation used a 300ms
+  // time window, which was fragile on slow relays and on actions the user
+  // legitimately fired twice within 300ms.
+  //
+  // v2 approach: the JS matcher stamps globalThis.__blsiShortcutFire[actionId]
+  // with performance.now() on every match. When a trigger message arrives,
+  // we check whether the corresponding fire token is recent (< 500ms). If so,
+  // the message is a relay of a chord the JS matcher already handled — drop it.
+  // Otherwise it's a legitimate independent trigger (popup button, shortcut
+  // the user set via chrome://extensions/shortcuts that's different from the
+  // JS binding, context-menu, etc.) — handle it.
+  //
+  // The mapping from messageType back to actionId comes from the action registry.
+  const RELAY_DEDUP_MS = 500;
+  const MESSAGE_TO_ACTION_ID = (() => {
+    const out = {};
+    if (blsi.Actions && blsi.Actions.list) {
+      for (const a of blsi.Actions.list()) out[a.messageType] = a.id;
+    }
+    return out;
+  })();
 
   function handleMessage(message, _sender, sendResponse) {
     const { type } = message;
     log.flow('msg.in', { type });
 
-    // Dedup toggle commands that fire from both manifest and JS handler
-    if (type === MSG.TOGGLE_BLUR_ALL || type === MSG.TOGGLE_PICKER || type === MSG.CLEAR_ALL_BLUR) {
-      const now = Date.now();
-      if (lastToggleTime[type] && now - lastToggleTime[type] < TOGGLE_DEDUP_MS) {
-        if (sendResponse) sendResponse({ ok: true, deduped: true });
-        return false;
+    // Monotonic fire-token dedup for trigger messages.
+    const actionId = MESSAGE_TO_ACTION_ID[type];
+    if (actionId) {
+      const fireTokens = globalThis.__blsiShortcutFire || {};
+      const last = fireTokens[actionId];
+      if (typeof last === 'number') {
+        const nowTs = (typeof performance !== 'undefined' && performance.now)
+          ? performance.now() : Date.now();
+        if (nowTs - last < RELAY_DEDUP_MS) {
+          if (sendResponse) sendResponse({ ok: true, deduped: true });
+          return false;
+        }
       }
-      lastToggleTime[type] = now;
     }
 
     if (settings.ENABLED === false && type !== MSG.GET_STATUS) {

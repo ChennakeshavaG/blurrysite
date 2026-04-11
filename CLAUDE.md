@@ -23,18 +23,21 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `deepMerge()` |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; everything else gated. `scope(name)` returns a tagged variant `{log, warn, error, flow, get enabled}`. |
+| `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
+| `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. |
+| `src/shortcut_reserved.js` | `blsi.ShortcutReserved` | Minimal reserved-chord warning list (~12 entries). `isReserved(chord)`, `lookup(chord)`, `RESERVED`. Warning only — capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `blsi.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
 | `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectBlurRules`, `removeBlurRules`, `isBlurAllActive`, `blurTextCheckElements`, `tryBlurTextCheck`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS`. High-level: `applyItem`, `removeItem`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `enableBlurAll`, `disableBlurAll`, `refreshBlurAll`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
-| `src/shortcut_handler.js` | `blsi.Shortcuts` | `init`, `destroy`, `showToast`, `_setPickerActive` |
+| `src/shortcut_handler.js` | `blsi.Shortcuts` | `init(shortcuts, callbacks)` — accepts the new `{ ACTION_ID: { binding: [{code, mods}] } }` shape. `destroy`, `showToast`, `_setPickerActive`, `_getFireToken` (for content_script dedup). Reads mods from event booleans (side-agnostic). Reads label from `blsi.Actions.get(id).label` for toast. |
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — constants → logger → url_matcher → selector_utils → storage_manager → blur_engine → reveal_controller → shortcut_handler → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — constants → logger → action_registry → shortcut_label → shortcut_reserved → url_matcher → selector_utils → storage_manager → blur_engine → reveal_controller → shortcut_handler → picker → content_script. Never reorder.
 
 ---
 
@@ -81,23 +84,20 @@ Any mismatch between sender message type and background.js handler silently drop
 
 Settings use UPPER_SNAKE_CASE keys everywhere. There is no two-shape duality — the same shape is used in storage, background, content script, and popup.
 
-**`settings.SHORTCUTS`** — per-command shortcut definitions:
+**`settings.SHORTCUTS`** — per-action shortcut definitions (v2 shape):
 ```js
 settings.SHORTCUTS = {
-  TOGGLE_BLUR_ALL: {
-    primaryModifier: 'AltLeft',
-    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'b', code: 'KeyB' }]
-  },
-  TOGGLE_PICKER: {
-    primaryModifier: 'AltLeft',
-    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'p', code: 'KeyP' }]
-  },
-  CLEAR_ALL_BLUR: {
-    primaryModifier: 'AltLeft',
-    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'u', code: 'KeyU' }]
-  }
+  TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyB', mods: ['Alt', 'Shift'] }] },
+  TOGGLE_PICKER:   { binding: [{ code: 'KeyP', mods: ['Alt', 'Shift'] }] },
+  CLEAR_ALL:       { binding: [{ code: 'KeyU', mods: ['Alt', 'Shift'] }] },
 }
 ```
+
+- Keys are action ids from `blsi.Actions` (not message-type strings).
+- `binding` is an array of chords. Phase 1 always has `length === 1`; phase 2 will add multi-chord sequences like `[{code: 'KeyG'}, {code: 'KeyI'}]` for Gmail-style `g i`.
+- `code` is `KeyboardEvent.code` (physical key, layout-independent).
+- `mods` is a sorted subset of `{"Alt","Control","Meta","Shift"}`. Left/right is folded away — `AltLeft` and `AltRight` both map to `"Alt"`.
+- `DEFAULT_SETTINGS.SHORTCUTS` is NOT in `constants.js` — defaults come from `blsi.Actions.defaultBindings()` and are merged in by `buildDefaultSettings()`.
 
 `content_script.js` passes `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
 

@@ -16,10 +16,21 @@
 global.window = global;
 
 // ─── Load message type constants ─────────────────────────────────────────────
-// constants.js assigns to globalThis.pb — must be loaded before any
+// constants.js assigns to globalThis.blsi — must be loaded before any
 // source module that references blsi.*.
 // Using require() so Jest's Istanbul transform instruments it for coverage.
 require('../src/constants.js');
+
+// ─── Load action registry ────────────────────────────────────────────────────
+// action_registry.js is the single source of truth for shortcut-driven
+// actions. constants.js buildDefaultSettings() and validateSettings() read
+// it lazily; loading it here ensures every test has access to the registry
+// via blsi.Actions.
+require('../src/action_registry.js');
+
+// ─── Load shortcut label + reserved helpers ──────────────────────────────────
+require('../src/shortcut_label.js');
+require('../src/shortcut_reserved.js');
 
 // ─── Chrome Extension API mock ────────────────────────────────────────────────
 

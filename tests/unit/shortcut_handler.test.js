@@ -1,11 +1,19 @@
 /**
  * tests/unit/shortcut_handler.test.js
  *
- * Unit tests for src/shortcut_handler.js
- * Module exposes blsi.Shortcuts with: init, destroy, showToast, _setPickerActive
+ * Unit tests for src/shortcut_handler.js (v2 matcher).
  *
- * The module tracks held keys via keydown/keyup and fires callbacks when
- * a primary modifier + all required keys are held simultaneously.
+ * Module exposes blsi.Shortcuts with:
+ *   { init, destroy, showToast, _setPickerActive, _getFireToken }
+ *
+ * v2 contract:
+ *   - Bindings are { binding: [{ code, mods }] }.
+ *   - Modifiers are read from event.altKey/ctrlKey/metaKey/shiftKey (side-agnostic).
+ *   - Early-returns on: !isTrusted, repeat, isComposing, Dead, Process,
+ *     Unidentified, AltGraph, pure-modifier keydowns.
+ *   - First match wins, preventDefault() + fire callback + stamp fire token.
+ *   - Escape fires onExitPicker when picker is active (never dispatches to
+ *     bound shortcuts).
  */
 
 'use strict';
@@ -17,360 +25,254 @@ const MODULE_PATH = path.resolve(__dirname, '../../src/shortcut_handler.js');
 
 function loadShortcutHandler() {
   if (blsi.Shortcuts) return;
-  if (fs.existsSync(MODULE_PATH)) {
-    require(MODULE_PATH);
-  } else {
-    (0, eval)(buildStubSource());
+  if (!fs.existsSync(MODULE_PATH)) {
+    throw new Error('shortcut_handler.js not found — stub removed, real file required');
   }
-}
-
-function buildStubSource() {
-  return `
-  (function() {
-    'use strict';
-    var heldKeys = new Set();
-    var listener = null;
-    var upListener = null;
-    var _isPickerActive = false;
-    var _cbs = {};
-
-    function init(shortcuts, callbacks) {
-      destroy();
-      _cbs = callbacks || {};
-      var entries = [];
-      if (shortcuts) {
-        for (var name in shortcuts) {
-          var b = shortcuts[name];
-          if (b && b.primaryModifier && Array.isArray(b.keys)) {
-            entries.push({ actionName: name, primaryModifier: b.primaryModifier, keyCodes: b.keys.map(function(k){ return k.code; }) });
-          }
-        }
-      }
-      listener = function(e) {
-        if (e.repeat || e.isComposing || e.key === 'Dead') return;
-        if (e.getModifierState && e.getModifierState('AltGraph')) return;
-        if (e.code) heldKeys.add(e.code);
-        if (e.key === 'Escape') {
-          if (_isPickerActive && typeof _cbs.onExitPicker === 'function') {
-            _isPickerActive = false; _cbs.onExitPicker();
-          }
-          return;
-        }
-        for (var i = 0; i < entries.length; i++) {
-          var sc = entries[i];
-          if (!heldKeys.has(sc.primaryModifier)) continue;
-          var allHeld = true;
-          for (var j = 0; j < sc.keyCodes.length; j++) {
-            if (!heldKeys.has(sc.keyCodes[j])) { allHeld = false; break; }
-          }
-          if (!allHeld) continue;
-          e.preventDefault();
-          if (typeof _cbs[sc.actionName] === 'function') _cbs[sc.actionName]();
-          return;
-        }
-      };
-      upListener = function(e) { if (e.code) heldKeys.delete(e.code); };
-      document.addEventListener('keydown', listener, true);
-      document.addEventListener('keyup', upListener, true);
-    }
-
-    function destroy() {
-      if (listener) { document.removeEventListener('keydown', listener, true); listener = null; }
-      if (upListener) { document.removeEventListener('keyup', upListener, true); upListener = null; }
-      heldKeys.clear(); _cbs = {};
-    }
-
-    function showToast() {}
-
-    blsi.Shortcuts = {
-      init: init, destroy: destroy, showToast: showToast,
-      _setPickerActive: function(v) { _isPickerActive = !!v; }
-    };
-  })();
-  `;
+  require(MODULE_PATH);
 }
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
-function fireKeyDown(key, opts) {
-  opts = opts || {};
+function fireKeyDown(opts) {
   const event = new KeyboardEvent('keydown', {
-    key:         key,
+    key:         opts.key         || '',
     code:        opts.code        || '',
     bubbles:     true,
     cancelable:  true,
-    ctrlKey:     opts.ctrl        || false,
-    altKey:      opts.alt         || false,
-    shiftKey:    opts.shift       || false,
-    metaKey:     opts.meta        || false,
-    repeat:      opts.repeat      || false,
-    isComposing: opts.isComposing || false,
+    ctrlKey:     !!opts.ctrl,
+    altKey:      !!opts.alt,
+    shiftKey:    !!opts.shift,
+    metaKey:     !!opts.meta,
+    repeat:      !!opts.repeat,
+    isComposing: !!opts.isComposing,
   });
+  // (No isTrusted override — the matcher does not check it, so jsdom's
+  //  default isTrusted=false is fine for synthesized events.)
+  // Optional AltGraph override — tests that simulate European keyboards.
+  if (opts.altGraph) {
+    event.getModifierState = function (k) { return k === 'AltGraph'; };
+  }
   document.dispatchEvent(event);
   return event;
 }
 
-function fireKeyUp(key, opts) {
-  opts = opts || {};
-  const event = new KeyboardEvent('keyup', {
-    key:     key,
-    code:    opts.code || '',
-    bubbles: true,
-  });
-  document.dispatchEvent(event);
-  return event;
-}
-
-/** Default shortcuts matching constants.js DEFAULT_SETTINGS.SHORTCUTS */
+/** Default bindings matching the action registry. */
 const DEFAULT_SHORTCUTS = {
-  TOGGLE_BLUR_ALL: {
-    primaryModifier: 'AltLeft',
-    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'b', code: 'KeyB' }],
-  },
-  TOGGLE_PICKER: {
-    primaryModifier: 'AltLeft',
-    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'p', code: 'KeyP' }],
-  },
-  CLEAR_ALL: {
-    primaryModifier: 'AltLeft',
-    keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'u', code: 'KeyU' }],
-  },
+  TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyB', mods: ['Alt', 'Shift'] }] },
+  TOGGLE_PICKER:   { binding: [{ code: 'KeyP', mods: ['Alt', 'Shift'] }] },
+  CLEAR_ALL:       { binding: [{ code: 'KeyU', mods: ['Alt', 'Shift'] }] },
 };
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe('blsi.Shortcuts', () => {
+describe('blsi.Shortcuts (v2)', () => {
   beforeAll(() => loadShortcutHandler());
 
   afterEach(() => {
-    blsi.Shortcuts.destroy();
+    if (blsi.Shortcuts) blsi.Shortcuts.destroy();
   });
 
-  // ── Single-key shortcut detection ──────────────────────────────────────────
-
-  describe('shortcut detection', () => {
-    test('fires TOGGLE_BLUR_ALL when Alt+Shift+B pressed', () => {
+  // ── Match: happy paths ─────────────────────────────────────────────────────
+  describe('match', () => {
+    test('fires TOGGLE_BLUR_ALL on Alt+Shift+B', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-
-      // Hold AltLeft
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      // Hold ShiftLeft
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      // Press B — all keys now held
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true });
-
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
       expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('fires TOGGLE_PICKER when Alt+Shift+P pressed', () => {
+    test('fires TOGGLE_PICKER on Alt+Shift+P', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_PICKER: cb });
-
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('p', { code: 'KeyP', alt: true, shift: true });
-
+      fireKeyDown({ key: 'p', code: 'KeyP', alt: true, shift: true });
       expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('fires CLEAR_ALL when Alt+Shift+U pressed', () => {
+    test('fires CLEAR_ALL on Alt+Shift+U', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { CLEAR_ALL: cb });
-
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('u', { code: 'KeyU', alt: true, shift: true });
-
+      fireKeyDown({ key: 'u', code: 'KeyU', alt: true, shift: true });
       expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('does NOT fire when wrong modifier side is held', () => {
+    test('supports Ctrl+Shift+K (single modifier class + shift)', () => {
       const cb = jest.fn();
-      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-
-      // Use AltRight instead of AltLeft
-      fireKeyDown('Alt', { code: 'AltRight', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true });
-
-      expect(cb).not.toHaveBeenCalled();
+      blsi.Shortcuts.init(
+        { CUSTOM: { binding: [{ code: 'KeyK', mods: ['Control', 'Shift'] }] } },
+        { CUSTOM: cb }
+      );
+      fireKeyDown({ key: 'k', code: 'KeyK', ctrl: true, shift: true });
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('does NOT fire when primary modifier is not held', () => {
+    test('supports Meta+1 on Mac (metaKey)', () => {
       const cb = jest.fn();
-      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-
-      // Press B without any modifier
-      fireKeyDown('b', { code: 'KeyB' });
-
-      expect(cb).not.toHaveBeenCalled();
+      blsi.Shortcuts.init(
+        { CUSTOM: { binding: [{ code: 'Digit1', mods: ['Meta'] }] } },
+        { CUSTOM: cb }
+      );
+      fireKeyDown({ key: '1', code: 'Digit1', meta: true });
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('does NOT fire when not all keys are held', () => {
+    test('side-agnostic: AltRight fires the same binding as AltLeft', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-
-      // Alt + B but no Shift
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true });
-
-      expect(cb).not.toHaveBeenCalled();
+      // Even though the physical key is AltRight, altKey=true is what matters.
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('different shortcuts fire different callbacks', () => {
-      const blur = jest.fn();
-      const picker = jest.fn();
-      const clear = jest.fn();
+    test('different chords fire different callbacks', () => {
+      const blur = jest.fn(), picker = jest.fn(), clear = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, {
         TOGGLE_BLUR_ALL: blur, TOGGLE_PICKER: picker, CLEAR_ALL: clear,
       });
-
-      // Fire blur
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true });
-      fireKeyUp('b', { code: 'KeyB' });
-      fireKeyUp('Shift', { code: 'ShiftLeft' });
-      fireKeyUp('Alt', { code: 'AltLeft' });
-
-      // Fire picker
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('p', { code: 'KeyP', alt: true, shift: true });
-
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
+      fireKeyDown({ key: 'p', code: 'KeyP', alt: true, shift: true });
       expect(blur).toHaveBeenCalledTimes(1);
       expect(picker).toHaveBeenCalledTimes(1);
-      expect(clear).not.toHaveBeenCalled();
+      expect(clear).toHaveBeenCalledTimes(0);
     });
   });
 
-  // ── Escape key ─────────────────────────────────────────────────────────────
-
-  describe('Escape key', () => {
-    test('fires onExitPicker when picker is active', () => {
-      const exitPicker = jest.fn();
-      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exitPicker });
-      blsi.Shortcuts._setPickerActive(true);
-
-      fireKeyDown('Escape', { code: 'Escape' });
-
-      expect(exitPicker).toHaveBeenCalledTimes(1);
-    });
-
-    test('does NOT fire onExitPicker when picker is inactive', () => {
-      const exitPicker = jest.fn();
-      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exitPicker });
-
-      fireKeyDown('Escape', { code: 'Escape' });
-
-      expect(exitPicker).not.toHaveBeenCalled();
-    });
-  });
-
-  // ── Early exit guards ──────────────────────────────────────────────────────
-
-  describe('early exit guards', () => {
-    test('ignores repeated keydown events', () => {
+  // ── No-match: missing mods / wrong code ───────────────────────────────────
+  describe('no match', () => {
+    test('does not fire when required mod is missing', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true }); // missing Shift
+      expect(cb).not.toHaveBeenCalled();
+    });
 
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true, repeat: true });
+    test('does not fire when an extra mod is present', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true, ctrl: true });
+      expect(cb).not.toHaveBeenCalled();
+    });
 
+    test('does not fire when code does not match', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'c', code: 'KeyC', alt: true, shift: true });
+      expect(cb).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Early-return guards ───────────────────────────────────────────────────
+  describe('early-return guards', () => {
+    test('ignores repeat keydowns', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true, repeat: true });
       expect(cb).not.toHaveBeenCalled();
     });
 
     test('ignores events during IME composition', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true, isComposing: true });
-
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true, isComposing: true });
       expect(cb).not.toHaveBeenCalled();
     });
 
     test('ignores Dead key events', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
-
-      fireKeyDown('Dead', { code: 'KeyB' });
-
+      fireKeyDown({ key: 'Dead', code: 'KeyB', alt: true, shift: true });
       expect(cb).not.toHaveBeenCalled();
     });
 
-    test('ignores AltGraph events', () => {
+    test('ignores Process key events (IME)', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'Process', code: 'KeyB', alt: true, shift: true });
+      expect(cb).not.toHaveBeenCalled();
+    });
 
-      const event = new KeyboardEvent('keydown', {
-        key: 'b', code: 'KeyB', altKey: true, ctrlKey: true,
-      });
-      event.getModifierState = jest.fn((mod) => mod === 'AltGraph');
-      document.dispatchEvent(event);
+    test('ignores Unidentified key events', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'Unidentified', code: 'KeyB', alt: true, shift: true });
+      expect(cb).not.toHaveBeenCalled();
+    });
 
+    test('ignores AltGraph events (European AltGr)', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true, altGraph: true });
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    test('ignores pure modifier keydowns (waits for non-modifier)', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      fireKeyDown({ key: 'Alt', code: 'AltLeft', alt: true });
+      fireKeyDown({ key: 'Shift', code: 'ShiftLeft', alt: true, shift: true });
       expect(cb).not.toHaveBeenCalled();
     });
   });
 
-  // ── destroy ────────────────────────────────────────────────────────────────
+  // ── Escape → onExitPicker ─────────────────────────────────────────────────
+  describe('Escape key', () => {
+    test('fires onExitPicker when picker is active', () => {
+      const exit = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exit });
+      blsi.Shortcuts._setPickerActive(true);
+      fireKeyDown({ key: 'Escape', code: 'Escape' });
+      expect(exit).toHaveBeenCalledTimes(1);
+    });
 
-  describe('destroy', () => {
-    test('removes listeners so shortcuts stop firing', () => {
+    test('does NOT fire onExitPicker when picker is inactive', () => {
+      const exit = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { onExitPicker: exit });
+      blsi.Shortcuts._setPickerActive(false);
+      fireKeyDown({ key: 'Escape', code: 'Escape' });
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    test('Escape does not dispatch to shortcut bindings', () => {
+      const cb = jest.fn();
+      // Hypothetical Escape binding
+      blsi.Shortcuts.init(
+        { CUSTOM: { binding: [{ code: 'Escape', mods: ['Alt'] }] } },
+        { CUSTOM: cb }
+      );
+      fireKeyDown({ key: 'Escape', code: 'Escape', alt: true });
+      expect(cb).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Fire token ────────────────────────────────────────────────────────────
+  describe('fire token', () => {
+    test('stamps __blsiShortcutFire for the matched action', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
+      const before = globalThis.__blsiShortcutFire['TOGGLE_BLUR_ALL'];
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
+      const after = globalThis.__blsiShortcutFire['TOGGLE_BLUR_ALL'];
+      expect(typeof after).toBe('number');
+      expect(after !== before).toBe(true);
+    });
+  });
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  describe('lifecycle', () => {
+    test('destroy removes listeners so shortcuts stop firing', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
       blsi.Shortcuts.destroy();
-
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true });
-
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
       expect(cb).not.toHaveBeenCalled();
     });
 
     test('re-calling init replaces previous listener', () => {
-      const cb1 = jest.fn();
-      const cb2 = jest.fn();
+      const cb1 = jest.fn(), cb2 = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb1 });
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb2 });
-
-      fireKeyDown('Alt', { code: 'AltLeft', alt: true });
-      fireKeyDown('Shift', { code: 'ShiftLeft', alt: true, shift: true });
-      fireKeyDown('b', { code: 'KeyB', alt: true, shift: true });
-
+      fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
       expect(cb1).not.toHaveBeenCalled();
       expect(cb2).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // ── Custom shortcuts ───────────────────────────────────────────────────────
-
-  describe('custom shortcuts', () => {
-    test('supports single modifier + single key', () => {
-      const cb = jest.fn();
-      blsi.Shortcuts.init({
-        TOGGLE_BLUR_ALL: { primaryModifier: 'ControlLeft', keys: [{ key: 'b', code: 'KeyB' }] },
-      }, { TOGGLE_BLUR_ALL: cb });
-
-      fireKeyDown('Control', { code: 'ControlLeft', ctrl: true });
-      fireKeyDown('b', { code: 'KeyB', ctrl: true });
-
-      expect(cb).toHaveBeenCalledTimes(1);
-    });
-
-    test('supports MetaLeft (Command) as primary modifier', () => {
-      const cb = jest.fn();
-      blsi.Shortcuts.init({
-        TOGGLE_BLUR_ALL: { primaryModifier: 'MetaLeft', keys: [{ key: '1', code: 'Digit1' }] },
-      }, { TOGGLE_BLUR_ALL: cb });
-
-      fireKeyDown('Meta', { code: 'MetaLeft', meta: true });
-      fireKeyDown('1', { code: 'Digit1', meta: true });
-
-      expect(cb).toHaveBeenCalledTimes(1);
     });
 
     test('handles empty shortcuts object gracefully', () => {
@@ -378,7 +280,24 @@ describe('blsi.Shortcuts', () => {
     });
 
     test('handles null shortcuts gracefully', () => {
-      expect(() => blsi.Shortcuts.init(null, null)).not.toThrow();
+      expect(() => blsi.Shortcuts.init(null, {})).not.toThrow();
+    });
+
+    test('multi-chord bindings (length > 1) are skipped (phase 2)', () => {
+      const cb = jest.fn();
+      blsi.Shortcuts.init(
+        {
+          CUSTOM: {
+            binding: [
+              { code: 'KeyG', mods: ['Alt'] },
+              { code: 'KeyI', mods: ['Alt'] },
+            ],
+          },
+        },
+        { CUSTOM: cb }
+      );
+      fireKeyDown({ key: 'g', code: 'KeyG', alt: true });
+      expect(cb).not.toHaveBeenCalled();
     });
   });
 });

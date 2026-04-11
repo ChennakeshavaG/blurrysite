@@ -148,29 +148,11 @@ const Constants = (() => {
     BLUR_MODE:            BLUR_MODES.GAUSSIAN,
     PICKER_MODE:          PICKER_MODES.STICKY,
 
-    SHORTCUTS: Object.freeze({
-      TOGGLE_BLUR_ALL: Object.freeze({
-        primaryModifier: 'AltLeft',
-        keys: Object.freeze([
-          Object.freeze({ key: 'Shift', code: 'ShiftLeft' }),
-          Object.freeze({ key: 'b',     code: 'KeyB' }),
-        ]),
-      }),
-      TOGGLE_PICKER: Object.freeze({
-        primaryModifier: 'AltLeft',
-        keys: Object.freeze([
-          Object.freeze({ key: 'Shift', code: 'ShiftLeft' }),
-          Object.freeze({ key: 'p',     code: 'KeyP' }),
-        ]),
-      }),
-      CLEAR_ALL: Object.freeze({
-        primaryModifier: 'AltLeft',
-        keys: Object.freeze([
-          Object.freeze({ key: 'Shift', code: 'ShiftLeft' }),
-          Object.freeze({ key: 'u',     code: 'KeyU' }),
-        ]),
-      }),
-    }),
+    // SHORTCUTS intentionally omitted here — built lazily by buildDefaultSettings()
+    // from blsi.Actions.defaultBindings() (loaded by src/action_registry.js, which
+    // runs after this module). Keeping this out of the frozen DEFAULT_SETTINGS
+    // avoids the chicken-and-egg where constants.js would need the registry at
+    // module-load time.
 
     BLUR_CATEGORIES: Object.freeze({
       TEXT:      true,
@@ -211,10 +193,33 @@ const Constants = (() => {
     return result;
   }
 
+  // ── Modifier codes (used by shortcut_handler matcher + popup capture) ──────
+  // KeyboardEvent.code strings for every modifier. The matcher short-circuits
+  // when event.code is in this set (waits for a non-modifier key), and the
+  // capture UI uses it to distinguish "still holding modifiers" from "chord
+  // committed". Left/right distinction is preserved here because the browser
+  // reports separate codes for each side; we fold them away at normalization
+  // time in the matcher (via event.altKey / ctrlKey / metaKey / shiftKey).
+  const MODIFIER_CODES = Object.freeze(new Set([
+    'AltLeft', 'AltRight',
+    'ControlLeft', 'ControlRight',
+    'ShiftLeft', 'ShiftRight',
+    'MetaLeft', 'MetaRight',
+    'OSLeft', 'OSRight',  // older Chrome / Firefox alias for Meta
+    'CapsLock', 'Fn', 'FnLock',
+  ]));
+
   // ── Utility: build mutable settings clone ───────────────────────────────────
 
   function buildDefaultSettings() {
-    return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    const base = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    // SHORTCUTS defaults come from the action registry (loaded after this
+    // module). At the time buildDefaultSettings() is called, every module is
+    // loaded and blsi.Actions is available.
+    base.SHORTCUTS = (globalThis.blsi && globalThis.blsi.Actions)
+      ? globalThis.blsi.Actions.defaultBindings()
+      : {};
+    return base;
   }
 
   // ── Utility: validate and repair settings ──────────────────────────────────
@@ -266,25 +271,61 @@ const Constants = (() => {
         ? cats[key] : defaults.BLUR_CATEGORIES[key];
     }
 
-    // SHORTCUTS: each action must have primaryModifier (string) and keys (array)
+    // SHORTCUTS: new shape. Each entry is { binding: [{code, mods}, ...] }.
+    // Malformed entries fall back to the registry default.
     result.SHORTCUTS = {};
     const sc = (settings.SHORTCUTS && typeof settings.SHORTCUTS === 'object')
       ? settings.SHORTCUTS : {};
     for (const action of Object.keys(defaults.SHORTCUTS)) {
-      const binding = sc[action];
-      if (binding &&
-          typeof binding.primaryModifier === 'string' &&
-          Array.isArray(binding.keys) &&
-          binding.keys.length > 0 &&
-          binding.keys.length <= 10 &&
-          binding.keys.every(k => k && typeof k.key === 'string' && typeof k.code === 'string')) {
-        result.SHORTCUTS[action] = binding;
+      const entry = sc[action];
+      if (isValidShortcutEntry(entry)) {
+        result.SHORTCUTS[action] = {
+          binding: entry.binding.map((chord) => ({
+            code: chord.code,
+            mods: [...chord.mods].sort(),
+          })),
+        };
       } else {
         result.SHORTCUTS[action] = JSON.parse(JSON.stringify(defaults.SHORTCUTS[action]));
       }
     }
 
     return result;
+  }
+
+  /**
+   * Validate a single shortcut entry against the new shape:
+   *   { binding: [{code: string, mods: Array<string>}, ...] }
+   *
+   * Rules:
+   *  - `binding` is a non-empty array, length ≤ 4 (phase 1 matcher only fires
+   *    when length === 1; longer arrays are accepted to future-proof sequences).
+   *  - Each chord has a non-empty `code` string and a `mods` array.
+   *  - `mods` is a subset of {Alt, Control, Meta, Shift}. Duplicates are
+   *    tolerated (sorted + deduped at store time).
+   *  - `mods.length >= 1` — no bare-letter bindings (would fire during typing).
+   *  - Not Control+Alt (correctness: breaks AltGr on European layouts).
+   */
+  const VALID_MODS = new Set(['Alt', 'Control', 'Meta', 'Shift']);
+  function isValidShortcutEntry(entry) {
+    if (!entry || typeof entry !== 'object') return false;
+    if (!Array.isArray(entry.binding)) return false;
+    if (entry.binding.length < 1 || entry.binding.length > 4) return false;
+    for (const chord of entry.binding) {
+      if (!chord || typeof chord !== 'object') return false;
+      if (typeof chord.code !== 'string' || chord.code.length === 0) return false;
+      if (!Array.isArray(chord.mods)) return false;
+      for (const mod of chord.mods) {
+        if (!VALID_MODS.has(mod)) return false;
+      }
+      const modSet = new Set(chord.mods);
+      if (modSet.size < 1) return false;
+      if (modSet.has('Control') && modSet.has('Alt') && !modSet.has('Shift') && !modSet.has('Meta')) {
+        // Bare Ctrl+Alt+X collides with AltGr. Reject.
+        return false;
+      }
+    }
+    return true;
   }
 
   // ── Build public object ─────────────────────────────────────────────────────
@@ -303,12 +344,19 @@ const Constants = (() => {
     CSS,
     IDS,
     DEFAULT_SETTINGS,
+    MODIFIER_CODES,
     buildDefaultSettings,
     validateSettings,
+    isValidShortcutEntry,
     deepMerge,
     isValid,
     categoryOf,
   });
 })();
 
-globalThis.blsi = Constants;
+// Extend (don't replace) any pre-existing blsi — action_registry may have
+// been loaded first in some contexts. In the extension's default load order
+// (content scripts, popup, background importScripts), constants.js runs
+// before any other blsi.* module, so `globalThis.blsi` is usually undefined
+// at this point.
+globalThis.blsi = Object.assign(globalThis.blsi || {}, Constants);

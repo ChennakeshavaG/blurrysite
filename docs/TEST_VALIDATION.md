@@ -1,6 +1,49 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-**277 unit tests across 9 test files.** Last updated 2026-04-11 after the flow logging work.
+**359 unit tests across 12 test files.** Last updated 2026-04-11 after the keyboard shortcuts v2 rewrite.
+
+## N5. action_registry.test.js (11 tests) — `tests/unit/action_registry.test.js`
+
+Covers `blsi.Actions`:
+
+| Group | What it asserts | Manual replication |
+|---|---|---|
+| Exposure + shape | Registry is exposed, contains exactly 3 actions, each action has full metadata (`id`, `label`, `description`, `defaultBinding`, `messageType`, `chromeCommand`) | DevTools: `blsi.Actions.list()` — 3 entries, every action metadata present |
+| Default binding shape | Each default binding chord has `{code, mods}` with valid modifier names | `blsi.Actions.defaultBindings()` — inspect returned object |
+| Frozen registry | `ACTIONS`, individual entries, and `defaultBinding` arrays are frozen | `Object.isFrozen(blsi.Actions.ACTIONS)` → true |
+| Mutable clone | `defaultBindings()` produces a fresh clone; mutation does not affect registry | Mutate result → `blsi.Actions.get(id).defaultBinding` unchanged |
+| Uniqueness | `messageType` and `chromeCommand` are unique across actions | — |
+| Unknown lookup | `get('DOES_NOT_EXIST')` returns undefined | — |
+
+## N6. shortcut_label.test.js (19 tests) — `tests/unit/shortcut_label.test.js`
+
+Covers `blsi.ShortcutLabel`:
+
+| Group | What it asserts | Manual replication |
+|---|---|---|
+| Code labels | Letters `A-Z`, digits `0-9`, symbols (`-`, `=`, `[`), named keys (`Enter`, `Esc`), arrows (`↑↓←→`), function keys, numpad, unknown → fallback | DevTools: `blsi.ShortcutLabel.codeLabel('KeyB')` → `'B'` |
+| Platform rendering | Mac returns `⌥⇧B`, Windows returns `Alt+Shift+B` for the same chord | Run test on both platforms |
+| Empty / null chord | Gracefully returns empty string | `blsi.ShortcutLabel.chordLabel(null)` → `''` |
+| Binding label | Single-chord matches `chordLabel`; multi-chord joined by space | `blsi.ShortcutLabel.bindingLabel([{code:'KeyG',mods:['Alt']}, {code:'KeyI',mods:['Alt']}])` |
+| Canonical chord key | Mod order doesn't affect key; different codes/mods produce different keys; format is `"<sorted mods>\|<code>"` | `chordKey({code:'KeyB', mods:['Shift','Alt']})` → `'Alt+Shift\|KeyB'` |
+| Binding key | Multi-chord canonical form joins chord keys with space | — |
+
+## N7. shortcut_reserved.test.js (10 tests) — `tests/unit/shortcut_reserved.test.js`
+
+Covers `blsi.ShortcutReserved`:
+
+| Group | What it asserts | Manual replication |
+|---|---|---|
+| Exposure | Module is loaded with `isReserved`, `lookup`, `RESERVED` | `blsi.ShortcutReserved` in DevTools |
+| Browser chords | `Ctrl+T`, `Ctrl+W`, `F5`, `F12` are reserved | In popup capture, enter Ctrl+T → warning appears |
+| Non-reserved | `Alt+Shift+B` (default binding), `Ctrl+Shift+K` → not flagged | — |
+| Mod order agnostic | `[Shift, Control]` treated same as `[Control, Shift]` | — |
+| Platform filter | `Meta+Q` reserved only on Mac; platform-consistent result | — |
+| Frozen | `RESERVED` array is frozen | — |
+
+---
+
+
 
 ## N4. logger.test.js (10 tests) — `tests/unit/logger.test.js`
 

@@ -295,91 +295,191 @@ saveRules(rules)
 
 ---
 
-## 5. shortcut_handler.js
+## 5. shortcut_handler.js (v2)
 
 ### State
 
 | Variable | Type | Purpose |
 |---|---|---|
-| `heldKeys` | `Set<string>` | Set of `event.code` values currently held down |
 | `activeKeydownListener` | `Function \| null` | Reference to the installed keydown handler |
-| `activeKeyupListener` | `Function \| null` | Reference to the installed keyup handler |
-| `activeBlurListener` | `Function \| null` | Reference to the window blur handler |
-| `registeredShortcuts` | `Array<{ actionName, primaryModifier, keyCodes }>` | Parsed shortcuts for fast iteration |
+| `activeBlurListener` | `Function \| null` | Window blur hook (reserved for sequence state reset in phase 2) |
+| `registeredShortcuts` | `Array<{ actionId, code, mods, bindingKey }>` | Parsed single-chord shortcuts for O(n) match |
 | `registeredCallbacks` | `Record<string, Function>` | Action callbacks + `onExitPicker` |
 | `currentToastEl` | `Element \| null` | Currently displayed toast element |
 | `_isPickerActive` | `boolean` | Set by content_script when picker opens/closes |
+| `globalThis.__blsiShortcutFire` | `Record<string, number>` | Per-action monotonic fire token (performance.now()) used by content_script to dedup the JS matcher against chrome.commands relays |
 
 ### Public API
 
 ```typescript
-interface PrivacyBlurShortcuts {
-  init(shortcuts: Record<string, ShortcutBinding>, callbacks: ShortcutCallbacks): void;
+interface BlurrySiteShortcuts {
+  init(shortcuts: Record<string, ShortcutEntry>, callbacks: ShortcutCallbacks): void;
   destroy(): void;
   showToast(text: string, duration?: number): void;
   _setPickerActive(active: boolean): void;
+  _getFireToken(): Record<string, number>;
 }
 
-interface ShortcutBinding {
-  primaryModifier: string;  // event.code of the modifier, e.g. "AltLeft"
-  keys: Array<{ key: string; code: string }>;  // additional keys required
+interface ShortcutEntry {
+  binding: Array<Chord>;  // Array of chords. Phase 1: length === 1. Phase 2: sequences.
+}
+
+interface Chord {
+  code: string;              // W3C KeyboardEvent.code, e.g. "KeyB", "Enter", "F5"
+  mods: Array<"Alt" | "Control" | "Meta" | "Shift">;  // Sorted. No left/right.
 }
 
 interface ShortcutCallbacks {
-  TOGGLE_BLUR_ALL?: () => void;
-  TOGGLE_PICKER?: () => void;
-  CLEAR_ALL?: () => void;
+  [actionId: string]: (() => void) | undefined;
   onExitPicker?: () => void;
 }
 ```
 
-### init — held-key matching logic
+### Matching algorithm
 
 ```
 init(shortcuts, callbacks)
-  destroy()  // detach any existing listeners, clear heldKeys
-
+  destroy()
   registeredCallbacks = callbacks
-  registeredShortcuts = parse shortcuts into flat array:
-    for each [actionName, binding] in shortcuts:
-      push { actionName, primaryModifier: binding.primaryModifier,
-             keyCodes: binding.keys.map(k => k.code) }
+  for each [actionId, entry] in shortcuts:
+    if entry.binding.length !== 1 → skip (phase 2)
+    chord = entry.binding[0]
+    push { actionId, code: chord.code, mods: sort(chord.mods), bindingKey }
 
   onKeyDown(event):
-    if event.repeat or event.isComposing or event.key === "Dead" → return
-    if getModifierState("AltGraph") → return (dead-key AltGr guard)
-
-    heldKeys.add(event.code)
-
-    if event.key === "Escape":
+    if event.repeat                              → return
+    if event.isComposing                         → return
+    if event.key in {"Dead","Process","Unidentified"} → return
+    if event.getModifierState("AltGraph")        → return
+    if event.code === "Escape":
       if _isPickerActive → callbacks.onExitPicker?.(), _isPickerActive = false
       return
+    if event.code in blsi.MODIFIER_CODES          → return (wait for non-mod)
+
+    mods = []
+    if event.altKey   push "Alt"
+    if event.ctrlKey  push "Control"
+    if event.metaKey  push "Meta"
+    if event.shiftKey push "Shift"
+    // Already alphabetical because the pushes are in that order.
 
     for each registered shortcut sc:
-      if !isPrimaryModifierHeld(event, sc.primaryModifier) → skip
-      if any code in sc.keyCodes not in heldKeys → skip
-      // All keys held — match found
+      if sc.code !== event.code      → skip
+      if !sameArray(sc.mods, mods)   → skip
       event.preventDefault()
-      callbacks[sc.actionName]?.()
-      showToast("BlurrySite: " + ACTION_LABELS[sc.actionName])
+      __blsiShortcutFire[sc.actionId] = performance.now()
+      callbacks[sc.actionId]?.()
+      showToast("Blurry Site — " + blsi.Actions.get(sc.actionId).label)
       return
 
-  onKeyUp(event):
-    heldKeys.delete(event.code)
-
-  onWindowBlur():
-    heldKeys.clear()
-
-  attach keydown + keyup at capture phase, window blur at bubble phase
+  attach keydown at capture phase on document
 ```
 
-### isPrimaryModifierHeld
+### Key differences from v1
 
-Checks both the event boolean property (e.g. `event.altKey`) and the specific side via `heldKeys.has(modifierCode)`. CapsLock uses `getModifierState('CapsLock')`.
+- No held-key Set. Modifier state comes from `event.altKey/ctrlKey/metaKey/shiftKey` — the correct source per MDN.
+- No `primaryModifier`/`keys[]` split. All modifiers live in one sorted `mods` array.
+- Side-agnostic: `AltLeft` and `AltRight` both satisfy a binding with `mods:["Alt"]`.
+- Added guards for `Process`, `Unidentified`, and pure-modifier keydowns.
+- Toast label comes from `blsi.Actions.get(id).label` — no hardcoded `ACTION_LABELS` map.
+- `__blsiShortcutFire[id]` token replaces the 300ms time-window dedup in content_script.
 
 ### showToast
 
 Creates a `<div class="bl-si-toast">` at bottom-right, appends to body, fades out after `duration` ms with a CSS animation, then removes from DOM.
+
+---
+
+## 5b. action_registry.js
+
+### Public API
+
+```typescript
+interface BlurrySiteActions {
+  ACTIONS: Readonly<Record<string, Action>>;  // frozen
+  list(): Action[];
+  get(id: string): Action | undefined;
+  ids(): string[];
+  defaultBindings(): Record<string, ShortcutEntry>;  // mutable clone
+}
+
+interface Action {
+  id: string;                  // e.g. "TOGGLE_BLUR_ALL"
+  label: string;               // user-facing long label (also used for toast)
+  description: string;         // help overlay description
+  defaultBinding: Chord[];     // frozen
+  messageType: string;         // content_script dispatch
+  chromeCommand: string;       // manifest.json > commands id
+}
+```
+
+### Invariants
+
+- `ACTIONS` is frozen. Entries are frozen. `defaultBinding` arrays are frozen.
+- `defaultBindings()` always returns a fresh deeply-mutable clone. Mutating it never affects the registry.
+- Adding a new action requires exactly one edit (a new entry in `ACTIONS`) plus a corresponding handler in `content_script.shortcutActionMap` and (optional) `manifest.json > commands` entry.
+
+---
+
+## 5c. shortcut_label.js
+
+### Public API
+
+```typescript
+interface BlurrySiteShortcutLabel {
+  CODE_TO_LABEL: Readonly<Record<string, string>>;
+  IS_MAC: boolean;  // computed once at module load
+  modLabel(mod: "Alt" | "Control" | "Meta" | "Shift"): string;
+  codeLabel(code: string): string;
+  chordLabel(chord: Chord): string;    // e.g. "⌥⇧B" on Mac, "Alt+Shift+B" on Win
+  bindingLabel(binding: Chord[]): string;   // chords joined by " "
+  chordKey(chord: Chord): string;      // e.g. "Alt+Shift|KeyB" — for conflict detection
+  bindingKey(binding: Chord[]): string;  // multi-chord canonical key
+}
+```
+
+### Platform rendering
+
+| Modifier | Mac glyph | Windows/Linux name |
+|---|---|---|
+| Control | `⌃` | `Ctrl` |
+| Alt | `⌥` | `Alt` |
+| Shift | `⇧` | `Shift` |
+| Meta | `⌘` | `Win` |
+
+Mac chords concatenate without separators (`⌘⇧K`); Windows/Linux chords are joined by `+` (`Ctrl+Shift+K`). Binding-level (sequences) always uses a space separator regardless of platform.
+
+### Canonical chord key
+
+`chordKey` sorts mods alphabetically and joins them with `+`, then appends `|` and the code:
+
+```
+{ code: "KeyB", mods: ["Alt", "Shift"] } → "Alt+Shift|KeyB"
+{ code: "KeyB", mods: ["Shift", "Alt"] } → "Alt+Shift|KeyB"  // same
+```
+
+This is used by the popup's conflict-detection logic to compare chords via string equality.
+
+---
+
+## 5d. shortcut_reserved.js
+
+### Public API
+
+```typescript
+interface BlurrySiteShortcutReserved {
+  RESERVED: Readonly<Array<{ key: string; label: string; platform: "any" | "mac" | "win" }>>;
+  isReserved(chord: Chord): boolean;
+  lookup(chord: Chord): { label: string } | null;
+}
+```
+
+### Policy
+
+- Minimal curated list (~12 entries): Ctrl+T, Ctrl+N, Ctrl+W, Ctrl+Tab, Ctrl+Shift+T, Ctrl+Shift+N, F5, F11, F12, Alt+F4 (Win-only), Meta+Q/W/M/H (Mac-only).
+- Platform filter applied at query time via `blsi.ShortcutLabel.IS_MAC`.
+- Not a deny list — the capture UI shows an inline warning but always allows save. Users can override intentionally (VS Code / JetBrains philosophy).
+- Ctrl+Alt+* is **not** in this list — it's rejected outright by `validateSettings` and the capture UI as a correctness fix for European AltGr, not a policy.
 
 ---
 

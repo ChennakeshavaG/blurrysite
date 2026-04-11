@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="popup.css" />
   <script src="../src/constants.js" defer></script>
   <script src="../src/logger.js" defer></script>
+  <script src="../src/action_registry.js" defer></script>
+  <script src="../src/shortcut_label.js" defer></script>
+  <script src="../src/shortcut_reserved.js" defer></script>
   <script src="../src/storage_manager.js" defer></script>
   <script src="popup_i18n.js" defer></script>
   <script src="popup_configs.js" defer></script>
@@ -133,15 +136,31 @@
   <!-- ===== SHORTCUT CAPTURE MODAL ===== -->
   <div class="bl-si-modal-overlay" id="shortcutModal" hidden>
     <div class="bl-si-modal bl-si-frost">
-      <div class="bl-si-modal__header" data-i18n="shortcut_modal_title">Customize Shortcut</div>
+      <div class="bl-si-modal__header" id="scModalTitle" data-i18n="shortcut_modal_title">Customize Shortcut</div>
       <div class="bl-si-modal__body">
-        <p style="font-size:11px;color:var(--bl-si-text);margin-bottom:6px" data-i18n="shortcut_modal_prompt">Hold a modifier, then press additional keys</p>
-        <div class="bl-si-capture bl-si-capture--listening" id="captureDisplay" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
+        <p class="bl-si-capture__hint" data-i18n="shortcut_modal_prompt">Hold one or more modifiers, then press a key</p>
+        <div class="bl-si-capture bl-si-capture--listening" id="captureDisplay" tabindex="0" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
+        <div class="bl-si-capture__warning" id="captureWarning" hidden></div>
       </div>
       <div class="bl-si-modal__footer">
         <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalCancel">Cancel</button>
         <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="scModalReset" data-i18n="shortcut_reset">Reset default</button>
         <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="scModalSave" disabled>Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HELP OVERLAY MODAL ===== -->
+  <div class="bl-si-modal-overlay" id="helpOverlayModal" hidden>
+    <div class="bl-si-modal bl-si-frost">
+      <div class="bl-si-modal__header">Keyboard shortcuts</div>
+      <div class="bl-si-modal__body">
+        <ul class="bl-si-help-list" id="helpOverlayList">
+          <!-- Populated from blsi.Actions.list() at open time -->
+        </ul>
+      </div>
+      <div class="bl-si-modal__footer">
+        <button class="bl-si-btn bl-si-btn--primary bl-si-btn--sm" id="helpOverlayClose">Close</button>
       </div>
     </div>
   </div>
@@ -182,6 +201,12 @@
   <!-- ===== FOOTER ===== -->
   <footer class="bl-si-footer bl-si-frost">
     <button class="bl-si-footer__link" id="clearAllSitesBtn" data-i18n="footer_clear_all">Clear all sites</button>
+    <button class="bl-si-footer__help" id="helpOverlayBtn" title="Keyboard shortcuts help" aria-label="Show keyboard shortcuts">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 13h10M6 17h.01M18 17h.01" />
+      </svg>
+    </button>
     <button class="bl-si-footer__debug" id="debugToggle" data-active="false" title="Toggle flow logs" aria-label="Toggle flow logs" aria-pressed="false">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M8 2v4M16 2v4M3 10h18M5 6h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>

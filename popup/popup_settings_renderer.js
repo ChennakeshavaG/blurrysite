@@ -42,19 +42,16 @@ const SettingsRenderer = (() => {
     current[parts[parts.length - 1]] = value;
   }
 
-  // ── Shortcut code labels ───────────────────────────────────────────────────
-  // Raw code → human-readable label. No i18n — stored for our ease.
-
-  const CODE_LABELS = {
-    ShiftLeft: 'L-Shift', ShiftRight: 'R-Shift',
-    ControlLeft: 'L-Ctrl', ControlRight: 'R-Ctrl',
-    AltLeft: 'L-Alt', AltRight: 'R-Alt',
-    MetaLeft: 'L-Cmd', MetaRight: 'R-Cmd',
-    CapsLock: 'CapsLock', Fn: 'Fn',
-  };
+  // ── Shortcut label bridge ──────────────────────────────────────────────────
+  // The canonical label renderer lives in src/shortcut_label.js (blsi.ShortcutLabel)
+  // and is platform-aware (Mac glyphs vs Windows/Linux spelled-out). These thin
+  // re-exports keep existing call sites in this file working during the v2
+  // transition.
 
   function codeLabel(code) {
-    return CODE_LABELS[code] || code;
+    return (blsi.ShortcutLabel && blsi.ShortcutLabel.codeLabel)
+      ? blsi.ShortcutLabel.codeLabel(code)
+      : code;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -117,15 +114,31 @@ const SettingsRenderer = (() => {
     row.className = 'bl-si-setting bl-si-setting--' + config.type;
     row.dataset.key = config.key;
 
-    // Label
+    // Label — prefer an i18n translation if available; fall back to the raw
+    // `label` field on the config (used by shortcut rows which are auto-generated
+    // from the action registry and don't have pre-existing i18n keys). i18n.t
+    // returns the key itself when no translation exists, so compare.
     const label = document.createElement('label');
     label.className = 'bl-si-setting__label';
-    label.textContent = I18n().t(config.i18nKey);
+    const i18n = I18n();
+    let labelText = '';
+    if (config.i18nKey) {
+      const translated = i18n.t(config.i18nKey);
+      labelText = (translated === config.i18nKey && config.label) ? config.label : translated;
+    } else if (config.label) {
+      labelText = config.label;
+    }
+    label.textContent = labelText;
 
     if (config.i18nHintKey) {
       const hint = document.createElement('span');
       hint.className = 'bl-si-setting__hint';
-      hint.textContent = I18n().t(config.i18nHintKey);
+      hint.textContent = i18n.t(config.i18nHintKey);
+      label.appendChild(hint);
+    } else if (config.description) {
+      const hint = document.createElement('span');
+      hint.className = 'bl-si-setting__hint';
+      hint.textContent = config.description;
       label.appendChild(hint);
     }
 
@@ -315,20 +328,18 @@ const SettingsRenderer = (() => {
     return wrapper;
   }
 
-  function _renderShortcutKeys(container, binding) {
+  function _renderShortcutKeys(container, entry) {
     container.textContent = '';
-    if (!binding || !binding.primaryModifier) return;
+    if (!entry || !Array.isArray(entry.binding) || entry.binding.length === 0) return;
+    const Label = blsi.ShortcutLabel;
+    if (!Label) return;
 
-    const modKbd = document.createElement('kbd');
-    modKbd.textContent = codeLabel(binding.primaryModifier);
-    container.appendChild(modKbd);
-
-    if (Array.isArray(binding.keys)) {
-      for (const k of binding.keys) {
-        const kbd = document.createElement('kbd');
-        kbd.textContent = CODE_LABELS[k.code] || (k.key || '').toUpperCase();
-        container.appendChild(kbd);
-      }
+    // Render one <kbd> per chord. Single-chord is the common case; sequences
+    // (phase 2) render as multiple <kbd> elements separated by a space.
+    for (const chord of entry.binding) {
+      const kbd = document.createElement('kbd');
+      kbd.textContent = Label.chordLabel(chord);
+      container.appendChild(kbd);
     }
   }
 
@@ -525,7 +536,6 @@ const SettingsRenderer = (() => {
     getByPath,
     setByPath,
     codeLabel,
-    CODE_LABELS,
   };
 })();
 

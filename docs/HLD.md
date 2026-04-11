@@ -123,11 +123,33 @@ A thin Promise-based wrapper around `chrome.runtime.sendMessage`. All methods de
 - Prevents content scripts from needing `storage` permission directly
 - Makes the storage layer mockable in unit tests (mock `chrome.runtime.sendMessage`)
 
-### 3.6 shortcut_handler.js — Multi-Key Shortcuts
+### 3.6 shortcut_handler.js — Keyboard Shortcut Matcher
 
-Tracks held keys via `Set<code>`. Fires action when primary modifier + all required keys are held simultaneously. Three configurable actions: `TOGGLE_BLUR_ALL`, `TOGGLE_PICKER`, `CLEAR_ALL`.
+Matches registered chords `{ code, mods }` against `KeyboardEvent`. Reads mod state from `event.altKey/ctrlKey/metaKey/shiftKey` (side-agnostic). First match fires the action callback and preventDefaults the event. Guards against `repeat`, `isComposing`, `Dead`, `Process`, `Unidentified`, `AltGraph`, and pure-modifier keydowns.
 
-Also handles `Escape` to exit picker mode (only fires when `_isPickerActive` is set). Window blur clears the held-key set to prevent phantom keys.
+Action list is not hardcoded in this module — it reads from the action registry (see §3.6b) and uses `blsi.Actions.get(id).label` for the toast message.
+
+Handles `Escape` to exit picker mode (only fires when `_isPickerActive` is set). On match, stamps `globalThis.__blsiShortcutFire[actionId]` with `performance.now()` — this is used by `content_script.handleMessage` to dedup the JS matcher path against `chrome.commands` relays from `background.js`.
+
+### 3.6a action_registry.js — Action Registry
+
+Single source of truth for every shortcut-driven action. Each entry carries `id`, `label`, `description`, `defaultBinding`, `messageType`, and `chromeCommand`. Consumers:
+- `constants.buildDefaultSettings()` reads `defaultBindings()` lazily.
+- `content_script.js` derives the shortcut-action handler map and dedup set from `Actions.list()`.
+- `background.js` derives the `chrome.commands.onCommand` relay map from `Actions.list()`.
+- `shortcut_handler.js` reads `Actions.get(id).label` for toast text.
+- `popup/popup_configs.js` auto-generates the shortcut settings rows.
+- The popup help overlay iterates `Actions.list()` for its content.
+
+Adding a new shortcut-triggered action is one entry in `action_registry.js` plus a handler in `content_script.shortcutActionMap`.
+
+### 3.6b shortcut_label.js — Platform-Aware Label Rendering
+
+Central module that converts `{code, mods}` chords into human-readable labels. Mac renders Unicode glyphs (`⌘⇧⌥⌃`); Windows/Linux spells out modifiers. Also exports `chordKey()` / `bindingKey()` for canonical string forms used by conflict detection. Used by every UI surface that shows a shortcut (popup settings rows, capture modal preview, help overlay, toast via registry label).
+
+### 3.6c shortcut_reserved.js — Browser-Reserved Chord Warnings
+
+Minimal curated list (~12 entries) of browser shortcuts (`Ctrl+T`, `F12`, `Cmd+Q`, ...) that the popup's capture UI warns about. Per-platform filtering via `blsi.ShortcutLabel.IS_MAC`. Not a deny list — save is always allowed.
 
 ### 3.7 picker.js — Element Picker UI
 

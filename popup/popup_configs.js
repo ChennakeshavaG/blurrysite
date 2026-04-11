@@ -10,13 +10,24 @@
 const PopupConfigs = (() => {
   'use strict';
 
-  // ── Shortcuts (displayed in own always-visible section) ────────────────────
+  // ── Shortcuts (derived from blsi.Actions registry) ─────────────────────────
+  // Every entry in the action registry becomes a row. Adding a new action to
+  // src/action_registry.js automatically adds a row here — no changes needed.
+  // The `label` from the registry is the primary display text; i18n keys are
+  // derived from the action id so existing translations continue to work.
 
-  const SHORTCUTS = Object.freeze([
-    { key: 'SHORTCUTS.TOGGLE_BLUR_ALL', i18nKey: 'shortcut_blur_all', type: 'shortcut' },
-    { key: 'SHORTCUTS.TOGGLE_PICKER',   i18nKey: 'shortcut_picker',   type: 'shortcut' },
-    { key: 'SHORTCUTS.CLEAR_ALL',       i18nKey: 'shortcut_clear',    type: 'shortcut' },
-  ]);
+  const SHORTCUTS = (() => {
+    if (!(blsi && blsi.Actions && blsi.Actions.list)) return Object.freeze([]);
+    return Object.freeze(
+      blsi.Actions.list().map((action) => ({
+        key: 'SHORTCUTS.' + action.id,
+        i18nKey: 'shortcut_' + action.id.toLowerCase(),
+        label: action.label,
+        description: action.description,
+        type: 'shortcut',
+      }))
+    );
+  })();
 
   // ── Settings (single section: Appearance → Behavior → Categories → Advanced)
 

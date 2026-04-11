@@ -119,19 +119,28 @@ describe('BlurrySite constants', () => {
       expect(Object.isFrozen(PB.DEFAULT_SETTINGS)).toBe(true);
     });
 
-    test('SHORTCUTS is frozen with 3 actions', () => {
-      expect(Object.isFrozen(PB.DEFAULT_SETTINGS.SHORTCUTS)).toBe(true);
-      expect(Object.keys(PB.DEFAULT_SETTINGS.SHORTCUTS)).toHaveLength(3);
-      expect(PB.DEFAULT_SETTINGS.SHORTCUTS.TOGGLE_BLUR_ALL).toBeDefined();
-      expect(PB.DEFAULT_SETTINGS.SHORTCUTS.TOGGLE_PICKER).toBeDefined();
-      expect(PB.DEFAULT_SETTINGS.SHORTCUTS.CLEAR_ALL).toBeDefined();
+    test('SHORTCUTS come from the action registry (not embedded in DEFAULT_SETTINGS)', () => {
+      // v2: DEFAULT_SETTINGS doesn't carry SHORTCUTS any more — it's built
+      // lazily by buildDefaultSettings() from blsi.Actions.
+      expect(PB.DEFAULT_SETTINGS.SHORTCUTS).toBeUndefined();
+      const full = PB.buildDefaultSettings();
+      expect(Object.keys(full.SHORTCUTS)).toHaveLength(3);
+      expect(full.SHORTCUTS.TOGGLE_BLUR_ALL).toBeDefined();
+      expect(full.SHORTCUTS.TOGGLE_PICKER).toBeDefined();
+      expect(full.SHORTCUTS.CLEAR_ALL).toBeDefined();
     });
 
-    test('each shortcut has primaryModifier and keys array', () => {
-      for (const action of Object.values(PB.DEFAULT_SETTINGS.SHORTCUTS)) {
-        expect(action.primaryModifier).toBeDefined();
-        expect(Array.isArray(action.keys)).toBe(true);
-        expect(action.keys.length).toBeGreaterThan(0);
+    test('each shortcut has a binding array of {code, mods}', () => {
+      const full = PB.buildDefaultSettings();
+      for (const entry of Object.values(full.SHORTCUTS)) {
+        expect(Array.isArray(entry.binding)).toBe(true);
+        expect(entry.binding.length).toBeGreaterThan(0);
+        for (const chord of entry.binding) {
+          expect(typeof chord.code).toBe('string');
+          expect(chord.code.length).toBeGreaterThan(0);
+          expect(Array.isArray(chord.mods)).toBe(true);
+          expect(chord.mods.length).toBeGreaterThanOrEqual(1);
+        }
       }
     });
   });
@@ -252,8 +261,52 @@ describe('BlurrySite constants', () => {
 
     test('replaces broken shortcut binding with default', () => {
       const result = PB.validateSettings({ SHORTCUTS: { TOGGLE_BLUR_ALL: { bad: true } } });
-      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.primaryModifier).toBe('AltLeft');
-      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.keys).toHaveLength(2);
+      const entry = result.SHORTCUTS.TOGGLE_BLUR_ALL;
+      expect(Array.isArray(entry.binding)).toBe(true);
+      expect(entry.binding).toHaveLength(1);
+      expect(entry.binding[0].code).toBe('KeyB');
+      expect(entry.binding[0].mods).toContain('Alt');
+      expect(entry.binding[0].mods).toContain('Shift');
+    });
+
+    test('accepts valid new-shape binding', () => {
+      const result = PB.validateSettings({
+        SHORTCUTS: {
+          TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyK', mods: ['Control', 'Shift'] }] },
+        },
+      });
+      const entry = result.SHORTCUTS.TOGGLE_BLUR_ALL;
+      expect(entry.binding[0].code).toBe('KeyK');
+      expect(entry.binding[0].mods).toEqual(['Control', 'Shift']);
+    });
+
+    test('rejects bare-letter binding (mods.length === 0)', () => {
+      const result = PB.validateSettings({
+        SHORTCUTS: {
+          TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyB', mods: [] }] },
+        },
+      });
+      // Falls back to default
+      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.binding[0].mods).toContain('Alt');
+    });
+
+    test('rejects Control+Alt chord (AltGr collision)', () => {
+      const result = PB.validateSettings({
+        SHORTCUTS: {
+          TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyQ', mods: ['Control', 'Alt'] }] },
+        },
+      });
+      // Falls back to default
+      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.binding[0].code).toBe('KeyB');
+    });
+
+    test('normalizes mods to sorted order', () => {
+      const result = PB.validateSettings({
+        SHORTCUTS: {
+          TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyK', mods: ['Shift', 'Control'] }] },
+        },
+      });
+      expect(result.SHORTCUTS.TOGGLE_BLUR_ALL.binding[0].mods).toEqual(['Control', 'Shift']);
     });
 
     test('fills missing keys with defaults', () => {
@@ -308,20 +361,33 @@ describe('BlurrySite constants', () => {
       expect(s.BLUR_RADIUS).toBe(PB.DEFAULT_SETTINGS.BLUR_RADIUS);
     });
 
-    test('SHORTCUTS rejects empty keys array', () => {
+    test('SHORTCUTS rejects empty binding array', () => {
       const s = PB.validateSettings({
-        SHORTCUTS: { TOGGLE_BLUR_ALL: { primaryModifier: 'AltLeft', keys: [] } }
+        SHORTCUTS: { TOGGLE_BLUR_ALL: { binding: [] } },
       });
-      // Should fall back to default since keys.length === 0
-      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.keys.length).toBeGreaterThan(0);
+      // Falls back to default — binding has at least one chord
+      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.binding.length).toBeGreaterThan(0);
     });
 
-    test('SHORTCUTS rejects keys exceeding limit (11)', () => {
-      const keys = Array.from({ length: 11 }, (_, i) => ({ key: 'k', code: 'Key' + i }));
+    test('SHORTCUTS rejects binding array exceeding limit (5 chords)', () => {
+      const binding = Array.from({ length: 5 }, (_, i) => ({
+        code: 'KeyA', mods: ['Alt'],
+      }));
       const s = PB.validateSettings({
-        SHORTCUTS: { TOGGLE_BLUR_ALL: { primaryModifier: 'AltLeft', keys } }
+        SHORTCUTS: { TOGGLE_BLUR_ALL: { binding } },
       });
-      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.keys.length).toBeLessThanOrEqual(10);
+      // Falls back to default — default is a single chord
+      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.binding).toHaveLength(1);
+    });
+
+    test('SHORTCUTS rejects unknown modifier names', () => {
+      const s = PB.validateSettings({
+        SHORTCUTS: {
+          TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyK', mods: ['Option'] }] },
+        },
+      });
+      // Falls back to default
+      expect(s.SHORTCUTS.TOGGLE_BLUR_ALL.binding[0].code).toBe('KeyB');
     });
 
     test('deepMerge stops at depth limit', () => {

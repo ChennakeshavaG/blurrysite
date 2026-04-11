@@ -1,21 +1,28 @@
 /**
- * shortcut_handler.js — Blurry Site Keyboard Shortcut Handler
+ * shortcut_handler.js — Blurry Site Keyboard Shortcut Handler (v2)
  *
- * Handles user-configurable shortcuts with a primary modifier + N additional
- * keys pressed simultaneously. Shortcuts are dynamically inferred from the
- * settings object — no hardcoded shortcuts exist in this module.
+ * Matches user-configurable shortcuts against KeyboardEvent and fires action
+ * callbacks. All action metadata (labels, default bindings, chrome.commands
+ * ids) lives in src/action_registry.js — this module is a pure matcher +
+ * toast renderer.
  *
- * Each shortcut is defined as:
- *   { primaryModifier: 'AltLeft', keys: [{ key: 'Shift', code: 'ShiftLeft' }, { key: 'b', code: 'KeyB' }] }
+ * Binding shape (enforced by validateSettings):
+ *   { binding: [{ code: 'KeyB', mods: ['Alt', 'Shift'] }] }
  *
- * Detection logic:
- *  1. Track all currently held keys via keydown/keyup + a Set<code>.
- *  2. On every keydown, check each registered shortcut:
- *     a. Is the primaryModifier held? (via heldKeys Set + event modifier properties)
- *     b. Are ALL keys in the shortcut's keys[] array held?
- *     c. If both → fire the action callback, preventDefault, show toast.
- *  3. Escape always calls onExitPicker when picker is active.
- *  4. Window blur clears the heldKeys Set (prevents phantom held keys).
+ * Matching logic:
+ *  1. Early-return on repeat, isComposing, Dead/Process/Unidentified, AltGr,
+ *     synthetic events, and pure-modifier keydowns (wait for the primary key).
+ *  2. Read modifier state from event.altKey / ctrlKey / metaKey / shiftKey —
+ *     NOT from a held-keys Set. MDN says these are the authoritative source.
+ *     This folds AltLeft/AltRight together automatically, as users expect.
+ *  3. For each registered binding, compare {code, mods} against the event.
+ *     First match wins, preventDefault + fire callback + showToast.
+ *  4. Escape is special-cased: when picker is active, fire onExitPicker and
+ *     do not dispatch to any bound shortcut.
+ *
+ * Phase 2 note: `binding` is an array to accommodate sequence chords (g i).
+ * Phase 1 only matches when `binding.length === 1`. Longer bindings are
+ * silently skipped by the matcher (logger warns).
  *
  * Exposed as blsi.Shortcuts (IIFE — no ES module syntax).
  */
@@ -24,17 +31,12 @@ const Shortcuts = (() => {
   'use strict';
 
   const _CSS = (blsi.CSS) || {};
+  const _log = blsi.Logger ? blsi.Logger.scope('shortcuts') : null;
 
-  // -------------------------------------------------------------------------
-  // Internal state
-  // -------------------------------------------------------------------------
+  // ── Internal state ─────────────────────────────────────────────────────────
 
-  /** Set of event.code values currently held down. */
-  let heldKeys = new Set();
-
-  /** The keydown/keyup/blur listeners currently attached, or null. */
+  /** The keydown/blur listeners currently attached, or null. */
   let activeKeydownListener = null;
-  let activeKeyupListener   = null;
   let activeBlurListener    = null;
 
   /** Reference to the current toast element so we can remove it early. */
@@ -43,67 +45,52 @@ const Shortcuts = (() => {
   /** Whether the element picker is currently active (set by content_script). */
   let _isPickerActive = false;
 
-  /** Registered shortcuts: array of { actionName, primaryModifier, keys, parsedKeys }. */
+  /**
+   * Registered single-chord shortcuts. Array of:
+   *   { actionId, code, mods: string[] (sorted), bindingKey: string }
+   * Multi-chord (sequence) bindings are skipped in phase 1.
+   */
   let registeredShortcuts = [];
 
-  /** Registered callbacks: { actionName: fn, onExitPicker: fn }. */
+  /** Registered callbacks: { ACTION_ID: fn, onExitPicker: fn }. */
   let registeredCallbacks = {};
 
-  // -------------------------------------------------------------------------
-  // Action labels for toast messages
-  // -------------------------------------------------------------------------
+  /**
+   * Monotonic fire token — records the last time each action fired. Used by
+   * content_script.handleMessage to dedup the JS path against chrome.commands
+   * relays. The JS matcher is canonical; chrome.commands is the fallback for
+   * users who customize via chrome://extensions/shortcuts, and duplicates
+   * within a short window are dropped by the message handler.
+   */
+  const FIRE_TOKEN = globalThis.__blsiShortcutFire = globalThis.__blsiShortcutFire || {};
 
-  const ACTION_LABELS = {
-    TOGGLE_BLUR_ALL: 'Blur All triggered',
-    TOGGLE_PICKER:   'Picker toggled',
-    CLEAR_ALL:       'Page cleared',
-  };
+  // ── Modifier extraction ────────────────────────────────────────────────────
 
-  // -------------------------------------------------------------------------
-  // Modifier detection helpers
-  // -------------------------------------------------------------------------
-
-  /** Modifier codes that map to event boolean properties. */
-  const MODIFIER_PROPERTY_MAP = {
-    ShiftLeft:    'shiftKey',
-    ShiftRight:   'shiftKey',
-    ControlLeft:  'ctrlKey',
-    ControlRight: 'ctrlKey',
-    AltLeft:      'altKey',
-    AltRight:     'altKey',
-    MetaLeft:     'metaKey',
-    MetaRight:    'metaKey',
-  };
-
-  /** Set of all modifier key codes (used to distinguish modifiers from regular keys). */
-  const MODIFIER_CODES = new Set([
-    'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
-    'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight',
-    'CapsLock', 'Fn',
-  ]);
+  /** The subset of mods to consider. Always sorted alphabetically. */
+  const MOD_NAMES = ['Alt', 'Control', 'Meta', 'Shift'];
 
   /**
-   * Checks whether the primary modifier is currently held.
-   * Uses both the event's modifier boolean (is Shift/Ctrl/Alt/Meta active?)
-   * and the heldKeys Set (is the SPECIFIC left/right key held?).
+   * Read the normalized modifier set for an event. Returns a sorted array
+   * from {"Alt","Control","Meta","Shift"}. Left/right is folded away.
    */
-  function isPrimaryModifierHeld(event, modifierCode) {
-    // CapsLock: use getModifierState (toggle-based)
-    if (modifierCode === 'CapsLock') {
-      return event.getModifierState && event.getModifierState('CapsLock');
-    }
-
-    // Standard modifiers: check the event boolean first (is the class active?)
-    const prop = MODIFIER_PROPERTY_MAP[modifierCode];
-    if (!prop || !event[prop]) return false;
-
-    // Then check the specific side via heldKeys
-    return heldKeys.has(modifierCode);
+  function modsFromEvent(event) {
+    const mods = [];
+    if (event.altKey)   mods.push('Alt');
+    if (event.ctrlKey)  mods.push('Control');
+    if (event.metaKey)  mods.push('Meta');
+    if (event.shiftKey) mods.push('Shift');
+    return mods; // Already alphabetical because the pushes are in that order.
   }
 
-  // -------------------------------------------------------------------------
-  // Toast notification (kept from previous implementation)
-  // -------------------------------------------------------------------------
+  function sameModSet(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  // ── Toast notification ─────────────────────────────────────────────────────
 
   function showToast(text, duration) {
     if (duration === undefined) duration = 1500;
@@ -113,13 +100,13 @@ const Shortcuts = (() => {
       currentToastEl = null;
     }
 
-    const toast = document.createElement("div");
-    toast.className = _CSS.TOAST || "bl-si-toast";
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
+    const toast = document.createElement('div');
+    toast.className = _CSS.TOAST || 'bl-si-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
 
-    const msgSpan = document.createElement("span");
-    msgSpan.className = _CSS.TOAST_MESSAGE || "bl-si-toast__message";
+    const msgSpan = document.createElement('span');
+    msgSpan.className = _CSS.TOAST_MESSAGE || 'bl-si-toast__message';
     msgSpan.textContent = text;
     toast.appendChild(msgSpan);
 
@@ -127,7 +114,7 @@ const Shortcuts = (() => {
     currentToastEl = toast;
 
     const removeTimer = setTimeout(() => {
-      toast.classList.add(_CSS.TOAST_EXITING || "bl-si-toast--exiting");
+      toast.classList.add(_CSS.TOAST_EXITING || 'bl-si-toast--exiting');
       setTimeout(() => {
         if (toast.parentNode) toast.parentNode.removeChild(toast);
         if (currentToastEl === toast) currentToastEl = null;
@@ -137,52 +124,55 @@ const Shortcuts = (() => {
     toast._removeTimer = removeTimer;
   }
 
-  // -------------------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------------------
+  // ── Public API ─────────────────────────────────────────────────────────────
 
   /**
-   * Attaches keyboard listeners and registers shortcuts.
+   * Attach keyboard listeners and register shortcuts.
    * Safe to call multiple times — detaches previous listeners first.
    *
-   * @param {object} shortcuts  - { ACTION_NAME: { primaryModifier, keys: [{ key, code }] } }
-   *   Dynamically inferred from settings. No hardcoded actions.
-   *
-   * @param {object} callbacks  - { ACTION_NAME: fn, onExitPicker: fn }
-   *   Each key matches an action name from shortcuts. onExitPicker fires on Escape.
+   * @param {object} shortcuts - { ACTION_ID: { binding: [{code, mods}, ...] } }
+   *   Shape is enforced by constants.validateSettings. Multi-chord (length > 1)
+   *   bindings are skipped in phase 1.
+   * @param {object} callbacks - { ACTION_ID: fn, onExitPicker: fn }
    */
   function init(shortcuts, callbacks) {
     destroy();
 
     registeredCallbacks = callbacks || {};
-
-    // Parse shortcuts into a flat lookup array for fast iteration on keydown.
     registeredShortcuts = [];
+
     if (shortcuts && typeof shortcuts === 'object') {
-      for (const [actionName, binding] of Object.entries(shortcuts)) {
-        if (!binding || !binding.primaryModifier || !Array.isArray(binding.keys)) continue;
+      for (const [actionId, entry] of Object.entries(shortcuts)) {
+        if (!entry || !Array.isArray(entry.binding) || entry.binding.length === 0) continue;
+        if (entry.binding.length > 1) {
+          if (_log) _log.warn('multi-chord binding skipped (phase 2 feature)', { actionId });
+          continue;
+        }
+        const chord = entry.binding[0];
+        if (!chord || typeof chord.code !== 'string' || !Array.isArray(chord.mods)) continue;
+        const mods = [...chord.mods].sort();
         registeredShortcuts.push({
-          actionName,
-          primaryModifier: binding.primaryModifier,
-          // Pre-extract codes for O(1) Set lookups during matching.
-          keyCodes: binding.keys.map(k => k.code).filter(Boolean),
+          actionId,
+          code: chord.code,
+          mods,
+          bindingKey: mods.join('+') + '|' + chord.code,
         });
       }
     }
 
-    // ── Keydown handler ─────────────────────────────────────────────────────
+    if (_log) _log.flow('init', { count: registeredShortcuts.length });
+
     function onKeyDown(event) {
-      // Early exits (W3C UI Events spec)
+      // ── Early-return guards (W3C UI Events spec + empirical) ──────────────
       if (event.repeat) return;
       if (event.isComposing) return;
       if (event.key === 'Dead') return;
+      if (event.key === 'Process') return;
+      if (event.key === 'Unidentified') return;
       if (event.getModifierState && event.getModifierState('AltGraph')) return;
 
-      // Track this key as held
-      if (event.code) heldKeys.add(event.code);
-
-      // Escape: exit picker (always, regardless of shortcut config)
-      if (event.key === 'Escape') {
+      // ── Escape special case: picker exit ─────────────────────────────────
+      if (event.code === 'Escape') {
         if (_isPickerActive && typeof registeredCallbacks.onExitPicker === 'function') {
           _isPickerActive = false;
           registeredCallbacks.onExitPicker();
@@ -190,74 +180,58 @@ const Shortcuts = (() => {
         return;
       }
 
-      // Check each registered shortcut
+      // ── Skip pure modifier keydowns ──────────────────────────────────────
+      // Wait for the user to press a non-modifier key before matching.
+      if (blsi.MODIFIER_CODES && blsi.MODIFIER_CODES.has(event.code)) return;
+
+      // ── Match against registered bindings ────────────────────────────────
+      const eventMods = modsFromEvent(event);
       for (let i = 0; i < registeredShortcuts.length; i++) {
         const sc = registeredShortcuts[i];
+        if (sc.code !== event.code) continue;
+        if (!sameModSet(sc.mods, eventMods)) continue;
 
-        // Is the primary modifier held?
-        if (!isPrimaryModifierHeld(event, sc.primaryModifier)) continue;
-
-        // Are ALL required keys held?
-        let allHeld = true;
-        for (let j = 0; j < sc.keyCodes.length; j++) {
-          if (!heldKeys.has(sc.keyCodes[j])) {
-            allHeld = false;
-            break;
-          }
-        }
-        if (!allHeld) continue;
-
-        // Match found — fire action
+        // Match: fire + preventDefault + toast + stamp fire token.
         event.preventDefault();
+        FIRE_TOKEN[sc.actionId] = (typeof performance !== 'undefined' && performance.now)
+          ? performance.now()
+          : Date.now();
 
-        if (typeof registeredCallbacks[sc.actionName] === 'function') {
-          registeredCallbacks[sc.actionName]();
-        }
+        if (_log) _log.flow('fire', { actionId: sc.actionId, chord: sc.bindingKey });
 
-        const label = ACTION_LABELS[sc.actionName] || sc.actionName;
-        showToast('Blurry Site: ' + label, 1500);
+        const cb = registeredCallbacks[sc.actionId];
+        if (typeof cb === 'function') cb();
+
+        const action = (blsi.Actions && blsi.Actions.get) ? blsi.Actions.get(sc.actionId) : null;
+        const toastText = 'Blurry Site — ' + (action ? action.label : sc.actionId);
+        showToast(toastText, 1500);
         return;
       }
     }
 
-    // ── Keyup handler ─────────────────────────────────────────────────────
-    function onKeyUp(event) {
-      if (event.code) heldKeys.delete(event.code);
-    }
-
-    // ── Window blur handler ───────────────────────────────────────────────
     function onWindowBlur() {
-      heldKeys.clear();
+      // No held-key state any more, but keep the hook so future sequence
+      // support can clear in-progress sequence state here.
     }
 
-    // Attach at capture phase so we intercept before page scripts
     document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('keyup', onKeyUp, true);
     window.addEventListener('blur', onWindowBlur);
 
     activeKeydownListener = onKeyDown;
-    activeKeyupListener   = onKeyUp;
     activeBlurListener    = onWindowBlur;
   }
 
-  /**
-   * Removes all listeners and resets state.
-   */
+  /** Removes all listeners and resets state. */
   function destroy() {
     if (activeKeydownListener) {
       document.removeEventListener('keydown', activeKeydownListener, true);
       activeKeydownListener = null;
-    }
-    if (activeKeyupListener) {
-      document.removeEventListener('keyup', activeKeyupListener, true);
-      activeKeyupListener = null;
     }
     if (activeBlurListener) {
       window.removeEventListener('blur', activeBlurListener);
       activeBlurListener = null;
     }
 
-    heldKeys.clear();
     registeredShortcuts = [];
     registeredCallbacks = {};
 
@@ -268,14 +242,13 @@ const Shortcuts = (() => {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Expose public API
-  // -------------------------------------------------------------------------
   return {
     init,
     destroy,
     showToast,
     _setPickerActive(v) { _isPickerActive = !!v; },
+    // Exposed for content_script dedup between JS matcher and chrome.commands.
+    _getFireToken() { return FIRE_TOKEN; },
   };
 })();
 

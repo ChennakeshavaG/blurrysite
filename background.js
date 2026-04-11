@@ -1,6 +1,10 @@
 "use strict";
 
-importScripts("src/constants.js", "src/logger.js");
+importScripts(
+  "src/constants.js",
+  "src/logger.js",
+  "src/action_registry.js"
+);
 
 const MSG = self.blsi;
 const log = blsi.Logger.scope('bg');
@@ -81,21 +85,26 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // ---------------------------------------------------------------------------
 // Commands API relay — forward keyboard commands to the active tab
 // ---------------------------------------------------------------------------
+// Map chrome.commands ids → action messageType, derived from the registry.
+// Adding a new action with a chromeCommand field automatically wires up the
+// relay without touching this file.
+const COMMAND_TO_MESSAGE = (() => {
+  const out = {};
+  for (const action of blsi.Actions.list()) {
+    if (action.chromeCommand) out[action.chromeCommand] = action.messageType;
+  }
+  return out;
+})();
+
 chrome.commands.onCommand.addListener(async (command) => {
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
 
-  const messageMap = {
-    "toggle-blur-all": { type: MSG.TOGGLE_BLUR_ALL },
-    "toggle-picker": { type: MSG.TOGGLE_PICKER },
-    "clear-all-blur": { type: MSG.CLEAR_ALL_BLUR },
-  };
+  const type = COMMAND_TO_MESSAGE[command];
+  if (!type) return;
 
-  const message = messageMap[command];
-  if (message) {
-    log.flow('command.relay', { command, type: message.type, tabId: tab.id });
-    chrome.tabs.sendMessage(tab.id, message).catch(() => {});
-  }
+  log.flow('command.relay', { command, type, tabId: tab.id });
+  chrome.tabs.sendMessage(tab.id, { type }).catch(() => {});
 });
 
 

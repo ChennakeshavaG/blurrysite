@@ -64,11 +64,18 @@
     ui.blurListCount     = $('blurListCount');
     // Footer
     ui.clearAllSitesBtn  = $('clearAllSitesBtn');
+    ui.helpOverlayBtn    = $('helpOverlayBtn');
     ui.debugToggle       = $('debugToggle');
     ui.extVersion        = $('extVersion');
+    // Help overlay modal
+    ui.helpOverlayModal  = $('helpOverlayModal');
+    ui.helpOverlayList   = $('helpOverlayList');
+    ui.helpOverlayClose  = $('helpOverlayClose');
     // Shortcut modal
     ui.shortcutModal     = $('shortcutModal');
+    ui.scModalTitle      = $('scModalTitle');
     ui.captureDisplay    = $('captureDisplay');
+    ui.captureWarning    = $('captureWarning');
     ui.scModalSave       = $('scModalSave');
     ui.scModalCancel     = $('scModalCancel');
     ui.scModalReset      = $('scModalReset');
@@ -398,6 +405,55 @@
       ui.debugToggle.setAttribute('aria-pressed', String(next));
       showToast(next ? 'Flow logs ON' : 'Flow logs OFF');
     });
+
+    // Help overlay: list every action + its current binding.
+    if (ui.helpOverlayBtn) {
+      ui.helpOverlayBtn.addEventListener('click', openHelpOverlay);
+    }
+    if (ui.helpOverlayClose) {
+      ui.helpOverlayClose.addEventListener('click', closeHelpOverlay);
+    }
+  }
+
+  function renderHelpOverlay() {
+    if (!ui.helpOverlayList || !blsi.Actions || !blsi.ShortcutLabel) return;
+    ui.helpOverlayList.textContent = '';
+    const shortcuts = (settings && settings.SHORTCUTS) || {};
+    for (const action of blsi.Actions.list()) {
+      const li = document.createElement('li');
+      li.className = 'bl-si-help-list__item';
+
+      const textBox = document.createElement('div');
+      textBox.className = 'bl-si-help-list__text';
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'bl-si-help-list__label';
+      labelDiv.textContent = action.label;
+      const descDiv = document.createElement('div');
+      descDiv.className = 'bl-si-help-list__desc';
+      descDiv.textContent = action.description || '';
+      textBox.appendChild(labelDiv);
+      if (action.description) textBox.appendChild(descDiv);
+
+      const kbd = document.createElement('kbd');
+      kbd.className = 'bl-si-help-list__kbd';
+      const entry = shortcuts[action.id];
+      kbd.textContent = (entry && Array.isArray(entry.binding))
+        ? blsi.ShortcutLabel.bindingLabel(entry.binding)
+        : blsi.ShortcutLabel.bindingLabel(action.defaultBinding);
+
+      li.appendChild(textBox);
+      li.appendChild(kbd);
+      ui.helpOverlayList.appendChild(li);
+    }
+  }
+
+  function openHelpOverlay() {
+    renderHelpOverlay();
+    if (ui.helpOverlayModal) ui.helpOverlayModal.hidden = false;
+  }
+
+  function closeHelpOverlay() {
+    if (ui.helpOverlayModal) ui.helpOverlayModal.hidden = true;
   }
 
   async function syncDebugToggleState() {
@@ -449,77 +505,152 @@
     }
   }
 
-  // ── Shortcut capture modal ─────────────────────────────────────────────────
+  // ── Shortcut capture modal (v2) ────────────────────────────────────────────
+  //
+  // Captures a single chord {code, mods} using the new data model. The user
+  // holds modifiers (displayed live) and presses one non-modifier key to
+  // commit. Guards against Dead/Process/Unidentified/AltGr/composition.
+  // Shows inline warnings for collisions with other actions or known
+  // browser-reserved chords, but always allows save (last-write-wins).
 
-  const MODIFIER_CODES = new Set([
-    'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
-    'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'CapsLock', 'Fn',
-  ]);
+  let scAction            = null;   // action id being edited
+  let scCandidate         = null;   // { code, mods } once the user commits
+  let scKeydownHandler    = null;
+  let scCleanup           = null;
 
-  let scAction          = null;
-  let scPrimaryMod      = null;
-  let scKeys            = [];
-  let scKeyCodes        = new Set();
-  let scKeydownHandler  = null;
-  let scCleanup         = null;
+  function openShortcutModal(actionId) {
+    scAction = actionId;
+    scCandidate = null;
 
-  function openShortcutModal(actionName) {
-    scAction = actionName;
-    scPrimaryMod = null;
-    scKeys = [];
-    scKeyCodes = new Set();
+    const title = (blsi.Actions && blsi.Actions.get(actionId))
+      ? 'Customize: ' + blsi.Actions.get(actionId).label
+      : I18n.t('shortcut_modal_title');
+    if (ui.scModalTitle) ui.scModalTitle.textContent = title;
+
     ui.scModalSave.disabled = true;
     ui.captureDisplay.textContent = I18n.t('shortcut_modal_placeholder');
     ui.captureDisplay.className = 'bl-si-capture bl-si-capture--listening';
+    if (ui.captureWarning) {
+      ui.captureWarning.hidden = true;
+      ui.captureWarning.textContent = '';
+    }
     ui.shortcutModal.hidden = false;
+
+    // Focus the capture surface so the user doesn't have to click.
+    try { ui.captureDisplay.focus(); } catch (_) {}
 
     if (scKeydownHandler) document.removeEventListener('keydown', scKeydownHandler, true);
 
-    function updateDisplay() {
-      const parts = [];
-      if (scPrimaryMod) parts.push(Renderer.codeLabel(scPrimaryMod));
-      for (const k of scKeys) parts.push(Renderer.CODE_LABELS[k.code] || k.key.toUpperCase());
-      ui.captureDisplay.textContent = parts.length > 0 ? parts.join(' + ') : I18n.t('shortcut_modal_placeholder');
+    const Label = blsi.ShortcutLabel;
+    const MODIFIER_CODES = blsi.MODIFIER_CODES;
+
+    function readMods(e) {
+      const mods = [];
+      if (e.altKey)   mods.push('Alt');
+      if (e.ctrlKey)  mods.push('Control');
+      if (e.metaKey)  mods.push('Meta');
+      if (e.shiftKey) mods.push('Shift');
+      return mods;
+    }
+
+    function renderPending(mods, code) {
+      if (!code && mods.length === 0) {
+        ui.captureDisplay.textContent = I18n.t('shortcut_modal_placeholder');
+        return;
+      }
+      const chord = { code: code || '', mods };
+      // When no code is set yet, render just the mods + an ellipsis-style hint.
+      if (!code) {
+        const modPart = mods.map(Label.modLabel).join(Label.IS_MAC ? '' : '+');
+        ui.captureDisplay.textContent = modPart + (Label.IS_MAC ? '…' : ' + …');
+        return;
+      }
+      ui.captureDisplay.textContent = Label.chordLabel(chord);
+    }
+
+    function refreshWarnings(candidate) {
+      if (!ui.captureWarning) return;
+      if (!candidate) {
+        ui.captureWarning.hidden = true;
+        ui.captureWarning.textContent = '';
+        return;
+      }
+
+      const notes = [];
+
+      // Conflict with another action in the current settings.
+      const myKey = Label.chordKey(candidate);
+      for (const [otherId, other] of Object.entries(settings.SHORTCUTS || {})) {
+        if (otherId === scAction) continue;
+        if (!other || !Array.isArray(other.binding) || other.binding.length !== 1) continue;
+        if (Label.chordKey(other.binding[0]) === myKey) {
+          const meta = blsi.Actions && blsi.Actions.get(otherId);
+          notes.push('Conflicts with ' + (meta ? meta.label : otherId) + ' — only the first match will fire.');
+        }
+      }
+
+      // Known browser-reserved chord.
+      const reserved = blsi.ShortcutReserved && blsi.ShortcutReserved.lookup(candidate);
+      if (reserved) {
+        notes.push('Overrides a browser shortcut: ' + reserved.label + '. The browser key will no longer work on pages where this extension is active.');
+      }
+
+      if (notes.length === 0) {
+        ui.captureWarning.hidden = true;
+        ui.captureWarning.textContent = '';
+      } else {
+        ui.captureWarning.hidden = false;
+        ui.captureWarning.textContent = notes.join(' ');
+      }
     }
 
     scKeydownHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === 'Escape') { closeShortcutModal(); return; }
 
-      if (!scPrimaryMod && MODIFIER_CODES.has(e.code)) {
-        scPrimaryMod = e.code;
-        updateDisplay();
+      // Guards — same as shortcut_handler matcher.
+      if (e.isComposing) return;
+      if (e.key === 'Process' || e.key === 'Dead' || e.key === 'Unidentified') return;
+      if (e.getModifierState && e.getModifierState('AltGraph')) return;
+
+      // Escape cancels (even if a candidate exists).
+      if (e.code === 'Escape') { closeShortcutModal(); return; }
+
+      const mods = readMods(e);
+
+      // Pure modifier keydown: preview, don't commit.
+      if (MODIFIER_CODES.has(e.code)) {
+        renderPending(mods, null);
         return;
       }
-      if (MODIFIER_CODES.has(e.code) && scPrimaryMod && !scKeyCodes.has(e.code)) {
-        scKeys.push({ key: e.key, code: e.code });
-        scKeyCodes.add(e.code);
-        updateDisplay();
+
+      // Non-modifier keydown: commit the chord (requires at least one modifier).
+      if (mods.length === 0) {
+        ui.captureDisplay.textContent = I18n.t('shortcut_modal_no_modifier') || 'Hold a modifier first';
         return;
       }
-      if (!MODIFIER_CODES.has(e.code) && !scKeyCodes.has(e.code)) {
-        if (!scPrimaryMod) {
-          ui.captureDisplay.textContent = I18n.t('shortcut_modal_no_modifier');
-          return;
-        }
-        scKeys.push({ key: e.key, code: e.code });
-        scKeyCodes.add(e.code);
-        ui.captureDisplay.className = 'bl-si-capture bl-si-capture--done';
-        ui.scModalSave.disabled = false;
-        updateDisplay();
+
+      // Ctrl+Alt without another modifier collides with AltGr — reject.
+      const modSet = new Set(mods);
+      if (modSet.has('Control') && modSet.has('Alt') && !modSet.has('Shift') && !modSet.has('Meta')) {
+        ui.captureDisplay.textContent = 'Ctrl+Alt combos break European keyboard layouts';
+        return;
       }
+
+      scCandidate = { code: e.code, mods: [...mods].sort() };
+      ui.captureDisplay.className = 'bl-si-capture bl-si-capture--done';
+      ui.captureDisplay.textContent = Label.chordLabel(scCandidate);
+      ui.scModalSave.disabled = false;
+      refreshWarnings(scCandidate);
     };
 
     document.addEventListener('keydown', scKeydownHandler, true);
 
     const onSave = async () => {
       try {
-        if (!scPrimaryMod || scKeys.length === 0) return;
-        const shortcutKey = 'SHORTCUTS.' + scAction;
-        Renderer.setByPath(settings, shortcutKey, {
-          primaryModifier: scPrimaryMod,
-          keys: scKeys.map(k => ({ key: k.key, code: k.code })),
+        if (!scCandidate) return;
+        Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, {
+          binding: [{ code: scCandidate.code, mods: [...scCandidate.mods] }],
         });
         await saveSettings(true);
         Renderer.updateAll(settings);
@@ -532,9 +663,11 @@
 
     const onReset = async () => {
       try {
-        const defaults = MSG.DEFAULT_SETTINGS.SHORTCUTS[scAction];
-        if (defaults) {
-          Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, JSON.parse(JSON.stringify(defaults)));
+        const action = blsi.Actions && blsi.Actions.get(scAction);
+        if (action) {
+          Renderer.setByPath(settings, 'SHORTCUTS.' + scAction, {
+            binding: action.defaultBinding.map((c) => ({ code: c.code, mods: [...c.mods] })),
+          });
           await saveSettings(true);
           Renderer.updateAll(settings);
         }
@@ -566,6 +699,7 @@
       scKeydownHandler = null;
     }
     if (scCleanup) { scCleanup(); scCleanup = null; }
+    scCandidate = null;
   }
 
   // ── Rule editor modal ──────────────────────────────────────────────────────
