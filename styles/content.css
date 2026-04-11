@@ -163,7 +163,26 @@
   background: rgba(245, 158, 11, 0.3) !important;
 }
 
-/* ── Mode chip — click to cycle modes, hover for description ─────────── */
+/* ── Mode chip — click to cycle modes, hover for description ───────────
+   Stands out as the primary "click me" affordance on the pill via three
+   cues working together:
+     1. Orange-tinted default border — sets it apart from Clear/Close.
+     2. Persistent soft pulse (breathing orange halo) — draws the eye
+        without being distracting. Stops on hover/focus/active so it
+        doesn't compete with the user's own interaction.
+     3. Brighter hover + click bounce (shared with Clear/Close).
+   The pulse is disabled when the user prefers reduced motion. */
+@keyframes bl-si-chip-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0),
+                0 0 0 1px rgba(245, 158, 11, 0.18) inset;
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.24),
+                0 0 0 1px rgba(245, 158, 11, 0.32) inset;
+  }
+}
+
 .bl-si-toolbar-chip {
   all: initial;
   display: inline-flex !important;
@@ -176,15 +195,16 @@
   border-radius: 999px !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 12px !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
   line-height: 1.4 !important;
-  color: #e5e7eb !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #f9fafb !important;
+  background: rgba(245, 158, 11, 0.1) !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
   cursor: pointer !important;
   user-select: none !important;
   white-space: nowrap !important;
   flex-shrink: 0 !important;
+  animation: bl-si-chip-pulse 2.4s ease-in-out infinite !important;
   transition:
     background 140ms ease,
     border-color 140ms ease,
@@ -192,13 +212,25 @@
     transform 90ms ease !important;
 }
 .bl-si-toolbar-chip:hover {
-  background: rgba(245, 158, 11, 0.18) !important;
+  background: rgba(245, 158, 11, 0.26) !important;
   border-color: var(--bl-si-highlight-color, #f59e0b) !important;
   color: #ffffff !important;
+  animation: none !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35) !important;
+}
+.bl-si-toolbar-chip:focus-visible {
+  animation: none !important;
+  outline: 2px solid var(--bl-si-highlight-color, #f59e0b) !important;
+  outline-offset: 2px !important;
 }
 .bl-si-toolbar-chip:active {
   transform: scale(0.94) !important;
-  background: rgba(245, 158, 11, 0.28) !important;
+  background: rgba(245, 158, 11, 0.38) !important;
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bl-si-toolbar-chip { animation: none !important; }
 }
 
 /* ── Static "Blur An:" prefix label — reads as one sentence with chip ──
