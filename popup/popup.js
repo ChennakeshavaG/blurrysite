@@ -412,14 +412,15 @@
       showToast(I18n.t('toast_cleared'));
     });
 
-    // Picker — fire-and-forget since popup may close before response arrives.
-    // isPickerActive is NOT a storage value — it's content-script runtime
-    // state the popup queries once at open, so we toggle it locally here.
+    // Picker — fire-and-forget and then close the popup. Focus should be on
+    // the picker pill in the page, not on the popup panel. Closing the
+    // popup avoids the user having to click away from it after activating
+    // the picker.
     ui.pickerBtn.addEventListener('click', () => {
       if (!currentTab) return;
       chrome.tabs.sendMessage(currentTab.id, { type: MSG.TOGGLE_PICKER }).catch(() => {});
-      isPickerActive = !isPickerActive;
-      ui.pickerBtn.dataset.active = String(isPickerActive);
+      // Close the popup — the send-message has already been dispatched.
+      try { window.close(); } catch (_) {}
     });
 
     // Accordion toggles

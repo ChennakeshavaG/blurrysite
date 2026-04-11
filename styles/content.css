@@ -99,7 +99,9 @@
   all: initial; /* Reset all inherited properties */
   position: fixed !important;
   top: 16px !important;
-  right: 16px !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
   max-width: calc(100vw - 32px) !important;
   height: auto !important;
   z-index: 2147483647 !important;
@@ -136,18 +138,21 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 22px !important;
-  height: 22px !important;
+  width: 24px !important;
+  height: 24px !important;
   border-radius: 999px !important;
-  color: rgba(229, 231, 235, 0.7) !important;
-  font-size: 14px !important;
+  color: var(--bl-si-highlight-color, #f59e0b) !important;
+  font-size: 16px !important;
   line-height: 1 !important;
   cursor: grab !important;
   user-select: none !important;
   flex-shrink: 0 !important;
-  transition: background 120ms ease, color 120ms ease !important;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease !important;
 }
-.bl-si-toolbar-drag:hover { background: rgba(255, 255, 255, 0.1) !important; color: #f3f4f6 !important; }
+.bl-si-toolbar-drag:hover {
+  background: rgba(245, 158, 11, 0.14) !important;
+  color: #fbbf24 !important;
+}
 
 /* ── Mode chip — click to cycle modes, hover for description ─────────── */
 .bl-si-toolbar-chip {
@@ -156,12 +161,12 @@
   align-items: center !important;
   justify-content: center !important;
   /* Fixed width so the pill never reflows when the mode label changes.
-     "Area on screen" is the longest — ~98px at font-size 11px. */
-  width: 100px !important;
-  padding: 4px 10px !important;
+     "Area on screen" is the longest — ~104px at font-size 12px. */
+  width: 110px !important;
+  padding: 5px 12px !important;
   border-radius: 999px !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
   font-weight: 500 !important;
   line-height: 1.4 !important;
   color: #e5e7eb !important;
@@ -171,11 +176,20 @@
   user-select: none !important;
   white-space: nowrap !important;
   flex-shrink: 0 !important;
-  transition: background 120ms ease, border-color 120ms ease !important;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 90ms ease !important;
 }
 .bl-si-toolbar-chip:hover {
-  background: rgba(255, 255, 255, 0.14) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(245, 158, 11, 0.18) !important;
+  border-color: var(--bl-si-highlight-color, #f59e0b) !important;
+  color: #ffffff !important;
+}
+.bl-si-toolbar-chip:active {
+  transform: scale(0.94) !important;
+  background: rgba(245, 158, 11, 0.28) !important;
 }
 
 /* ── Static "Blur An:" prefix label — reads as one sentence with chip ──
@@ -184,9 +198,9 @@
 .bl-si-toolbar-prefix {
   all: initial;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  color: rgba(229, 231, 235, 0.9) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #f3f4f6 !important;
   line-height: 1.4 !important;
   white-space: nowrap !important;
   user-select: none !important;
@@ -194,7 +208,7 @@
   cursor: default !important;
   text-decoration: underline !important;
   text-decoration-color: var(--bl-si-highlight-color, #f59e0b) !important;
-  text-decoration-thickness: 1.5px !important;
+  text-decoration-thickness: 2px !important;
   text-underline-offset: 3px !important;
 }
 

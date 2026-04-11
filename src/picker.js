@@ -120,9 +120,12 @@ const Picker = (() => {
     return order[(idx + 1) % order.length];
   }
 
-  // Default corner when no stored position is available.
-  const DEFAULT_PILL_POS = { top: 16, left: null, right: 16, bottom: null };
-  const PILL_POS_KEY = 'picker_toolbar_pos';
+  // The pill always opens at top-center of the viewport on every picker
+  // activation. We intentionally do NOT persist the user's last-dragged
+  // position — each open starts fresh so the user always knows where to
+  // look. The default position is declared in styles/content.css as
+  // `top: 16px; left: 50%; transform: translateX(-50%);` — picker.js
+  // doesn't need to set it on mount.
 
   // ── Custom instant tooltip for the mode chip ───────────────────────────
   // Native `title` has a ~500ms browser delay. We render our own tooltip
@@ -286,9 +289,9 @@ const Picker = (() => {
     toolbarLabelEl = null;
 
     document.body.appendChild(toolbarEl);
-
-    // Restore saved position, or default to top-right corner.
-    _restorePillPosition();
+    // No position restore: the pill always opens at top-center of the
+    // viewport via the stylesheet. Drag is in-memory only during this
+    // picker session; next activation starts fresh.
   }
 
   // ── Pill drag handling ─────────────────────────────────────────────────────
@@ -333,14 +336,16 @@ const Picker = (() => {
       offsetX: e.clientX - rect.left,
       offsetY: e.clientY - rect.top,
     };
-    // Switch to {top,left} anchoring regardless of the current anchor side.
-    // Freeze the pill's current viewport position before we start moving it.
-    // MUST use setProperty(..., 'important') — the stylesheet has
-    // !important rules that otherwise win the cascade.
-    _setPos('left',   rect.left + 'px');
-    _setPos('top',    rect.top + 'px');
-    _setPos('right',  'auto');
-    _setPos('bottom', 'auto');
+    // Switch to raw {top,left} anchoring. The stylesheet defaults to
+    // top-center via `left: 50%; transform: translateX(-50%);` — we must
+    // clear the transform so subsequent left-writes don't get offset by
+    // half the pill width. Everything uses setProperty(..., 'important')
+    // to beat the stylesheet's !important rules.
+    _setPos('left',       rect.left + 'px');
+    _setPos('top',        rect.top + 'px');
+    _setPos('right',      'auto');
+    _setPos('bottom',     'auto');
+    _setPos('transform',  'none');
     toolbarEl.classList.add('bl-si-toolbar--dragging');
     document.addEventListener('mousemove', _onDragMove, true);
     document.addEventListener('mouseup', _onDragEnd, true);
@@ -369,37 +374,8 @@ const Picker = (() => {
     document.removeEventListener('mouseup', _onDragEnd, true);
     toolbarEl.classList.remove('bl-si-toolbar--dragging');
     _dragCtx = null;
-    // Persist the current {top, left}.
-    const rect = toolbarEl.getBoundingClientRect();
-    const pos = { top: Math.round(rect.top), left: Math.round(rect.left), right: null, bottom: null };
-    try {
-      if (chrome && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({ [PILL_POS_KEY]: pos });
-      }
-    } catch (_) {}
-  }
-
-  function _restorePillPosition() {
-    if (!toolbarEl) return;
-    const apply = (pos) => {
-      if (!toolbarEl) return;
-      // Must use setProperty('important') to beat the stylesheet's
-      // `top: 16px !important; right: 16px !important;` rules.
-      _setPos('top',    (pos.top != null)    ? pos.top + 'px'    : 'auto');
-      _setPos('left',   (pos.left != null)   ? pos.left + 'px'   : 'auto');
-      _setPos('right',  (pos.right != null)  ? pos.right + 'px'  : 'auto');
-      _setPos('bottom', (pos.bottom != null) ? pos.bottom + 'px' : 'auto');
-    };
-    try {
-      if (chrome && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(PILL_POS_KEY, (result) => {
-          const pos = result && result[PILL_POS_KEY];
-          apply(pos && typeof pos === 'object' ? pos : DEFAULT_PILL_POS);
-        });
-        return;
-      }
-    } catch (_) {}
-    apply(DEFAULT_PILL_POS);
+    // Position is NOT persisted. Each picker activation opens fresh at
+    // top-center via the stylesheet.
   }
 
   function removeToolbar() {
