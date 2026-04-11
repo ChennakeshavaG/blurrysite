@@ -191,11 +191,12 @@ const Shortcuts = (() => {
         if (sc.code !== event.code) continue;
         if (!sameModSet(sc.mods, eventMods)) continue;
 
-        // Match: fire + preventDefault + toast + stamp fire token.
+        // Match: fire + preventDefault + toast. The fire token for dedup
+        // against chrome.commands relays is stamped inside handleMessage on
+        // entry, NOT here — otherwise this path would stamp the token BEFORE
+        // the callback re-enters handleMessage, and handleMessage would see
+        // its own fresh stamp and drop the call.
         event.preventDefault();
-        FIRE_TOKEN[sc.actionId] = (typeof performance !== 'undefined' && performance.now)
-          ? performance.now()
-          : Date.now();
 
         if (_log) _log.flow('fire', { actionId: sc.actionId, chord: sc.bindingKey });
 

@@ -154,22 +154,23 @@
 
   // ─── Message handler ──────────────────────────────────────────────────────────
 
-  // Dedup trigger messages against the JS shortcut matcher.
+  // Dedup trigger messages between the JS shortcut matcher and chrome.commands.
   //
-  // Alt+Shift+B (or whatever chord is bound) can fire from TWO sources for the
-  // same keypress: (1) the JS matcher in shortcut_handler.js, synchronously,
-  // (2) the chrome.commands relay from background.js, asynchronously via a
-  // cross-process message round trip. The old implementation used a 300ms
-  // time window, which was fragile on slow relays and on actions the user
-  // legitimately fired twice within 300ms.
+  // When the user presses a bound chord, two independent paths may fire:
+  //   (A) JS matcher in shortcut_handler.js → fires synchronously → calls its
+  //       callback which re-enters handleMessage.
+  //   (B) chrome.commands in the manifest → browser dispatches to
+  //       background.js → relays via chrome.tabs.sendMessage → handleMessage.
   //
-  // v2 approach: the JS matcher stamps globalThis.__blsiShortcutFire[actionId]
-  // with performance.now() on every match. When a trigger message arrives,
-  // we check whether the corresponding fire token is recent (< 500ms). If so,
-  // the message is a relay of a chord the JS matcher already handled — drop it.
-  // Otherwise it's a legitimate independent trigger (popup button, shortcut
-  // the user set via chrome://extensions/shortcuts that's different from the
-  // JS binding, context-menu, etc.) — handle it.
+  // Both paths enter handleMessage. We stamp globalThis.__blsiShortcutFire
+  // [actionId] with performance.now() on the FIRST entry for a given type,
+  // and dedup subsequent entries within a 500ms window.
+  //
+  // Path (A) enters first (synchronous), stamps, handles the action. Path (B)
+  // arrives microseconds-to-milliseconds later, sees the fresh stamp, drops.
+  //
+  // The popup button and context-menu paths also enter handleMessage, stamp,
+  // and handle — no competing second path, no dedup triggered.
   //
   // The mapping from messageType back to actionId comes from the action registry.
   const RELAY_DEDUP_MS = 500;
@@ -185,19 +186,20 @@
     const { type } = message;
     log.flow('msg.in', { type });
 
-    // Monotonic fire-token dedup for trigger messages.
+    // Fire-token dedup for trigger messages. Check-then-stamp: a fresh stamp
+    // means a prior handleMessage call (same tick/ms) already handled this
+    // action — drop this one as a duplicate relay.
     const actionId = MESSAGE_TO_ACTION_ID[type];
     if (actionId) {
-      const fireTokens = globalThis.__blsiShortcutFire || {};
+      const fireTokens = globalThis.__blsiShortcutFire || (globalThis.__blsiShortcutFire = {});
+      const nowTs = (typeof performance !== 'undefined' && performance.now)
+        ? performance.now() : Date.now();
       const last = fireTokens[actionId];
-      if (typeof last === 'number') {
-        const nowTs = (typeof performance !== 'undefined' && performance.now)
-          ? performance.now() : Date.now();
-        if (nowTs - last < RELAY_DEDUP_MS) {
-          if (sendResponse) sendResponse({ ok: true, deduped: true });
-          return false;
-        }
+      if (typeof last === 'number' && (nowTs - last) < RELAY_DEDUP_MS) {
+        if (sendResponse) sendResponse({ ok: true, deduped: true });
+        return false;
       }
+      fireTokens[actionId] = nowTs;
     }
 
     if (settings.ENABLED === false && type !== MSG.GET_STATUS) {

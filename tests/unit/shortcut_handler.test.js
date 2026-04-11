@@ -243,16 +243,24 @@ describe('blsi.Shortcuts (v2)', () => {
     });
   });
 
-  // ── Fire token ────────────────────────────────────────────────────────────
+  // ── Fire token — matcher exposes the map but does NOT stamp on match.
+  //     The stamp now lives in content_script.handleMessage so the JS path
+  //     and the chrome.commands relay both stamp from the same place, and
+  //     the JS path doesn't dedup itself.
   describe('fire token', () => {
-    test('stamps __blsiShortcutFire for the matched action', () => {
+    test('_getFireToken returns the shared globalThis map', () => {
+      const token = blsi.Shortcuts._getFireToken();
+      expect(token).toBe(globalThis.__blsiShortcutFire);
+    });
+
+    test('matcher does not stamp the token (stamping moved to content_script)', () => {
       const cb = jest.fn();
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, { TOGGLE_BLUR_ALL: cb });
       const before = globalThis.__blsiShortcutFire['TOGGLE_BLUR_ALL'];
       fireKeyDown({ key: 'b', code: 'KeyB', alt: true, shift: true });
-      const after = globalThis.__blsiShortcutFire['TOGGLE_BLUR_ALL'];
-      expect(typeof after).toBe('number');
-      expect(after !== before).toBe(true);
+      expect(cb).toHaveBeenCalledTimes(1);
+      // Matcher no longer stamps — token is unchanged.
+      expect(globalThis.__blsiShortcutFire['TOGGLE_BLUR_ALL']).toBe(before);
     });
   });
 
