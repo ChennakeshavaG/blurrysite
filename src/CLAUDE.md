@@ -70,6 +70,10 @@ A module may only depend on modules loaded before it.
 
 #### Zone overlay methods
 - `createZoneOverlay(zoneData)` appends an overlay `<div>` to `document.body`. Overlays use the `data-bl-si-zone` attribute (set to `zoneData.id`) for identification.
+- **Anchor**: `zoneData.anchor` is `'page'` (default) or `'screen'`.
+  - `'page'` → `position: absolute`; coordinates are document-space; the zone scrolls with the page content. `_applyStickyItem` re-projects via `xPct`/`yPct` against the current `scrollWidth`/`scrollHeight` to survive layout changes. Also honors `path` scoping.
+  - `'screen'` → `position: fixed`; coordinates are viewport-space; the zone stays on screen during scroll. Raw `x`/`y` are used as-is. No `path` scoping — a screen-anchored zone applies on every page under its host.
+- Overlay stamps `data-bl-si-zone-anchor="page"|"screen"` for debugging/CSS.
 - `removeZoneOverlay(zoneId)` removes the overlay matching `zoneId` from DOM and internal tracking.
 - `getZoneOverlays()` returns an array of all active zone overlay elements.
 - `removeAllZoneOverlays()` removes all zone overlays from DOM and tracking.
@@ -151,8 +155,12 @@ A module may only depend on modules loaded before it.
 - `_setPickerActive(v)` and `_getFireToken()` must be in the public return object.
 
 ### picker.js
-- Toolbar: `toolbarEl.id = "bl-si-picker-toolbar"` (tests use `getElementById`).
+- Three modes: `PM.DYNAMIC`, `PM.STICKY_PAGE`, `PM.STICKY_SCREEN`. `_isSticky(mode)` helper distinguishes the two sticky variants. `setMode` rejects anything else.
+- Sticky draw: the preview `<div class="bl-si-zone-drawing">` always uses `position: fixed` with viewport coordinates — it's just a drag visual.
+- Sticky commit: the `onStickyBlur` callback passes `{ anchor: 'page' | 'screen', x, y, width, height, scrollWidth, scrollHeight }`. For `STICKY_PAGE`, `x/y` are **document** coordinates (scroll offset added) and `scrollWidth/Height` snapshot the document size for later xPct/yPct re-projection. For `STICKY_SCREEN`, `x/y` are **viewport** coordinates (no scroll offset) and `scrollWidth/Height` is the viewport, not the document.
+- Toolbar: `toolbarEl.id = "bl-si-picker-toolbar"` (tests use `getElementById`). It's a floating draggable pill, not a full-width bar. Position persisted at `chrome.storage.local.picker_toolbar_pos = { top, left, right, bottom }`. Drag handle is the `.bl-si-toolbar-drag` element; dragging attaches `mousemove`/`mouseup` at capture phase on `document` so it beats the picker's own mouse handlers.
 - Toolbar appended to `document.body`, not `document.documentElement`.
+- The `.bl-si-picker-active button` blanket `cursor: crosshair` rule in `styles/content.css` excludes toolbar buttons (`.bl-si-toolbar-btn`, `.bl-si-toolbar-btn--close`, `.bl-si-toolbar-drag`) and toolbar selects. Two explicit higher-specificity rules (`.bl-si-toolbar .bl-si-toolbar-btn`, `.bl-si-toolbar select`) re-assert `cursor: pointer` for the pill's interactive children.
 - Blur/unblur decision: use `blsi.BlurEngine.isBlurred(target)` to detect both data-attribute and CSS-tag-rule blurs.
 - Do not call `blsi.SelectorUtils` inside picker — it is not picker's responsibility.
 - All event listeners at capture phase. `onClick` calls `stopPropagation` + `stopImmediatePropagation`.

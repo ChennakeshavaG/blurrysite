@@ -398,21 +398,29 @@ describe('BlurrySite constants', () => {
       expect(result.a.b.c.d.e.f).toEqual({ g: 'deep' });
     });
 
-    test('PICKER_MODE defaults to sticky', () => {
-      expect(PB.DEFAULT_SETTINGS.PICKER_MODE).toBe('sticky');
+    test('PICKER_MODE defaults to sticky-page', () => {
+      expect(PB.DEFAULT_SETTINGS.PICKER_MODE).toBe('sticky-page');
     });
 
     test('PICKER_MODE validates against enum', () => {
-      const s1 = PB.validateSettings({ PICKER_MODE: 'sticky' });
-      expect(s1.PICKER_MODE).toBe('sticky');
-      const s2 = PB.validateSettings({ PICKER_MODE: 'dynamic' });
-      expect(s2.PICKER_MODE).toBe('dynamic');
-      const s3 = PB.validateSettings({ PICKER_MODE: 'invalid' });
-      expect(s3.PICKER_MODE).toBe(PB.DEFAULT_SETTINGS.PICKER_MODE);
+      const s1 = PB.validateSettings({ PICKER_MODE: 'sticky-page' });
+      expect(s1.PICKER_MODE).toBe('sticky-page');
+      const s2 = PB.validateSettings({ PICKER_MODE: 'sticky-screen' });
+      expect(s2.PICKER_MODE).toBe('sticky-screen');
+      const s3 = PB.validateSettings({ PICKER_MODE: 'dynamic' });
+      expect(s3.PICKER_MODE).toBe('dynamic');
+      const s4 = PB.validateSettings({ PICKER_MODE: 'invalid' });
+      expect(s4.PICKER_MODE).toBe(PB.DEFAULT_SETTINGS.PICKER_MODE);
+    });
+
+    test('PICKER_MODE legacy "sticky" migrates to sticky-page', () => {
+      const s = PB.validateSettings({ PICKER_MODE: 'sticky' });
+      expect(s.PICKER_MODE).toBe('sticky-page');
     });
 
     test('PICKER_MODES enum exists', () => {
-      expect(PB.PICKER_MODES.STICKY).toBe('sticky');
+      expect(PB.PICKER_MODES.STICKY_PAGE).toBe('sticky-page');
+      expect(PB.PICKER_MODES.STICKY_SCREEN).toBe('sticky-screen');
       expect(PB.PICKER_MODES.DYNAMIC).toBe('dynamic');
     });
 

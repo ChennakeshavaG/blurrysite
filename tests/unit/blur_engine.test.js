@@ -344,6 +344,24 @@ describe('blsi.BlurEngine', () => {
       expect(el2.style.left).toBe('20px');
       expect(document.querySelectorAll('[data-bl-si-zone="s_dup"]').length).toBe(1);
     });
+
+    test('defaults to page anchor when anchor is omitted', () => {
+      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_def', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+      expect(el.style.position).toBe('absolute');
+      expect(el.dataset.blSiZoneAnchor).toBe('page');
+    });
+
+    test('page anchor uses position: absolute', () => {
+      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_page', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 });
+      expect(el.style.position).toBe('absolute');
+      expect(el.dataset.blSiZoneAnchor).toBe('page');
+    });
+
+    test('screen anchor uses position: fixed', () => {
+      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_scr', name: 'S', anchor: 'screen', x: 0, y: 0, width: 10, height: 10 });
+      expect(el.style.position).toBe('fixed');
+      expect(el.dataset.blSiZoneAnchor).toBe('screen');
+    });
   });
 
   describe('removeZoneOverlay', () => {

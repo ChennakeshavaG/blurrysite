@@ -777,12 +777,12 @@ describe('blsi.Picker', () => {
     });
 
     test('activates in sticky mode when pickerMode is sticky', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       expect(blsi.Picker.isActive).toBe(true);
     });
 
     test('creates drawing preview on mousedown', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -792,7 +792,7 @@ describe('blsi.Picker', () => {
     });
 
     test('updates drawing preview on mousemove', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -807,7 +807,7 @@ describe('blsi.Picker', () => {
 
     test('calls onStickyBlur on mouseup with valid area', () => {
       const callbacks = { onStickyBlur: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -823,7 +823,7 @@ describe('blsi.Picker', () => {
 
     test('does not call onStickyBlur for area smaller than 10px', () => {
       const callbacks = { onStickyBlur: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -834,7 +834,7 @@ describe('blsi.Picker', () => {
     });
 
     test('removes drawing preview on mouseup', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -846,7 +846,7 @@ describe('blsi.Picker', () => {
     });
 
     test('Escape cancels in-progress draw without deactivating', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -865,7 +865,7 @@ describe('blsi.Picker', () => {
 
     test('clicking zone overlay in sticky mode calls onStickyUnblur', () => {
       const callbacks = { onStickyUnblur: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
 
       const zone = document.createElement('div');
       zone.dataset.blSiZone = 's_test123';
@@ -881,7 +881,7 @@ describe('blsi.Picker', () => {
 
   describe('setMode', () => {
     test('switches from sticky to dynamic', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       blsi.Picker.setMode('dynamic');
 
       // Dynamic mode should enable hover highlights
@@ -894,7 +894,7 @@ describe('blsi.Picker', () => {
 
     test('switches from dynamic to sticky', () => {
       blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
-      blsi.Picker.setMode('sticky');
+      blsi.Picker.setMode('sticky-page');
 
       // Sticky mode should NOT enable hover highlights
       const el = document.createElement('div');
@@ -905,7 +905,7 @@ describe('blsi.Picker', () => {
     });
 
     test('cancels in-progress draw on mode switch', () => {
-      blsi.Picker.activate({ pickerMode: 'sticky' }, {});
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       const el = document.createElement('div');
       document.body.appendChild(el);
 
@@ -925,22 +925,22 @@ describe('blsi.Picker', () => {
 
     test('calls onModeChange callback', () => {
       const callbacks = { onModeChange: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
       blsi.Picker.setMode('dynamic');
       expect(callbacks.onModeChange).toHaveBeenCalledWith('dynamic');
     });
 
     test('ignores invalid mode values', () => {
       const callbacks = { onModeChange: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
       blsi.Picker.setMode('invalid');
       expect(callbacks.onModeChange).not.toHaveBeenCalled();
     });
 
     test('no-op when setting same mode', () => {
       const callbacks = { onModeChange: jest.fn() };
-      blsi.Picker.activate({ pickerMode: 'sticky' }, callbacks);
-      blsi.Picker.setMode('sticky');
+      blsi.Picker.activate({ pickerMode: 'sticky-page' }, callbacks);
+      blsi.Picker.setMode('sticky-page');
       expect(callbacks.onModeChange).not.toHaveBeenCalled();
     });
   });

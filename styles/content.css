@@ -45,14 +45,22 @@
 }
 
 .bl-si-picker-active a,
-.bl-si-picker-active button,
+.bl-si-picker-active button:not(.bl-si-toolbar-btn):not(.bl-si-toolbar-btn--close):not(.bl-si-toolbar-drag),
 .bl-si-picker-active input,
-.bl-si-picker-active select,
+.bl-si-picker-active select:not(.bl-si-toolbar select),
 .bl-si-picker-active textarea,
-.bl-si-picker-active [role="button"],
-.bl-si-picker-active [style*="cursor"] {
+.bl-si-picker-active [role="button"]:not(.bl-si-toolbar *),
+.bl-si-picker-active [style*="cursor"]:not(.bl-si-toolbar *) {
   cursor: crosshair !important;
 }
+
+/* Explicit cursor overrides for toolbar interactive children —
+   higher specificity than the blanket `.bl-si-picker-active button` rule. */
+.bl-si-toolbar .bl-si-toolbar-btn,
+.bl-si-toolbar .bl-si-toolbar-btn--close {
+  cursor: pointer !important;
+}
+.bl-si-toolbar select { cursor: pointer !important; }
 
 /**
  * Hover highlight: shown on the element currently under the cursor while the
@@ -72,54 +80,84 @@
   transition: outline var(--bl-si-transition-duration, 200ms) ease !important;
 }
 
-/* ─── Picker toolbar ────────────────────────────────────────────────────────── */
+/* ─── Picker toolbar (floating draggable pill) ─────────────────────────────── */
 
 /**
- * Fixed toolbar shown at the top of the viewport when picker is active.
- * Max z-index to sit above all page content.
+ * A compact pill that floats over the page during picker mode. User can drag
+ * it to any corner via the grip handle. Position is persisted in
+ * chrome.storage.local under `picker_toolbar_pos`. Uses `position: fixed` so
+ * it stays anchored to the viewport regardless of scroll.
  */
 .bl-si-toolbar {
   all: initial; /* Reset all inherited properties */
   position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
+  top: 16px !important;
+  right: 16px !important;
+  max-width: calc(100vw - 32px) !important;
   height: auto !important;
   z-index: 2147483647 !important;
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  padding: 8px 16px !important;
-  background: rgba(15, 15, 15, 0.93) !important;
-  backdrop-filter: blur(6px) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+  gap: 8px !important;
+  padding: 6px 8px 6px 6px !important;
+  background: rgba(15, 15, 15, 0.92) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3) !important;
   box-sizing: border-box !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 13px !important;
   line-height: 1.4 !important;
   color: #f3f4f6 !important;
-  /* Prevent the picker's own mouseover from highlighting toolbar elements */
   pointer-events: auto !important;
+  /* Smooth transition into view when the picker activates */
+  transition: box-shadow 150ms ease, border-color 150ms ease !important;
 }
+
+.bl-si-toolbar--dragging {
+  cursor: grabbing !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.bl-si-toolbar-drag {
+  all: initial;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 999px !important;
+  color: rgba(229, 231, 235, 0.7) !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+  cursor: grab !important;
+  user-select: none !important;
+  flex-shrink: 0 !important;
+  transition: background 120ms ease, color 120ms ease !important;
+}
+
+.bl-si-toolbar-drag:hover { background: rgba(255, 255, 255, 0.1) !important; color: #f3f4f6 !important; }
+.bl-si-toolbar--dragging .bl-si-toolbar-drag { cursor: grabbing !important; }
 
 .bl-si-toolbar-label {
   all: initial;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-  font-size: 13px !important;
-  color: #e5e7eb !important;
+  font-size: 11px !important;
+  color: rgba(229, 231, 235, 0.75) !important;
   line-height: 1.4 !important;
-  flex: 1 !important;
-  padding-right: 12px !important;
+  max-width: 240px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  /* Hide on viewports where the pill would exceed half the width. */
+  display: inline-block !important;
 }
 
-.bl-si-toolbar-btn-group {
-  all: initial;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  flex-shrink: 0 !important;
+@media (max-width: 640px) {
+  .bl-si-toolbar-label { display: none !important; }
 }
 
 .bl-si-toolbar-btn {
@@ -127,17 +165,18 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  padding: 4px 12px !important;
-  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
-  line-height: 1.5 !important;
+  line-height: 1.4 !important;
   cursor: pointer !important;
   border: 1px solid transparent !important;
   transition: background 120ms ease, border-color 120ms ease !important;
   user-select: none !important;
   white-space: nowrap !important;
+  flex-shrink: 0 !important;
 }
 
 .bl-si-toolbar-btn--clear {

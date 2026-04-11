@@ -105,7 +105,12 @@ settings.SHORTCUTS = {
 
 **`THOROUGH_BLUR`** — boolean; when true, applies deeper blur processing for more thorough coverage.
 
-**`PICKER_MODE`** — controls the picker strategy: `'sticky'` (draw rectangle, default) | `'dynamic'` (click element).
+**`PICKER_MODE`** — controls the picker strategy:
+- `'sticky-page'` (default) — sketch a box anchored to the document. Scrolls with the page content. Stored with `anchor: 'page'`.
+- `'sticky-screen'` — sketch a box anchored to the viewport. Stays fixed on screen during scroll. Stored with `anchor: 'screen'`. Best for screen-sharing / streaming.
+- `'dynamic'` — tap an element to blur it (selector-based, follows the element).
+
+Legacy `'sticky'` is migrated to `'sticky-page'` in `validateSettings`. Sticky zones stored without an `anchor` field default to `'page'` at restore time.
 
 **All default values live in `src/constants.js` → `BlurrySite.DEFAULTS`.** Do not hardcode defaults anywhere else.
 

@@ -96,9 +96,16 @@ const Constants = (() => {
     FROSTED:  'frosted',
   });
 
+  // Picker modes — what happens when the user clicks / sketches in the picker.
+  //   DYNAMIC       — tap an element to blur it; selector-based, follows the element.
+  //   STICKY_PAGE   — sketch a box anchored to document coordinates; scrolls with content.
+  //   STICKY_SCREEN — sketch a box anchored to viewport coordinates; stays fixed on screen.
+  //
+  // STICKY (legacy) maps to STICKY_PAGE at validation time.
   const PICKER_MODES = Object.freeze({
-    STICKY:  'sticky',
-    DYNAMIC: 'dynamic',
+    DYNAMIC:       'dynamic',
+    STICKY_PAGE:   'sticky-page',
+    STICKY_SCREEN: 'sticky-screen',
   });
 
   const PATTERN_TYPES = Object.freeze({
@@ -146,7 +153,7 @@ const Constants = (() => {
     ENABLED:              true,
     THOROUGH_BLUR:        false,
     BLUR_MODE:            BLUR_MODES.GAUSSIAN,
-    PICKER_MODE:          PICKER_MODES.STICKY,
+    PICKER_MODE:          PICKER_MODES.STICKY_PAGE,
 
     // SHORTCUTS intentionally omitted here — built lazily by buildDefaultSettings()
     // from blsi.Actions.defaultBindings() (loaded by src/action_registry.js, which
@@ -259,8 +266,11 @@ const Constants = (() => {
     result.BLUR_MODE = (Object.values(BLUR_MODES).includes(settings.BLUR_MODE))
       ? settings.BLUR_MODE : defaults.BLUR_MODE;
 
-    result.PICKER_MODE = (Object.values(PICKER_MODES).includes(settings.PICKER_MODE))
-      ? settings.PICKER_MODE : defaults.PICKER_MODE;
+    // Legacy "sticky" maps to the new "sticky-page" value (kept as a one-line
+    // shim because PICKER_MODE is live user state that was previously valid).
+    const legacyPicker = settings.PICKER_MODE === 'sticky' ? PICKER_MODES.STICKY_PAGE : settings.PICKER_MODE;
+    result.PICKER_MODE = (Object.values(PICKER_MODES).includes(legacyPicker))
+      ? legacyPicker : defaults.PICKER_MODE;
 
     // BLUR_CATEGORIES: each key must be boolean
     result.BLUR_CATEGORIES = {};

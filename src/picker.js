@@ -1,11 +1,12 @@
 /**
- * picker.js — PrivacyBlur Element Picker
+ * picker.js — Blurry Site Element Picker
  *
  * Exposed as blsi.Picker (IIFE — no ES module syntax).
  *
- * Two-mode picker:
- *  - Sticky mode: user drags to draw a rectangle → creates a zone overlay
- *  - Dynamic mode: user hovers and clicks an element → blurs/unblurs it
+ * Three picker modes:
+ *  - DYNAMIC       — tap an element, we find its boundary and blur it
+ *  - STICKY_PAGE   — sketch a box that scrolls with the page content
+ *  - STICKY_SCREEN — sketch a box that stays in the same spot on the screen
  *
  * Activated/deactivated programmatically by content_script.js.
  * Depends on blsi.BlurEngine (loaded before this file via manifest.json).
@@ -16,15 +17,24 @@ const Picker = (() => {
 
   const CLS = blsi.CSS || {};
   const _IDS = blsi.IDS || {};
-  const PM = blsi.PICKER_MODES || { STICKY: 'sticky', DYNAMIC: 'dynamic' };
+  const PM = blsi.PICKER_MODES || {
+    DYNAMIC: 'dynamic',
+    STICKY_PAGE: 'sticky-page',
+    STICKY_SCREEN: 'sticky-screen',
+  };
   const MIN_ZONE_SIZE = 10;
+
+  /** True iff `mode` is either of the sticky variants. */
+  function _isSticky(mode) {
+    return mode === PM.STICKY_PAGE || mode === PM.STICKY_SCREEN;
+  }
 
   // ─── Internal state ──────────────────────────────────────────────────────────
 
   let isActive = false;
 
-  /** Current picker mode: 'sticky' | 'dynamic' */
-  let currentMode = PM.STICKY;
+  /** Current picker mode: 'dynamic' | 'sticky-page' | 'sticky-screen' */
+  let currentMode = PM.STICKY_PAGE;
 
   /** Currently hovered DOM element while picker is active (dynamic mode). */
   let hoveredElement = null;
@@ -88,10 +98,14 @@ const Picker = (() => {
   // ─── Toolbar (fixed overlay) ──────────────────────────────────────────────────
 
   function _modeLabel() {
-    return currentMode === PM.STICKY
-      ? 'Click and drag to blur an area. Press Esc to exit.'
-      : 'Hover an element and click to blur. Press Esc to exit.';
+    if (currentMode === PM.STICKY_PAGE) return 'Sketch a box on the page to blur an area. Esc to exit.';
+    if (currentMode === PM.STICKY_SCREEN) return 'Sketch a box on your screen — it stays put. Esc to exit.';
+    return 'Tap an element on the page to blur it. Esc to exit.';
   }
+
+  // Default corner when no stored position is available.
+  const DEFAULT_PILL_POS = { top: 16, left: null, right: 16, bottom: null };
+  const PILL_POS_KEY = 'picker_toolbar_pos';
 
   function buildToolbar() {
     if (toolbarEl) return;
@@ -107,56 +121,64 @@ const Picker = (() => {
     toolbarEl.addEventListener('mouseover', (e) => e.stopPropagation());
     toolbarEl.addEventListener('mouseout', (e) => e.stopPropagation());
     toolbarEl.addEventListener('click', (e) => e.stopPropagation());
-    toolbarEl.addEventListener('mousedown', (e) => e.stopPropagation());
-    toolbarEl.addEventListener('mouseup', (e) => e.stopPropagation());
+    // NOTE: we intentionally do NOT stopPropagation on mousedown/mouseup —
+    // the drag handler below needs to see them to start a drag.
 
-    // ── Left: mode selector + status text ──────────────────────────────────
-    const leftGroup = document.createElement('div');
-    leftGroup.style.cssText = 'display:flex !important; align-items:center !important; gap:8px !important; flex:1 !important;';
+    // ── Drag handle (also acts as the pill's "grab surface") ─────────────
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'bl-si-toolbar-drag';
+    dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
+    dragHandle.title = 'Drag to move';
+    dragHandle.textContent = '\u2630'; // ☰ trigram for stable characters
+    _wireDrag(dragHandle);
 
+    // ── Mode selector ──────────────────────────────────────────────────────
     modeSelectEl = document.createElement('select');
+    modeSelectEl.className = 'bl-si-toolbar-select';
     // all:initial resets page CSS that sites like WhatsApp override on <select>.
-    // Then we re-apply our own styles + native appearance.
-    modeSelectEl.style.cssText = 'all:initial !important; cursor:pointer !important; padding:3px 6px !important; background:rgba(255,255,255,0.08) !important; color:#e5e7eb !important; border:1px solid rgba(255,255,255,0.12) !important; border-radius:4px !important; font-size:12px !important; font-family:system-ui,sans-serif !important; appearance:auto !important; -webkit-appearance:menulist !important; line-height:1.5 !important; height:auto !important; width:auto !important; display:inline-block !important;';
-
-    const optSticky = document.createElement('option');
-    optSticky.value = PM.STICKY;
-    optSticky.textContent = 'Sticky';
-    optSticky.title = 'Draw a box to blur a fixed area on the page. Stays in place even if the page content changes.';
+    modeSelectEl.style.cssText = 'all:initial !important; cursor:pointer !important; padding:4px 8px !important; background:rgba(255,255,255,0.1) !important; color:#e5e7eb !important; border:1px solid rgba(255,255,255,0.14) !important; border-radius:6px !important; font-size:12px !important; font-family:system-ui,sans-serif !important; appearance:auto !important; -webkit-appearance:menulist !important; line-height:1.5 !important; height:auto !important; width:auto !important; display:inline-block !important;';
 
     const optDynamic = document.createElement('option');
     optDynamic.value = PM.DYNAMIC;
-    optDynamic.textContent = 'Dynamic';
-    optDynamic.title = 'Click an element to blur it. Follows the element, but may not survive page reloads.';
+    optDynamic.textContent = 'Tap to blur';
+    optDynamic.title = 'Tap any element on the page to blur it. The blur follows that item.';
 
-    modeSelectEl.appendChild(optSticky);
+    const optStickyPage = document.createElement('option');
+    optStickyPage.value = PM.STICKY_PAGE;
+    optStickyPage.textContent = 'Area on page';
+    optStickyPage.title = 'Sketch a box over a region of the page. Scrolls with the content.';
+
+    const optStickyScreen = document.createElement('option');
+    optStickyScreen.value = PM.STICKY_SCREEN;
+    optStickyScreen.textContent = 'Area on screen';
+    optStickyScreen.title = 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing.';
+
     modeSelectEl.appendChild(optDynamic);
+    modeSelectEl.appendChild(optStickyPage);
+    modeSelectEl.appendChild(optStickyScreen);
     modeSelectEl.value = currentMode;
 
     modeSelectEl.addEventListener('change', (e) => {
       e.stopPropagation();
       setMode(modeSelectEl.value);
     });
+    // Keep mousedown on the select from starting a drag.
+    modeSelectEl.addEventListener('mousedown', (e) => e.stopPropagation());
 
     toolbarLabelEl = document.createElement('span');
     toolbarLabelEl.className = (CLS.TOOLBAR_LABEL || 'bl-si-toolbar-label');
     toolbarLabelEl.textContent = _modeLabel();
 
-    leftGroup.appendChild(modeSelectEl);
-    leftGroup.appendChild(toolbarLabelEl);
-
-    // ── Right: action buttons ──────────────────────────────────────────────
-    const btnGroup = document.createElement('div');
-    btnGroup.className = 'bl-si-toolbar-btn-group';
-
+    // ── Action buttons ──────────────────────────────────────────────────────
     const clearBtn = document.createElement('button');
     clearBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--clear';
-    clearBtn.textContent = 'Clear all';
+    clearBtn.textContent = 'Clear';
     clearBtn.title = 'Remove all blur from this page';
     clearBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       clearAllFromPicker();
     });
+    clearBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--close';
@@ -167,14 +189,105 @@ const Picker = (() => {
       e.stopPropagation();
       deactivate();
     });
+    closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    btnGroup.appendChild(clearBtn);
-    btnGroup.appendChild(closeBtn);
-
-    toolbarEl.appendChild(leftGroup);
-    toolbarEl.appendChild(btnGroup);
+    // Pill layout: [grip] [mode select] [label] [clear] [close]
+    toolbarEl.appendChild(dragHandle);
+    toolbarEl.appendChild(modeSelectEl);
+    toolbarEl.appendChild(toolbarLabelEl);
+    toolbarEl.appendChild(clearBtn);
+    toolbarEl.appendChild(closeBtn);
 
     document.body.appendChild(toolbarEl);
+
+    // Restore saved position, or default to top-right corner.
+    _restorePillPosition();
+  }
+
+  // ── Pill drag handling ─────────────────────────────────────────────────────
+  // Uses fixed positioning with {top, left} in viewport coordinates. On drag
+  // end the position is clamped to the viewport and persisted to
+  // chrome.storage.local under `picker_toolbar_pos`.
+
+  let _dragCtx = null; // { pointerId, offsetX, offsetY }
+
+  function _wireDrag(handle) {
+    handle.addEventListener('mousedown', _onDragStart);
+    handle.addEventListener('mousedown', (e) => e.stopPropagation());
+  }
+
+  function _onDragStart(e) {
+    if (!toolbarEl) return;
+    if (e.button !== 0) return; // left click only
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = toolbarEl.getBoundingClientRect();
+    _dragCtx = {
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+    // Switch to {top,left} anchoring regardless of the current anchor side.
+    toolbarEl.style.left = rect.left + 'px';
+    toolbarEl.style.top = rect.top + 'px';
+    toolbarEl.style.right = 'auto';
+    toolbarEl.style.bottom = 'auto';
+    toolbarEl.classList.add('bl-si-toolbar--dragging');
+    document.addEventListener('mousemove', _onDragMove, true);
+    document.addEventListener('mouseup', _onDragEnd, true);
+  }
+
+  function _onDragMove(e) {
+    if (!_dragCtx || !toolbarEl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = toolbarEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = e.clientX - _dragCtx.offsetX;
+    let top  = e.clientY - _dragCtx.offsetY;
+    left = Math.max(4, Math.min(left, vw - rect.width - 4));
+    top  = Math.max(4, Math.min(top,  vh - rect.height - 4));
+    toolbarEl.style.left = left + 'px';
+    toolbarEl.style.top  = top + 'px';
+  }
+
+  function _onDragEnd(e) {
+    if (!_dragCtx || !toolbarEl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    document.removeEventListener('mousemove', _onDragMove, true);
+    document.removeEventListener('mouseup', _onDragEnd, true);
+    toolbarEl.classList.remove('bl-si-toolbar--dragging');
+    _dragCtx = null;
+    // Persist the current {top, left}.
+    const rect = toolbarEl.getBoundingClientRect();
+    const pos = { top: Math.round(rect.top), left: Math.round(rect.left), right: null, bottom: null };
+    try {
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ [PILL_POS_KEY]: pos });
+      }
+    } catch (_) {}
+  }
+
+  function _restorePillPosition() {
+    if (!toolbarEl) return;
+    const apply = (pos) => {
+      if (!toolbarEl) return;
+      toolbarEl.style.top    = (pos.top != null) ? pos.top + 'px'    : 'auto';
+      toolbarEl.style.left   = (pos.left != null) ? pos.left + 'px'   : 'auto';
+      toolbarEl.style.right  = (pos.right != null) ? pos.right + 'px'  : 'auto';
+      toolbarEl.style.bottom = (pos.bottom != null) ? pos.bottom + 'px' : 'auto';
+    };
+    try {
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(PILL_POS_KEY, (result) => {
+          const pos = result && result[PILL_POS_KEY];
+          apply(pos && typeof pos === 'object' ? pos : DEFAULT_PILL_POS);
+        });
+        return;
+      }
+    } catch (_) {}
+    apply(DEFAULT_PILL_POS);
   }
 
   function removeToolbar() {
@@ -200,7 +313,7 @@ const Picker = (() => {
   // ─── Mode switching ──────────────────────────────────────────────────────────
 
   function setMode(mode) {
-    if (mode !== PM.STICKY && mode !== PM.DYNAMIC) return;
+    if (mode !== PM.DYNAMIC && !_isSticky(mode)) return;
     if (mode === currentMode) return;
 
     // Cancel any in-progress sticky drag
@@ -306,23 +419,40 @@ const Picker = (() => {
       return;
     }
 
-    // Convert viewport coords to document coords
-    const left = Math.min(drawState.startX, e.clientX) + window.scrollX;
-    const top = Math.min(drawState.startY, e.clientY) + window.scrollY;
+    const isScreen = currentMode === PM.STICKY_SCREEN;
 
-    // Clamp to document bounds (fallback to viewport if doc not sized)
-    const scrollW = document.documentElement.scrollWidth || window.innerWidth || dx;
-    const scrollH = document.documentElement.scrollHeight || window.innerHeight || dy;
-    const x = Math.max(0, Math.min(left, scrollW - dx));
-    const y = Math.max(0, Math.min(top, scrollH - dy));
-    const w = Math.min(dx, scrollW - x);
-    const h = Math.min(dy, scrollH - y);
+    // Coordinate system depends on anchor:
+    //   STICKY_PAGE   → document coords (add scroll offset), clamped to doc bounds.
+    //   STICKY_SCREEN → viewport coords (no scroll offset), clamped to viewport bounds.
+    let x, y, w, h, scrollW, scrollH;
+    if (isScreen) {
+      const vw = window.innerWidth || dx;
+      const vh = window.innerHeight || dy;
+      const left = Math.min(drawState.startX, e.clientX);
+      const top  = Math.min(drawState.startY, e.clientY);
+      x = Math.max(0, Math.min(left, vw - dx));
+      y = Math.max(0, Math.min(top,  vh - dy));
+      w = Math.min(dx, vw - x);
+      h = Math.min(dy, vh - y);
+      scrollW = vw;
+      scrollH = vh;
+    } else {
+      const left = Math.min(drawState.startX, e.clientX) + window.scrollX;
+      const top  = Math.min(drawState.startY, e.clientY) + window.scrollY;
+      scrollW = document.documentElement.scrollWidth || window.innerWidth || dx;
+      scrollH = document.documentElement.scrollHeight || window.innerHeight || dy;
+      x = Math.max(0, Math.min(left, scrollW - dx));
+      y = Math.max(0, Math.min(top,  scrollH - dy));
+      w = Math.min(dx, scrollW - x);
+      h = Math.min(dy, scrollH - y);
+    }
 
     drawState = null;
 
-    // Notify content_script to create and persist the zone
+    // Notify content_script to create and persist the zone.
     if (typeof activeCallbacks.onStickyBlur === 'function') {
       activeCallbacks.onStickyBlur({
+        anchor: isScreen ? 'screen' : 'page',
         x: Math.round(x),
         y: Math.round(y),
         width: Math.round(w),
@@ -410,7 +540,7 @@ const Picker = (() => {
   // ─── Unified event handlers (dispatch by mode) ────────────────────────────────
 
   function onMouseOver(e) {
-    if (currentMode === PM.STICKY) {
+    if (_isSticky(currentMode)) {
       _onStickyMouseOver(e);
       return;
     }
@@ -430,7 +560,7 @@ const Picker = (() => {
   }
 
   function onMouseOut(e) {
-    if (currentMode === PM.STICKY) {
+    if (_isSticky(currentMode)) {
       // Clear zone highlight when leaving a zone
       if (_highlightedZone) {
         const related = e.relatedTarget;
@@ -451,25 +581,25 @@ const Picker = (() => {
   }
 
   function onMouseDown(e) {
-    if (currentMode === PM.STICKY) {
+    if (_isSticky(currentMode)) {
       _onStickyMouseDown(e);
     }
   }
 
   function onMouseMove(e) {
-    if (currentMode === PM.STICKY) {
+    if (_isSticky(currentMode)) {
       _onStickyMouseMove(e);
     }
   }
 
   function onMouseUp(e) {
-    if (currentMode === PM.STICKY) {
+    if (_isSticky(currentMode)) {
       _onStickyMouseUp(e);
     }
   }
 
   function onClick(e) {
-    if (currentMode === PM.STICKY) {
+    if (_isSticky(currentMode)) {
       // Sticky mode uses mousedown/mouseup, so consume click to prevent page handlers
       let target = e.target;
       if (target === toolbarEl || (toolbarEl && toolbarEl.contains(target))) return;
@@ -533,12 +663,20 @@ const Picker = (() => {
     isActive = true;
 
     // Set mode from settings (persisted across sessions), default to sticky.
-    // Touch devices fall back to dynamic mode — sticky requires mouse drag.
+    // Touch devices fall back to dynamic mode — sticky requires mouse sketch.
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     if (isTouch) {
       currentMode = PM.DYNAMIC;
     } else {
-      currentMode = (settings && settings.pickerMode === PM.DYNAMIC) ? PM.DYNAMIC : PM.STICKY;
+      const requested = settings && settings.pickerMode;
+      if (requested === PM.DYNAMIC || requested === PM.STICKY_PAGE || requested === PM.STICKY_SCREEN) {
+        currentMode = requested;
+      } else if (requested === 'sticky') {
+        // Legacy value persisted from pre-v2; treat as page-anchored.
+        currentMode = PM.STICKY_PAGE;
+      } else {
+        currentMode = PM.STICKY_PAGE;
+      }
     }
 
     document.documentElement.classList.add((CLS.PICKER_ACTIVE || 'bl-si-picker-active'));

@@ -550,9 +550,17 @@ const BlurEngine = (() => {
     el.dataset.blSiZone = zoneData.id;
     el.dataset.blSiZoneName = zoneData.name || "";
 
+    // Anchor: 'page' (default, absolute positioning in document coordinates
+    // — zone scrolls with content) vs 'screen' (position: fixed in viewport
+    // coordinates — zone stays put during scroll, ideal for always-on
+    // screen-share privacy overlays).
+    const anchor = zoneData.anchor === "screen" ? "screen" : "page";
+    el.dataset.blSiZoneAnchor = anchor;
+
+    const position = anchor === "screen" ? "fixed" : "absolute";
     el.style.cssText =
       [
-        "position: absolute",
+        "position: " + position,
         "left: " + zoneData.x + "px",
         "top: " + zoneData.y + "px",
         "width: " + zoneData.width + "px",
@@ -643,25 +651,41 @@ const BlurEngine = (() => {
   }
 
   function _applyStickyItem(item) {
-    if (item.path) {
+    // Anchor determines coordinate system:
+    //   'page'   — document coordinates, scrolls with content. Supports
+    //              path-scoping and xPct/yPct re-projection on layout changes.
+    //   'screen' — viewport coordinates, position: fixed. Applies on every
+    //              page regardless of path; raw x/y are stable across pages.
+    const anchor = item.anchor === "screen" ? "screen" : "page";
+
+    if (anchor === "page" && item.path) {
       const stored = item.path.replace(/\/+$/, "") || "/";
       const current = location.pathname.replace(/\/+$/, "") || "/";
       if (stored !== current) return;
     }
 
-    const curW = document.documentElement.scrollWidth || window.innerWidth;
-    const curH = document.documentElement.scrollHeight || window.innerHeight;
-
-    const x = typeof item.xPct === "number" ? item.xPct * curW : item.x;
-    const y = typeof item.yPct === "number" ? item.yPct * curH : item.y;
-    const w =
-      typeof item.widthPct === "number" ? item.widthPct * curW : item.width;
-    const h =
-      typeof item.heightPct === "number" ? item.heightPct * curH : item.height;
+    let x, y, w, h;
+    if (anchor === "page") {
+      // Re-project from percentages if available (handles layout changes
+      // between the capture page and the current render).
+      const curW = document.documentElement.scrollWidth || window.innerWidth;
+      const curH = document.documentElement.scrollHeight || window.innerHeight;
+      x = typeof item.xPct === "number" ? item.xPct * curW : item.x;
+      y = typeof item.yPct === "number" ? item.yPct * curH : item.y;
+      w = typeof item.widthPct === "number" ? item.widthPct * curW : item.width;
+      h = typeof item.heightPct === "number" ? item.heightPct * curH : item.height;
+    } else {
+      // Screen-anchored: raw pixel coordinates in the viewport. No re-projection.
+      x = item.x;
+      y = item.y;
+      w = item.width;
+      h = item.height;
+    }
 
     createZoneOverlay({
       id: item.id,
       name: item.name,
+      anchor: anchor,
       x: Math.round(x),
       y: Math.round(y),
       width: Math.round(w),
