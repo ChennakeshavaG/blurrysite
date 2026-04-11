@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "description": "Browser extension to blur text, images, and videos for privacy",
   "scripts": {
-    "test": "jest --coverage",
-    "test:unit": "jest tests/unit",
+    "test": "npm run i18n:lint && jest --coverage",
+    "test:unit": "npm run i18n:lint && jest tests/unit",
     "test:e2e": "jest tests/e2e --testTimeout=30000",
     "test:watch": "jest --watch",
     "lint": "eslint src/ tests/ --ext .js",
+    "i18n:lint": "node scripts/i18n_lint.js",
     "build": "node build.js"
   },
   "devDependencies": {

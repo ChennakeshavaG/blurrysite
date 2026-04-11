@@ -122,11 +122,14 @@ After Phase 2: popup AND picker toolbar both honor LANGUAGE. Action toast and he
    - Placeholder survival (`{{count}}`, `{{name}}`).
    - Re-render correctness when the user switches LANGUAGE live in the popup (verified by `tests/unit/popup_i18n.test.js`).
    Replace machine-drafted strings with human review before shipping to real users.
-5. **Translation file linter.** A small Node script that:
-   - Loads `_locales/en/popup.json` as the source of truth.
-   - For every other locale, asserts: same key set, same `{{placeholder}}` set per key, no empty values.
-   - Runs in CI; fails on drift.
-6. **Hardcoded-string linter.** Greps `popup/*.{js,html}` and `src/*.js` for `textContent = '`, `\.title = '`, `showToast('`, `alert('`, `confirm('`, `placeholder="` outside of `data-i18n*` attrs or `I18n.t(...)` / `chrome.i18n.getMessage(...)` calls. Allow-list for known false positives.
+5. ✅ **Translation file linter — SHIPPED.** `scripts/i18n_lint.js` + `npm run i18n:lint` + hooked into `test` / `test:unit` via `&&`. Enforces:
+   - Shape validation (popup.json flat strings, messages.json Chrome wrapper).
+   - Key parity with en/ (missing + stale both reported).
+   - `{{placeholder}}` set parity per key (catches the silent "en has {{count}}, hi dropped it" class of bug).
+   - No empty values — with an explicit `EMPTY_ALLOWED` set for the `pickerPrefixLabel` case where an empty string is the correct translation (sentence-fragment grammar doesn't carry to Hindi/Tamil).
+   - `_meta` key skipped as metadata, not user-facing copy.
+   - Exit 1 on drift; the test suite fails before jest even starts. Smoke-tested against synthetic drift (missing key, dropped placeholder) — both paths correctly block the build.
+6. **Hardcoded-string linter.** Greps `popup/*.{js,html}` and `src/*.js` for `textContent = '`, `\.title = '`, `showToast('`, `alert('`, `confirm('`, `placeholder="` outside of `data-i18n*` attrs or `I18n.t(...)` / `chrome.i18n.getMessage(...)` calls. Allow-list for known false positives. Not yet shipped.
 
 ### Tier 3 — quality of life (2–3 days)
 
