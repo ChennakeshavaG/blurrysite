@@ -157,28 +157,26 @@ const BlurrySiteReveal = (() => {
 
     const zone = _findZoneAtPoint(e.clientX, e.clientY);
     if (zone) {
-      if (zone === clickRevealedEl) {
-        dismissClickReveal();
-      } else {
-        dismissClickReveal();
-        _revealElement(zone);
-        clickRevealedEl = zone;
-      }
+      if (zone === clickRevealedEl) return;
+      dismissClickReveal();
+      _revealElement(zone);
+      clickRevealedEl = zone;
+      e.preventDefault();
+      e.stopPropagation();
       return;
     }
 
     const blurredEl = findBlurredTarget(target);
     if (!blurredEl) return;
 
-    if (blurredEl === clickRevealedEl) {
-      dismissClickReveal();
-      return;
-    }
+    if (blurredEl === clickRevealedEl) return;
 
     dismissClickReveal();
     _revealElement(blurredEl);
     clickRevealedEl = blurredEl;
     revealAncestorChain(blurredEl);
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   function onRevealKeydown(e) {

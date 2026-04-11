@@ -16,13 +16,13 @@ Covers the extracted `blsi.UrlMatcher`:
 | MAX_PATTERN_LENGTH | 501-char pattern rejected | `matchesPattern(url, 'a'.repeat(501), 'wildcard')` → `false` |
 | resolveSettings | deep merge, first-match-wins, non-matching fall-through, null rules tolerated | Create two rules with same pattern, different `BLUR_RADIUS`. Open a matching page. Popup "Current page" shows the FIRST rule's radius |
 
-## N2. reveal_controller.test.js (10 tests) — `tests/unit/reveal_controller.test.js`
+## N2. reveal_controller.test.js (12 tests) — `tests/unit/reveal_controller.test.js`
 
 Covers the extracted `blsi.Reveal`:
 
 | Group | Cases | Manual replication |
 |---|---|---|
-| Click mode | reveal on click, dismiss on second click, dismiss on Escape, input/textarea skip, picker-active block, mode=none disables | Popup: set REVEAL_MODE=click. Blur a `<div>`, click it → unblurs. Click again → re-blurs. Click a form `<input>` that is blurred → stays blurred |
+| Click mode | reveal on click, second click on same element keeps reveal (link pass-through), first click calls preventDefault, second click does NOT preventDefault, dismiss on Escape, input/textarea skip, picker-active block, mode=none disables | Popup: set REVEAL_MODE=click. Blur an `<a href>`, click it → unblurs but does NOT navigate. Click it again → navigates to the link. Press Escape after first click → re-blurs without navigating. Click a form `<input>` that is blurred → stays blurred |
 | Hover mode | reveal on mouseover, 50ms mouseout debounce | Set REVEAL_MODE=hover. Mouseover blurred element → reveals. Move away → stays revealed ~50ms then hides |
 | Lifecycle | clearAll wipes reveal state, destroy removes listeners | Toggle reveal mode in popup — any active reveal snaps back |
 

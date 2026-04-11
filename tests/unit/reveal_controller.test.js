@@ -65,6 +65,7 @@ function fireClick(target) {
   const ev = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 });
   Object.defineProperty(ev, 'target', { value: target, writable: false });
   document.dispatchEvent(ev);
+  return ev;
 }
 
 function fireMouseOver(target) {
@@ -83,14 +84,34 @@ describe('blsi.Reveal — click mode', () => {
     expect(el.style.getPropertyValue('filter')).toBe('none');
   });
 
-  test('second click on same element dismisses reveal', () => {
+  test('second click on same element keeps reveal (link pass-through)', () => {
     mode = 'click';
     const el = document.createElement('div');
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.style.getPropertyValue('filter')).toBe('none');
+  });
+
+  test('first click on blurred element calls preventDefault', () => {
+    mode = 'click';
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    blsi.BlurEngine.applyBlur(el);
+    const ev = fireClick(el);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  test('second click on revealed element does not preventDefault (link works)', () => {
+    mode = 'click';
+    const link = document.createElement('a');
+    link.href = 'https://example.com';
+    document.body.appendChild(link);
+    blsi.BlurEngine.applyBlur(link);
+    fireClick(link);
+    const ev = fireClick(link);
+    expect(ev.defaultPrevented).toBe(false);
   });
 
   test('Escape dismisses click reveal', () => {
