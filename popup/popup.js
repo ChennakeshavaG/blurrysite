@@ -904,7 +904,7 @@
         rules = await Store.getRules();
       } catch (err) {
         console.error('[BlurrySite popup] getRules:', err);
-        showToast('Failed to save rule');
+        showToast(I18n.t('toast_failed_save_rule'));
         return;
       }
       rules = Array.isArray(rules) ? rules.slice() : [];

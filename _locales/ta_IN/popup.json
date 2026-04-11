@@ -105,9 +105,6 @@
   "rule_edit_btn": "திருத்து",
   "rule_delete_btn": "அகற்று",
 
-  "site_elements_blurred": "{{count}} மங்கியவை",
-  "site_rule_active": "விதி: {{name}}",
-
   "item_type_dynamic": "கூறு",
   "item_type_sticky": "மண்டலம்",
   "item_remove_title": "இதை அழி",

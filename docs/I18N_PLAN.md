@@ -129,7 +129,26 @@ After Phase 2: popup AND picker toolbar both honor LANGUAGE. Action toast and he
    - No empty values — with an explicit `EMPTY_ALLOWED` set for the `pickerPrefixLabel` case where an empty string is the correct translation (sentence-fragment grammar doesn't carry to Hindi/Tamil).
    - `_meta` key skipped as metadata, not user-facing copy.
    - Exit 1 on drift; the test suite fails before jest even starts. Smoke-tested against synthetic drift (missing key, dropped placeholder) — both paths correctly block the build.
-6. **Hardcoded-string linter.** Greps `popup/*.{js,html}` and `src/*.js` for `textContent = '`, `\.title = '`, `showToast('`, `alert('`, `confirm('`, `placeholder="` outside of `data-i18n*` attrs or `I18n.t(...)` / `chrome.i18n.getMessage(...)` calls. Allow-list for known false positives. Not yet shipped.
+6. ✅ **Hardcoded-string linter — SHIPPED.** `scripts/string_lint.js` + `npm run string:lint`, chained into `test` / `test:unit` after `i18n:lint`. Scans `popup/*.{js,html}`, `src/*.js`, and `background.js` for:
+   - `.textContent = '...'`
+   - `.title = '...'`
+   - `.setAttribute('title' | 'aria-label', '...')`
+   - `showToast('...')`, `alert('...')`, `confirm('...')`
+   - HTML `placeholder="..."`, `title="..."`, `aria-label="..."`
+
+   Ignores:
+   - Lines routed through `I18n.t` / `ContentI18n.t` / `_t` / `chrome.i18n.getMessage`
+   - Lines containing any `data-i18n*` attr (translated at runtime)
+   - Symbol-only literals (`×`, `⚓`, `…`) — decodes `\uXXXX` escape sequences before checking `\p{L}`
+   - Empty strings
+   - Explicit `ALLOW_LIST` entries — each entry is a debt statement with an inline comment explaining why the line is exempt
+
+   Baseline when shipped: 5 violations found, 4 were escape-sequence false positives (fixed in the decoder), 1 was a real missed `showToast('Failed to save rule')` that Phase 1 had skipped — now routed through `I18n.t('toast_failed_save_rule')`. Also smoke-tested by injecting a synthetic regression — linter correctly reports, restores cleanly.
+
+   Limitations:
+   - Line-based regex, not an AST walk. Cross-line assignments would slip through. Acceptable for the current codebase (popup is ~1k lines, picker is ~800).
+   - Doesn't follow variable aliases — `const s = 'hi'; x.textContent = s;` is missed. Tradeoff for implementation simplicity.
+   - Test files are skipped entirely (they use literals intentionally for assertions).
 
 ### Tier 3 — quality of life (2–3 days)
 

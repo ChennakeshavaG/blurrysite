@@ -105,9 +105,6 @@
   "rule_edit_btn": "संपादित",
   "rule_delete_btn": "हटाएँ",
 
-  "site_elements_blurred": "{{count}} धुंधले",
-  "site_rule_active": "नियम: {{name}}",
-
   "item_type_dynamic": "तत्व",
   "item_type_sticky": "ज़ोन",
   "item_remove_title": "इसे साफ़ करें",

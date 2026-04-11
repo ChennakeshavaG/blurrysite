@@ -103,9 +103,6 @@
   "rule_edit_btn": "Edit",
   "rule_delete_btn": "Remove",
 
-  "site_elements_blurred": "{{count}} blurred",
-  "site_rule_active": "Rule: {{name}}",
-
   "item_type_dynamic": "Element",
   "item_type_sticky": "Zone",
   "item_remove_title": "Unblur this",
