@@ -81,23 +81,40 @@ Every interactive element without body text now has a `data-i18n-title` / `data-
 
 Current tooltip coverage (keys under `tt_*` in popup.json):
 
-| Key | Attached to |
-|---|---|
-| tt_master_toggle | Header on/off switch |
-| tt_theme | Theme toggle button |
-| tt_blur_all | Action bar "Blur All" |
-| tt_clear_all | Action bar "Clear All" |
-| tt_picker | Action bar "Pick & Blur" |
-| tt_help | Footer help button |
-| tt_debug | Footer debug button |
-| tt_clear_all_sites | Footer "Clear every site" |
-| tt_add_rule | "+ Add Site Rule" button |
-| tt_remove_blur_item | × button on each blur list item |
-| tt_rule_edit | Edit button per rule |
-| tt_rule_delete | Remove button per rule |
-| tt_customize_shortcut | Shortcut "Change" button (reserved for future) |
+| Key | Attached to | Current English copy |
+|---|---|---|
+| tt_master_toggle | Header on/off switch | Turn Blurry Site on or off for every site |
+| tt_theme | Theme toggle button | Switch to light or dark |
+| tt_blur_all | Action bar "Blur All" | Blur everything on this page |
+| tt_clear_all | Action bar "Clear All" | Clear the blur on this page |
+| tt_picker | Action bar "Pick & Blur" | Click something to blur it, or drag a box over an area |
+| tt_help | Footer help button | See the keyboard shortcuts |
+| tt_debug | Footer debug button | See what the extension is doing — helps fix problems |
+| tt_clear_all_sites | Footer "Clear every site" | Clear every blur on every site |
+| tt_add_rule | "+ Add Site Rule" button | Make different settings for a specific site |
+| tt_remove_blur_item | × button on each blur list item | Unblur this |
+| tt_rule_edit | Edit button per rule | Change this rule's settings |
+| tt_rule_delete | Remove button per rule | Delete this rule |
+| tt_customize_shortcut | Shortcut "Change" button | Pick a different keyboard shortcut |
 
-Accessibility: every button that uses an icon alone still has a visible `aria-label` driven from the same `tt_*` key, so screen readers and the tooltip stay in sync.
+### Layman rewrite history (2026-04-12)
+
+First pass tooltips leaked developer jargon even though labels were laymen-friendly. Reviewed every `tt_*` key and rewrote to match UX principle #4 ("Tooltips answer 'what happens if I click?' Single sentence, plain verb"). Jargon removed:
+
+| Jargon before | Plain after | Why |
+|---|---|---|
+| "supported element" | (dropped) | Users don't know what a "supported element" is — they just see things on the page |
+| "draw a zone" | "drag a box over an area" | "Zone" is OBS/streaming jargon that leaked into the tooltip — laymen say "box" |
+| "toggle" | "turn on or off" / "pick" | Toggle is a UI primitive term |
+| "activity logs" / "troubleshooting" | "see what the extension is doing — helps fix problems" | Renamed for non-technical users |
+| "site-specific rule" | "different settings for a specific site" | "Rule" is abstract; "settings" is what they recognise |
+| "unblur this element" | "unblur this" | Dropped the word "element" |
+| "edit this rule" | "change this rule's settings" | "Edit" suggests a text editor; "change settings" matches the actual action |
+| "remove" (rules) | "delete" | "Delete" is stronger and matches the icon |
+
+Hindi and Tamil tooltips rewritten in lockstep. "तत्व" (element), "ज़ोन" (zone), "गतिविधि लॉग" (activity log) replaced with plain-language equivalents. Same for Tamil: "கூறு" (element), "மண்டலம்" (zone), "செயல்பாட்டு பதிவு" (activity log) dropped.
+
+Accessibility: every button that uses an icon alone still has a visible `aria-label` driven from the same `tt_*` key, so screen readers and the tooltip stay in sync. Rewriting the tooltip automatically rewrites the aria-label — no drift.
 
 ---
 
