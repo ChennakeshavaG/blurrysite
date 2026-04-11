@@ -97,10 +97,24 @@ const Picker = (() => {
 
   // ─── Toolbar (fixed overlay) ──────────────────────────────────────────────────
 
-  function _modeLabel() {
-    if (currentMode === PM.STICKY_PAGE) return 'Sketch a box on the page to blur an area. Esc to exit.';
-    if (currentMode === PM.STICKY_SCREEN) return 'Sketch a box on your screen — it stays put. Esc to exit.';
-    return 'Tap an element on the page to blur it. Esc to exit.';
+  // Short label shown on the mode chip.
+  function _modeChipLabel(mode) {
+    if (mode === PM.STICKY_PAGE) return 'Area on page';
+    if (mode === PM.STICKY_SCREEN) return 'Area on screen';
+    return 'Tap to blur';
+  }
+
+  // Long description shown in the chip's tooltip (hover).
+  function _modeChipDescription(mode) {
+    if (mode === PM.STICKY_PAGE) return 'Sketch a box over a region of the page. Scrolls with the content. Click to switch mode.';
+    if (mode === PM.STICKY_SCREEN) return 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode.';
+    return 'Tap any element on the page to blur it. Click to switch mode.';
+  }
+
+  function _cycleMode(mode) {
+    const order = [PM.DYNAMIC, PM.STICKY_PAGE, PM.STICKY_SCREEN];
+    const idx = order.indexOf(mode);
+    return order[(idx + 1) % order.length];
   }
 
   // Default corner when no stored position is available.
@@ -124,56 +138,36 @@ const Picker = (() => {
     // NOTE: we intentionally do NOT stopPropagation on mousedown/mouseup —
     // the drag handler below needs to see them to start a drag.
 
-    // ── Drag handle (visual affordance — whole pill is draggable) ───────
-    // The ☰ icon hints to the user that the pill is movable. The actual
-    // drag logic is wired to the WHOLE pill via _wireDrag(toolbarEl) below,
-    // so clicking anywhere on the pill's non-interactive surface starts a
-    // drag. This matches how OS floating windows behave.
+    // ── Drag handle (the ONLY draggable surface on the pill) ───────────
     const dragHandle = document.createElement('div');
     dragHandle.className = 'bl-si-toolbar-drag';
-    dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
-    dragHandle.title = 'Drag to move (or drag anywhere on the pill)';
+    dragHandle.setAttribute('aria-label', 'Drag to move picker');
+    dragHandle.title = 'Drag to move';
     dragHandle.textContent = '\u2630'; // ☰ trigram
+    // Drag is wired at CAPTURE phase on the grip so it fires before any
+    // bubble handlers on inner elements. The grip has no children, so this
+    // is effectively "mousedown on the grip".
+    _wireDrag(dragHandle);
 
-    // ── Mode selector ──────────────────────────────────────────────────────
-    modeSelectEl = document.createElement('select');
-    modeSelectEl.className = 'bl-si-toolbar-select';
-    // all:initial resets page CSS that sites like WhatsApp override on <select>.
-    modeSelectEl.style.cssText = 'all:initial !important; cursor:pointer !important; padding:4px 8px !important; background:rgba(255,255,255,0.1) !important; color:#e5e7eb !important; border:1px solid rgba(255,255,255,0.14) !important; border-radius:6px !important; font-size:12px !important; font-family:system-ui,sans-serif !important; appearance:auto !important; -webkit-appearance:menulist !important; line-height:1.5 !important; height:auto !important; width:auto !important; display:inline-block !important;';
-
-    const optDynamic = document.createElement('option');
-    optDynamic.value = PM.DYNAMIC;
-    optDynamic.textContent = 'Tap to blur';
-    optDynamic.title = 'Tap any element on the page to blur it. The blur follows that item.';
-
-    const optStickyPage = document.createElement('option');
-    optStickyPage.value = PM.STICKY_PAGE;
-    optStickyPage.textContent = 'Area on page';
-    optStickyPage.title = 'Sketch a box over a region of the page. Scrolls with the content.';
-
-    const optStickyScreen = document.createElement('option');
-    optStickyScreen.value = PM.STICKY_SCREEN;
-    optStickyScreen.textContent = 'Area on screen';
-    optStickyScreen.title = 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing.';
-
-    modeSelectEl.appendChild(optDynamic);
-    modeSelectEl.appendChild(optStickyPage);
-    modeSelectEl.appendChild(optStickyScreen);
-    modeSelectEl.value = currentMode;
-
-    modeSelectEl.addEventListener('change', (e) => {
+    // ── Mode chip — click to cycle, hover for description ─────────────
+    // Single button replaces the native <select> dropdown so the pill never
+    // has to re-layout for a dropdown popup. Width is fixed in CSS so the
+    // pill doesn't reflow when the chip's text changes across modes.
+    modeSelectEl = document.createElement('button');
+    modeSelectEl.type = 'button';
+    modeSelectEl.className = 'bl-si-toolbar-chip';
+    modeSelectEl.setAttribute('aria-label', 'Picker mode');
+    modeSelectEl.textContent = _modeChipLabel(currentMode);
+    modeSelectEl.title = _modeChipDescription(currentMode);
+    modeSelectEl.addEventListener('click', (e) => {
       e.stopPropagation();
-      setMode(modeSelectEl.value);
+      setMode(_cycleMode(currentMode));
     });
-    // Keep mousedown on the select from starting a drag.
     modeSelectEl.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    toolbarLabelEl = document.createElement('span');
-    toolbarLabelEl.className = (CLS.TOOLBAR_LABEL || 'bl-si-toolbar-label');
-    toolbarLabelEl.textContent = _modeLabel();
-
-    // ── Action buttons ──────────────────────────────────────────────────────
+    // ── Action buttons ──────────────────────────────────────────────────
     const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
     clearBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--clear';
     clearBtn.textContent = 'Clear';
     clearBtn.title = 'Remove all blur from this page';
@@ -184,6 +178,7 @@ const Picker = (() => {
     clearBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
     const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
     closeBtn.className = 'bl-si-toolbar-btn bl-si-toolbar-btn--close';
     closeBtn.textContent = '\u00d7';
     closeBtn.title = 'Exit picker mode';
@@ -194,19 +189,18 @@ const Picker = (() => {
     });
     closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    // Pill layout: [grip] [mode select] [label] [clear] [close]
+    // Pill layout: [grip] [mode chip] [Clear] [×]  (no long label)
     toolbarEl.appendChild(dragHandle);
     toolbarEl.appendChild(modeSelectEl);
-    toolbarEl.appendChild(toolbarLabelEl);
     toolbarEl.appendChild(clearBtn);
     toolbarEl.appendChild(closeBtn);
 
-    document.body.appendChild(toolbarEl);
+    // toolbarLabelEl is retained as null — legacy code paths that touched
+    // it must check for null. The long "sketch a box on the page..." label
+    // is gone; the chip tooltip carries the description now.
+    toolbarLabelEl = null;
 
-    // Wire drag on the WHOLE pill so the user can grab it from anywhere.
-    // Interactive children (select, buttons) bail out of the drag path so
-    // their own events (open dropdown, click) still fire.
-    _wireDrag(toolbarEl);
+    document.body.appendChild(toolbarEl);
 
     // Restore saved position, or default to top-right corner.
     _restorePillPosition();
@@ -222,31 +216,27 @@ const Picker = (() => {
 
   let _dragCtx = null; // { offsetX, offsetY } — viewport-relative offset from pill origin
 
-  function _wireDrag(pill) {
-    pill.addEventListener('mousedown', _onDragStart, true);
+  function _wireDrag(handle) {
+    // Capture phase so we run before any bubble-phase handlers on children.
+    // The grip has no children, so in practice mousedown fires on the grip
+    // itself and we unconditionally start the drag.
+    handle.addEventListener('mousedown', _onDragStart, true);
   }
 
   /**
-   * Return true if the target is an interactive control that should handle
-   * its own mousedown (open the select, click the button) instead of being
-   * hijacked by the drag-start handler.
+   * Apply a positional style with !important. The stylesheet uses
+   * `top: 16px !important; right: 16px !important;` to anchor the pill's
+   * initial position — plain inline-style writes (without !important) lose
+   * to those rules and the pill refuses to move. setProperty with the
+   * priority argument is the only way an inline write wins.
    */
-  function _isInteractiveInToolbar(target) {
-    if (!target) return false;
-    if (target.tagName === 'SELECT' || target.tagName === 'OPTION') return true;
-    if (typeof target.closest === 'function') {
-      if (target.closest('select')) return true;
-      if (target.closest('.bl-si-toolbar-btn')) return true;
-      if (target.closest('.bl-si-toolbar-btn--close')) return true;
-    }
-    return false;
+  function _setPos(prop, value) {
+    toolbarEl.style.setProperty(prop, value, 'important');
   }
 
   function _onDragStart(e) {
     if (!toolbarEl) return;
     if (e.button !== 0) return; // left click only
-    // Let interactive children handle their own mousedown.
-    if (_isInteractiveInToolbar(e.target)) return;
 
     // Stop propagation so the picker's sticky-zone-draw handler (registered
     // at capture phase on document, earlier in the chain) never sees this.
@@ -260,10 +250,12 @@ const Picker = (() => {
     };
     // Switch to {top,left} anchoring regardless of the current anchor side.
     // Freeze the pill's current viewport position before we start moving it.
-    toolbarEl.style.left = rect.left + 'px';
-    toolbarEl.style.top = rect.top + 'px';
-    toolbarEl.style.right = 'auto';
-    toolbarEl.style.bottom = 'auto';
+    // MUST use setProperty(..., 'important') — the stylesheet has
+    // !important rules that otherwise win the cascade.
+    _setPos('left',   rect.left + 'px');
+    _setPos('top',    rect.top + 'px');
+    _setPos('right',  'auto');
+    _setPos('bottom', 'auto');
     toolbarEl.classList.add('bl-si-toolbar--dragging');
     document.addEventListener('mousemove', _onDragMove, true);
     document.addEventListener('mouseup', _onDragEnd, true);
@@ -280,8 +272,8 @@ const Picker = (() => {
     let top  = e.clientY - _dragCtx.offsetY;
     left = Math.max(4, Math.min(left, vw - rect.width - 4));
     top  = Math.max(4, Math.min(top,  vh - rect.height - 4));
-    toolbarEl.style.left = left + 'px';
-    toolbarEl.style.top  = top + 'px';
+    _setPos('left', left + 'px');
+    _setPos('top',  top + 'px');
   }
 
   function _onDragEnd(e) {
@@ -306,10 +298,12 @@ const Picker = (() => {
     if (!toolbarEl) return;
     const apply = (pos) => {
       if (!toolbarEl) return;
-      toolbarEl.style.top    = (pos.top != null) ? pos.top + 'px'    : 'auto';
-      toolbarEl.style.left   = (pos.left != null) ? pos.left + 'px'   : 'auto';
-      toolbarEl.style.right  = (pos.right != null) ? pos.right + 'px'  : 'auto';
-      toolbarEl.style.bottom = (pos.bottom != null) ? pos.bottom + 'px' : 'auto';
+      // Must use setProperty('important') to beat the stylesheet's
+      // `top: 16px !important; right: 16px !important;` rules.
+      _setPos('top',    (pos.top != null)    ? pos.top + 'px'    : 'auto');
+      _setPos('left',   (pos.left != null)   ? pos.left + 'px'   : 'auto');
+      _setPos('right',  (pos.right != null)  ? pos.right + 'px'  : 'auto');
+      _setPos('bottom', (pos.bottom != null) ? pos.bottom + 'px' : 'auto');
     };
     try {
       if (chrome && chrome.storage && chrome.storage.local) {
@@ -363,11 +357,13 @@ const Picker = (() => {
 
     currentMode = mode;
 
-    // Update toolbar UI
-    if (toolbarLabelEl) toolbarLabelEl.textContent = _modeLabel();
-    if (modeSelectEl) modeSelectEl.value = mode;
+    // Update the mode chip's label + tooltip to match the new mode.
+    if (modeSelectEl) {
+      modeSelectEl.textContent = _modeChipLabel(mode);
+      modeSelectEl.title = _modeChipDescription(mode);
+    }
 
-    // Notify content_script for settings persistence
+    // Notify content_script for settings persistence.
     if (typeof activeCallbacks.onModeChange === 'function') {
       activeCallbacks.onModeChange(mode);
     }

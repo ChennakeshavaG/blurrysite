@@ -45,7 +45,7 @@
 }
 
 .bl-si-picker-active a,
-.bl-si-picker-active button:not(.bl-si-toolbar-btn):not(.bl-si-toolbar-btn--close):not(.bl-si-toolbar-drag),
+.bl-si-picker-active button:not(.bl-si-toolbar-btn):not(.bl-si-toolbar-btn--close):not(.bl-si-toolbar-drag):not(.bl-si-toolbar-chip),
 .bl-si-picker-active input,
 .bl-si-picker-active select:not(.bl-si-toolbar select),
 .bl-si-picker-active textarea,
@@ -57,10 +57,11 @@
 /* Explicit cursor overrides for toolbar interactive children —
    higher specificity than the blanket `.bl-si-picker-active button` rule. */
 .bl-si-toolbar .bl-si-toolbar-btn,
-.bl-si-toolbar .bl-si-toolbar-btn--close {
+.bl-si-toolbar .bl-si-toolbar-btn--close,
+.bl-si-toolbar .bl-si-toolbar-chip {
   cursor: pointer !important;
 }
-.bl-si-toolbar select { cursor: pointer !important; }
+.bl-si-toolbar .bl-si-toolbar-drag { cursor: grab !important; }
 
 /**
  * Hover highlight: shown on the element currently under the cursor while the
@@ -83,10 +84,16 @@
 /* ─── Picker toolbar (floating draggable pill) ─────────────────────────────── */
 
 /**
- * A compact pill that floats over the page during picker mode. User can drag
- * it to any corner via the grip handle. Position is persisted in
- * chrome.storage.local under `picker_toolbar_pos`. Uses `position: fixed` so
- * it stays anchored to the viewport regardless of scroll.
+ * A compact pill that floats over the page during picker mode. Only the
+ * ☰ grip is a drag handle. The mode chip, Clear, and × buttons are
+ * click-only. Position is persisted in chrome.storage.local under
+ * `picker_toolbar_pos`. Uses `position: fixed` so it stays anchored to
+ * the viewport regardless of scroll.
+ *
+ * NOTE: top / right are set with !important as the INITIAL anchor. When
+ * the user drags the pill, picker.js overrides these via
+ * `style.setProperty('top' | 'left', ..., 'important')` — plain inline
+ * writes wouldn't beat !important on the stylesheet side.
  */
 .bl-si-toolbar {
   all: initial; /* Reset all inherited properties */
@@ -98,7 +105,7 @@
   z-index: 2147483647 !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 8px !important;
+  gap: 6px !important;
   padding: 6px 8px 6px 6px !important;
   background: rgba(15, 15, 15, 0.92) !important;
   backdrop-filter: blur(10px) !important;
@@ -112,27 +119,18 @@
   line-height: 1.4 !important;
   color: #f3f4f6 !important;
   pointer-events: auto !important;
-  /* Whole pill is draggable from anywhere — interactive children override
-     cursor via explicit rules below. */
-  cursor: grab !important;
+  cursor: default !important;
   /* Smooth transition into view when the picker activates */
   transition: box-shadow 150ms ease, border-color 150ms ease !important;
 }
 
-.bl-si-toolbar--dragging,
-.bl-si-toolbar--dragging * {
-  cursor: grabbing !important;
-}
 .bl-si-toolbar--dragging {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
+.bl-si-toolbar--dragging .bl-si-toolbar-drag { cursor: grabbing !important; }
 
-/* Label inherits grab cursor from the pill. Reset only for interactive
-   children (select, buttons) — those get explicit cursor rules below. */
-.bl-si-toolbar-label { cursor: grab !important; }
-.bl-si-toolbar-drag  { cursor: grab !important; }
-
+/* ── Drag grip — the ONLY draggable surface on the pill ─────────────────── */
 .bl-si-toolbar-drag {
   all: initial;
   display: inline-flex !important;
@@ -149,26 +147,35 @@
   flex-shrink: 0 !important;
   transition: background 120ms ease, color 120ms ease !important;
 }
-
 .bl-si-toolbar-drag:hover { background: rgba(255, 255, 255, 0.1) !important; color: #f3f4f6 !important; }
-.bl-si-toolbar--dragging .bl-si-toolbar-drag { cursor: grabbing !important; }
 
-.bl-si-toolbar-label {
+/* ── Mode chip — click to cycle modes, hover for description ─────────── */
+.bl-si-toolbar-chip {
   all: initial;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  /* Fixed width so the pill never reflows when the mode label changes.
+     "Area on screen" is the longest — ~98px at font-size 11px. */
+  width: 100px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 11px !important;
-  color: rgba(229, 231, 235, 0.75) !important;
+  font-weight: 500 !important;
   line-height: 1.4 !important;
-  max-width: 240px !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  color: #e5e7eb !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  cursor: pointer !important;
+  user-select: none !important;
   white-space: nowrap !important;
-  /* Hide on viewports where the pill would exceed half the width. */
-  display: inline-block !important;
+  flex-shrink: 0 !important;
+  transition: background 120ms ease, border-color 120ms ease !important;
 }
-
-@media (max-width: 640px) {
-  .bl-si-toolbar-label { display: none !important; }
+.bl-si-toolbar-chip:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 .bl-si-toolbar-btn {
