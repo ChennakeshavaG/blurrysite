@@ -55,7 +55,7 @@
   "cat_media": "Images & Video",
   "cat_media_hint": "Photos, videos, canvases, and SVGs.",
   "cat_form": "Inputs & Forms",
-  "cat_form_hint": "Text boxes, buttons, and dropdowns. Off by default.",
+  "cat_form_hint": "Text boxes, buttons, and dropdowns.",
   "cat_table": "Tables",
   "cat_table_hint": "Table cells and captions.",
   "cat_structure": "Containers",
