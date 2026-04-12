@@ -129,6 +129,7 @@ const BlurEngine = (() => {
   });
 
   const DEFAULT_CATS = blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES;
+
   const CATEGORY_ORDER = Object.freeze([
     "TEXT",
     "MEDIA",

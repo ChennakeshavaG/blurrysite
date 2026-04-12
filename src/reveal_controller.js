@@ -64,10 +64,28 @@ const BlurrySiteReveal = (() => {
   }
 
   function findBlurredTarget(el) {
+    // Walk UP — find the nearest blurred ancestor (or self).
     let node = el;
     while (node && node !== document.documentElement) {
       if (node instanceof Element && _isVisuallyBlurred(node)) return node;
       node = node.parentElement;
+    }
+    // Walk DOWN — the hover target may be a non-blurred container whose
+    // children ARE blurred (e.g. WhatsApp chat items: the div receives the
+    // mouseover but the blurred <span> is a descendant). Return the first
+    // blurred descendant so the reveal handler can unblur it + its ancestors.
+    if (el && el instanceof Element) {
+      // Fast path: data-attribute stamped descendants
+      var stamped = el.querySelector('[data-bl-si-blur]');
+      if (stamped) return stamped;
+      // Slow path: CSS-rule blurred descendants (alwaysBlur tags like svg, img).
+      // Only check when blur-all is active and selectorCache exists.
+      if (Engine.isBlurAllActive() && typeof Engine.matchesActiveCategories === 'function') {
+        var children = el.getElementsByTagName('*');
+        for (var i = 0; i < children.length; i++) {
+          if (_isVisuallyBlurred(children[i])) return children[i];
+        }
+      }
     }
     return null;
   }
@@ -243,19 +261,29 @@ const BlurrySiteReveal = (() => {
     if (_installed) return;
     if (opts && typeof opts.getMode === 'function') _getMode = opts.getMode;
     if (opts && typeof opts.isPickerActive === 'function') _getPickerActive = opts.isPickerActive;
+    // Capture phase for mouse events — SPAs like WhatsApp Web stop propagation
+    // at intermediate DOM levels for their own hover handling (timestamps, read
+    // receipts, chat item highlighting). Bubble-phase listeners on `document`
+    // never fire if any handler between the target and document calls
+    // stopPropagation(). Capture fires top-down before any target/bubble
+    // handler, so it always reaches us.
+    document.addEventListener('mouseover', onRevealMouseOver, true);
+    document.addEventListener('mouseout', onRevealMouseOut, true);
+    // Click + keydown stay at bubble phase. At capture, stopPropagation()
+    // would kill the page's own click handlers (React, links, buttons) before
+    // they fire — too aggressive. WhatsApp doesn't stop click propagation for
+    // chat items, only hover events.
     document.addEventListener('click', onRevealClick);
     document.addEventListener('keydown', onRevealKeydown);
-    document.addEventListener('mouseover', onRevealMouseOver);
-    document.addEventListener('mouseout', onRevealMouseOut);
     _installed = true;
   }
 
   function destroy() {
     if (!_installed) return;
+    document.removeEventListener('mouseover', onRevealMouseOver, true);
+    document.removeEventListener('mouseout', onRevealMouseOut, true);
     document.removeEventListener('click', onRevealClick);
     document.removeEventListener('keydown', onRevealKeydown);
-    document.removeEventListener('mouseover', onRevealMouseOver);
-    document.removeEventListener('mouseout', onRevealMouseOut);
     clearAll();
     _installed = false;
   }
