@@ -17,6 +17,14 @@ const I18n = (() => {
   let _fallback = {};
 
   /**
+   * Keys we've already warned about. Prevents console spam when the
+   * same missing key is requested hundreds of times (e.g. during a
+   * full re-render). Cleared on every init() so a fresh locale
+   * evaluation can re-warn if new keys are missing in it.
+   */
+  let _warnedKeys = new Set();
+
+  /**
    * Load a language JSON file from _locales/<lang>/popup.json.
    * @param {string} lang — Language code (e.g. 'en', 'es', 'ja')
    * @returns {Promise<Object>} Parsed JSON or empty object on failure
@@ -59,6 +67,10 @@ const I18n = (() => {
     }
 
     _strings = (lang === 'en') ? {} : await _loadJSON(lang);
+    // Re-initing for a fresh locale means the set of "missing" keys
+    // may be different — clear the dedup cache so translators see
+    // the full picture on every switch.
+    _warnedKeys = new Set();
   }
 
   /**
@@ -96,7 +108,24 @@ const I18n = (() => {
    * @returns {string} The localized string, or the key itself if not found
    */
   function t(key, replacements) {
-    let str = _strings[key] || _fallback[key] || key;
+    const primary = _strings[key];
+    const fallback = _fallback[key];
+    let str;
+    if (primary !== undefined) {
+      str = primary;
+    } else if (fallback !== undefined) {
+      str = fallback;
+    } else {
+      // No translation found in either catalog — return the key itself
+      // and warn ONCE per key. Hitting this path usually means a typo
+      // in the caller (e.g. I18n.t('toas_enabled') vs 'toast_enabled')
+      // or a key that was renamed on one side and not the other.
+      if (!_warnedKeys.has(key)) {
+        _warnedKeys.add(key);
+        console.warn('[BlurrySite i18n] missing key: ' + key);
+      }
+      str = key;
+    }
     if (replacements) {
       for (const [k, v] of Object.entries(replacements)) {
         str = str.split('{{' + k + '}}').join(String(v));

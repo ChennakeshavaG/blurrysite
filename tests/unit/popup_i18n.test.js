@@ -28,15 +28,21 @@ beforeAll(() => {
 describe('popup_i18n loader', () => {
   let originalFetch;
   let originalNavLanguage;
+  let warnSpy;
 
   beforeEach(() => {
     originalFetch = global.fetch;
     originalNavLanguage = navigator.language;
+    // Silence missing-key dev warnings by default so expected-miss tests
+    // don't pollute output. Individual tests can read warnSpy.mock.calls
+    // to assert the warn path.
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
     Object.defineProperty(navigator, 'language', { value: originalNavLanguage, configurable: true });
+    warnSpy.mockRestore();
   });
 
   // Every test uses the same en/popup.json shape so the cached _fallback
@@ -143,6 +149,31 @@ describe('popup_i18n loader', () => {
     mockFetch({ '/en/popup.json': EN_BASE });
     await blsi.I18n.init('en');
     expect(blsi.I18n.t('totally_unknown')).toBe('totally_unknown');
+  });
+
+  test('missing key logs console.warn once per key per init', async () => {
+    mockFetch({ '/en/popup.json': EN_BASE });
+    await blsi.I18n.init('en');
+    warnSpy.mockClear();
+    // Same key 3 times → 1 warning
+    blsi.I18n.t('ghost_key');
+    blsi.I18n.t('ghost_key');
+    blsi.I18n.t('ghost_key');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain('missing key: ghost_key');
+    // A second unknown key → one additional warning
+    blsi.I18n.t('ghost_key_2');
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('re-init clears the warn-once cache so missing keys re-warn in the new locale', async () => {
+    mockFetch({ '/en/popup.json': EN_BASE });
+    await blsi.I18n.init('en');
+    blsi.I18n.t('ghost_after_reinit');
+    warnSpy.mockClear();
+    await blsi.I18n.init('en');
+    blsi.I18n.t('ghost_after_reinit');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   // ── interpolation ──────────────────────────────────────────────────────────

@@ -29,13 +29,18 @@ beforeAll(() => {
 
 describe('blsi.ContentI18n', () => {
   let originalFetch;
+  let warnSpy;
 
   beforeEach(() => {
     originalFetch = global.fetch;
+    // Silence missing-key dev warnings. Individual tests that exercise
+    // the warn path read warnSpy.mock.calls to assert the dedup.
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    warnSpy.mockRestore();
   });
 
   function mockFetch(map) {
@@ -130,6 +135,17 @@ describe('blsi.ContentI18n', () => {
     mockFetch({ '/en/messages.json': EN_BASE });
     await blsi.ContentI18n.init('en');
     expect(blsi.ContentI18n.t('totally_unknown')).toBe('totally_unknown');
+  });
+
+  test('missing key logs once per key per init', async () => {
+    mockFetch({ '/en/messages.json': EN_BASE });
+    await blsi.ContentI18n.init('en');
+    warnSpy.mockClear();
+    blsi.ContentI18n.t('ghost_key', 'English fallback');
+    blsi.ContentI18n.t('ghost_key', 'English fallback');
+    blsi.ContentI18n.t('ghost_key', 'English fallback');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain('missing key: ghost_key');
   });
 
   test('failed fetch leaves t() returning the fallback literal', async () => {

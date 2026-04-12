@@ -26,6 +26,13 @@ const ContentI18n = (() => {
   /** @type {string} Last successful init language */
   let _lang = 'en';
 
+  /**
+   * Keys we've already warned about per init. Reset whenever init() runs
+   * so a fresh locale can surface its own missing-key set cleanly without
+   * console spam on every `t()` call.
+   */
+  let _warnedKeys = new Set();
+
   async function _loadJSON(lang) {
     try {
       const url = chrome.runtime.getURL('_locales/' + lang + '/messages.json');
@@ -85,6 +92,7 @@ const ContentI18n = (() => {
 
     _lang = lang;
     _strings = (lang === 'en') ? {} : await _loadJSON(lang);
+    _warnedKeys = new Set();
   }
 
   /**
@@ -100,6 +108,17 @@ const ContentI18n = (() => {
     if (primary) return primary;
     const fb = _fallback[key] && _fallback[key].message;
     if (fb) return fb;
+    // Neither primary nor English fallback has this key — probably a
+    // typo in the caller or a key that was added to source but not to
+    // messages.json. Warn once per key so typos surface in devtools.
+    if (!_warnedKeys.has(key)) {
+      _warnedKeys.add(key);
+      if (blsi && blsi.Logger) {
+        blsi.Logger.warn('[ContentI18n] missing key: ' + key);
+      } else {
+        console.warn('[BlurrySite ContentI18n] missing key: ' + key);
+      }
+    }
     return fallback || key;
   }
 

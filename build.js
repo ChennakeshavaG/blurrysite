@@ -42,4 +42,6 @@ if (fs.existsSync(OUT_FILE)) {
 const args = INCLUDE.map(f => `"${f}"`).join(' ');
 execSync(`zip -r "${OUT_FILE}" ${args}`, { cwd: ROOT, stdio: 'inherit' });
 
-console.log(`\nBuilt: dist/blurry_site-${VERSION}.zip`);
+const stat = fs.statSync(OUT_FILE);
+const kb = (stat.size / 1024).toFixed(1);
+console.log(`\nBuilt: dist/blurrysite-${VERSION}.zip (${kb} KB)`);

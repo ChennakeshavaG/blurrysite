@@ -10,7 +10,8 @@
     "lint": "eslint src/ tests/ --ext .js",
     "i18n:lint": "node scripts/i18n_lint.js",
     "string:lint": "node scripts/string_lint.js",
-    "build": "node build.js"
+    "build": "node build.js",
+    "release": "npm run test:unit && npm run build"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
