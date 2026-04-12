@@ -71,7 +71,7 @@ const BlurEngine = (() => {
       ]),
     }),
     MEDIA: Object.freeze({
-      alwaysBlur: Object.freeze(["img", "video", "audio", "canvas"]),
+      alwaysBlur: Object.freeze(["img", "video", "audio", "canvas", "svg"]),
       textCheck: Object.freeze([]),
     }),
     FORM: Object.freeze({
@@ -287,11 +287,17 @@ const BlurEngine = (() => {
 
   let _styleEl = null;
 
-  // Extension UI exclusion — prevents our own toolbar/toast from being blurred
+  // Extension UI exclusion — prevents our own toolbar/toast/filter from being blurred.
+  // The frosted-filter SVG (#bl-si-svg-filters) must be excluded because adding svg
+  // to MEDIA alwaysBlur means the CSS rule `svg:not(...)` would otherwise match our
+  // own hidden filter definition SVG and apply blur to it. Visually harmless (0×0
+  // element), but unclean — and could theoretically interfere with the filter if
+  // Chrome invalidates paint-server references on blurred host elements.
   const EXCLUDE =
     ":not(#bl-si-picker-toolbar):not(#bl-si-picker-toolbar *)" +
     ":not(.bl-si-toast):not(.bl-si-toast *)" +
-    ":not(.bl-si-toolbar):not(.bl-si-toolbar *)";
+    ":not(.bl-si-toolbar):not(.bl-si-toolbar *)" +
+    ":not(#" + SVG_FILTER_ID + ")";
 
   /**
    * Inject CSS rules for blur-all mode in DOM.
@@ -321,7 +327,7 @@ const BlurEngine = (() => {
     // to be in effect before the animated property changes.
     const blurDecl =
       `filter: ${filterValue} !important; ` +
-      `transition: filter var(--bl-si-transition-duration, 200ms) ease !important; ` +
+      `transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ` +
       `user-select: none !important;`;
 
     const rules = [];
