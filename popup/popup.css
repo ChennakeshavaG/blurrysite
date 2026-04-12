@@ -94,17 +94,14 @@
 html {
   font-size: var(--bl-si-font-size-base);
   background: var(--bl-si-bg); /* Solid base behind everything */
+  width: var(--bl-si-popup-width);
 }
 
 body {
-  width: var(--bl-si-popup-width);
+  width: 100%;
   max-height: 520px;
-  overflow-y: auto;
+  overflow-y: scroll;
   overflow-x: hidden;
-  /* Reserve scrollbar gutter always so opening an accordion doesn't
-     jerk the popup width when the scrollbar appears. Modern Chrome +
-     Firefox both support this. */
-  scrollbar-gutter: stable;
   background: transparent; /* Let .bl-si-bg blobs show through for frosted glass effect */
   color: var(--bl-si-text);
   font-family: var(--bl-si-font);

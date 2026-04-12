@@ -50,7 +50,7 @@ const PopupConfigs = (() => {
     },
     {
       key: 'TRANSITION_DURATION', i18nKey: 'setting_transition', i18nHintKey: 'setting_transition_hint',
-      type: 'toggle', group: 'appearance', options: { falseValue: 0, trueValue: 200 },
+      type: 'toggle', group: 'appearance', options: { falseValue: 0, trueValue: 150 },
     },
     {
       key: 'HIGHLIGHT_COLOR', i18nKey: 'setting_highlight_color', i18nHintKey: 'setting_highlight_color_hint',

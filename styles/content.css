@@ -15,7 +15,7 @@
 :root {
   --bl-si-radius: 10px;
   --bl-si-highlight-color: #f59e0b;
-  --bl-si-transition-duration: 200ms;
+  --bl-si-transition-duration: 150ms;
 }
 
 /* ─── Blur: always-blur tags are handled by injected <style> in blur_engine.
@@ -29,7 +29,7 @@
  */
 [data-bl-si-blur] {
   filter: blur(var(--bl-si-radius, 10px)) !important;
-  transition: filter var(--bl-si-transition-duration, 200ms) ease !important;
+  transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: none !important;
 }
 
@@ -78,7 +78,7 @@
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--bl-si-highlight-color, #f59e0b) 25%, transparent),
     inset 0 0 0 2px color-mix(in srgb, var(--bl-si-highlight-color, #f59e0b) 15%, transparent) !important;
-  transition: outline var(--bl-si-transition-duration, 200ms) ease !important;
+  transition: outline var(--bl-si-transition-duration, 150ms) ease !important;
 }
 
 /* ─── Picker toolbar (floating draggable pill) ─────────────────────────────── */
@@ -442,7 +442,7 @@
   border: 1px dashed rgba(128, 128, 128, 0.3) !important;
   z-index: 2147483640 !important;
   pointer-events: none !important;
-  transition: opacity var(--bl-si-transition-duration, 200ms) !important;
+  transition: opacity var(--bl-si-transition-duration, 150ms) !important;
 }
 
 /* In picker mode, zones become interactive (click to remove) */
@@ -492,7 +492,7 @@
 @media print {
   [data-bl-si-blur] {
     filter: blur(var(--bl-si-radius, 10px)) !important;
-    transition: filter var(--bl-si-transition-duration, 200ms) ease !important;
+    transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
     user-select: none !important;
   }
 

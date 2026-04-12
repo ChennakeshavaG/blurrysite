@@ -33,7 +33,7 @@
   "setting_highlight_color_hint": "Color of the highlight when you hover over an element in Picker mode.",
 
   "setting_blur_mode": "Blur Look",
-  "setting_blur_mode_hint": "Frosted scrambles text so AI and screenshot tools can't read it. Uses a little more power.",
+  "setting_blur_mode_hint": "Standard is a simple blur. Frosted scrambles text so AI and screenshot tools can't read it, but uses a little more power.",
   "setting_thorough_blur": "Aggressive Blur",
   "setting_thorough_hint": "Also blur empty containers. Catches more, but may hide layouts.",
 
@@ -138,7 +138,7 @@
   "tt_theme": "Switch to light or dark",
   "tt_blur_all": "Blur everything on this page",
   "tt_clear_all": "Clear the blur on this page",
-  "tt_picker": "Click something to blur it, or drag a box over an area",
+  "tt_picker": "Click any item to blur it. Or switch to area mode and drag a box to blur a whole region",
   "tt_help": "See the keyboard shortcuts",
   "tt_debug": "See what the extension is doing — helps fix problems",
   "tt_clear_all_sites": "Clear every blur on every site",

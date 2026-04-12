@@ -108,7 +108,7 @@ describe('BlurrySite constants', () => {
   describe('DEFAULT_SETTINGS', () => {
     test('contains all expected top-level keys', () => {
       expect(PB.DEFAULT_SETTINGS.BLUR_RADIUS).toBe(6);
-      expect(PB.DEFAULT_SETTINGS.TRANSITION_DURATION).toBe(200);
+      expect(PB.DEFAULT_SETTINGS.TRANSITION_DURATION).toBe(150);
       expect(PB.DEFAULT_SETTINGS.HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(PB.DEFAULT_SETTINGS.REVEAL_MODE).toBe('hover');
       expect(PB.DEFAULT_SETTINGS.ENABLED).toBe(true);
@@ -335,7 +335,7 @@ describe('BlurrySite constants', () => {
     test('fills missing keys with defaults', () => {
       const result = PB.validateSettings({});
       expect(result.BLUR_RADIUS).toBe(6);
-      expect(result.TRANSITION_DURATION).toBe(200);
+      expect(result.TRANSITION_DURATION).toBe(150);
       expect(result.HIGHLIGHT_COLOR).toBe('#f59e0b');
       expect(result.REVEAL_MODE).toBe('hover');
       expect(result.LANGUAGE).toBe('auto');

@@ -155,7 +155,7 @@ const Constants = (() => {
 
   const DEFAULT_SETTINGS = Object.freeze({
     BLUR_RADIUS:          6,
-    TRANSITION_DURATION:  200,
+    TRANSITION_DURATION:  150,
     HIGHLIGHT_COLOR:      '#f59e0b',
     REVEAL_MODE:          REVEAL_MODES.HOVER,
     ENABLED:              true,
