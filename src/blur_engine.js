@@ -315,6 +315,13 @@ const BlurEngine = (() => {
     const { alwaysBlurSelector } = getSelectors(cats);
     _rebuildTextCheckSet(cats);
 
+    // CSS var dependency: --bl-si-radius is NOT set by the engine. The
+    // caller (content_script.js applySettingsToDom()) owns setting it on
+    // :root. In gaussian mode, changing BLUR_RADIUS propagates instantly
+    // via the CSS var without needing a page-wide nuke — that's why the
+    // reconcileKey deliberately excludes BLUR_RADIUS for gaussian. If
+    // applySettingsToDom() is ever removed, blur radius changes will
+    // silently stop working in gaussian mode.
     const filterValue =
       mode === blsi.BLUR_MODES.FROSTED
         ? "url(#bl-si-frosted-filter)"
@@ -619,6 +626,13 @@ const BlurEngine = (() => {
   let _dynamicCounter = 0;
   let _stickyCounter = 0;
   let _pickerActive = false;
+  // Reserved for future tooltip-during-peek feature. Not currently used.
+  // See commit history for the stamp-then-reveal approach that was reverted
+  // because it created visual gaps on SPAs (WhatsApp: "Download for Mac"
+  // section unblurred on load when cursor was positioned over it).
+  // The correct approach likely needs a fundamentally different strategy
+  // (e.g., CSS :has() to style tooltip siblings, or a site-specific
+  // heuristic layer) rather than MO gating.
   let _currentSettings = null;
 
   // Tracks items currently applied to the DOM, keyed by item id
@@ -802,6 +816,14 @@ const BlurEngine = (() => {
   /**
    * Single reconciler: sync DOM state to the storage snapshot.
    *
+   * CONCURRENCY: this function is async but has no reentrance guard. If two
+   * calls overlap (e.g., rapid storage.onChange events), the second may read
+   * _activeItems mid-mutation. In practice this doesn't happen because all
+   * callers await and storage.onChange is dispatched serially per the
+   * storage_manager's self-echo detection. If a future code path fires
+   * blurAll without awaiting, add a _reconcilePromise + _reconcilePending
+   * queue pattern (see I18N_PLAN.md known limitations).
+   *
    * Pulls settings, URL rules, per-host blur-all state, and per-host items
    * from Storage in parallel, then diffs against the current DOM state and
    * applies only the delta. Safe to call at any time from any path — init,
@@ -911,10 +933,13 @@ const BlurEngine = (() => {
     _pickerActive = !!v;
   }
 
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   return {
-    // Blur-all low-level primitives
+    // Semi-private: used internally by blurAll() + _enablePageWide(). Exposed
+    // only because unit tests and e2e tests call them directly for setup. Do
+    // NOT call from content_script, popup, picker, or reveal — use blurAll().
     injectBlurRules,
     removeBlurRules,
     isBlurAllActive,
