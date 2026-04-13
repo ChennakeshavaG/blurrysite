@@ -76,26 +76,36 @@ const BlurrySiteReveal = (() => {
     }
   }
 
-  function findBlurredTarget(el) {
+  function findBlurredTarget(el, clientX, clientY) {
     // Walk UP — find the nearest blurred ancestor (or self).
     let node = el;
     while (node && node !== document.documentElement) {
       if (node instanceof Element && _isVisuallyBlurred(node)) return node;
       node = node.parentElement;
     }
-    // Walk DOWN — the hover target may be a non-blurred container whose
-    // children ARE blurred (e.g. WhatsApp wraps <video> in 6+ nested divs).
-    // Tag-based querySelectorAll finds media/heading elements at any depth
-    // without hitting random wrapper divs or text spans.
+    // Walk DOWN — fallback when hover target is a non-blurred wrapper.
+    // querySelectorAll scoped to el's subtree keeps the candidate set small
+    // (typically 5–50 elements; 300 is a safe upper bound on dense pages).
+    // Iterating in reverse DOM order returns the innermost match first when
+    // nested blurred elements overlap at the cursor position.
     if (el && el instanceof Element) {
-      // CSS-rule blurred descendants (alwaysBlur tags: img, video, svg, h1, p…)
-      if (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive()) {
-        var tagMatch = el.querySelector(ALWAYS_BLUR_SELECTOR);
-        if (tagMatch && _isVisuallyBlurred(tagMatch)) return tagMatch;
+      var hasSel = ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive();
+      var sel = hasSel
+        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur]'
+        : '[data-bl-si-blur]';
+      var candidates = el.querySelectorAll(sel);
+      var useCoords = clientX !== undefined && clientY !== undefined;
+      for (var i = candidates.length - 1; i >= 0; i--) {
+        var c = candidates[i];
+        if (!_isVisuallyBlurred(c)) continue;
+        if (useCoords) {
+          var r = c.getBoundingClientRect();
+          if (clientX >= r.left && clientX <= r.right &&
+              clientY >= r.top  && clientY <= r.bottom) return c;
+        } else {
+          return c; // no coords — return innermost blurred descendant
+        }
       }
-      // Individually stamped descendants (picker / context-menu blurs)
-      var stamped = el.querySelector('[data-bl-si-blur]');
-      if (stamped) return stamped;
     }
     return null;
   }
@@ -112,7 +122,7 @@ const BlurrySiteReveal = (() => {
       el.dataset.blSiReveal = '1';
       // Stamp reveal on all blurred children — tag-matched (CSS rule) and
       // data-stamped (picker). querySelectorAll is browser-native and fast.
-      var sel = ALWAYS_BLUR_SELECTOR
+      var sel = (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive())
         ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur]'
         : '[data-bl-si-blur]';
       var children = el.querySelectorAll(sel);
@@ -207,7 +217,7 @@ const BlurrySiteReveal = (() => {
       return;
     }
 
-    const blurredEl = findBlurredTarget(target);
+    const blurredEl = findBlurredTarget(target, e.clientX, e.clientY);
     if (!blurredEl) return;
 
     if (blurredEl === clickRevealedEl) return;
@@ -245,7 +255,7 @@ const BlurrySiteReveal = (() => {
       return;
     }
 
-    const blurredRoot = findBlurredTarget(target);
+    const blurredRoot = findBlurredTarget(target, e.clientX, e.clientY);
     if (_hoverRevealedEl && _hoverRevealedEl !== blurredRoot) {
       _dismissHoverReveal();
     }
@@ -253,7 +263,6 @@ const BlurrySiteReveal = (() => {
     if (!blurredRoot) return;
     if (_hoverRevealedEl === blurredRoot) return;
 
-    _dismissHoverReveal();
     _revealElement(blurredRoot);
     _hoverRevealedEl = blurredRoot;
     revealAncestorChain(blurredRoot);

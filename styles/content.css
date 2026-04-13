@@ -28,7 +28,7 @@
  * The injected <style> also includes this rule, but this static version
  * provides a fallback and handles picker blurs when blur-all is off.
  */
-[data-bl-si-blur] {
+[data-bl-si-blur]:not([data-bl-si-reveal]) {
   filter: blur(var(--bl-si-radius, 10px)) !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: none !important;
@@ -44,21 +44,15 @@
 }
 
 /* ─── Reveal: attribute-driven, covers all blur modes ──────────────────────── */
-/* Trade-off: background-color:transparent may strip legitimate element backgrounds
-   during gaussian/frosted reveal. Acceptable — reveal is temporary (hover/click). */
+/* These rules are also pushed inside injectBlurRules() in blur_engine.js, but
+   BOTH declarations are needed. This static version handles reveal when blur-all
+   is OFF (picker/individual blurs only — no injected <style> exists). The injected
+   copy handles reveal when blur-all is ON, where it must appear after the blur rules
+   in the same <style> block to win the !important source-order tie. */
 
 [data-bl-si-reveal] {
-  /* Gaussian / Frosted */
   filter: none !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
-  /* Redacted */
-  background-color: transparent !important;
-  color: inherit !important;
-  border-color: inherit !important;
-  text-decoration-color: inherit !important;
-  /* Masked */
-  font-size: inherit !important;
-  /* All modes */
   user-select: auto !important;
 }
 

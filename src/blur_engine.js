@@ -298,7 +298,8 @@ const BlurEngine = (() => {
     ":not(#bl-si-picker-toolbar):not(#bl-si-picker-toolbar *)" +
     ":not(.bl-si-toast):not(.bl-si-toast *)" +
     ":not(.bl-si-toolbar):not(.bl-si-toolbar *)" +
-    ":not(#" + SVG_FILTER_ID + ")";
+    ":not(#" + SVG_FILTER_ID + ")" +
+    ":not([data-bl-si-reveal])";
 
   /**
    * Inject CSS rules for blur-all mode in DOM.
@@ -362,15 +363,17 @@ const BlurEngine = (() => {
       rules.push(`${excluded} { ${blurDecl} }`);
     }
 
-    // Data attribute rule — for text-check elements and individual picker blurs
-    rules.push(`[data-bl-si-blur] { ${blurDecl} }`);
+    // Data attribute rule — for text-check elements and individual picker blurs.
+    // :not([data-bl-si-reveal]) excludes revealed elements so page CSS shows through
+    // naturally — no cascade fight, no revert overrides needed in the reveal rule.
+    rules.push(`[data-bl-si-blur]:not([data-bl-si-reveal]) { ${blurDecl} }`);
 
     // Media elements in redacted/masked modes need filter:brightness(0) since
     // color:transparent and font-size:0 don't affect images/video/canvas.
     if (isRedacted || isMasked) {
       const mediaTags = "img,video,canvas,svg,picture,audio";
       const mediaDecl = "filter: brightness(0) !important; user-select: none !important;";
-      rules.push(`${mediaTags.split(",").map(t => t + "[data-bl-si-blur]").join(",")} { ${mediaDecl} }`);
+      rules.push(`${mediaTags.split(",").map(t => t + "[data-bl-si-blur]:not([data-bl-si-reveal])").join(",")} { ${mediaDecl} }`);
       if (alwaysBlurSelector) {
         const mediaSel = mediaTags.split(",")
           .filter(t => alwaysBlurSelector.includes(t))
@@ -380,9 +383,15 @@ const BlurEngine = (() => {
       }
     }
 
-    // Reveal overrides — attribute-driven, covers all blur modes.
-    // Injected here so reveal wins over both alwaysBlur and [data-bl-si-blur] rules.
-    rules.push(`[data-bl-si-reveal] { filter: none !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; background-color: transparent !important; color: inherit !important; border-color: inherit !important; text-decoration-color: inherit !important; font-size: inherit !important; user-select: auto !important; }`);
+    // Reveal overrides — also declared in styles/content.css, but BOTH are needed:
+    // - static content.css handles reveal when blur-all is OFF (picker/individual blurs only,
+    //   no injected <style> exists).
+    // - these injected rules handle reveal when blur-all is ON. The injected <style> is
+    //   appended to <head> after content.css, so when both have !important at equal
+    //   specificity, source order decides — the static reveal rule would LOSE to the
+    //   injected blur rules above it. Pushing reveal here places it after the blur rules
+    //   in the same stylesheet, so it wins.
+    rules.push(`[data-bl-si-reveal] { filter: none !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
     rules.push(`[data-bl-si-reveal][data-bl-si-mask-text]::after { content: none !important; }`);
 
     if (rules.length === 0) return;
