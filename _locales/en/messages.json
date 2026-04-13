@@ -11,6 +11,9 @@
   "ctxUnblurElement": {
     "message": "Unblur this element"
   },
+  "ctxBlurSelection": {
+    "message": "Blur selected text"
+  },
 
   "pickerPrefixLabel": {
     "message": "Blur An:",

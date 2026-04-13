@@ -11,6 +11,9 @@
   "ctxUnblurElement": {
     "message": "इस तत्व का धुंधलापन हटाएँ"
   },
+  "ctxBlurSelection": {
+    "message": "चयनित पाठ धुंधला करें"
+  },
 
   "pickerPrefixLabel": {
     "message": "",

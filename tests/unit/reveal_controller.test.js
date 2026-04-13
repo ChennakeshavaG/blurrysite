@@ -81,7 +81,7 @@ describe('blsi.Reveal — click mode', () => {
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('none');
+    expect(el.dataset.blSiReveal).toBe('1');
   });
 
   test('second click on same element keeps reveal (link pass-through)', () => {
@@ -91,7 +91,7 @@ describe('blsi.Reveal — click mode', () => {
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('none');
+    expect(el.dataset.blSiReveal).toBe('1');
   });
 
   test('first click on blurred element calls preventDefault', () => {
@@ -122,7 +122,7 @@ describe('blsi.Reveal — click mode', () => {
     fireClick(el);
     const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
     document.dispatchEvent(ev);
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.dataset.blSiReveal).toBeUndefined();
   });
 
   test('input elements are skipped (reveal does not fire)', () => {
@@ -131,8 +131,7 @@ describe('blsi.Reveal — click mode', () => {
     document.body.appendChild(input);
     blsi.BlurEngine.applyBlur(input);
     fireClick(input);
-    // No reveal applied — filter not set to 'none' by reveal.
-    expect(input.style.getPropertyValue('filter')).toBe('');
+    expect(input.dataset.blSiReveal).toBeUndefined();
   });
 
   test('picker active blocks click reveal', () => {
@@ -142,7 +141,7 @@ describe('blsi.Reveal — click mode', () => {
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.dataset.blSiReveal).toBeUndefined();
   });
 
   test('mode=none disables click reveal', () => {
@@ -151,7 +150,7 @@ describe('blsi.Reveal — click mode', () => {
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.dataset.blSiReveal).toBeUndefined();
   });
 });
 
@@ -162,7 +161,7 @@ describe('blsi.Reveal — hover mode', () => {
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireMouseOver(el);
-    expect(el.style.getPropertyValue('filter')).toBe('none');
+    expect(el.dataset.blSiReveal).toBe('1');
   });
 
   test('mouseout debounces dismiss by 50ms', () => {
@@ -176,9 +175,9 @@ describe('blsi.Reveal — hover mode', () => {
     Object.defineProperty(out, 'target', { value: el });
     document.dispatchEvent(out);
     // Still revealed right after mouseout
-    expect(el.style.getPropertyValue('filter')).toBe('none');
+    expect(el.dataset.blSiReveal).toBe('1');
     jest.advanceTimersByTime(60);
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.dataset.blSiReveal).toBeUndefined();
     jest.useRealTimers();
   });
 });
@@ -190,9 +189,9 @@ describe('blsi.Reveal.clearAll', () => {
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('none');
+    expect(el.dataset.blSiReveal).toBe('1');
     blsi.Reveal.clearAll();
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.dataset.blSiReveal).toBeUndefined();
   });
 });
 
@@ -204,6 +203,6 @@ describe('blsi.Reveal.destroy', () => {
     document.body.appendChild(el);
     blsi.BlurEngine.applyBlur(el);
     fireClick(el);
-    expect(el.style.getPropertyValue('filter')).toBe('');
+    expect(el.dataset.blSiReveal).toBeUndefined();
   });
 });

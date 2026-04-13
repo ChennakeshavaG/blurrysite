@@ -125,10 +125,11 @@ describe('BlurrySite constants', () => {
       // lazily by buildDefaultSettings() from blsi.Actions.
       expect(PB.DEFAULT_SETTINGS.SHORTCUTS).toBeUndefined();
       const full = PB.buildDefaultSettings();
-      expect(Object.keys(full.SHORTCUTS)).toHaveLength(3);
+      expect(Object.keys(full.SHORTCUTS)).toHaveLength(4);
       expect(full.SHORTCUTS.TOGGLE_BLUR_ALL).toBeDefined();
       expect(full.SHORTCUTS.TOGGLE_PICKER).toBeDefined();
       expect(full.SHORTCUTS.CLEAR_ALL).toBeDefined();
+      expect(full.SHORTCUTS.SCREENSHOT).toBeDefined();
     });
 
     test('each shortcut has a binding array of {code, mods}', () => {
@@ -342,7 +343,7 @@ describe('BlurrySite constants', () => {
       expect(result.ENABLED).toBe(true);
       expect(result.THOROUGH_BLUR).toBe(false);
       expect(Object.keys(result.BLUR_CATEGORIES)).toHaveLength(5);
-      expect(Object.keys(result.SHORTCUTS)).toHaveLength(3);
+      expect(Object.keys(result.SHORTCUTS)).toHaveLength(4);
     });
   });
 

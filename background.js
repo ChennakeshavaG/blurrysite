@@ -38,6 +38,12 @@ function createContextMenus() {
       title: chrome.i18n.getMessage("ctxUnblurElement") || "Unblur this element",
       contexts: ["all"],
     });
+
+    chrome.contextMenus.create({
+      id: "bl-si-blur-selection",
+      title: chrome.i18n.getMessage("ctxBlurSelection") || "Blur selected text",
+      contexts: ["selection"],
+    });
   });
 }
 
@@ -79,6 +85,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     chrome.tabs
       .sendMessage(tab.id, { type: MSG.CONTEXT_UNBLUR })
       .catch(() => {});
+  } else if (info.menuItemId === "bl-si-blur-selection") {
+    chrome.tabs
+      .sendMessage(tab.id, { type: MSG.BLUR_SELECTION })
+      .catch(() => {});
   }
 });
 
@@ -107,6 +117,22 @@ chrome.commands.onCommand.addListener(async (command) => {
   chrome.tabs.sendMessage(tab.id, { type }).catch(() => {});
 });
 
+
+// ---------------------------------------------------------------------------
+// Screenshot capture handler
+// ---------------------------------------------------------------------------
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.type === 'CAPTURE_VIEWPORT') {
+    chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ dataUrl });
+      }
+    });
+    return true; // async sendResponse
+  }
+});
 
 // Note: tab navigation does not need a RESTORE message — the content script
 // is re-injected on each page load and restores blur state from storage in

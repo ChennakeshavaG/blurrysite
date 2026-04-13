@@ -56,6 +56,17 @@ const Actions = (() => {
       messageType: 'CLEAR_ALL_BLUR',
       chromeCommand: 'clear-all-blur',
     }),
+
+    SCREENSHOT: Object.freeze({
+      id: 'SCREENSHOT',
+      label: 'Take screenshot',
+      description: 'Capture viewport screenshot with blur applied',
+      defaultBinding: Object.freeze([
+        Object.freeze({ code: 'KeyS', mods: Object.freeze(['Alt', 'Shift']) }),
+      ]),
+      messageType: 'CAPTURE_VIEWPORT',
+      chromeCommand: null,
+    }),
   });
 
   /** @returns {Array} Array of action objects in registration order. */

@@ -11,6 +11,9 @@
   "ctxUnblurElement": {
     "message": "இந்தக் கூறின் மங்கலை அகற்று"
   },
+  "ctxBlurSelection": {
+    "message": "தேர்ந்தெடுத்த உரையை மங்கச்செய்"
+  },
 
   "pickerPrefixLabel": {
     "message": "",

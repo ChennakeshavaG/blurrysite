@@ -322,21 +322,34 @@ const BlurEngine = (() => {
     // reconcileKey deliberately excludes BLUR_RADIUS for gaussian. If
     // applySettingsToDom() is ever removed, blur radius changes will
     // silently stop working in gaussian mode.
-    const filterValue =
-      mode === blsi.BLUR_MODES.FROSTED
-        ? "url(#bl-si-frosted-filter)"
-        : "blur(var(--bl-si-radius, 10px))";
+    const isRedacted = mode === blsi.BLUR_MODES.REDACTED;
+    const isMasked   = mode === blsi.BLUR_MODES.MASKED;
 
-    // transition: filter is declared alongside the filter itself so hover/click
-    // reveal (reveal_controller sets inline `filter: none !important`) animates
-    // smoothly in both directions. Initial blur-all apply/remove still snaps
-    // because the rule itself appears/disappears in the same style recalc as
-    // the filter value change — CSS transitions require the transition property
-    // to be in effect before the animated property changes.
-    const blurDecl =
-      `filter: ${filterValue} !important; ` +
-      `transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ` +
-      `user-select: none !important;`;
+    let blurDecl;
+    if (isRedacted) {
+      blurDecl =
+        `background-color: var(--bl-si-redaction-color, #000) !important; ` +
+        `color: transparent !important; ` +
+        `border-color: var(--bl-si-redaction-color, #000) !important; ` +
+        `text-decoration-color: transparent !important; ` +
+        `user-select: none !important;`;
+    } else if (isMasked) {
+      blurDecl =
+        `font-size: 0 !important; ` +
+        `user-select: none !important;`;
+    } else {
+      const filterValue =
+        mode === blsi.BLUR_MODES.FROSTED
+          ? "url(#bl-si-frosted-filter)"
+          : "blur(var(--bl-si-radius, 10px))";
+      // transition: filter is declared alongside the filter itself so hover/click
+      // reveal (reveal_controller sets inline `filter: none !important`) animates
+      // smoothly in both directions.
+      blurDecl =
+        `filter: ${filterValue} !important; ` +
+        `transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ` +
+        `user-select: none !important;`;
+    }
 
     const rules = [];
 
@@ -351,6 +364,26 @@ const BlurEngine = (() => {
 
     // Data attribute rule — for text-check elements and individual picker blurs
     rules.push(`[data-bl-si-blur] { ${blurDecl} }`);
+
+    // Media elements in redacted/masked modes need filter:brightness(0) since
+    // color:transparent and font-size:0 don't affect images/video/canvas.
+    if (isRedacted || isMasked) {
+      const mediaTags = "img,video,canvas,svg,picture,audio";
+      const mediaDecl = "filter: brightness(0) !important; user-select: none !important;";
+      rules.push(`${mediaTags.split(",").map(t => t + "[data-bl-si-blur]").join(",")} { ${mediaDecl} }`);
+      if (alwaysBlurSelector) {
+        const mediaSel = mediaTags.split(",")
+          .filter(t => alwaysBlurSelector.includes(t))
+          .map(t => t + EXCLUDE)
+          .join(",");
+        if (mediaSel) rules.push(`${mediaSel} { ${mediaDecl} }`);
+      }
+    }
+
+    // Reveal overrides — attribute-driven, covers all blur modes.
+    // Injected here so reveal wins over both alwaysBlur and [data-bl-si-blur] rules.
+    rules.push(`[data-bl-si-reveal] { filter: none !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; background-color: transparent !important; color: inherit !important; border-color: inherit !important; text-decoration-color: inherit !important; font-size: inherit !important; user-select: auto !important; }`);
+    rules.push(`[data-bl-si-reveal][data-bl-si-mask-text]::after { content: none !important; }`);
 
     if (rules.length === 0) return;
 
@@ -379,9 +412,10 @@ const BlurEngine = (() => {
    * every page-wide reconcile. New DOM nodes (SPA rerenders, infinite
    * scroll) are handled per-node by the MutationObserver via `tryBlurTextCheck`.
    */
-  function blurTextCheckElements(categories, thorough) {
+  function blurTextCheckElements(categories, thorough, mode) {
     const { textCheckSelector } = getSelectors(categories || DEFAULT_CATS);
     if (!textCheckSelector) return;
+    const isMasked = mode === blsi.BLUR_MODES.MASKED;
 
     document.querySelectorAll(textCheckSelector).forEach((el) => {
       if (el.dataset.blSiBlur) return; // already stamped
@@ -390,10 +424,15 @@ const BlurEngine = (() => {
       // blurring wrappers creates nested blur that breaks hover reveal.
       // Thorough mode only bypasses the gate for inline content elements.
       const needsTextGate = _structuralTags.has(el.tagName.toLowerCase());
+      let shouldStamp = false;
       if (needsTextGate) {
-        if (hasMeaningfulTextContent(el)) el.dataset.blSiBlur = "1";
-      } else if (thorough || hasMeaningfulTextContent(el)) {
+        shouldStamp = hasMeaningfulTextContent(el);
+      } else {
+        shouldStamp = thorough || hasMeaningfulTextContent(el);
+      }
+      if (shouldStamp) {
         el.dataset.blSiBlur = "1";
+        if (isMasked) _stampMaskText(el);
       }
     });
   }
@@ -428,6 +467,19 @@ const BlurEngine = (() => {
     );
   }
 
+  // ── Mask text helper (masked mode) ──────────────────────────────────────────
+
+  function _stampMaskText(element) {
+    const len = (element.textContent || '').length;
+    if (len > 0) {
+      element.dataset.blSiMaskText = '*'.repeat(Math.min(len, 100));
+    }
+  }
+
+  function _clearMaskAttrs(element) {
+    delete element.dataset.blSiMaskText;
+  }
+
   // ── Individual element blur (picker / context menu) ────────────────────────
 
   function applyBlur(element) {
@@ -440,6 +492,7 @@ const BlurEngine = (() => {
   function removeBlur(element) {
     if (!element || !(element instanceof Element)) return;
     delete element.dataset.blSiBlur;
+    _clearMaskAttrs(element);
   }
 
   function toggleBlur(element) {
@@ -501,6 +554,7 @@ const BlurEngine = (() => {
     removeBlurRules();
     document.querySelectorAll("[data-bl-si-blur]").forEach((el) => {
       delete el.dataset.blSiBlur;
+      _clearMaskAttrs(el);
     });
     removeAllZoneOverlays();
   }
@@ -791,9 +845,10 @@ const BlurEngine = (() => {
     // step in blurAll() right after this function returns.
     document.querySelectorAll("[data-bl-si-blur]").forEach((el) => {
       delete el.dataset.blSiBlur;
+      _clearMaskAttrs(el);
     });
     injectBlurRules(cats, mode);
-    blurTextCheckElements(cats, thorough);
+    blurTextCheckElements(cats, thorough, mode);
     _startDomObserver();
     _isPageBlurred = true;
   }
@@ -805,6 +860,7 @@ const BlurEngine = (() => {
     // PHASE 4 of the same blurAll() call when they're still in storage.
     document.querySelectorAll("[data-bl-si-blur]").forEach((el) => {
       delete el.dataset.blSiBlur;
+      _clearMaskAttrs(el);
     });
     // Remove the frosted SVG filter if it was injected. Harmless to leave
     // behind, but keeps the DOM clean for users who toggle modes repeatedly.
@@ -869,6 +925,8 @@ const BlurEngine = (() => {
       if (_isPageBlurred) _disablePageWide();
       for (const [, item] of _activeItems) removeItem(item);
       _activeItems.clear();
+      // Safety net: remove any orphaned zone overlays not tracked in _activeItems.
+      removeAllZoneOverlays();
       _lastReconcileKey = null;
       return;
     }

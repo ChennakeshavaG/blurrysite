@@ -144,6 +144,14 @@
       await Store.saveBlurState(hostname, false);
       await Engine.blurAll();
     },
+    async SCREENSHOT() {
+      try {
+        const dataUrl = await blsi.Screenshot.captureViewport();
+        blsi.Screenshot.download(dataUrl);
+      } catch (_e) {
+        log.error('Screenshot capture failed', _e);
+      }
+    },
     onExitPicker() {
       if (isPickerActive) {
         Picker.deactivate();
@@ -315,6 +323,13 @@
         return true;
       }
 
+      case MSG.BLUR_SELECTION: {
+        log.flow('trigger.blurSelection');
+        const result = blsi.SelectionBlur.blurSelection();
+        if (sendResponse) sendResponse({ ok: !!result });
+        return false;
+      }
+
       default:
         break;
     }
@@ -328,6 +343,7 @@
     document.documentElement.style.setProperty('--bl-si-radius', `${settings.BLUR_RADIUS}px`);
     document.documentElement.style.setProperty('--bl-si-highlight-color', settings.HIGHLIGHT_COLOR);
     document.documentElement.style.setProperty('--bl-si-transition-duration', `${settings.TRANSITION_DURATION}ms`);
+    document.documentElement.style.setProperty('--bl-si-redaction-color', settings.REDACTION_COLOR);
   }
 
   // ─── Idempotent state application ─────────────────────────────────────────────
@@ -367,6 +383,13 @@
       }
     }
 
+    // Tab privacy (hide title + favicon)
+    if (settings.TAB_PRIVACY && settings.ENABLED) {
+      blsi.TabPrivacy.enable();
+    } else {
+      blsi.TabPrivacy.disable();
+    }
+
     // Clear stale reveal state on mode change / disable
     if (old.REVEAL_MODE !== settings.REVEAL_MODE || !settings.ENABLED) {
       Reveal.clearAll();
@@ -374,6 +397,48 @@
 
     // Delegate blur reconciliation. Contract lives in blur_engine.js blurAll() docblock.
     await Engine.blurAll();
+
+    // Auto-blur (idle / tab switch)
+    if ((settings.AUTO_BLUR_IDLE || settings.AUTO_BLUR_TAB_SWITCH) && settings.ENABLED) {
+      blsi.AutoBlur.init({
+        idleTimeout: settings.IDLE_TIMEOUT_SECONDS,
+        tabSwitch: settings.AUTO_BLUR_TAB_SWITCH,
+        idle: settings.AUTO_BLUR_IDLE,
+        onIdle: async () => {
+          await Store.saveBlurState(hostname, true);
+          await Engine.blurAll();
+        },
+        onActive: async () => {
+          await Store.saveBlurState(hostname, false);
+          await Engine.blurAll();
+        },
+      });
+    } else {
+      blsi.AutoBlur.destroy();
+    }
+
+    // Blur timer
+    if (settings.BLUR_TIMER_MINUTES > 0 && settings.ENABLED) {
+      if (!blsi.BlurTimer.isActive()) {
+        blsi.BlurTimer.start(settings.BLUR_TIMER_MINUTES, async () => {
+          await Store.saveBlurState(hostname, false);
+          await Engine.blurAll();
+        });
+      }
+    } else if (settings.BLUR_TIMER_MINUTES === 0) {
+      blsi.BlurTimer.stop();
+    }
+
+    // PII auto-detection — scan after blur reconciliation so PII spans don't
+    // conflict with the blur engine's text-check stamping.
+    const anyDetect = settings.AUTO_DETECT && Object.values(settings.AUTO_DETECT).some(Boolean);
+    if (anyDetect && settings.ENABLED) {
+      blsi.PiiDetector.scan(document.body, settings.AUTO_DETECT);
+      blsi.PiiDetector.observeMutations(document.body);
+    } else {
+      blsi.PiiDetector.stopObserving();
+      blsi.PiiDetector.clear(document.body);
+    }
   }
 
   // ─── Initialisation ───────────────────────────────────────────────────────────

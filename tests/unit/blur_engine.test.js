@@ -614,6 +614,20 @@ describe('blsi.BlurEngine', () => {
       expect(document.getElementById('gone').dataset.blSiBlur).toBeUndefined();
     });
 
+    test('ENABLED=false removes zone overlays', async () => {
+      fakeStorage.blurState = true;
+      fakeStorage.items = [
+        { type: 'sticky', id: 'z1', name: 'Sticky 1', anchor: 'page', x: 0, y: 0, width: 100, height: 100 },
+      ];
+      await blsi.BlurEngine.blurAll();
+      expect(document.querySelector('[data-bl-si-zone="z1"]')).not.toBeNull();
+
+      fakeStorage.settings.ENABLED = false;
+      await blsi.BlurEngine.blurAll();
+      expect(document.querySelector('[data-bl-si-zone]')).toBeNull();
+      expect(blsi.BlurEngine.getZoneOverlays().length).toBe(0);
+    });
+
     test('_setPickerActiveForObserver is exposed', () => {
       expect(typeof blsi.BlurEngine._setPickerActiveForObserver).toBe('function');
       blsi.BlurEngine._setPickerActiveForObserver(true);

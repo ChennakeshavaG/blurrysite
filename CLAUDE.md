@@ -23,7 +23,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()` |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `REVEAL_DFS_MAX_DEPTH`, `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; everything else gated. `scope(name)` returns a tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. |
@@ -166,9 +166,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 | Hover highlight | `bl-si-hover-highlight` |
 | Picker active (on `<html>`) | `bl-si-picker-active` |
 | Toolbar | `bl-si-toolbar` (id: `bl-si-picker-toolbar`) |
-| Click-to-reveal active state | `bl-si-revealed` |
-| Ancestor chain unblur (click and hover) | `bl-si-ancestor-reveal` |
-| Hover-to-reveal target | `bl-si-reveal-on-hover` |
+| Reveal attribute (all modes, click+hover) | `data-bl-si-reveal` (attribute, not class) |
 | Sticky zone overlay | `bl-si-zone-overlay` |
 | Zone drawing preview | `bl-si-zone-drawing` |
 | Zone hover highlight (picker mode) | `bl-si-zone-highlight` |
@@ -257,3 +255,4 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |
 | `position: sticky` inside blurred containers stops sticking | CSS `filter` creates stacking context — spec behaviour | Same root cause as `position: fixed` issue |
 | `<select>` dropdown options visible when opened | CSS filter only blurs closed state | Known limitation |
+| Reveal may strip element background color | `data-bl-si-reveal` sets `background-color: transparent` to cancel redacted mode; in gaussian/frosted, this removes legitimate backgrounds during temporary reveal | Acceptable — reveal is temporary (hover/click) |

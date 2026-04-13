@@ -108,8 +108,10 @@ A module may only depend on modules loaded before it.
 - `init({ getMode, isPickerActive })` — both are **functions**, not values. Called on every event, so the caller never has to re-init when `settings.REVEAL_MODE` or picker-active state changes.
 - `clearAll()` resets every piece of reveal state: click-revealed element, hover-revealed element, ancestor chain, mouseout debounce timer, `_revealedElements` set. Called from `applyState` on `REVEAL_MODE` change and on `!settings.ENABLED`.
 - `destroy()` removes all document listeners + `clearAll()`. Only used on disable paths.
-- Listeners are registered at bubble phase on `document` for click/keydown/mouseover/mouseout. Input / textarea / select / button / contenteditable targets are skipped inside `onRevealClick` — do not move that guard.
+- Listeners are registered at capture phase on `document` for mouseover/mouseout, bubble phase for click/keydown. Input / textarea / select / button / contenteditable targets are skipped inside `onRevealClick` — do not move that guard.
 - Hover mode has a 50ms mouseout debounce via `setTimeout`; reset on any mouseover to avoid flicker on element boundaries.
+- **Reveal is attribute-driven, not inline-style.** `_revealElement` stamps `data-bl-si-reveal="1"`; CSS rules in `styles/content.css` + injected `<style>` override all four blur modes (gaussian, frosted, redacted, masked) simultaneously. Zone overlays are the exception — they use inline `backdrop-filter` since they have no injected CSS. Trade-off: `background-color: transparent` may strip legitimate element backgrounds during reveal; acceptable since reveal is temporary.
+- No JS mode branching needed. The CSS overrides are no-ops for properties the active blur mode doesn't set.
 
 ### selector_utils.js
 - `getSelector(body)` and `getSelector(documentElement)` must return `null` — tests assert this.

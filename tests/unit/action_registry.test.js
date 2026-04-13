@@ -26,14 +26,15 @@ describe('blsi.Actions (action registry)', () => {
     expect(typeof blsi.Actions.defaultBindings).toBe('function');
   });
 
-  test('contains exactly 3 actions', () => {
-    expect(blsi.Actions.ids()).toHaveLength(3);
+  test('contains exactly 4 actions', () => {
+    expect(blsi.Actions.ids()).toHaveLength(4);
   });
 
-  test('all three core actions are registered', () => {
+  test('all core actions are registered', () => {
     expect(blsi.Actions.get('TOGGLE_BLUR_ALL')).toBeDefined();
     expect(blsi.Actions.get('TOGGLE_PICKER')).toBeDefined();
     expect(blsi.Actions.get('CLEAR_ALL')).toBeDefined();
+    expect(blsi.Actions.get('SCREENSHOT')).toBeDefined();
   });
 
   test('each action has the full metadata shape', () => {
@@ -42,7 +43,7 @@ describe('blsi.Actions (action registry)', () => {
       expect(typeof action.label).toBe('string');
       expect(typeof action.description).toBe('string');
       expect(typeof action.messageType).toBe('string');
-      expect(typeof action.chromeCommand).toBe('string');
+      expect(action.chromeCommand === null || typeof action.chromeCommand === 'string').toBe(true);
       expect(Array.isArray(action.defaultBinding)).toBe(true);
       expect(action.defaultBinding.length).toBeGreaterThan(0);
     }

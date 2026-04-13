@@ -354,6 +354,14 @@
     // Update every view with fresh state.
     Renderer.updateAll(settings);
     renderHeader(settings);
+
+    // When disabled, hide all controls except the header toggle.
+    if (settings.ENABLED) {
+      document.body.removeAttribute('data-disabled');
+    } else {
+      document.body.setAttribute('data-disabled', '');
+    }
+
     renderBlurCount(pageBlurred);
     renderBlurList(items);
     renderRulesList(rules);

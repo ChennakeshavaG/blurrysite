@@ -16,6 +16,7 @@
   --bl-si-radius: 10px;
   --bl-si-highlight-color: #f59e0b;
   --bl-si-transition-duration: 150ms;
+  --bl-si-redaction-color: #000000;
 }
 
 /* ─── Blur: always-blur tags are handled by injected <style> in blur_engine.
@@ -31,6 +32,39 @@
   filter: blur(var(--bl-si-radius, 10px)) !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: none !important;
+}
+
+/* ─── Masked mode: asterisk replacement via ::after ─────────────────────────── */
+
+[data-bl-si-mask-text]::after {
+  content: attr(data-bl-si-mask-text);
+  font-size: 1rem !important;
+  letter-spacing: 0.05em;
+  color: inherit;
+}
+
+/* ─── Reveal: attribute-driven, covers all blur modes ──────────────────────── */
+/* Trade-off: background-color:transparent may strip legitimate element backgrounds
+   during gaussian/frosted reveal. Acceptable — reveal is temporary (hover/click). */
+
+[data-bl-si-reveal] {
+  /* Gaussian / Frosted */
+  filter: none !important;
+  transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
+  /* Redacted */
+  background-color: transparent !important;
+  color: inherit !important;
+  border-color: inherit !important;
+  text-decoration-color: inherit !important;
+  /* Masked */
+  font-size: inherit !important;
+  /* All modes */
+  user-select: auto !important;
+}
+
+/* Kill masked-mode asterisks on revealed elements */
+[data-bl-si-reveal][data-bl-si-mask-text]::after {
+  content: none !important;
 }
 
 /* ─── Picker mode ───────────────────────────────────────────────────────────── */

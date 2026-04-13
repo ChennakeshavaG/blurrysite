@@ -21,6 +21,19 @@ const BlurrySiteReveal = (() => {
   const Engine = blsi.BlurEngine;
   const RM = blsi.REVEAL_MODES;
 
+  // Derived from Engine.CATEGORY_SELECTORS — single source of truth.
+  // Joins every alwaysBlur tag across all categories into one CSS selector.
+  const ALWAYS_BLUR_SELECTOR = (function () {
+    var cats = Engine.CATEGORY_SELECTORS;
+    var tags = [];
+    var keys = Object.keys(cats);
+    for (var i = 0; i < keys.length; i++) {
+      var ab = cats[keys[i]].alwaysBlur;
+      for (var j = 0; j < ab.length; j++) tags.push(ab[j]);
+    }
+    return tags.join(',');
+  }());
+
   // ── State ────────────────────────────────────────────────────────────────
   let _getMode = () => null;
   let _getPickerActive = () => false;
@@ -46,7 +59,7 @@ const BlurrySiteReveal = (() => {
 
   function clearRevealedAncestors() {
     for (let i = 0; i < revealedAncestors.length; i++) {
-      revealedAncestors[i].style.removeProperty('filter');
+      delete revealedAncestors[i].dataset.blSiReveal;
     }
     revealedAncestors = [];
   }
@@ -56,7 +69,7 @@ const BlurrySiteReveal = (() => {
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
       if (_isVisuallyBlurred(node)) {
-        node.style.setProperty('filter', 'none', 'important');
+        node.dataset.blSiReveal = '1';
         revealedAncestors.push(node);
       }
       node = node.parentElement;
@@ -71,21 +84,18 @@ const BlurrySiteReveal = (() => {
       node = node.parentElement;
     }
     // Walk DOWN — the hover target may be a non-blurred container whose
-    // children ARE blurred (e.g. WhatsApp chat items: the div receives the
-    // mouseover but the blurred <span> is a descendant). Return the first
-    // blurred descendant so the reveal handler can unblur it + its ancestors.
+    // children ARE blurred (e.g. WhatsApp wraps <video> in 6+ nested divs).
+    // Tag-based querySelectorAll finds media/heading elements at any depth
+    // without hitting random wrapper divs or text spans.
     if (el && el instanceof Element) {
-      // Fast path: data-attribute stamped descendants
+      // CSS-rule blurred descendants (alwaysBlur tags: img, video, svg, h1, p…)
+      if (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive()) {
+        var tagMatch = el.querySelector(ALWAYS_BLUR_SELECTOR);
+        if (tagMatch && _isVisuallyBlurred(tagMatch)) return tagMatch;
+      }
+      // Individually stamped descendants (picker / context-menu blurs)
       var stamped = el.querySelector('[data-bl-si-blur]');
       if (stamped) return stamped;
-      // Slow path: CSS-rule blurred descendants (alwaysBlur tags like svg, img).
-      // Only check when blur-all is active and selectorCache exists.
-      if (Engine.isBlurAllActive() && typeof Engine.matchesActiveCategories === 'function') {
-        var children = el.getElementsByTagName('*');
-        for (var i = 0; i < children.length; i++) {
-          if (_isVisuallyBlurred(children[i])) return children[i];
-        }
-      }
     }
     return null;
   }
@@ -99,13 +109,19 @@ const BlurrySiteReveal = (() => {
       el.style.setProperty('backdrop-filter', 'none', 'important');
       el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
     } else {
-      el.style.setProperty('filter', 'none', 'important');
-      el.querySelectorAll('*').forEach(child => {
-        if (_isVisuallyBlurred(child)) {
-          child.style.setProperty('filter', 'none', 'important');
-          _revealedElements.add(child);
+      el.dataset.blSiReveal = '1';
+      // Stamp reveal on all blurred children — tag-matched (CSS rule) and
+      // data-stamped (picker). querySelectorAll is browser-native and fast.
+      var sel = ALWAYS_BLUR_SELECTOR
+        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur]'
+        : '[data-bl-si-blur]';
+      var children = el.querySelectorAll(sel);
+      for (var i = 0; i < children.length; i++) {
+        if (_isVisuallyBlurred(children[i])) {
+          children[i].dataset.blSiReveal = '1';
+          _revealedElements.add(children[i]);
         }
-      });
+      }
     }
     _revealedElements.add(el);
   }
@@ -115,27 +131,24 @@ const BlurrySiteReveal = (() => {
       el.style.removeProperty('backdrop-filter');
       el.style.removeProperty('-webkit-backdrop-filter');
     } else {
-      el.style.removeProperty('filter');
-      el.style.removeProperty('transition');
-      el.querySelectorAll('*').forEach(child => {
-        if (_revealedElements.has(child)) {
-          child.style.removeProperty('filter');
-          _revealedElements.delete(child);
-        }
-      });
+      delete el.dataset.blSiReveal;
+      // Clean up by querying the reveal attr directly — no tag search needed
+      var revealed = el.querySelectorAll('[data-bl-si-reveal]');
+      for (var i = 0; i < revealed.length; i++) {
+        delete revealed[i].dataset.blSiReveal;
+        _revealedElements.delete(revealed[i]);
+      }
     }
     _revealedElements.delete(el);
   }
 
   function _unrevealAll() {
-    const snapshot = Array.from(_revealedElements);
-    for (const el of snapshot) {
+    for (const el of _revealedElements) {
       if (_isZoneOverlay(el)) {
         el.style.removeProperty('backdrop-filter');
         el.style.removeProperty('-webkit-backdrop-filter');
       } else {
-        el.style.removeProperty('filter');
-        el.style.removeProperty('transition');
+        delete el.dataset.blSiReveal;
       }
     }
     _revealedElements.clear();
