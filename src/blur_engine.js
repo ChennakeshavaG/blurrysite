@@ -110,7 +110,9 @@ const BlurEngine = (() => {
       textCheck: Object.freeze(["td", "th"]),
     }),
     STRUCTURE: Object.freeze({
-      alwaysBlur: Object.freeze([]),
+      // li/dt/dd moved to alwaysBlur so CSS injection covers ::marker pseudo-elements
+      // unconditionally — JS text-gate on li was leaving ordinal markers visible.
+      alwaysBlur: Object.freeze(["li", "dt", "dd"]),
       textCheck: Object.freeze([
         "div",
         "section",
@@ -121,9 +123,6 @@ const BlurEngine = (() => {
         "figure",
         "details",
         "dialog",
-        "li",
-        "dt",
-        "dd",
       ]),
     }),
   });
@@ -240,15 +239,17 @@ const BlurEngine = (() => {
     return Number.isFinite(n) && n > 0 ? n : null;
   }
 
-  function ensureSvgFilter() {
-    // blurAll can fire before <body> is mounted (early document_idle edge case) —
-    // appendChild(null) would throw. injectBlurRules is called on every page-wide
-    // reconcile, so the filter gets re-created as soon as body exists.
-    if (!document.body) return;
+  function ensureSvgFilter(root) {
+    // injectRules can fire before <body> is mounted (early document_idle edge case) —
+    // appendChild(null) would throw. injectRules is called on every page-wide
+    // reconcile, so the filter gets re-created as soon as the container exists.
+    // For shadow roots, root.body is undefined so root itself is the container.
+    const container = (root && root !== document) ? root : document.body;
+    if (!container) return;
     // Always rebuild: mutating feGaussianBlur stdDeviation in place does not
     // reliably invalidate Chrome's filter cache, so callers rely on a fresh
     // element being injected whenever radius / mode changes.
-    const existing = document.getElementById(SVG_FILTER_ID);
+    const existing = container.querySelector('#' + SVG_FILTER_ID);
     if (existing && existing.parentNode)
       existing.parentNode.removeChild(existing);
 
@@ -281,12 +282,10 @@ const BlurEngine = (() => {
     filter.appendChild(gaussianBlur);
     svg.appendChild(filter);
 
-    document.body.appendChild(svg);
+    container.appendChild(svg);
   }
 
   // ── CSS Rule Injection (always-blur tags) ──────────────────────────────────
-
-  let _styleEl = null;
 
   // Extension UI exclusion — prevents our own toolbar/toast/filter from being blurred.
   // The frosted-filter SVG (#bl-si-svg-filters) must be excluded because adding svg
@@ -302,15 +301,20 @@ const BlurEngine = (() => {
     ":not([data-bl-si-reveal])";
 
   /**
-   * Inject CSS rules for blur-all mode in DOM.
-   * Always-blur tags get tag-based CSS selectors.
-   * Text-check elements are handled by blurTextCheckElements() via data attribute.
-   * Also injects the [data-bl-si-blur] rule for text-check and picker elements.
+   * Inject CSS rules for blur-all mode into `root` (document or shadow root).
+   * Always-blur tags get tag-based CSS selectors; data-attribute rule covers
+   * text-check and picker elements. Idempotent — removes prior style first.
+   *
+   * Stateless injection target: `root.head ?? root`
+   *   - document: styles go to <head>
+   *   - shadowRoot: shadowRoot.head is undefined → styles go directly into the root
    */
-  function injectBlurRules(categories, mode) {
-    removeBlurRules();
+  function injectRules(root, categories, mode) {
+    removeRules(root);
 
-    if (mode === blsi.BLUR_MODES.FROSTED) ensureSvgFilter();
+    // Frosted glass: inject SVG filter into the same root so url(#id)
+    // resolves correctly within that root's scope.
+    if (mode === blsi.BLUR_MODES.FROSTED) ensureSvgFilter(root);
 
     const cats = categories || DEFAULT_CATS;
     const { alwaysBlurSelector } = getSelectors(cats);
@@ -323,20 +327,28 @@ const BlurEngine = (() => {
     // reconcileKey deliberately excludes BLUR_RADIUS for gaussian. If
     // applySettingsToDom() is ever removed, blur radius changes will
     // silently stop working in gaussian mode.
+    // For shadow roots, --bl-si-radius is inherited from :root, so the same
+    // CSS var reference works without any extra propagation.
     const isRedacted = mode === blsi.BLUR_MODES.REDACTED;
     const isMasked   = mode === blsi.BLUR_MODES.MASKED;
 
     let blurDecl;
     if (isRedacted) {
+      // filter: none cancels the static content.css gaussian rule for [data-bl-si-blur]
+      // elements (textCheck + picker), so only the redaction colour shows.
       blurDecl =
         `background-color: var(--bl-si-redaction-color, #000) !important; ` +
         `color: transparent !important; ` +
         `border-color: var(--bl-si-redaction-color, #000) !important; ` +
         `text-decoration-color: transparent !important; ` +
+        `filter: none !important; ` +
         `user-select: none !important;`;
     } else if (isMasked) {
+      // filter: none cancels the static content.css gaussian rule so asterisks
+      // (::after) are crisp, not blurry.
       blurDecl =
         `font-size: 0 !important; ` +
+        `filter: none !important; ` +
         `user-select: none !important;`;
     } else {
       const filterValue =
@@ -368,11 +380,16 @@ const BlurEngine = (() => {
     // naturally — no cascade fight, no revert overrides needed in the reveal rule.
     rules.push(`[data-bl-si-blur]:not([data-bl-si-reveal]) { ${blurDecl} }`);
 
-    // Media elements in redacted/masked modes need filter:brightness(0) since
-    // color:transparent and font-size:0 don't affect images/video/canvas.
+    // Media elements in redacted/masked modes need extra rules:
+    // - Redacted: visibility:hidden hides image content so the background-color
+    //   (already in blurDecl) shows through in the user's chosen redaction colour.
+    //   brightness(0) always produced black regardless of --bl-si-redaction-color.
+    // - Masked: brightness(0) makes media black (font-size:0 has no effect on images).
     if (isRedacted || isMasked) {
       const mediaTags = "img,video,canvas,svg,picture,audio";
-      const mediaDecl = "filter: brightness(0) !important; user-select: none !important;";
+      const mediaDecl = isRedacted
+        ? "visibility: hidden !important; user-select: none !important;"
+        : "filter: brightness(0) !important; user-select: none !important;";
       rules.push(`${mediaTags.split(",").map(t => t + "[data-bl-si-blur]:not([data-bl-si-reveal])").join(",")} { ${mediaDecl} }`);
       if (alwaysBlurSelector) {
         const mediaSel = mediaTags.split(",")
@@ -391,59 +408,108 @@ const BlurEngine = (() => {
     //   specificity, source order decides — the static reveal rule would LOSE to the
     //   injected blur rules above it. Pushing reveal here places it after the blur rules
     //   in the same stylesheet, so it wins.
-    rules.push(`[data-bl-si-reveal] { filter: none !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
+    // For shadow roots, these overrides are equally required so that reveal works
+    // on elements inside the shadow tree.
+    // visibility:hidden is used for media in redacted mode — must be reset on reveal.
+    rules.push(`[data-bl-si-reveal] { filter: none !important; visibility: visible !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
     rules.push(`[data-bl-si-reveal][data-bl-si-mask-text]::after { content: none !important; }`);
+    // Cascade reveal to blurred children of a revealed ancestor.
+    // When revealAncestorChain stamps data-bl-si-reveal on a parent (e.g. <p>),
+    // sibling [data-bl-si-blur] children inside it would still paint their own
+    // filter: blur() — child filter wins over the parent's filter: none. This
+    // descendant rule clears those children, preventing blurred "islands" inside
+    // a revealed ancestor. Also declared in content.css for the static (blur-all
+    // OFF) case; both copies are needed for source-order correctness.
+    rules.push(`[data-bl-si-reveal] [data-bl-si-blur] { filter: none !important; user-select: auto !important; }`);
+    rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; user-select: auto !important; }`);
 
     if (rules.length === 0) return;
 
-    _styleEl = document.createElement("style");
-    _styleEl.id = STYLE_ID;
-    _styleEl.textContent = rules.join("\n");
-    document.head.appendChild(_styleEl);
+    const styleEl = document.createElement("style");
+    styleEl.id = STYLE_ID;
+    styleEl.textContent = rules.join("\n");
+    (root.head ?? root).appendChild(styleEl);
   }
 
-  function removeBlurRules() {
-    if (_styleEl && _styleEl.parentNode) {
-      _styleEl.parentNode.removeChild(_styleEl);
-    }
-    _styleEl = null;
+  function removeRules(root) {
+    const container = root.head ?? root;
+    const el = container.querySelector && container.querySelector('#' + STYLE_ID);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
   function isBlurAllActive() {
-    return _styleEl !== null && _styleEl.parentNode !== null;
+    return !!(document.head && document.head.querySelector('#' + STYLE_ID));
   }
 
   // ── Text-check element blur (scan + MO for new nodes) ─────────────────────
 
   /**
-   * Scan existing text-check elements and stamp `data-bl-si-blur` on those
-   * matching the active categories. Called from `_enablePageWide` during
-   * every page-wide reconcile. New DOM nodes (SPA rerenders, infinite
-   * scroll) are handled per-node by the MutationObserver via `tryBlurTextCheck`.
+   * Scan elements in `root`, stamp `data-bl-si-blur` on text-check elements
+   * matching the active categories, and collect any open shadow roots found
+   * during the traversal — all in ONE querySelectorAll('*') pass.
+   *
+   * Returns the discovered ShadowRoot[] so the caller (handleDocument) can
+   * dispatch into them after this root is fully processed. No shadowCb param —
+   * the caller owns dispatch so shadow roots are never processed mid-loop.
    */
-  function blurTextCheckElements(categories, thorough, mode) {
-    const { textCheckSelector } = getSelectors(categories || DEFAULT_CATS);
-    if (!textCheckSelector) return;
+  function stampElements(root, categories, thorough, mode) {
+    const cats = categories || DEFAULT_CATS;
+    _rebuildTextCheckSet(cats);
     const isMasked = mode === blsi.BLUR_MODES.MASKED;
 
-    document.querySelectorAll(textCheckSelector).forEach((el) => {
+    // Collect shadow roots piggybacked on the stamp pass — no extra traversal.
+    const shadowRoots = [];
+
+    root.querySelectorAll('*').forEach((el) => {
+      // Shadow root discovery: collect for post-stamp dispatch by caller.
+      // CSS injected into each shadow root handles alwaysBlur declaratively;
+      // text-check stamping happens when caller recurses via handleDocument.
+      if (el.shadowRoot) shadowRoots.push(el.shadowRoot);
+
+      const tag = el.tagName.toLowerCase();
+
+      // Custom element host stamping — hyphenated tag names never land in
+      // _textCheckSet (which only contains known HTML elements). Stamp the
+      // host itself so light-DOM-only custom elements (e.g. <shreddit-foo>)
+      // aren't invisible to blur. Shadow root content is handled separately
+      // via handleDocument recursion. Gated on STRUCTURE or TEXT active.
+      if (tag.includes('-')) {
+        if (!el.dataset.blSiBlur && !_isExtensionUI(el) &&
+            (cats.STRUCTURE !== false || cats.TEXT !== false) &&
+            (thorough || hasMeaningfulTextContent(el))) {
+          el.dataset.blSiBlur = '1';
+          if (isMasked) _stampMaskText(el);
+        }
+        return;
+      }
+
+      // Text-check stamping
+      if (!_textCheckSet.has(tag)) return;
       if (el.dataset.blSiBlur) return; // already stamped
       if (_isExtensionUI(el)) return;
       // Structural containers (div, section, etc.) always require the text gate —
       // blurring wrappers creates nested blur that breaks hover reveal.
       // Thorough mode only bypasses the gate for inline content elements.
-      const needsTextGate = _structuralTags.has(el.tagName.toLowerCase());
+      const needsTextGate = _structuralTags.has(tag);
       let shouldStamp = false;
       if (needsTextGate) {
         shouldStamp = hasMeaningfulTextContent(el);
       } else {
-        shouldStamp = thorough || hasMeaningfulTextContent(el);
+        // For inline/phrasing content (a, span, em, etc.): also stamp if the
+        // element contains a <slot> descendant — shadow DOM projection means the
+        // slot renders light-DOM content visually (text, images) even though the
+        // shadow element itself has no direct text nodes. CSS filter on the
+        // stamped element blurs the projected slot content correctly.
+        shouldStamp = thorough || hasMeaningfulTextContent(el) ||
+          !!(el.querySelector && el.querySelector('slot'));
       }
       if (shouldStamp) {
         el.dataset.blSiBlur = "1";
         if (isMasked) _stampMaskText(el);
       }
     });
+
+    return shadowRoots;
   }
 
   /**
@@ -459,7 +525,10 @@ const BlurEngine = (() => {
     const needsTextGate = _structuralTags.has(tag);
     if (needsTextGate) {
       if (hasMeaningfulTextContent(element)) element.dataset.blSiBlur = "1";
-    } else if (thorough || hasMeaningfulTextContent(element)) {
+    } else if (thorough || hasMeaningfulTextContent(element) ||
+               !!(element.querySelector && element.querySelector('slot'))) {
+      // slot check: dynamically added shadow DOM elements with <slot> descendants
+      // render projected light-DOM content — stamp them even without direct text.
       element.dataset.blSiBlur = "1";
     }
   }
@@ -546,6 +615,7 @@ const BlurEngine = (() => {
   function isVisuallyBlurred(element) {
     if (!element || !(element instanceof Element)) return false;
     if (element.dataset.blSiBlur) return true;
+    if (element.dataset.blSiPii) return true;  // PII spans have their own CSS rule
     if (isBlurAllActive() && selectorCache) {
       const tag = element.tagName.toLowerCase();
       for (let i = 0; i < selectorCache.alwaysBlurTags.length; i++) {
@@ -559,12 +629,10 @@ const BlurEngine = (() => {
     return false;
   }
 
+  // Public alias — used by picker callbacks and tests.
+  // Delegates to teardown(document) once teardown is defined below.
   function unblurAll() {
-    removeBlurRules();
-    document.querySelectorAll("[data-bl-si-blur]").forEach((el) => {
-      delete el.dataset.blSiBlur;
-      _clearMaskAttrs(el);
-    });
+    teardown(document);
     removeAllZoneOverlays();
   }
 
@@ -685,7 +753,11 @@ const BlurEngine = (() => {
   // private utilities of the wrappers below.
 
   let _isPageBlurred = false;
-  let _domObserver = null;
+  // WeakMap<root, MutationObserver> — one observer per active root (document + shadow roots).
+  // WeakMap auto-GCs entries when a shadow root is GC'd (host removed from DOM).
+  const _observers = new WeakMap();
+  // Mutex — prevents concurrent handleSite() calls from interleaving DOM mutations.
+  let _handling = false;
   let _dynamicCounter = 0;
   let _stickyCounter = 0;
   let _pickerActive = false;
@@ -811,164 +883,154 @@ const BlurEngine = (() => {
     return "Sticky " + _stickyCounter;
   }
 
-  function _startDomObserver() {
-    if (!document.body) return;
-    if (_domObserver) return;
-    _domObserver = new MutationObserver((mutations) => {
-      if (_pickerActive) return;
-      if (!_isPageBlurred) return;
-      const thorough = _currentSettings
-        ? !!_currentSettings.THOROUGH_BLUR
-        : false;
+  /**
+   * Register a MutationObserver on `root` to stamp new text-check elements
+   * and activate shadow roots as they appear. Idempotent — no-op if `root`
+   * already has an active observer.
+   *
+   * Observation target: `root.body ?? root`
+   *   - document: observes document.body
+   *   - shadowRoot: observes the shadow root itself (shadowRoot.body is undefined)
+   */
+  function observeRoot(root) {
+    if (_observers.has(root)) return;
+    const target = root.body ?? root;
+    if (!target) return;
+
+    const obs = new MutationObserver((mutations) => {
+      if (_pickerActive || !_isPageBlurred) return;
+      const thorough = _currentSettings ? !!_currentSettings.THOROUGH_BLUR : false;
       for (const mutation of mutations) {
-        if (mutation.type !== "childList") continue;
+        if (mutation.type !== 'childList') continue;
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
           if (node.dataset && node.dataset.blSiZone !== undefined) continue;
+          // Single pass: stamp text-check AND activate new shadow roots.
+          // Guard: skip shadow roots that already have an observer — they were
+          // activated by a prior handleDocument call and don't need re-processing.
           tryBlurTextCheck(node, thorough);
-          const children = node.querySelectorAll("*");
+          if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
+            handleDocument(_currentSettings, node.shadowRoot); // fire-and-forget (async)
+          }
+          const children = node.querySelectorAll('*');
           for (let i = 0; i < children.length; i++) {
             tryBlurTextCheck(children[i], thorough);
+            if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
+              handleDocument(_currentSettings, children[i].shadowRoot); // fire-and-forget (async)
+            }
           }
         }
       }
     });
-    _domObserver.observe(document.body, { childList: true, subtree: true });
+    obs.observe(target, { childList: true, subtree: true });
+    _observers.set(root, obs);
   }
 
-  function _stopDomObserver() {
-    if (_domObserver) {
-      _domObserver.disconnect();
-      _domObserver = null;
+  function disconnectObserver(root) {
+    const obs = _observers.get(root);
+    if (obs) {
+      obs.disconnect();
+      _observers.delete(root);
     }
-  }
-
-  function _enablePageWide(settings) {
-    const cats = settings.BLUR_CATEGORIES || DEFAULT_CATS;
-    const mode = settings.BLUR_MODE || null;
-    const thorough = !!settings.THOROUGH_BLUR;
-    removeBlurRules();
-    // Clear all text-check stamps before re-scanning so that tightening
-    // categories or disabling THOROUGH_BLUR actually removes elements that
-    // no longer match. Picker items are re-stamped by the item reconcile
-    // step in blurAll() right after this function returns.
-    document.querySelectorAll("[data-bl-si-blur]").forEach((el) => {
-      delete el.dataset.blSiBlur;
-      _clearMaskAttrs(el);
-    });
-    injectBlurRules(cats, mode);
-    blurTextCheckElements(cats, thorough, mode);
-    _startDomObserver();
-    _isPageBlurred = true;
-  }
-
-  function _disablePageWide() {
-    _stopDomObserver();
-    removeBlurRules();
-    // Clear every data-bl-si-blur stamp. Picker items are re-stamped by
-    // PHASE 4 of the same blurAll() call when they're still in storage.
-    document.querySelectorAll("[data-bl-si-blur]").forEach((el) => {
-      delete el.dataset.blSiBlur;
-      _clearMaskAttrs(el);
-    });
-    // Remove the frosted SVG filter if it was injected. Harmless to leave
-    // behind, but keeps the DOM clean for users who toggle modes repeatedly.
-    const svg = document.getElementById(SVG_FILTER_ID);
-    if (svg && svg.parentNode) svg.parentNode.removeChild(svg);
-    _isPageBlurred = false;
   }
 
   /**
-   * Single reconciler: sync DOM state to the storage snapshot.
+   * Remove all blur state from `root` and recursively from any open shadow
+   * roots found within it. One pass: clear stamps + find shadow hosts.
    *
-   * CONCURRENCY: this function is async but has no reentrance guard. If two
-   * calls overlap (e.g., rapid storage.onChange events), the second may read
-   * _activeItems mid-mutation. In practice this doesn't happen because all
-   * callers await and storage.onChange is dispatched serially per the
-   * storage_manager's self-echo detection. If a future code path fires
-   * blurAll without awaiting, add a _reconcilePromise + _reconcilePending
-   * queue pattern (see I18N_PLAN.md known limitations).
-   *
-   * Pulls settings, URL rules, per-host blur-all state, and per-host items
-   * from Storage in parallel, then diffs against the current DOM state and
-   * applies only the delta. Safe to call at any time from any path — init,
-   * settings change, picker add/remove, shortcut toggle, SPA URL change.
-   *
-   * Zero args by design: storage is the single source of truth. Callers
-   * write to storage first, then `await blurAll()` to materialise the change.
-   * Every caller MUST await — fire-and-forget call sites let onChange events
-   * interleave concurrent reconciles that corrupt `_activeItems`.
+   * PII-stamped elements (data-bl-si-pii) are intentionally skipped —
+   * they own their own blur lifecycle and must stay blurred when blur-all
+   * turns off (matches the original _disablePageWide behaviour).
    */
-  async function blurAll() {
-    const Store = blsi.Storage;
-    const UrlMatcher = blsi.UrlMatcher;
-    if (!Store || !UrlMatcher) return;
+  function teardown(root) {
+    disconnectObserver(root);
+    removeRules(root);
 
-    // ── PHASE 1: Fetch + resolve snapshot ────────────────────────────────────
-    // Reads:    blsi.Storage (settings, rules, blur_all_state, blur_items), UrlMatcher
-    // Mutates:  nothing (storage read only)
-    // Invariant: on error, return early without touching any DOM state.
-    const hostname = location.hostname;
-    let rawSettings, rules, isActive, items;
-    try {
-      [rawSettings, rules, isActive, items] = await Promise.all([
-        Store.getSettings(),
-        Store.getRules(),
-        Store.getBlurState(hostname),
-        Store.getBlurItems(hostname),
-      ]);
-    } catch (_e) {
+    // ONE pass: clear stamps + collect shadow hosts for post-loop recursion.
+    // Recursing inside forEach risks processing a child's shadow root before
+    // the parent's stamps are cleared — collect-then-recurse avoids that.
+    const shadowHosts = [];
+    root.querySelectorAll('*').forEach(el => {
+      if (el.dataset.blSiBlur && !el.dataset.blSiPii) {
+        delete el.dataset.blSiBlur;
+        _clearMaskAttrs(el);
+      }
+      if (el.shadowRoot) shadowHosts.push(el);
+    });
+
+    // Remove SVG filter if present in this root (stateless — no-op if absent).
+    const svg = root.querySelector && root.querySelector('#' + SVG_FILTER_ID);
+    if (svg && svg.parentNode) svg.parentNode.removeChild(svg);
+
+    // Recurse into shadow roots after this root is fully cleaned up.
+    shadowHosts.forEach(h => teardown(h.shadowRoot));
+  }
+
+  /**
+   * Apply or remove blur for a single root (document or shadow root). Async
+   * so sibling shadow roots can be dispatched in parallel via Promise.all.
+   * Settings-driven: active = ENABLED !== false && BLUR_ALL_ACTIVE.
+   *
+   * Active path:
+   *   injectRules → clear stale stamps → stampElements (returns ShadowRoot[])
+   *   → observeRoot → await Promise.all(shadowRoots.map(handleDocument))
+   *
+   * Inactive path: teardown(root)
+   *
+   * _isPageBlurred is NOT set here — that is handleSite's responsibility so
+   * recursive shadow root calls don't clobber the flag.
+   */
+  async function handleDocument(settings, root) {
+    const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
+    if (!active) {
+      teardown(root);
       return;
     }
-    const settings = UrlMatcher.resolveSettings(
-      location.href,
-      rawSettings,
-      rules,
-    );
 
-    // ── PHASE 2: ENABLED=false teardown ──────────────────────────────────────
-    // Reads:    settings.ENABLED
-    // Mutates:  _isPageBlurred, _activeItems, _lastReconcileKey, DOM (all stamps + overlays + SVG)
-    // Invariant: on return, DOM has zero blur state regardless of prior state.
-    if (settings.ENABLED === false) {
-      if (_isPageBlurred) _disablePageWide();
-      for (const [, item] of _activeItems) removeItem(item);
-      _activeItems.clear();
-      // Safety net: remove any orphaned zone overlays not tracked in _activeItems.
-      removeAllZoneOverlays();
-      _lastReconcileKey = null;
-      return;
+    const cats = settings.BLUR_CATEGORIES || DEFAULT_CATS;
+    const mode = settings.BLUR_MODE || null;
+    const thorough = !!settings.THOROUGH_BLUR;
+
+    // ── 1. Inject CSS rules for this root ────────────────────────────────────
+    // root.head ?? root handles both document (<head>) and shadow roots
+    // (no .head → styles go directly into the root).
+    injectRules(root, cats, mode);
+
+    // ── 2. Clear stale text-check stamps in this root only ───────────────────
+    // querySelectorAll('[data-bl-si-blur]') does NOT pierce shadow boundaries —
+    // intentional: shadow root stamps are cleared when we recurse into them.
+    // PII spans are skipped — they own their blur lifecycle.
+    root.querySelectorAll('[data-bl-si-blur]').forEach(el => {
+      if (!el.dataset.blSiPii) {
+        delete el.dataset.blSiBlur;
+        _clearMaskAttrs(el);
+      }
+    });
+
+    // ── 3. Stamp text-check elements + discover shadow roots — ONE pass ───────
+    // stampElements returns the ShadowRoot[] collected during its querySelectorAll('*')
+    // traversal. No mid-loop dispatch — caller owns the recursion.
+    const shadowRoots = stampElements(root, cats, thorough, mode);
+
+    // ── 4. Attach MutationObserver for this root ──────────────────────────────
+    observeRoot(root);
+
+    // ── 5. Recurse into discovered shadow roots — parallel for perf ───────────
+    // Each shadow root gets its own injectRules + stamp + observe cycle.
+    // Promise.all lets siblings proceed concurrently instead of serially.
+    if (shadowRoots.length) {
+      await Promise.all(shadowRoots.map(sr => handleDocument(settings, sr)));
     }
-    _currentSettings = settings;
+  }
 
-    // ── PHASE 3: Page-wide blur-all reconcile ────────────────────────────────
-    // Reads:    isActive, _isPageBlurred, _lastReconcileKey
-    // Mutates:  DOM (style rules, text-check stamps, SVG filter), _domObserver, _isPageBlurred
-    // Invariant: after this block, _isPageBlurred === isActive. Cheap no-op
-    //            when nothing page-wide changed since the last call (e.g. a
-    //            BLUR_RADIUS drag in gaussian mode, which propagates via CSS vars).
-    const reconcileKey = isActive
-      ? `${settings.BLUR_MODE}|${JSON.stringify(settings.BLUR_CATEGORIES)}|${settings.THOROUGH_BLUR}|${settings.BLUR_MODE === blsi.BLUR_MODES.FROSTED ? settings.BLUR_RADIUS : ""}`
-      : "inactive";
-    const pageWideChanged = reconcileKey !== _lastReconcileKey;
-    _lastReconcileKey = reconcileKey;
-
-    if (isActive) {
-      if (pageWideChanged || !_isPageBlurred) _enablePageWide(settings);
-      // else: already active with same categories/mode/thorough — skip nuke.
-    } else if (_isPageBlurred) {
-      _disablePageWide();
-    }
-
-    // ── PHASE 4: Item reconcile (dynamic + sticky) ───────────────────────────
-    // Reads:    items (from storage), _activeItems (current tracked set)
-    // Mutates:  _activeItems, DOM (blur attributes, zone overlays)
-    // Invariant: after this block, _activeItems keyset === desiredById keyset;
-    //            every desired item has been re-applied (applyBlur and
-    //            createZoneOverlay are idempotent, so re-apply is safe and
-    //            necessary — PHASE 3's nuke may have cleared the stamp).
-    const desired = Array.isArray(items) ? items : [];
-    const desiredById = new Map(desired.map((i) => [_itemId(i), i]));
+  /**
+   * Diff `desired` items against `_activeItems` and apply/remove the delta.
+   * Runs in both active and inactive paths — picker blurs and sticky zones
+   * persist even when blur-all is off.
+   */
+  function _reconcileItems(desired) {
+    const desiredArray = Array.isArray(desired) ? desired : [];
+    const desiredById = new Map(desiredArray.map((i) => [_itemId(i), i]));
 
     let added = 0, removed = 0;
     for (const [id, item] of Array.from(_activeItems)) {
@@ -984,15 +1046,73 @@ const BlurEngine = (() => {
       _activeItems.set(id, item);
       if (isNew) added++;
     }
+    return { added, removed };
+  }
 
-    if (blsi.Logger && blsi.Logger.enabled) {
-      blsi.Logger.scope('engine').flow('blurAll', {
-        pageActive: isActive,
-        pageWideChanged,
-        added,
-        removed,
-        totalActive: _activeItems.size,
-      });
+  /**
+   * Single entry point — reconcile the entire page (document + all open shadow
+   * roots) to the provided settings snapshot.
+   *
+   * Settings must include:
+   *   BLUR_ALL_ACTIVE {boolean} — whether blur-all is on for this host
+   *   BLUR_ITEMS      {Array}   — per-host blur items (dynamic + sticky)
+   * Both are folded in by the caller (content_script._reconcile) before calling.
+   *
+   * Storage reads live in content_script — handleSite is stateless/pure w.r.t.
+   * storage. Every caller MUST await — concurrent calls are dropped (mutex).
+   */
+  async function handleSite(settings) {
+    if (_handling) return;
+    _handling = true;
+    try {
+      // Store FIRST — MO callback reads _currentSettings for new shadow hosts.
+      _currentSettings = settings;
+
+      // ── Extension disabled — full teardown including items ──────────────────
+      if (settings.ENABLED === false) {
+        handleDocument(settings, document);
+        _isPageBlurred = false;
+        _reconcileItems([]);
+        removeAllZoneOverlays(); // safety net for orphaned zones
+        _lastReconcileKey = null;
+        return;
+      }
+
+      // ── Page-wide reconcile ─────────────────────────────────────────────────
+      // Skip DOM work when only CSS vars changed (BLUR_RADIUS in gaussian mode,
+      // HIGHLIGHT_COLOR). Those propagate instantly via custom properties and
+      // don't require a nuke+rescan. Frosted mode is the exception — its radius
+      // lives in an SVG attribute and needs a full filter rebuild.
+      const isActive = !!settings.BLUR_ALL_ACTIVE;
+      const reconcileKey = isActive
+        ? `${settings.BLUR_MODE}|${JSON.stringify(settings.BLUR_CATEGORIES)}|${settings.THOROUGH_BLUR}|${settings.BLUR_MODE === blsi.BLUR_MODES.FROSTED ? settings.BLUR_RADIUS : ''}`
+        : 'inactive';
+      const pageWideChanged = reconcileKey !== _lastReconcileKey;
+      _lastReconcileKey = reconcileKey;
+
+      if (pageWideChanged) {
+        // handleDocument is async — awaiting it here ensures shadow roots
+        // are fully processed (inject + stamp + observe) before item reconcile.
+        await handleDocument(settings, document);
+      }
+      _isPageBlurred = isActive;
+
+      // ── Item reconcile ──────────────────────────────────────────────────────
+      // Runs in both active and inactive paths: picker blurs + sticky zones
+      // persist when blur-all is off.
+      const { added, removed } = _reconcileItems(settings.BLUR_ITEMS || []);
+
+      if (blsi.Logger && blsi.Logger.enabled) {
+        blsi.Logger.scope('engine').flow('handleSite', {
+          active: isActive,
+          pageWideChanged,
+          added,
+          removed,
+          totalActive: _activeItems.size,
+        });
+      }
+    } finally {
+      _handling = false;
     }
   }
 
@@ -1004,20 +1124,20 @@ const BlurEngine = (() => {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   return {
-    // Semi-private: used internally by blurAll() + _enablePageWide(). Exposed
-    // only because unit tests and e2e tests call them directly for setup. Do
-    // NOT call from content_script, popup, picker, or reveal — use blurAll().
-    injectBlurRules,
-    removeBlurRules,
+    // Semi-private: exposed for unit tests only.
+    // Do NOT call from content_script, popup, picker, or reveal — use handleSite().
+    injectRules,
+    removeRules,
     isBlurAllActive,
-    blurTextCheckElements,
+    stampElements,
     tryBlurTextCheck,
 
-    // Individual element
+    // Individual element (picker / context menu)
     applyBlur,
     removeBlur,
     toggleBlur,
-    unblurAll,
+    unblurAll,   // alias for teardown(document) + removeAllZoneOverlays
+    teardown,
 
     // Queries
     isBlurred,
@@ -1040,8 +1160,15 @@ const BlurEngine = (() => {
     allocateDynamicName,
     allocateStickyName,
 
-    // Single orchestration entry point: reconcile DOM to Storage snapshot.
-    blurAll,
+    // Single orchestration entry point.
+    // Caller must fold BLUR_ALL_ACTIVE and BLUR_ITEMS into settings before calling.
+    handleSite,
+
+    // Per-root active/inactive dispatch (async). Public for unit tests;
+    // all production callers go through handleSite.
+    handleDocument,
+    observeRoot,
+    disconnectObserver,
     get isPageBlurred() {
       return _isPageBlurred;
     },

@@ -50,123 +50,187 @@ Owns all reveal state (click target, hover target, ancestor chain, 50ms mouseout
 
 | Variable | Type | Purpose |
 |---|---|---|
-| `videoOverlayMap` | `WeakMap<Element, {canvas, animFrameId}>` | Tracks canvas overlays and RAF handles for video elements |
-| `CATEGORY_SELECTORS` | `Record<string, { alwaysBlur: string[], textCheck: string[] }>` | Maps each category to unconditional and text-check tag arrays (frozen constant) |
-| `selectorCache` | `{ key: string, combined: string } \| null` | Cached combined selector string; invalidated when active categories change |
+| `CATEGORY_SELECTORS` | `Record<string, { alwaysBlur: string[], textCheck: string[], roles?: string[] }>` | Maps each category to unconditional + text-check tag arrays and optional ARIA roles. Frozen constant. |
+| `selectorCache` | `{ key, alwaysBlurSelector, textCheckSelector, tagSet, roleSet } \| null` | Cached selector strings + Sets keyed by 5-bit category toggle string; rebuilt on cache miss. |
+| `_isPageBlurred` | `boolean` | Whether blur-all is currently active. Set only by `handleSite`. |
+| `_observers` | `WeakMap<Document|ShadowRoot, MutationObserver>` | One observer per active root. WeakMap auto-GCs when a detached shadow root is collected. |
+| `_handling` | `boolean` | Mutex — drops concurrent `handleSite` calls. |
+| `_currentSettings` | `object \| null` | Latest settings snapshot; read by MO callback when stamping newly-added nodes. |
+| `_activeItems` | `Map<string, object>` | Items currently applied to the DOM, keyed by selector (dynamic) or id (sticky). Diffed on every reconcile. |
+| `_lastReconcileKey` | `string \| null` | Fingerprint of last page-wide reconcile inputs. Lets `handleSite` skip the nuke+rescan when only CSS vars changed. |
+| `_dynamicCounter` | `number` | High-water mark for dynamic item names ("Dynamic N"). |
+| `_stickyCounter` | `number` | High-water mark for sticky item names ("Sticky N"). |
 
 ### Public API
 
 ```typescript
-type BlurCategories = {
-  text: boolean;
-  media: boolean;
-  form: boolean;
-  table: boolean;
-  structure: boolean;
-};
+type BlurCategories = { TEXT: boolean; MEDIA: boolean; FORM: boolean; TABLE: boolean; STRUCTURE: boolean };
+type BlurMode = 'solid' | 'frosted' | 'redacted' | 'masked' | null;
+type Settings = { ENABLED?: boolean; BLUR_ALL_ACTIVE: boolean; BLUR_ITEMS: object[];
+                  BLUR_CATEGORIES: BlurCategories; BLUR_MODE: BlurMode; THOROUGH_BLUR: boolean;
+                  BLUR_RADIUS?: number; [key: string]: any };
 
-type BlurMode = 'gaussian' | 'frosted';
+interface BlurEngine {
+  // ── Orchestration ──────────────────────────────────────────────────────────
+  handleSite(settings: Settings): Promise<void>;
+  handleDocument(settings: Settings, root: Document | ShadowRoot): Promise<void>;
 
-interface PrivacyBlurEngine {
-  applyBlur(element: Element, radius?: number, mode?: BlurMode): void;
+  // ── CSS injection (per-root) ───────────────────────────────────────────────
+  injectRules(root: Document | ShadowRoot, categories: BlurCategories, mode: BlurMode): void;
+  removeRules(root: Document | ShadowRoot): void;
+  isBlurAllActive(): boolean;           // checks document.head only (light DOM)
+  ensureSvgFilter(root: Document | ShadowRoot): void;
+
+  // ── DOM stamping ───────────────────────────────────────────────────────────
+  stampElements(root: Document | ShadowRoot, categories: BlurCategories,
+                thorough: boolean, mode: BlurMode): ShadowRoot[];
+  tryBlurTextCheck(element: Element, thorough: boolean): void;
+
+  // ── Per-root observation ───────────────────────────────────────────────────
+  observeRoot(root: Document | ShadowRoot): void;
+  disconnectObserver(root: Document | ShadowRoot): void;
+  teardown(root: Document | ShadowRoot): void;
+
+  // ── Individual element (picker / context menu) ─────────────────────────────
+  applyBlur(element: Element): void;
   removeBlur(element: Element): void;
-  toggleBlur(element: Element, radius?: number, mode?: BlurMode): void;
-  blurAllContent(radius?: number, options?: { categories?: BlurCategories, thoroughBlur?: boolean, blurMode?: BlurMode }): void;
-  unblurAll(): void;
-  isBlurred(element: Element): boolean;          // stamped OR tag-rule
-  isVisuallyBlurred(element: Element): boolean;  // isBlurred + role-rule (reveal-only)
-  invalidateSelectorCache(): void;
+  toggleBlur(element: Element): void;
+  unblurAll(): void;   // alias: teardown(document) + removeAllZoneOverlays
+
+  // ── Queries ────────────────────────────────────────────────────────────────
+  isBlurred(element: Element): boolean;         // stamped OR tag-rule (light DOM only)
+  isVisuallyBlurred(element: Element): boolean; // isBlurred + role-rule (reveal walks)
   matchesActiveCategories(element: Element, categories?: BlurCategories): boolean;
-  ensureSvgFilter(): void;
-  createZoneOverlay(zoneData: { id: string; x: number; y: number; width: number; height: number; [key: string]: any }): HTMLElement | null;
+  shouldBlurElement(element: Element, categories?: BlurCategories, thorough?: boolean): boolean;
+  get isPageBlurred(): boolean;
+
+  // ── Sticky zones ───────────────────────────────────────────────────────────
+  createZoneOverlay(zoneData: object): HTMLElement | null;
   removeZoneOverlay(zoneId: string): void;
   getZoneOverlays(): HTMLElement[];
   removeAllZoneOverlays(): void;
+
+  // ── Counter allocation (picker callbacks) ──────────────────────────────────
+  resetCounters(): void;
+  allocateDynamicName(): string;
+  allocateStickyName(): string;
+
+  // ── Internal (exposed for unit tests) ─────────────────────────────────────
+  CATEGORY_SELECTORS: object;
+  _setPickerActiveForObserver(v: boolean): void;
 }
 ```
 
-### applyBlur — element dispatch
+### handleSite — top-level reconcile
 
 ```
-applyBlur(el, radius = 8, mode)
-  if el is null or not Element → return
-  if isBlurred(el) → return (idempotent)
-  isFrosted = mode === 'frosted'
-  
-  tag = el.tagName.toLowerCase()
-  
-  if tag === "video":
-    el.classList.add(BLURRED_CLASS)
-    startVideoBlurCanvas(el, radius)
-    
-  elif tag === "img":
-    el.classList.add(BLURRED_CLASS)
-    
-  elif backgroundImage !== "none":
-    el.classList.add(BLURRED_CLASS)
-    
-  else:
-    wrapTextNodes(el)  // wrap bare text nodes in <span class="bl-si-text-node-wrapper">
-    el.classList.add(BLURRED_CLASS)
+handleSite(settings)   [async, mutex — drops concurrent calls]
+  _currentSettings = settings
+
+  if ENABLED === false:
+    await handleDocument(settings, document)   // teardown path
+    _isPageBlurred = false
+    _reconcileItems([])
+    removeAllZoneOverlays()
+    _lastReconcileKey = null
+    return
+
+  isActive = !!BLUR_ALL_ACTIVE
+  reconcileKey = isActive
+    ? "<BLUR_MODE>|<JSON(BLUR_CATEGORIES)>|<THOROUGH_BLUR>|<BLUR_RADIUS if frosted>"
+    : "inactive"
+  pageWideChanged = reconcileKey !== _lastReconcileKey
+  _lastReconcileKey = reconcileKey
+
+  if pageWideChanged:
+    await handleDocument(settings, document)   // dispatches shadow roots recursively
+
+  _isPageBlurred = isActive
+  _reconcileItems(BLUR_ITEMS)
 ```
 
-### Video canvas overlay
+### handleDocument — per-root active/inactive dispatch
 
 ```
-startVideoBlurCanvas(videoElement, radius)
-  stop any existing overlay (stopVideoBlurCanvas)
-  canvas = createElement("canvas")
-  canvas.className = "bl-si-canvas-overlay"
-  size canvas from videoElement.videoWidth/Height or getBoundingClientRect
-  position canvas absolutely over video (CSS: position absolute, z-index 9999)
-  if parent is position:static → set parent to position:relative
-  insert canvas after videoElement
-  ctx = canvas.getContext("2d")
-  
-  function drawFrame():
-    ctx.clearRect(...)
-    ctx.filter = "blur(" + radius + "px)"
-    try:
-      ctx.drawImage(videoElement, 0, 0, w, h)
-    catch:
-      // DRM video — fill with dark overlay instead
-      ctx.fillStyle = "rgba(30,30,30,0.85)"
-      ctx.fillRect(0, 0, w, h)
-    animFrameId = requestAnimationFrame(drawFrame)
-  
-  drawFrame()
-  videoOverlayMap.set(videoElement, { canvas, animFrameId })
+handleDocument(settings, root)   [async]
+  active = ENABLED !== false && BLUR_ALL_ACTIVE
+
+  ── Inactive path ────────────────────────────────────────────────────────
+  teardown(root)
+  return
+
+  ── Active path ──────────────────────────────────────────────────────────
+  cats = BLUR_CATEGORIES, mode = BLUR_MODE, thorough = THOROUGH_BLUR
+
+  // 1. Inject CSS rules for this root (root.head ?? root)
+  injectRules(root, cats, mode)
+
+  // 2. Clear stale text-check stamps in this root only
+  //    querySelectorAll('[data-bl-si-blur]') does NOT pierce shadow boundaries —
+  //    shadow root stamps are cleared when we recurse into them.
+  root.querySelectorAll('[data-bl-si-blur]').forEach(el →
+    if !el.dataset.blSiPii: delete el.dataset.blSiBlur; _clearMaskAttrs(el)
+  )
+
+  // 3. Stamp text-check elements + discover shadow roots — ONE querySelectorAll('*') pass
+  shadowRoots = stampElements(root, cats, thorough, mode)
+
+  // 4. Attach MutationObserver for this root (idempotent)
+  observeRoot(root)
+
+  // 5. Recurse into shadow roots in parallel
+  if shadowRoots.length: await Promise.all(shadowRoots.map(sr → handleDocument(settings, sr)))
 ```
 
-### blurAllContent — category-based two-pass
+### stampElements — stamp + shadow root discovery
 
 ```
-blurAllContent(radius = 8, options = {})
-  categories = options.categories || all-categories-ON
-  thoroughBlur = options.thoroughBlur || false
+stampElements(root, categories, thorough, mode)   [sync, returns ShadowRoot[]]
+  rebuild _textCheckSet from categories
+  shadowRoots = []
 
-  // Build/cache combined selector from active CATEGORY_SELECTORS
-  // Selector cache is keyed by a 5-bit category toggle string; rebuilt on change.
+  root.querySelectorAll('*').forEach(el →
+    if el.shadowRoot: shadowRoots.push(el.shadowRoot)   // piggybacked discovery
+    tag = el.tagName.toLowerCase()
+    if !_textCheckSet.has(tag): return
+    if el.dataset.blSiBlur: return   // already stamped
+    if _isExtensionUI(el): return
+    needsTextGate = _structuralTags.has(tag)
+    shouldStamp = needsTextGate
+      ? hasMeaningfulTextContent(el)
+      : thorough || hasMeaningfulTextContent(el)
+    if shouldStamp:
+      el.dataset.blSiBlur = "1"
+      if mode === MASKED: _stampMaskText(el)
+  )
 
-  // Pass 1 — alwaysBlur tags: query combined selector, applyBlur each match
-  for each active category:
-    querySelectorAll(alwaysBlur tags joined by comma)
-    applyBlur(el, radius) for each result
-
-  // Pass 2 — textCheck tags: query, filter by hasMeaningfulTextContent
-  for each active category:
-    querySelectorAll(textCheck tags joined by comma)
-    if hasMeaningfulTextContent(el) OR thoroughBlur:
-      applyBlur(el, radius)
+  return shadowRoots
 ```
 
-### CSS class constants
+### teardown — recursive cleanup
 
-| Constant | Value |
-|---|---|
-| `BLURRED_CLASS` | `"bl-si-blurred"` |
-| `CANVAS_CLASS` | `"bl-si-canvas-overlay"` |
-| `TEXT_WRAPPER_CLASS` | `"bl-si-text-node-wrapper"` |
+```
+teardown(root)   [sync]
+  disconnectObserver(root)
+  removeRules(root)
+
+  // ONE pass: clear stamps + collect shadow hosts for post-loop recursion
+  shadowHosts = []
+  root.querySelectorAll('*').forEach(el →
+    if el.dataset.blSiBlur && !el.dataset.blSiPii:
+      delete el.dataset.blSiBlur; _clearMaskAttrs(el)
+    if el.shadowRoot: shadowHosts.push(el)
+  )
+  remove SVG filter (#bl-si-svg-filters) if present in root
+  shadowHosts.forEach(h → teardown(h.shadowRoot))
+```
+
+### Shadow DOM notes
+
+- `injectRules` / `removeRules` use `root.head ?? root` — works for both document (styles → `<head>`) and shadow roots (no `.head` → styles go directly into the root).
+- CSS custom properties (`--bl-si-radius`, etc.) set on `:root` in the light DOM are inherited into open shadow roots — no extra propagation needed.
+- `isBlurAllActive()` checks `document.head` only. AlwaysBlur elements inside shadow roots are blurred via CSS injected into each shadow root, but `isBlurred()` / `isVisuallyBlurred()` cannot detect this (they are unaware of which root an element lives in). Picker and reveal interactions with shadow-root elements are therefore not supported in Phase 1 (see Known Limitations in `CLAUDE.md`).
+- MO callback guards new shadow hosts with `!_observers.has(sr)` before calling `handleDocument` — prevents re-processing already-active roots on every MO tick.
 
 ---
 
@@ -637,6 +701,7 @@ When `isPageBlurred` is true, a MutationObserver fires on `childList` changes to
 | `THOROUGH_BLUR` | `boolean` | Blur textCheck elements even without meaningful text |
 | `SHORTCUTS` | `object` | `{ ACTION_NAME: { primaryModifier, keys } }` (see §5) |
 | `BLUR_CATEGORIES` | `object` | `{ TEXT, MEDIA, FORM, TABLE, STRUCTURE }` — which categories participate in blur-all |
+| `AUTO_DETECT` | `object` | `{ EMAIL, PHONE, SSN, CREDIT_CARD, FINANCIAL }` — all boolean, default false; popup master toggle sets all 5 atomically |
 
 ### CSS custom properties applied to `:root`
 

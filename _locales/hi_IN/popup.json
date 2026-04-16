@@ -22,6 +22,7 @@
   "lang_hi_IN": "हिन्दी (भारत)",
   "lang_ta_IN": "தமிழ் (तमिल — भारत)",
   "section_shortcuts_title": "कीबोर्ड शॉर्टकट",
+  "section_pii_title": "PII स्वतः-पहचान",
   "section_settings_title": "सेटिंग्स",
   "section_rules_title": "साइट नियम",
 
@@ -67,16 +68,14 @@
   "group_shortcuts": "कीबोर्ड शॉर्टकट",
   "group_advanced": "उन्नत",
 
-  "detect_email": "ईमेल पते",
-  "detect_email_hint": "पेज पर ईमेल पते स्वचालित रूप से धुंधले करें।",
-  "detect_phone": "फ़ोन नंबर",
-  "detect_phone_hint": "फ़ोन नंबर स्वचालित रूप से धुंधले करें।",
-  "detect_ssn": "SSN / ID नंबर",
-  "detect_ssn_hint": "सामाजिक सुरक्षा नंबर और समान ID पैटर्न स्वचालित रूप से धुंधले करें।",
-  "detect_credit_card": "क्रेडिट कार्ड नंबर",
-  "detect_credit_card_hint": "क्रेडिट कार्ड नंबर पैटर्न स्वचालित रूप से धुंधले करें।",
-  "detect_financial": "वित्तीय आँकड़े",
-  "detect_financial_hint": "मुद्रा राशि ($, EUR, GBP, आदि) स्वचालित रूप से धुंधली करें।",
+  "detect_pii": "संवेदनशील डेटा (PII)",
+  "detect_pii_hint": "ईमेल, फ़ोन नंबर, SSN, क्रेडिट कार्ड और वित्तीय आँकड़े स्वचालित रूप से धुंधले करें।",
+
+  "pii_numeric_label": "संख्यात्मक पहचान",
+  "pii_numeric_hint": "मानक — स्क्रीन शेयरिंग के लिए सभी नंबर छुपाता है। कंजर्वेटिव — केवल बैलेंस, सैलरी जैसे संवेदनशील लेबल के पास के नंबर छुपाता है।",
+  "pii_numeric_off": "बंद",
+  "pii_numeric_standard": "मानक (स्क्रीन-शेयर सुरक्षित)",
+  "pii_numeric_conservative": "कंजर्वेटिव (केवल लेबल)",
 
   "cat_text": "टेक्स्ट",
   "cat_text_hint": "शीर्षक, अनुच्छेद, लिंक और इनलाइन टेक्स्ट।",

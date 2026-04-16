@@ -95,7 +95,10 @@ const SettingsRenderer = (() => {
    */
   function updateAll(settings) {
     for (const [key, entry] of _registry) {
-      const value = getByPath(settings, key);
+      void key; // key is the config.key; getValue may compute a derived value
+      const value = typeof entry.config.getValue === 'function'
+        ? entry.config.getValue(settings)
+        : getByPath(settings, entry.config.key);
       _syncControl(entry, value);
     }
   }
@@ -144,7 +147,9 @@ const SettingsRenderer = (() => {
 
     row.appendChild(label);
 
-    const value = getByPath(settings, config.key);
+    const value = typeof config.getValue === 'function'
+      ? config.getValue(settings)
+      : getByPath(settings, config.key);
     let controlEl = null;
     let displayEl = null;
 

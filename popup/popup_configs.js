@@ -101,13 +101,6 @@ const PopupConfigs = (() => {
       type: 'range', group: 'behavior', options: { min: 0, max: 480, step: 5, unit: 'min' },
     },
 
-    // Auto-Detect (PII scanning)
-    { key: 'AUTO_DETECT.EMAIL',       i18nKey: 'detect_email',       i18nHintKey: 'detect_email_hint',       type: 'toggle', group: 'autodetect' },
-    { key: 'AUTO_DETECT.PHONE',       i18nKey: 'detect_phone',       i18nHintKey: 'detect_phone_hint',       type: 'toggle', group: 'autodetect' },
-    { key: 'AUTO_DETECT.SSN',         i18nKey: 'detect_ssn',         i18nHintKey: 'detect_ssn_hint',         type: 'toggle', group: 'autodetect' },
-    { key: 'AUTO_DETECT.CREDIT_CARD', i18nKey: 'detect_credit_card', i18nHintKey: 'detect_credit_card_hint', type: 'toggle', group: 'autodetect' },
-    { key: 'AUTO_DETECT.FINANCIAL',   i18nKey: 'detect_financial',   i18nHintKey: 'detect_financial_hint',   type: 'toggle', group: 'autodetect' },
-
     // Advanced (Frosted / AI-resistant)
     {
       key: 'BLUR_MODE', i18nKey: 'setting_blur_mode', i18nHintKey: 'setting_blur_mode_hint',
@@ -125,9 +118,49 @@ const PopupConfigs = (() => {
     },
   ]);
 
-  const ALL = Object.freeze([...SHORTCUTS, ...SETTINGS]);
+  // ── PII Auto-Detect (own section in the popup, separate from Settings) ──────
+  // Stored as 5 individual keys so per-type config is possible later.
+  // The single toggle sets all 5 at once via expandKeys.
 
-  return Object.freeze({ SHORTCUTS, SETTINGS, ALL });
+  const PII = Object.freeze([
+    {
+      key: 'AUTO_DETECT',
+      type: 'toggle',
+      i18nKey: 'detect_pii',
+      i18nHintKey: 'detect_pii_hint',
+      group: 'autodetect',
+      // Reads true when at least one sub-key is meaningfully enabled.
+      // 'off' is a truthy string, so we cannot use .some(Boolean) — check explicitly.
+      getValue: (settings) => !!(settings.AUTO_DETECT && (
+        settings.AUTO_DETECT.EMAIL ||
+        (settings.AUTO_DETECT.NUMERIC && settings.AUTO_DETECT.NUMERIC !== 'off')
+      )),
+      // Which storage paths to write when the toggle changes.
+      // NUMERIC uses onValue/offValue because it is a string enum, not boolean.
+      expandKeys: [
+        { key: 'AUTO_DETECT.EMAIL',   onValue: true,       offValue: false },
+        { key: 'AUTO_DETECT.NUMERIC', onValue: 'standard', offValue: 'off' },
+      ],
+    },
+    {
+      key: 'AUTO_DETECT.NUMERIC',
+      type: 'select',
+      i18nKey: 'pii_numeric_label',
+      i18nHintKey: 'pii_numeric_hint',
+      group: 'autodetect',
+      options: {
+        values: [
+          { value: 'off',          i18nKey: 'pii_numeric_off'          },
+          { value: 'standard',     i18nKey: 'pii_numeric_standard'     },
+          { value: 'conservative', i18nKey: 'pii_numeric_conservative' },
+        ],
+      },
+    },
+  ]);
+
+  const ALL = Object.freeze([...SHORTCUTS, ...SETTINGS, ...PII]);
+
+  return Object.freeze({ SHORTCUTS, SETTINGS, PII, ALL });
 })();
 
 blsi.PopupConfigs = PopupConfigs;

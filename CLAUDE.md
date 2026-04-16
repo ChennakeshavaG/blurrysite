@@ -31,13 +31,19 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `blsi.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
-| `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectBlurRules`, `removeBlurRules`, `isBlurAllActive`, `blurTextCheckElements`, `tryBlurTextCheck`, `invalidateSelectorCache`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `CATEGORY_SELECTORS`. High-level: `applyItem`, `removeItem`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `enableBlurAll`, `disableBlurAll`, `refreshBlurAll`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
+| `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
+| `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — text-node split approach; wraps matches in `[data-bl-si-pii]` spans with `[data-bl-si-blur]` |
+| `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
+| `src/blur_timer.js` | `blsi.BlurTimer` | `start(minutes, onExpire)`, `stop()`, `getRemaining()`, `isActive()` — countdown timer that fires `onExpire` when elapsed |
+| `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
 | `src/shortcut_handler.js` | `blsi.Shortcuts` | `init(shortcuts, callbacks)` — accepts the new `{ ACTION_ID: { binding: [{code, mods}] } }` shape. `destroy`, `showToast`, `_setPickerActive`, `_getFireToken` (for content_script dedup). Reads mods from event booleans (side-agnostic). Reads label from `blsi.Actions.get(id).label` for toast. |
+| `src/selection_blur.js` | `blsi.SelectionBlur` | `init()`, `destroy()`, `blurSelection(range)`, `clearAll()`, `getSelectionBlurs()`, `removeSelectionBlur(id)` — text-selection driven blur via `[data-bl-si-blur]` spans |
+| `src/screenshot.js` | `blsi.Screenshot` | `captureViewport()`, `download(dataUrl, filename)`, `copyToClipboard(dataUrl)`, `startCrop()`, `cancelCrop()` — viewport capture with blur preserved |
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — constants → logger → action_registry → shortcut_label → shortcut_reserved → url_matcher → selector_utils → storage_manager → blur_engine → reveal_controller → shortcut_handler → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → shortcut_reserved → url_matcher → selector_utils → storage_manager → tab_privacy → pii_detector → blur_engine → blur_timer → auto_blur → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -132,6 +138,31 @@ settings.BLUR_CATEGORIES = {
 Default values live in `src/constants.js` → `BlurrySite.DEFAULTS.BLUR_CATEGORIES`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
 
 Note: the section heading says "blurCategories" but the key is now `BLUR_CATEGORIES` (UPPER_SNAKE_CASE), consistent with the rest of the settings shape.
+
+### Settings Shape: AUTO_DETECT
+
+Controls automatic PII detection. Same shape everywhere — no flattening needed.
+
+**In `chrome.storage.local` / background / `blsi.Storage.getSettings()` / content_script.js / popup.js:**
+```js
+settings.AUTO_DETECT = {
+  EMAIL:   false,   // boolean — email addresses (local@domain.tld)
+  NUMERIC: 'off',   // 'off' | 'standard' | 'conservative'
+}
+```
+
+- `EMAIL` is a boolean. Default `false`.
+- `NUMERIC` is a string enum. Default `'off'`.
+  - `'standard'` — broad regex, hides all matched numbers. Best for screen sharing.
+  - `'conservative'` — label-context aware; only hides numbers near Tier A labels (balance, salary, account, invoice, etc.) with no price-suppressor present (/month, cart, qty).
+
+Default values live in `src/constants.js` → `DEFAULTS.AUTO_DETECT`.
+
+The popup shows a master toggle (sets `EMAIL=true`/`NUMERIC='standard'` on enable) and a NUMERIC dropdown (`off`/`standard`/`conservative`). The master toggle's `expandKeys` uses `{ key, onValue, offValue }` objects; `popup.js patchManySettings` handles both plain key strings and object entries.
+
+**Gate check** — `'off'` is a truthy string; always use explicit check: `NUMERIC && NUMERIC !== 'off'` rather than `Boolean(NUMERIC)`.
+
+PII blur is **independent of blur-all**. PII spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`. The `[data-bl-si-pii]:not([data-bl-si-reveal])` CSS rule in `content.css` drives their blur. Enabling PII detection means those spans stay blurred whether or not blur-all is on.
 
 ---
 
@@ -256,3 +287,5 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | `position: sticky` inside blurred containers stops sticking | CSS `filter` creates stacking context — spec behaviour | Same root cause as `position: fixed` issue |
 | `<select>` dropdown options visible when opened | CSS filter only blurs closed state | Known limitation |
 | Reveal may strip element background color | `data-bl-si-reveal` sets `background-color: transparent` to cancel redacted mode; in gaussian/frosted, this removes legitimate backgrounds during temporary reveal | Acceptable — reveal is temporary (hover/click) |
+| Hover reveal and click reveal work inside shadow roots; picker does not | `reveal_controller` uses `event.composedPath()[0]` to pierce shadow DOM retargeting — reveal now reaches elements inside shadow roots. `picker` still uses `event.target` and cannot reach inside shadow roots. | Hover/click reveal: fixed. Picker: Phase 2 |
+| `isBlurred()` returns false for alwaysBlur elements inside shadow roots | `isBlurAllActive()` checks `document.head` only; elements blurred by CSS injected into a shadow root are not detected. Picker can't reach them anyway until Phase 2. | Phase 2 |

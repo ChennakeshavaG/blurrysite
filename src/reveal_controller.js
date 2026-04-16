@@ -83,6 +83,28 @@ const BlurrySiteReveal = (() => {
       if (node instanceof Element && _isVisuallyBlurred(node)) return node;
       node = node.parentElement;
     }
+    // parentElement stops at shadow root boundaries: for an element whose
+    // parent is a ShadowRoot (not an Element), parentElement returns null
+    // before we ever reach the shadow host. Walk up the host chain, then
+    // continue up light DOM from the outermost host if needed.
+    // Handles: <rpl-badge data-bl-si-blur> → #shadow-root → <span> (cursor here)
+    if (node === null && el instanceof Element) {
+      var root = el.getRootNode();
+      var lastHost = null;
+      while (root instanceof ShadowRoot) {
+        if (_isVisuallyBlurred(root.host)) return root.host;
+        lastHost = root.host;
+        root = root.host.getRootNode();
+      }
+      // Re-entered light DOM — keep walking up from the outermost host.
+      if (lastHost) {
+        var lightNode = lastHost.parentElement;
+        while (lightNode && lightNode !== document.documentElement) {
+          if (_isVisuallyBlurred(lightNode)) return lightNode;
+          lightNode = lightNode.parentElement;
+        }
+      }
+    }
     // Walk DOWN — fallback when hover target is a non-blurred wrapper.
     // querySelectorAll scoped to el's subtree keeps the candidate set small
     // (typically 5–50 elements; 300 is a safe upper bound on dense pages).
@@ -91,8 +113,8 @@ const BlurrySiteReveal = (() => {
     if (el && el instanceof Element) {
       var hasSel = ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive();
       var sel = hasSel
-        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur]'
-        : '[data-bl-si-blur]';
+        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pii]'
+        : '[data-bl-si-blur],[data-bl-si-pii]';
       var candidates = el.querySelectorAll(sel);
       var useCoords = clientX !== undefined && clientY !== undefined;
       for (var i = candidates.length - 1; i >= 0; i--) {
@@ -123,8 +145,8 @@ const BlurrySiteReveal = (() => {
       // Stamp reveal on all blurred children — tag-matched (CSS rule) and
       // data-stamped (picker). querySelectorAll is browser-native and fast.
       var sel = (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive())
-        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur]'
-        : '[data-bl-si-blur]';
+        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pii]'
+        : '[data-bl-si-blur],[data-bl-si-pii]';
       var children = el.querySelectorAll(sel);
       for (var i = 0; i < children.length; i++) {
         if (_isVisuallyBlurred(children[i])) {
@@ -199,7 +221,12 @@ const BlurrySiteReveal = (() => {
     if (_getMode() !== RM.CLICK) return;
     if (_getPickerActive()) return;
 
-    const target = e.target;
+    // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
+    // host when the click originates inside a shadow root. composedPath()[0] gives
+    // the actual element clicked (e.g. an SVG or blurred span inside shadow DOM).
+    const target = (e.composedPath && e.composedPath()[0] instanceof Element)
+      ? e.composedPath()[0]
+      : e.target;
     if (!(target instanceof Element)) return;
 
     const tag = target.tagName.toLowerCase();
@@ -238,16 +265,20 @@ const BlurrySiteReveal = (() => {
 
   function onRevealMouseOver(e) {
     if (_getMode() !== RM.HOVER) return;
-    const target = e.target;
+    // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
+    // host when the mouseover originates inside a shadow root. composedPath()[0]
+    // gives the actual element under the cursor (e.g. svg or path inside shadow).
+    // findBlurredTarget then walks up within the shadow tree via parentElement,
+    // finds the blurred element, and _revealElement stamps it inside shadow DOM.
+    // The shadow root's injected [data-bl-si-reveal] CSS rule clears the filter.
+    const target = (e.composedPath && e.composedPath()[0] instanceof Element)
+      ? e.composedPath()[0]
+      : e.target;
     if (!(target instanceof Element)) return;
-
-    if (mouseoutTimer) {
-      clearTimeout(mouseoutTimer);
-      mouseoutTimer = null;
-    }
 
     const zone = _findZoneAtPoint(e.clientX, e.clientY);
     if (zone) {
+      if (mouseoutTimer) { clearTimeout(mouseoutTimer); mouseoutTimer = null; }
       if (_hoverRevealedEl === zone) return;
       _dismissHoverReveal();
       _revealElement(zone);
@@ -256,11 +287,23 @@ const BlurrySiteReveal = (() => {
     }
 
     const blurredRoot = findBlurredTarget(target, e.clientX, e.clientY);
+
+    // Only act when we actually found a blurred element under the cursor.
+    // When blurredRoot is null — cursor is over a non-blurred wrapper or gap
+    // between elements — do NOT clear the mouseout timer and do NOT dismiss
+    // immediately. The 50ms debounce in onRevealMouseOut handles the case where
+    // the cursor genuinely leaves the reveal area. Clearing the timer here would
+    // prevent that debounce from firing, causing hover reveal to stick
+    // indefinitely when the cursor drifts into wrapper whitespace.
+    if (!blurredRoot) return;
+
+    // Cursor is confirmed over a blurred element — safe to cancel the pending
+    // dismiss and transition to (or stay on) this element.
+    if (mouseoutTimer) { clearTimeout(mouseoutTimer); mouseoutTimer = null; }
+
     if (_hoverRevealedEl && _hoverRevealedEl !== blurredRoot) {
       _dismissHoverReveal();
     }
-
-    if (!blurredRoot) return;
     if (_hoverRevealedEl === blurredRoot) return;
 
     _revealElement(blurredRoot);

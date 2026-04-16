@@ -34,6 +34,19 @@
   user-select: none !important;
 }
 
+/**
+ * PII auto-detect blur — independent of blur-all.
+ * PII spans (data-bl-si-pii) are never cleared by blur_engine sweeps, so this
+ * rule applies whether blur-all is on or off. When blur-all is active the
+ * injected [data-bl-si-blur] rule for the chosen mode (frosted / redacted /
+ * masked) takes over via source-order; this rule is the gaussian fallback.
+ */
+[data-bl-si-pii]:not([data-bl-si-reveal]) {
+  filter: blur(var(--bl-si-radius, 10px)) !important;
+  transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
+  user-select: none !important;
+}
+
 /* ─── Masked mode: asterisk replacement via ::after ─────────────────────────── */
 
 [data-bl-si-mask-text]::after {
@@ -52,6 +65,7 @@
 
 [data-bl-si-reveal] {
   filter: none !important;
+  visibility: visible !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: auto !important;
 }
@@ -59,6 +73,19 @@
 /* Kill masked-mode asterisks on revealed elements */
 [data-bl-si-reveal][data-bl-si-mask-text]::after {
   content: none !important;
+}
+
+/* Cascade reveal to blurred children of a revealed ancestor.
+   When hover/click reveal stamps data-bl-si-reveal on an ancestor via
+   revealAncestorChain, sibling [data-bl-si-blur] elements inside that
+   ancestor still paint their own filter: blur() — child filter wins over
+   the parent's filter: none. This descendant rule clears those children so
+   no blurred "islands" remain inside the revealed area.
+   Also pushed inside injectRules() for blur-all-ON source-order correctness. */
+[data-bl-si-reveal] [data-bl-si-blur],
+[data-bl-si-reveal] [data-bl-si-pii] {
+  filter: none !important;
+  user-select: auto !important;
 }
 
 /* ─── Picker mode ───────────────────────────────────────────────────────────── */

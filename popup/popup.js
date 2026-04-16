@@ -55,6 +55,8 @@
     ui.toast             = $('toast');
     // Sections
     ui.bodyShortcuts     = $('bodyShortcuts');
+    ui.piiToggle         = $('piiToggle');
+    ui.bodyPii           = $('bodyPii');
     ui.settingsToggle    = $('settingsToggle');
     ui.bodySettings      = $('bodySettings');
     // Rules
@@ -170,6 +172,20 @@
     }
   }
 
+  // Atomic write for configs with expandKeys (master toggle → multiple sub-keys).
+  async function patchManySettings(pairs, immediate) {
+    if (!_pendingWrite) _pendingWrite = await Store.getSettings();
+    for (const [k, v] of pairs) {
+      Renderer.setByPath(_pendingWrite, k, v);
+    }
+    clearTimeout(_writeTimer);
+    if (immediate) {
+      await _flushPendingWrite();
+    } else {
+      _writeTimer = setTimeout(() => { _flushPendingWrite(); }, DEBOUNCE_MS);
+    }
+  }
+
   // ── Setting changed callback (from Renderer) ──────────────────────────────
 
   function onSettingChanged(key, value) {
@@ -196,6 +212,18 @@
       return;
     }
 
+    // Master toggle with expandKeys: write all sub-keys atomically.
+    // Each entry is either a plain key string (value passed through) or an
+    // { key, onValue, offValue } object (for non-boolean sub-keys like NUMERIC).
+    const config = Configs.ALL.find(c => c.key === key);
+    if (config && config.expandKeys) {
+      patchManySettings(config.expandKeys.map(entry => {
+        if (typeof entry === 'object') return [entry.key, value ? entry.onValue : entry.offValue];
+        return [entry, value];
+      }), true);
+      return;
+    }
+
     // Debounce sliders/colors, immediate for toggles/selects.
     const isSliderOrColor = key === 'BLUR_RADIUS' || key === 'HIGHLIGHT_COLOR';
     patchSettings(key, value, !isSliderOrColor);
@@ -216,8 +244,10 @@
     applyI18nToDOM();
     Renderer.destroy();
     ui.bodyShortcuts.textContent = '';
-    ui.bodySettings.textContent = '';
+    ui.bodyPii.textContent       = '';
+    ui.bodySettings.textContent  = '';
     Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, fresh, onSettingChanged);
+    Renderer.renderSection(ui.bodyPii,       Configs.PII,       fresh, onSettingChanged);
     Renderer.renderSection(ui.bodySettings,  Configs.SETTINGS,  fresh, onSettingChanged);
     await renderAll();
   }
@@ -479,8 +509,9 @@
     });
 
     // Accordion toggles
+    wireAccordion(ui.piiToggle,      ui.bodyPii);
     wireAccordion(ui.settingsToggle, ui.bodySettings);
-    wireAccordion(ui.rulesToggle, ui.bodyRules);
+    wireAccordion(ui.rulesToggle,    ui.bodyRules);
 
     // Rules
     ui.addRuleBtn.addEventListener('click', () => openRuleModal(null));
@@ -1007,8 +1038,9 @@
     // One-time scaffolding: render the settings/shortcut section DOM once
     // with the bootstrap settings (already fetched above for I18n.init).
     // Row values are filled in by renderAll() → Renderer.updateAll() next.
-    Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS, bootstrapSettings, onSettingChanged);
-    Renderer.renderSection(ui.bodySettings, Configs.SETTINGS, bootstrapSettings, onSettingChanged);
+    Renderer.renderSection(ui.bodyShortcuts, Configs.SHORTCUTS,    bootstrapSettings, onSettingChanged);
+    Renderer.renderSection(ui.bodyPii,       Configs.PII,          bootstrapSettings, onSettingChanged);
+    Renderer.renderSection(ui.bodySettings,  Configs.SETTINGS,     bootstrapSettings, onSettingChanged);
 
     // First full reconcile — reads storage and populates every view.
     await renderAll();

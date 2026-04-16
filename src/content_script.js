@@ -56,6 +56,19 @@
   // ── Logger alias ──────────────────────────────────────────────────────────
   const log = blsi.Logger.scope('content');
 
+  /**
+   * Reads the current blur state + items from storage and calls Engine.handleSite()
+   * with the resolved settings. All _reconcile() call sites have been replaced
+   * with this helper — storage is the single source of truth; handleSite is pure.
+   */
+  async function _reconcile() {
+    const [isActive, items] = await Promise.all([
+      Store.getBlurState(hostname),
+      Store.getBlurItems(hostname),
+    ]);
+    await Engine.handleSite({ ...settings, BLUR_ALL_ACTIVE: isActive, BLUR_ITEMS: items });
+  }
+
   // ─── Picker callbacks ─────────────────────────────────────────────────────────
 
   function _generateZoneId() {
@@ -70,7 +83,7 @@
       const item = { type: 'dynamic', name, selector };
       log.flow('picker.blur', { name, selector });
       await Store.saveBlurItem(hostname, item);
-      await Engine.blurAll();
+      await _reconcile();
     },
 
     async onUnblur(el) {
@@ -78,7 +91,7 @@
       if (!selector) return;
       log.flow('picker.unblur', { selector });
       await Store.removeBlurItem(hostname, selector);
-      await Engine.blurAll();
+      await _reconcile();
     },
 
     async onStickyBlur(zoneRect) {
@@ -101,14 +114,14 @@
 
       log.flow('picker.stickyBlur', { name, id, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height } });
       await Store.saveBlurItem(hostname, item);
-      await Engine.blurAll();
+      await _reconcile();
       Shortcuts.showToast(name);
     },
 
     async onStickyUnblur(zoneId) {
       log.flow('picker.stickyUnblur', { zoneId });
       await Store.removeBlurItem(hostname, zoneId);
-      await Engine.blurAll();
+      await _reconcile();
     },
 
     onModeChange(mode) {
@@ -142,7 +155,7 @@
       log.flow('trigger.clearAll', { source: 'shortcut', hostname });
       await Store.clearHost(hostname);
       await Store.saveBlurState(hostname, false);
-      await Engine.blurAll();
+      await _reconcile();
     },
     async SCREENSHOT() {
       try {
@@ -217,13 +230,13 @@
 
     switch (type) {
       // ── Toggle blur-all mode ──────────────────────────────────────────────
-      // Write storage, then reconcile DOM via Engine.blurAll().
+      // Write storage, then reconcile DOM via _reconcile().
       case MSG.TOGGLE_BLUR_ALL: {
         const newState = !Engine.isPageBlurred;
         log.flow('trigger.toggleBlurAll', { nextState: newState, hostname });
         (async () => {
           await Store.saveBlurState(hostname, newState);
-          await Engine.blurAll();
+          await _reconcile();
           if (sendResponse) sendResponse({ isPageBlurred: newState });
         })();
         return true;
@@ -260,7 +273,7 @@
         (async () => {
           await Store.clearHost(hostname);
           await Store.saveBlurState(hostname, false);
-          await Engine.blurAll();
+          await _reconcile();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -284,7 +297,7 @@
         log.flow('trigger.contextBlur', { name, selector: sel });
         (async () => {
           await Store.saveBlurItem(hostname, item);
-          await Engine.blurAll();
+          await _reconcile();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -317,7 +330,7 @@
         log.flow('trigger.contextUnblur', { selector: sel });
         (async () => {
           await Store.removeBlurItem(hostname, sel);
-          await Engine.blurAll();
+          await _reconcile();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -348,7 +361,7 @@
 
   // ─── Idempotent state application ─────────────────────────────────────────────
   // Thin coordinator — applies resolved settings to CSS vars, shortcuts, picker,
-  // reveal, then awaits Engine.blurAll() to reconcile DOM. Idempotent. Async —
+  // reveal, then awaits _reconcile() to reconcile DOM. Idempotent. Async —
   // all callers must `await` so onChange events don't start overlapping reconciles.
 
   async function applyState(newSettings, prev) {
@@ -395,8 +408,8 @@
       Reveal.clearAll();
     }
 
-    // Delegate blur reconciliation. Contract lives in blur_engine.js blurAll() docblock.
-    await Engine.blurAll();
+    // Delegate blur reconciliation to _reconcile() — reads storage, calls handleSite.
+    await _reconcile();
 
     // Auto-blur (idle / tab switch)
     if ((settings.AUTO_BLUR_IDLE || settings.AUTO_BLUR_TAB_SWITCH) && settings.ENABLED) {
@@ -406,11 +419,11 @@
         idle: settings.AUTO_BLUR_IDLE,
         onIdle: async () => {
           await Store.saveBlurState(hostname, true);
-          await Engine.blurAll();
+          await _reconcile();
         },
         onActive: async () => {
           await Store.saveBlurState(hostname, false);
-          await Engine.blurAll();
+          await _reconcile();
         },
       });
     } else {
@@ -422,7 +435,7 @@
       if (!blsi.BlurTimer.isActive()) {
         blsi.BlurTimer.start(settings.BLUR_TIMER_MINUTES, async () => {
           await Store.saveBlurState(hostname, false);
-          await Engine.blurAll();
+          await _reconcile();
         });
       }
     } else if (settings.BLUR_TIMER_MINUTES === 0) {
@@ -431,7 +444,10 @@
 
     // PII auto-detection — scan after blur reconciliation so PII spans don't
     // conflict with the blur engine's text-check stamping.
-    const anyDetect = settings.AUTO_DETECT && Object.values(settings.AUTO_DETECT).some(Boolean);
+    const anyDetect = settings.AUTO_DETECT && (
+      settings.AUTO_DETECT.EMAIL ||
+      (settings.AUTO_DETECT.NUMERIC && settings.AUTO_DETECT.NUMERIC !== 'off')
+    );
     if (anyDetect && settings.ENABLED) {
       blsi.PiiDetector.scan(document.body, settings.AUTO_DETECT);
       blsi.PiiDetector.observeMutations(document.body);
@@ -499,12 +515,13 @@
       return;
     }
 
-    // 8. Initialise keyboard shortcut handler.
-    Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
-
-    // 9. Restore blur state from storage (items + blur-all + zones).
+    // 8–9. Apply all stored settings — single authoritative call that covers
+    //      blur restore, PII scan, AutoBlur, BlurTimer, shortcuts, and CSS vars.
+    //      applyState(settings, null): old = prev ?? settings → changedKeys = []
+    //      → logging skipped, every block runs unconditionally. _reconcile() is
+    //      called inside, so no separate reconcile step is needed.
     Engine.resetCounters();
-    await Engine.blurAll();
+    await applyState(settings, null);
 
     // 10. Subscribe AFTER initial restore so we don't race with cross-tab events
     //     during the cold-start window.
@@ -520,7 +537,7 @@
 
   // ─── Storage change subscriber ────────────────────────────────────────────────
   // Routes changes: settings/rules go through applyState for URL-rule resolution;
-  // items/blur-all delegate directly to Engine.blurAll() (reconciler handles diffing
+  // items/blur-all delegate directly to _reconcile() (reconciler handles diffing
   // internally). Async — always await the downstream call.
 
   async function handleStorageChange(key, newValue) {
@@ -534,7 +551,7 @@
         break;
       case 'blurred_items':
       case 'blur_all_hosts':
-        await Engine.blurAll();
+        await _reconcile();
         break;
     }
   }

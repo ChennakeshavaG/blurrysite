@@ -1,6 +1,6 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-**359 unit tests across 12 test files.** Last updated 2026-04-11 after the keyboard shortcuts v2 rewrite.
+**532 unit tests across 20 test files.** Last updated 2026-04-15 after shadow host reveal fix (parentElement boundary + host-chain walk).
 
 ## N5. action_registry.test.js (11 tests) — `tests/unit/action_registry.test.js`
 
@@ -78,7 +78,7 @@ Covers the extracted `blsi.UrlMatcher`:
 | MAX_PATTERN_LENGTH | 501-char pattern rejected | `matchesPattern(url, 'a'.repeat(501), 'wildcard')` → `false` |
 | resolveSettings | deep merge, first-match-wins, non-matching fall-through, null rules tolerated | Create two rules with same pattern, different `BLUR_RADIUS`. Open a matching page. Popup "Current page" shows the FIRST rule's radius |
 
-## N2. reveal_controller.test.js (12 tests) — `tests/unit/reveal_controller.test.js`
+## N2. reveal_controller.test.js (16 tests) — `tests/unit/reveal_controller.test.js`
 
 Covers the extracted `blsi.Reveal`:
 
@@ -667,11 +667,148 @@ Tests added for the category-aware `blurAllContent(radius, options)` API.
 | 1 | returns blurCategories merged with defaults | partial override preserved, defaults kept | Mock response with {form:true}, check all 5 keys |
 | 2 | returns default blurCategories when none saved | all defaults present | Mock response with {}, check defaults |
 
+## pii_detector.test.js (31 tests) — `tests/unit/pii_detector.test.js`
+
+Covers `blsi.PiiDetector`:
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | detects email addresses | scan finds `user@example.com`, wraps in `[data-bl-si-pii="email"][data-bl-si-blur="1"]` | Enable PII toggle, visit page with email, verify span wrapping |
+| 2 | detects phone numbers | scan finds `+1-555-123-4567`, wraps in `[data-bl-si-pii="phone"]` | Visit page with phone number, enable toggle |
+| 3 | detects SSN patterns | scan finds `123-45-6789`, wraps in `[data-bl-si-pii="ssn"]` | Visit page with SSN format |
+| 4 | detects credit card patterns | scan finds `4111 1111 1111 1111`, wraps | Visit page with CC number |
+| 5 | detects financial figures | scan finds `$1,234.56` | Visit page with dollar amount |
+| 6 | detects Euro currency symbol | `€500` matched | Visit page with € amount |
+| 7 | detects Indian Rupee symbol | `₹50,000` matched | Visit page with ₹ amount |
+| 8 | respects per-type toggles — disabled types are skipped | EMAIL:true finds email, SSN:false skips SSN | Enable only email, visit page with both |
+| 9 | returns 0 when no types are enabled | empty types object → 0 | Pass empty object, nothing wrapped |
+| 10 | does not match invalid email | `not@email` and `@handle` not matched | Verify invalid patterns unaffected |
+| 11 | SSN pattern requires separators | `123456789` (no dashes) not matched | Bare 9-digit number ignored |
+| 12 | skips already-wrapped PII nodes | double-scan count stays at 0 | Scan twice; no duplicate spans |
+| 13 | skips extension UI elements | toolbar content ignored | Inject email inside `#bl-si-picker-toolbar` |
+| 14 | skips text nodes inside toast | toast content ignored | Inject email in `.bl-si-toast` |
+| 15 | skips empty text nodes | whitespace-only nodes return 0 | Pass `<p>   </p>` |
+| 16 | handles multiple matches in one text node | two emails in one `<p>` → count 2 | Visit paragraph with two emails |
+| 17 | handles multiple PII types in one text node | email + phone in one `<p>` → count 2 | Visit paragraph with email and phone |
+| 18 | preserves surrounding text after wrapping | `textContent` identical to original | Verify `<p>` text unchanged post-scan |
+| 19 | clear() unwraps all PII spans and restores text | `[data-bl-si-pii]` gone, text intact | Scan then clear, verify DOM |
+| 20 | clear() resets match count | `getMatchCount()` → 0 after clear | Scan → check count > 0; clear → count 0 |
+| 21 | getPatterns() returns the pattern definitions | `PATTERNS.EMAIL.regex` is RegExp | `blsi.PiiDetector.getPatterns().EMAIL` |
+| 22 | getMatchCount() tracks total matches | two emails → count 2 | Scan 2-email page, check count |
+| 23 | scan with null rootEl returns 0 | `scan(null, types)` → 0 | — |
+| 24 | scan with null types returns 0 | `scan(body, null)` → 0 | — |
+| 25 | stopObserving is safe to call when no observer is active | no throw | `blsi.PiiDetector.stopObserving()` with no prior `observeMutations` |
+| 26 | double scan does not re-wrap already wrapped nodes | single span after two scans | Scan same page twice, verify one span |
+| 27 | PII blur survives blur-all teardown (data-bl-si-blur preserved on PII spans) | blur_engine sweep skips PII spans; stamp remains | Enable PII, blur-all off, verify spans still blurred |
+| 28 | all AUTO_DETECT defaults false — scan returns 0 and wraps nothing | default `{EMAIL:false,...}` → 0, no spans | Verify feature is inert before user enables toggle |
+| 29 | _matchCount accumulates across separate scan calls on different nodes | scan p1 → 1, scan p2 → 2 | Scan two separate paragraphs sequentially |
+
+---
+
 ## Category E2E Test (mutation_loop.spec.js)
 
 | # | Test Name | Asserts | Manual Replication |
 |---|---|---|---|
 | 1 | MutationObserver respects categories: form elements not blurred when form OFF | injected input/textarea not blurred, injected p blurred | Activate blur-all with default categories, inject input+textarea+p via console, check classes |
+
+---
+
+## Shadow DOM Tests (blur_engine.test.js) — 14 new tests
+
+Added under `describe('shadow DOM')` in `tests/unit/blur_engine.test.js`.
+Uses jsdom `attachShadow({ mode: 'open' })` to build real shadow roots.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | injectRules injects style into shadow root | `sr.querySelector('#bl-si-blur-styles')` not null after `injectRules(sr, cats, mode)` | Load extension; open DevTools on a page with web components; inspect shadow root — look for `<style id="bl-si-blur-styles">` inside it when blur-all is on |
+| 2 | injectRules style in shadow root does not appear in document head | `document.head.querySelector('#bl-si-blur-styles')` is null after injecting only into sr | Same as above — confirm main `<head>` has its own separate style element |
+| 3 | removeRules removes style from shadow root | style is null after `injectRules` then `removeRules` | Turn blur-all off — style element should disappear from shadow root |
+| 4 | stampElements stamps text-check elements inside shadow root | `<span>text</span>` inside sr gets `data-bl-si-blur="1"`, empty `<span>` does not | With blur-all on, inspect shadow root elements — text-bearing spans should have `data-bl-si-blur` |
+| 5 | stampElements returns discovered shadow roots | return value of `stampElements(document, ...)` contains sr when host is in document.body | N/A — internal API, no direct manual equivalent |
+| 6 | stampElements returns empty array when no shadow roots present | `[]` when no shadow hosts exist | N/A — internal |
+| 7 | handleDocument active path injects rules into shadow root | sr has `#bl-si-blur-styles` after `handleDocument(activeSettings, sr)` | Same as test 1 |
+| 8 | handleDocument active path stamps text-check elements inside shadow root | `<span>text</span>` in sr has `data-bl-si-blur` after active `handleDocument` | Same as test 4 |
+| 9 | handleDocument inactive path removes rules and stamps from shadow root | style + stamp both gone after inactive `handleDocument` following active | Turn blur-all off — shadow root cleaned up |
+| 10 | handleDocument recurses into nested shadow roots | nested sr (sr → innerHost → nestedSr) gets style + stamp after one `handleDocument(sr)` call | Inspect nested web component tree with blur-all on — innermost shadow root has style element |
+| 11 | teardown removes stamps and rules recursively from nested shadow roots | single `teardown(sr)` clears both sr and nestedSr style + stamps | Same as test 10 with blur-all turned off |
+| 12 | handleSite stamps elements inside shadow roots when blur-all active | end-to-end: shadow root gets style + stamp after `handleSite({BLUR_ALL_ACTIVE:true,...})` | Enable blur-all extension-wide; inspect any page with web components |
+| 13 | handleSite cleans up shadow roots when blur-all deactivated | shadow root style + stamps removed after `handleSite({BLUR_ALL_ACTIVE:false,...})` | Disable blur-all; inspect same shadow root — style element gone |
+| 14 | handleDocument called twice on same shadow root yields one style element | `sr.querySelectorAll('#bl-si-blur-styles').length === 1` | Trigger multiple rapid reconciles; open DevTools — should see exactly one style element per shadow root |
+
+---
+
+## RC-1: Custom Element Host Stamping (blur_engine.test.js) — 4 new tests
+
+Added under `describe('custom element stamping (RC-1)')` in `tests/unit/blur_engine.test.js`.
+Verifies custom elements (hyphenated tag names) are stamped by `stampElements` when STRUCTURE or TEXT category is active.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | stampElements stamps custom element host when text content present | `<shreddit-foo>content</shreddit-foo>` gets `data-bl-si-blur="1"` when STRUCTURE+TEXT active | Enable blur-all on Reddit; inspect `<shreddit-dynamic-ad-link>` in DevTools — should have `data-bl-si-blur` attribute |
+| 2 | stampElements does not stamp custom element host when no text content | empty `<shreddit-bar>` has no `data-bl-si-blur` in normal (non-thorough) mode | Empty custom element should not be blurred unless it renders visible content |
+| 3 | stampElements stamps custom element host in thorough mode regardless of text | empty custom element gets `data-bl-si-blur` when `thorough=true` | Enable THOROUGH_BLUR; inspect empty custom element — should be blurred |
+| 4 | stampElements does not stamp custom element when STRUCTURE and TEXT both disabled | `<shreddit-qux>some text</shreddit-qux>` not stamped when TEXT=false, STRUCTURE=false | Disable TEXT and STRUCTURE categories; custom elements should not be blurred |
+
+---
+
+## RC-2: List Element Category Placement (blur_engine.test.js) — 3 new tests
+
+Added under `describe('CATEGORY_SELECTORS list element placement (RC-2)')` in `tests/unit/blur_engine.test.js`.
+Verifies `li`, `dt`, `dd` are in `STRUCTURE.alwaysBlur` (CSS injection) not `textCheck` (JS stamp).
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | li is in STRUCTURE.alwaysBlur not textCheck | `CATEGORY_SELECTORS.STRUCTURE.alwaysBlur` contains `'li'`; `textCheck` does not | Open DevTools on any page with blur-all + STRUCTURE; inspect `<style id="bl-si-blur-styles">` — should contain `li` in the CSS selector string |
+| 2 | dt and dd are in STRUCTURE.alwaysBlur not textCheck | same for `dt` and `dd` | Same as above — `dt` and `dd` in injected CSS |
+| 3 | injectRules includes li in alwaysBlur CSS when STRUCTURE active | injected `<style>` textContent contains `'li'` | Enable blur-all with STRUCTURE on; inspect injected style — list elements covered |
+
+---
+
+## RC-3: Reveal Descendant Cascade Rule (blur_engine.test.js) — 2 new tests
+
+Added under `describe('reveal descendant cascade rule (RC-3)')` in `tests/unit/blur_engine.test.js`.
+Verifies `injectRules` includes the `[data-bl-si-reveal] [data-bl-si-blur]` descendant combinator rule.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | injectRules includes descendant-reveal cascade rule for data-bl-si-blur | injected CSS contains `[data-bl-si-reveal] [data-bl-si-blur]` | Enable THOROUGH_BLUR + REVEAL_MODE=hover; hover over a `<p>` with multiple `<span>` children — all spans inside the hovered `<p>` should clear, no blurred islands |
+| 2 | injectRules includes descendant-reveal cascade rule for data-bl-si-pii | injected CSS contains `[data-bl-si-reveal] [data-bl-si-pii]` | Enable PII detection + THOROUGH_BLUR; hover over a `<p>` containing a PII-stamped span — PII span should also reveal with the ancestor |
+
+---
+
+## Slot-Projected Text Blur (blur_engine.test.js) — 2 new tests
+
+Added under `describe('custom element stamping (RC-1)')` in `tests/unit/blur_engine.test.js`.
+Verifies that shadow DOM elements with `<slot>` descendants are stamped (slotted content appears blurred) while structural wrappers with only a slot are not.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | stampElements stamps shadow DOM `<a>` containing a `<slot>` (no direct text) | `<a><slot></slot></a>` inside a shadow root gets `data-bl-si-blur="1"` | Enable blur-all; inspect Reddit ad element shadow DOM — the shadow `<a>` should have `data-bl-si-blur`; slotted ad text should be blurred |
+| 2 | stampElements does NOT stamp structural element containing only a slot (text gate still strict) | `<div><slot></slot></div>` inside shadow root has no stamp | Shadow DOM layout wrappers (div with slot) should not be stamped — prevents nested-blur artifacts |
+
+---
+
+## ComposedPath Shadow DOM Reveal (reveal_controller.test.js) — 2 new tests
+
+Added under `describe('blsi.Reveal — composedPath (shadow DOM pierce)')` in `tests/unit/reveal_controller.test.js`.
+Verifies that `onRevealMouseOver` and `onRevealClick` use `composedPath()[0]` to reveal the actual element inside a shadow root, bypassing shadow DOM event retargeting.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | onRevealMouseOver reveals composedPath target, not retargeted e.target | inner blurred `<span>` gets `data-bl-si-reveal`; shadow host does not | Enable blur-all + REVEAL_MODE=hover; hover over `<pdp-back-button>` on Reddit — SVG inside should unblur |
+| 2 | onRevealClick reveals composedPath target, not retargeted e.target | same for click reveal mode | Enable REVEAL_MODE=click; click on a shadow-DOM blurred element — it should reveal |
+
+---
+
+## Shadow Host Reveal — parentElement boundary (reveal_controller.test.js) — 2 new tests
+
+Added under `describe('blsi.Reveal — shadow host reveal (parentElement boundary)')` in `tests/unit/reveal_controller.test.js`.
+Verifies that `findBlurredTarget` walks the shadow host chain (via `getRootNode().host`) when `parentElement` returns null at a shadow root boundary.
+
+| # | Test Name | Asserts | Manual Replication |
+|---|---|---|---|
+| 1 | hover over element inside shadow root reveals blurred shadow host | `<rpl-badge data-bl-si-blur>` → #shadow-root → `<span>NEW</span>`. Hovering the span reveals the host (host gets `data-bl-si-reveal`). | Enable blur-all + REVEAL_MODE=hover; hover over `<rpl-badge>` on Reddit — "NEW" badge text inside shadow root should unblur on hover |
+| 2 | hover over shadow DOM child finds blurred light DOM ancestor of host | `<div data-bl-si-blur>` wraps an unblurred `<custom-el>` whose shadow root contains `<span>`. Hovering the span reveals the outer `<div>`. | Enable blur-all; find a page with nested custom elements where blur is on a light-DOM ancestor — hover reveal should still work |
 
 ---
 

@@ -20,6 +20,7 @@
   "lang_hi_IN": "हिन्दी (Hindi — India)",
   "lang_ta_IN": "தமிழ் (Tamil — India)",
   "section_shortcuts_title": "Keyboard Shortcuts",
+  "section_pii_title": "Auto-Detect PII",
   "section_settings_title": "Settings",
   "section_rules_title": "Site Rules",
 
@@ -65,16 +66,14 @@
   "group_shortcuts": "Keyboard Shortcuts",
   "group_advanced": "Advanced",
 
-  "detect_email": "Email Addresses",
-  "detect_email_hint": "Automatically blur email addresses on the page.",
-  "detect_phone": "Phone Numbers",
-  "detect_phone_hint": "Automatically blur phone numbers.",
-  "detect_ssn": "SSN / ID Numbers",
-  "detect_ssn_hint": "Automatically blur Social Security Numbers and similar ID patterns.",
-  "detect_credit_card": "Credit Card Numbers",
-  "detect_credit_card_hint": "Automatically blur credit card number patterns.",
-  "detect_financial": "Financial Figures",
-  "detect_financial_hint": "Automatically blur currency amounts ($, EUR, GBP, etc.).",
+  "detect_pii": "Sensitive Data (PII)",
+  "detect_pii_hint": "Automatically blur emails, phone numbers, SSNs, credit cards, and financial figures.",
+
+  "pii_numeric_label": "Numeric Detection",
+  "pii_numeric_hint": "Standard hides all numbers — best for screen sharing. Conservative only hides numbers near sensitive labels like Balance, Salary, or Account.",
+  "pii_numeric_off": "Off",
+  "pii_numeric_standard": "Standard (screen-share safe)",
+  "pii_numeric_conservative": "Conservative (labels only)",
 
   "cat_text": "Text",
   "cat_text_hint": "Headings, paragraphs, links, and inline text.",

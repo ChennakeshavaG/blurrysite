@@ -195,6 +195,101 @@ describe('blsi.Reveal.clearAll', () => {
   });
 });
 
+describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
+  test('onRevealMouseOver reveals composedPath target, not retargeted e.target', () => {
+    // Simulates shadow DOM event retargeting: e.target = shadow host, but
+    // composedPath()[0] = the actual blurred element inside the shadow root.
+    mode = 'hover';
+    const innerEl = document.createElement('span');
+    innerEl.textContent = 'shadow content';
+    document.body.appendChild(innerEl);
+    blsi.BlurEngine.applyBlur(innerEl);
+
+    const hostEl = document.createElement('div');
+    document.body.appendChild(hostEl);
+    // hostEl is NOT blurred — simulates unblurred shadow host
+
+    const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
+    Object.defineProperty(ev, 'target', { value: hostEl, writable: false });
+    // Override composedPath to return the actual inner element first
+    ev.composedPath = () => [innerEl, hostEl, document.body, document.documentElement, document, window];
+    document.dispatchEvent(ev);
+
+    expect(innerEl.dataset.blSiReveal).toBe('1');
+    expect(hostEl.dataset.blSiReveal).toBeUndefined();
+  });
+
+  test('onRevealClick reveals composedPath target, not retargeted e.target', () => {
+    mode = 'click';
+    const innerEl = document.createElement('span');
+    innerEl.textContent = 'shadow content';
+    document.body.appendChild(innerEl);
+    blsi.BlurEngine.applyBlur(innerEl);
+
+    const hostEl = document.createElement('div');
+    document.body.appendChild(hostEl);
+
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 });
+    Object.defineProperty(ev, 'target', { value: hostEl, writable: false });
+    ev.composedPath = () => [innerEl, hostEl, document.body, document.documentElement, document, window];
+    document.dispatchEvent(ev);
+
+    expect(innerEl.dataset.blSiReveal).toBe('1');
+    expect(hostEl.dataset.blSiReveal).toBeUndefined();
+  });
+});
+
+describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
+  test('hover over element inside shadow root reveals blurred shadow host', () => {
+    // <rpl-badge data-bl-si-blur="1"> → #shadow-root → <span>NEW</span>
+    // parentElement of <span> is null (ShadowRoot is not an Element).
+    // findBlurredTarget must walk the host chain via getRootNode().host.
+    mode = 'hover';
+    const host = document.createElement('rpl-badge');
+    document.body.appendChild(host);
+    blsi.BlurEngine.applyBlur(host);
+
+    const shadow = host.attachShadow({ mode: 'open' });
+    const inner = document.createElement('span');
+    inner.textContent = 'NEW';
+    shadow.appendChild(inner);
+
+    const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
+    Object.defineProperty(ev, 'target', { value: host, writable: false });
+    ev.composedPath = () => [inner, shadow, host, document.body, document.documentElement, document, window];
+    document.dispatchEvent(ev);
+
+    expect(host.dataset.blSiReveal).toBe('1');
+  });
+
+  test('hover over shadow DOM child finds blurred light DOM ancestor of host', () => {
+    // <div data-bl-si-blur="1"> → <custom-el> → #shadow-root → <span>
+    // parentElement chain: span→null; then host chain: host not blurred;
+    // light DOM walk from host's parentElement: finds the blurred <div>.
+    mode = 'hover';
+    const wrapper = document.createElement('div');
+    document.body.appendChild(wrapper);
+    blsi.BlurEngine.applyBlur(wrapper);
+
+    const host = document.createElement('custom-el');
+    wrapper.appendChild(host);
+    // host is NOT blurred — blur is on the outer wrapper
+
+    const shadow = host.attachShadow({ mode: 'open' });
+    const inner = document.createElement('span');
+    inner.textContent = 'content';
+    shadow.appendChild(inner);
+
+    const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
+    Object.defineProperty(ev, 'target', { value: host, writable: false });
+    ev.composedPath = () => [inner, shadow, host, wrapper, document.body, document.documentElement, document, window];
+    document.dispatchEvent(ev);
+
+    expect(wrapper.dataset.blSiReveal).toBe('1');
+    expect(host.dataset.blSiReveal).toBeUndefined();
+  });
+});
+
 describe('blsi.Reveal.destroy', () => {
   test('after destroy, clicks no longer reveal', () => {
     mode = 'click';
