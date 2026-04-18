@@ -40,7 +40,7 @@ const BlurrySitePiiDetector = (() => {
   //      (no newline/tab — phone numbers don't span lines).
   //   5. 4+ bare digit sequence  — 17150  account numbers  (catch-all)
   //
-  // Intentionally broad: users opt-in knowing years (2024), IDs may fire.
+  // Intentionally broad: years 1000–2099 and versions are suppressed by isYear/isVersion in precise mode.
   const NUMERIC_RE =
     /[$\u20AC\u00A3\u00A5\u20B9\u20A9\u20BF\u20BA\u20A8\u20B1\u0E3F]\s*\d[\d,.'\u00A0]*|\b\d[\d,.'\u00A0]*\s*(?:USD|EUR|GBP|JPY|INR|BTC|ETH)\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{2,}(?:[ \-\u00A0]\d{2,}){2,}\b|\b\d{4,}\b/g;
 
@@ -74,7 +74,7 @@ const BlurrySitePiiDetector = (() => {
   }
 
   const _PUBLIC_PRICE_RE =
-    /\/mo(?:nth)?|\/y(?:r|ear)|per month|per year|\bcart\b|\bqty\b|\bquantity\b|\bunits\b|\bcount\b|\brating\b|\breviews?\b|\bstars?\b/i;
+    /\/mo(?:nth)?|\/y(?:r|ear)|per month|per year|\bcart\b|\bqty\b|\bquantity\b|\bunits\b|\brating\b|\breviews?\b|\bstars?\b/i;
 
   function isPublicPrice(_matchText, text, matchIndex) {
     const start = Math.max(0, matchIndex - 100);
