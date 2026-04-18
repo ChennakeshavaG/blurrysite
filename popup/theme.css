@@ -1,0 +1,27 @@
+/* Slate dark mode (default) */
+:root {
+  --bl-base:         #0a0b0f;
+  --bl-surface:      #13151f;
+  --bl-raised:       #1e2130;
+  --bl-amber:        #fbbf24;
+  --bl-sky:          #38bdf8;
+  --bl-violet:       #818cf8;
+  --bl-danger:       #f87171;
+  --bl-text-primary: #e8eaf0;
+  --bl-text-muted:   #6b7280;
+  --bl-text-dim:     #3a3d50;
+}
+
+/* Slate light mode — cool-shifted, aligned with Slate palette */
+[data-theme="light"] {
+  --bl-base:         #f8f9fc;
+  --bl-surface:      #eef0f6;
+  --bl-raised:       #e4e8f2;
+  --bl-amber:        #d97706;
+  --bl-sky:          #0284c7;
+  --bl-violet:       #6d28d9;
+  --bl-danger:       #dc2626;
+  --bl-text-primary: #0f1117;
+  --bl-text-muted:   #6b7280;
+  --bl-text-dim:     #9098b0;
+}
