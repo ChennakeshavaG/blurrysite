@@ -167,5 +167,43 @@
   "tt_customize_shortcut": "Pick a different keyboard shortcut",
   "tt_remove_blur_item": "Unblur this",
   "tt_rule_edit": "Change this rule's settings",
-  "tt_rule_delete": "Delete this rule"
+  "tt_rule_delete": "Delete this rule",
+
+  "off_state_message": "Blurry Site is off",
+  "off_state_hint": "All blur is paused on every site",
+  "power_turn_on": "Turn On",
+
+  "htb_chip_gaussian": "Gaussian",
+  "htb_chip_frosted": "Frosted",
+  "htb_chip_redacted": "Redacted",
+  "htb_chip_masked": "Masked",
+  "htb_chip_color": "Color",
+  "htb_label_covers": "Covers",
+  "htb_label_strength": "Strength",
+  "htb_label_reveal": "Reveal",
+  "htb_label_color": "Color",
+  "htb_strength_subtle": "Subtle",
+  "htb_strength_moderate": "Moderate",
+  "htb_strength_strong": "Strong",
+  "htb_pick_blur_note": "Redacted & Masked available in Blur All mode.",
+
+  "pii_chip_gaussian": "Gaussian",
+  "pii_chip_frosted": "Frosted",
+  "pii_chip_redacted": "Redacted",
+  "pii_chip_asterisked": "Asterisked",
+
+  "automate_timer": "Timer",
+  "automate_idle": "Idle",
+  "automate_tab_switch": "Tab Switch",
+  "automate_off": "Off",
+  "automate_on": "On",
+  "automate_unit_sec": "sec",
+  "automate_unit_min": "min",
+  "automate_unit_hr": "hr",
+
+  "mode_blur_all_active_desc": "All matching categories are blurred on this page.",
+  "mode_blur_all_off_hint": "Off — page is visible.",
+  "mode_pick_blur_empty": "No elements picked yet. Open the picker to start.",
+  "mode_open_picker": "Open Picker",
+  "mode_blur_all_cats": "categories"
 }
