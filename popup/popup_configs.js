@@ -129,32 +129,13 @@ const PopupConfigs = (() => {
       i18nKey: 'detect_pii',
       i18nHintKey: 'detect_pii_hint',
       group: 'autodetect',
-      // Reads true when at least one sub-key is meaningfully enabled.
-      // 'off' is a truthy string, so we cannot use .some(Boolean) — check explicitly.
       getValue: (settings) => !!(settings.AUTO_DETECT && (
-        settings.AUTO_DETECT.EMAIL ||
-        (settings.AUTO_DETECT.NUMERIC && settings.AUTO_DETECT.NUMERIC !== 'off')
+        settings.AUTO_DETECT.EMAIL || settings.AUTO_DETECT.NUMERIC
       )),
-      // Which storage paths to write when the toggle changes.
-      // NUMERIC uses onValue/offValue because it is a string enum, not boolean.
       expandKeys: [
-        { key: 'AUTO_DETECT.EMAIL',   onValue: true,       offValue: false },
-        { key: 'AUTO_DETECT.NUMERIC', onValue: 'standard', offValue: 'off' },
+        { key: 'AUTO_DETECT.EMAIL',   onValue: true, offValue: false },
+        { key: 'AUTO_DETECT.NUMERIC', onValue: true, offValue: false },
       ],
-    },
-    {
-      key: 'AUTO_DETECT.NUMERIC',
-      type: 'select',
-      i18nKey: 'pii_numeric_label',
-      i18nHintKey: 'pii_numeric_hint',
-      group: 'autodetect',
-      options: {
-        values: [
-          { value: 'off',          i18nKey: 'pii_numeric_off'          },
-          { value: 'standard',     i18nKey: 'pii_numeric_standard'     },
-          { value: 'conservative', i18nKey: 'pii_numeric_conservative' },
-        ],
-      },
     },
   ]);
 
