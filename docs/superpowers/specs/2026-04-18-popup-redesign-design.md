@@ -140,7 +140,7 @@ Redacted and Masked are **hidden** (not disabled or greyed out). A note below th
 
 **Reveal mode**: segmented — Hover · Click · None
 
-**Color picker** (Redacted): 6 swatches + hex input + eyedropper + opacity slider
+**Color picker** (Redacted): 6 page-extracted swatches (same extraction as Pick & Blur Color mode) + hex input + eyedropper + opacity slider
 
 **Mask style** (Masked): fixed obscuring font — TBD in next phase
 
@@ -155,9 +155,11 @@ Redacted and Masked are **hidden** (not disabled or greyed out). A note below th
 No Categories in Pick & Blur — user is selecting specific elements/zones, not category-wide.
 
 **Color mode (Pick & Blur):**
-- 6 quick swatches: Black · White · Red · Amber · Indigo · Green
+- **6 page-extracted swatches** — content script scans computed `background-color` of visible elements, ranks by frequency, sends top 6 to popup. These are the actual colors the page uses, not arbitrary presets. Tones of black and white will naturally dominate most pages.
+  - Extraction happens on picker open, cached for the session
+  - Fallback: if fewer than 6 extracted, remaining slots fill with neutral defaults (black, white, mid-grey)
 - Hex input field
-- Eyedropper button (samples page color — enables invisible cover by matching page bg)
+- Eyedropper button (samples any pixel on page — enables invisible cover by matching page bg exactly)
 - Opacity slider
 - No Reveal mode — opacity serves as the "peek-through" mechanism
 
@@ -264,11 +266,28 @@ Automate
 ```
 
 ### 8.2 Modify sub-page controls
-- **Timer**: duration selector (1 / 5 / 10 / 15 / 30 / 60 min) + Start/Stop button + live countdown shown when active
-- **Idle**: inactivity threshold selector (1 / 2 / 5 / 10 min) + enable toggle
-- **Tab Switch**: enable toggle (activates blur when user switches away from tab)
-- Footer note: "When triggered → applies current [Blur All / Pick & Blur] settings"
-- Multiple triggers can be active simultaneously
+
+**Timer** (uses `BlurTimer` — `setTimeout`, no platform cap):
+- Number input: 1–99 · Unit selector: `sec` / `min` / `hr`
+- Start / Stop button
+- Live countdown displayed in Automate summary row when active: `⏱ 4:32 remaining`
+- Practical minimum: 30 seconds (below this = annoying). Validation rejects values under 30s.
+- No hard maximum — `hr` unit supports long-session use cases (e.g., "blur after 2 hours")
+
+**Idle** (uses `chrome.idle.setDetectionInterval` — Chrome API constraints apply):
+- Number input: 1–99 · Unit selector: `sec` / `min`
+  - `hr` unit intentionally excluded — Chrome API max is 3000 s (50 min)
+- Enable toggle
+- Hard minimum enforced: **15 seconds** (Chrome API floor — values below silently clamp to 15)
+- Hard maximum enforced: **3000 seconds / 50 minutes** — UI shows warning if user exceeds: *"Chrome limits idle detection to 50 minutes maximum"*
+- Validation converts to seconds and clamps before calling `setDetectionInterval`
+
+**Tab Switch**:
+- Enable toggle only — no threshold, fires immediately on tab visibility change
+
+**Footer note**: "When triggered → applies current [Blur All / Pick & Blur] settings"
+
+**Multiple triggers** can be active simultaneously.
 
 ---
 
