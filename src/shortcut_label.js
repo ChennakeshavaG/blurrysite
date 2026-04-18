@@ -1,5 +1,5 @@
 /**
- * shortcut_label.js — Platform-aware keyboard shortcut label rendering
+ * shortcut_label.js — Platform-aware keyboard shortcut label rendering + reserved chord list
  *
  * Single source of truth for converting a stored chord ({code, mods}) into
  * a human-readable label. Used by:
@@ -10,6 +10,10 @@
  *
  * Mac renders Unicode glyphs (⌘⇧⌥⌃) and concatenates without separators.
  * Windows/Linux spell out modifiers (Ctrl, Shift, Alt, Win) joined by `+`.
+ *
+ * Also exposes RESERVED / lookup / isReserved — a curated hint list of
+ * browser-reserved chords shown as warnings in the capture UI (not a deny
+ * list; users can override intentionally).
  *
  * Exposed as blsi.ShortcutLabel (IIFE — no ES module syntax).
  * Must load after constants.js (needs blsi namespace).
@@ -174,6 +178,47 @@ const ShortcutLabel = (() => {
     return binding.map(chordKey).join(' ');
   }
 
+  // ── Reserved chord list ──────────────────────────────────────────────────────
+  // Chords that browsers or the host OS will intercept before the extension's
+  // keydown handler runs. The capture UI shows a warning when the user tries
+  // to bind one of these, but still allows the save.
+
+  const RESERVED = Object.freeze([
+    // Cross-platform browser shortcuts (Chrome, Firefox, Edge)
+    { key: 'Control|KeyT',       label: 'New tab',           platform: 'any' },
+    { key: 'Control|KeyN',       label: 'New window',        platform: 'any' },
+    { key: 'Control|KeyW',       label: 'Close tab',         platform: 'any' },
+    { key: 'Control|Tab',        label: 'Next tab',          platform: 'any' },
+    { key: 'Control+Shift|KeyT', label: 'Reopen closed tab', platform: 'any' },
+    { key: 'Control+Shift|KeyN', label: 'Incognito window',  platform: 'any' },
+    { key: '|F5',                label: 'Reload',            platform: 'any' },
+    { key: '|F11',               label: 'Fullscreen',        platform: 'any' },
+    { key: '|F12',               label: 'DevTools',          platform: 'any' },
+    // Windows / Linux
+    { key: 'Alt|F4',             label: 'Close window',      platform: 'win' },
+    // macOS
+    { key: 'Meta|KeyQ',          label: 'Quit application',  platform: 'mac' },
+    { key: 'Meta|KeyW',          label: 'Close window',      platform: 'mac' },
+    { key: 'Meta|KeyM',          label: 'Minimize window',   platform: 'mac' },
+    { key: 'Meta|KeyH',          label: 'Hide application',  platform: 'mac' },
+  ]);
+
+  function lookup(chord) {
+    const key = chordKey(chord);
+    if (!key) return null;
+    for (const entry of RESERVED) {
+      if (entry.key !== key) continue;
+      if (entry.platform === 'any') return { label: entry.label };
+      if (entry.platform === 'mac' && IS_MAC) return { label: entry.label };
+      if (entry.platform === 'win' && !IS_MAC) return { label: entry.label };
+    }
+    return null;
+  }
+
+  function isReserved(chord) {
+    return lookup(chord) !== null;
+  }
+
   return {
     CODE_TO_LABEL,
     IS_MAC,
@@ -183,6 +228,9 @@ const ShortcutLabel = (() => {
     bindingLabel,
     chordKey,
     bindingKey,
+    RESERVED,
+    lookup,
+    isReserved,
   };
 })();
 

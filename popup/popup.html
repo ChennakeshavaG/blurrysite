@@ -9,7 +9,6 @@
   <script src="../src/logger.js" defer></script>
   <script src="../src/action_registry.js" defer></script>
   <script src="../src/shortcut_label.js" defer></script>
-  <script src="../src/shortcut_reserved.js" defer></script>
   <script src="../src/storage_manager.js" defer></script>
   <script src="popup_i18n.js" defer></script>
   <script src="popup_configs.js" defer></script>
@@ -45,7 +44,7 @@
         </svg>
       </button>
       <label class="bl-si-toggle bl-si-toggle--master" data-i18n-title="tt_master_toggle" title="Enable or disable Blurry Site">
-        <input type="checkbox" id="enableToggle" />
+        <input type="checkbox" id="enableToggle" aria-describedby="enableLabel" />
         <span class="bl-si-toggle__track"><span class="bl-si-toggle__thumb"></span></span>
       </label>
       <span class="bl-si-toggle__label" id="enableLabel">On</span>
@@ -85,7 +84,7 @@
 
   <!-- ===== BLURRED ELEMENTS ===== -->
   <section class="bl-si-section" id="sectionBlurred">
-    <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
+    <div class="bl-si-section__header bl-si-section__header--static">
       <span data-i18n="section_blurred_elements">Blurred on this page</span>
       <span class="bl-si-list-count" id="blurListCount">0</span>
     </div>
@@ -97,7 +96,7 @@
 
   <!-- ===== KEYBOARD SHORTCUTS (always visible) ===== -->
   <section class="bl-si-section" id="sectionShortcuts">
-    <div class="bl-si-section__header" style="cursor:default;padding:var(--bl-si-spacing-sm) var(--bl-si-spacing-md)">
+    <div class="bl-si-section__header bl-si-section__header--static">
       <span data-i18n="section_shortcuts_title">Keyboard Shortcuts</span>
     </div>
     <div class="bl-si-section__body is-open" id="bodyShortcuts">
@@ -134,10 +133,10 @@
       <svg class="bl-si-section__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <div class="bl-si-section__body" id="bodyRules">
-      <p class="bl-si-rules-hint" style="font-size:10px;color:var(--bl-si-text-dim);margin-bottom:6px" data-i18n="rule_hint">Per-URL settings overrides. First matching rule wins.</p>
+      <p class="bl-si-rules-hint" data-i18n="rule_hint">Per-URL settings overrides. First matching rule wins.</p>
       <ul class="bl-si-rules-list" id="rulesList"></ul>
       <p class="bl-si-rules-empty" id="rulesEmpty" data-i18n="rule_no_rules">No URL rules configured.</p>
-      <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm" id="addRuleBtn" style="margin-top:6px;width:100%" data-i18n="rule_add" data-i18n-title="tt_add_rule" title="Create a site-specific rule">+ Add Site Rule</button>
+      <button class="bl-si-btn bl-si-btn--ghost bl-si-btn--sm bl-si-rules-add-btn" id="addRuleBtn" data-i18n="rule_add" data-i18n-title="tt_add_rule" title="Create a site-specific rule">+ Add Site Rule</button>
     </div>
   </section>
 
@@ -150,7 +149,7 @@
       <div class="bl-si-modal__header" id="scModalTitle" data-i18n="shortcut_modal_title">Customize Shortcut</div>
       <div class="bl-si-modal__body">
         <p class="bl-si-capture__hint" data-i18n="shortcut_modal_prompt">Hold one or more modifiers, then press a key</p>
-        <div class="bl-si-capture bl-si-capture--listening" id="captureDisplay" tabindex="0" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
+        <div class="bl-si-capture bl-si-capture--listening" id="captureDisplay" tabindex="0" role="textbox" aria-label="Shortcut capture zone — hold modifiers then press a key" data-i18n="shortcut_modal_placeholder">Press a key combo...</div>
         <div class="bl-si-capture__warning" id="captureWarning" hidden></div>
       </div>
       <div class="bl-si-modal__footer">
@@ -196,8 +195,8 @@
             <option value="regex" data-i18n="rule_pattern_regex">Advanced (regex)</option>
           </select>
         </div>
-        <hr style="border:none;border-top:1px solid var(--bl-si-border);margin:8px 0" />
-        <p style="font-size:10px;color:var(--bl-si-text-dim);margin-bottom:6px" data-i18n="rule_overrides">Settings overrides for matching URLs</p>
+        <hr class="bl-si-divider" />
+        <p class="bl-si-rules-hint" data-i18n="rule_overrides">Settings overrides for matching URLs</p>
         <div id="ruleOverridesContainer">
           <!-- Populated by Renderer.renderSection() in ruleMode -->
         </div>

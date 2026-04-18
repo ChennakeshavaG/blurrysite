@@ -14,7 +14,7 @@
  */
 
 const BlurrySitePiiDetector = (() => {
-  'use strict';
+  "use strict";
 
   // ── PII patterns ───────────────────────────────────────────────────────────
   // All patterns use the /g flag; _findMatches clones via new RegExp(re.source, re.flags)
@@ -36,14 +36,15 @@ const BlurrySitePiiDetector = (() => {
   //   5. 4+ bare digit sequence  — 17150  account numbers  (catch-all)
   //
   // Intentionally broad: users opt-in knowing years (2024), IDs may fire.
-  const NUMERIC_RE = /[$\u20AC\u00A3\u00A5\u20B9\u20A9\u20BF\u20BA\u20A8\u20B1\u0E3F]\s*\d[\d,.'\u00A0]*|\b\d[\d,.'\u00A0]*\s*(?:USD|EUR|GBP|JPY|INR|BTC|ETH)\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{2,}(?:[ \-\u00A0]\d{2,}){2,}\b|\b\d{4,}\b/g;
+  const NUMERIC_RE =
+    /[$\u20AC\u00A3\u00A5\u20B9\u20A9\u20BF\u20BA\u20A8\u20B1\u0E3F]\s*\d[\d,.'\u00A0]*|\b\d[\d,.'\u00A0]*\s*(?:USD|EUR|GBP|JPY|INR|BTC|ETH)\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{2,}(?:[ \-\u00A0]\d{2,}){2,}\b|\b\d{4,}\b/g;
 
   const PATTERNS = Object.freeze({
-    EMAIL:   { regex: EMAIL_RE,   label: 'email' },
-    NUMERIC: { regex: NUMERIC_RE, label: 'numeric' },
+    EMAIL: { regex: EMAIL_RE, label: "email" },
+    NUMERIC: { regex: NUMERIC_RE, label: "numeric" },
   });
 
-  const PII_ATTR = 'data-bl-si-pii';
+  const PII_ATTR = "data-bl-si-pii";
 
   // ── Conservative mode — label-context filter ───────────────────────────────
   // Only used when types.NUMERIC === 'conservative'. Checks the 100-char text
@@ -51,13 +52,15 @@ const BlurrySitePiiDetector = (() => {
   // price suppressors (negative signal — indicates public pricing, not PII).
   // Decision: suppressor present → skip; Tier A label → hide; neither → skip.
 
-  const SENSITIVE_LABELS = /balance|salary|wages|account|invoice|subtotal|total due|amount due|net pay|credit card|card number|ssn|social security|passport|sort code|routing|iban|swift/i;
-  const PRICE_SUPPRESSORS = /\/mo(?:nth)?|\/yr(?:ear)?|per month|per year|\bcart\b|\bqty\b|\bquantity\b|\bunits\b|\bcount\b|\brating\b|\breviews?\b|\bstars?\b/i;
+  const SENSITIVE_LABELS =
+    /balance|salary|wages|account|invoice|subtotal|total due|amount due|net pay|credit card|card number|ssn|social security|passport|sort code|routing|iban|swift/i;
+  const PRICE_SUPPRESSORS =
+    /\/mo(?:nth)?|\/yr(?:ear)?|per month|per year|\bcart\b|\bqty\b|\bquantity\b|\bunits\b|\bcount\b|\brating\b|\breviews?\b|\bstars?\b/i;
 
   function _hasContextLabel(text, matchIndex) {
     const start = Math.max(0, matchIndex - 100);
-    const end   = Math.min(text.length, matchIndex + 100);
-    const win   = text.slice(start, end);
+    const end = Math.min(text.length, matchIndex + 100);
+    const win = text.slice(start, end);
     if (PRICE_SUPPRESSORS.test(win)) return false;
     return SENSITIVE_LABELS.test(win);
   }
@@ -71,21 +74,23 @@ const BlurrySitePiiDetector = (() => {
   function _isExtensionUI(node) {
     const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     if (!el) return false;
-    const toolbarId = blsi.IDS ? blsi.IDS.PICKER_TOOLBAR : 'bl-si-picker-toolbar';
+    const toolbarId = blsi.IDS
+      ? blsi.IDS.PICKER_TOOLBAR
+      : "bl-si-picker-toolbar";
     return (
       el.id === toolbarId ||
-      el.closest('#' + toolbarId) !== null ||
-      el.closest('.bl-si-toast') !== null ||
-      el.closest('.bl-si-toolbar') !== null ||
-      el.closest('[data-bl-si-zone]') !== null ||
-      el.closest('#bl-si-svg-filters') !== null
+      el.closest("#" + toolbarId) !== null ||
+      el.closest(".bl-si-toast") !== null ||
+      el.closest(".bl-si-toolbar") !== null ||
+      el.closest("[data-bl-si-zone]") !== null ||
+      el.closest("#bl-si-svg-filters") !== null
     );
   }
 
   function _isInsidePiiSpan(node) {
     const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     if (!el) return false;
-    return el.closest('[' + PII_ATTR + ']') !== null;
+    return el.closest("[" + PII_ATTR + "]") !== null;
   }
 
   // ── Core scan helpers ───────────────────────────────────────────────────────
@@ -97,22 +102,30 @@ const BlurrySitePiiDetector = (() => {
   function _findMatches(text, types) {
     const matches = [];
 
-    if (types.EMAIL && text.includes('@')) {
+    if (types.EMAIL && text.includes("@")) {
       const re = new RegExp(EMAIL_RE.source, EMAIL_RE.flags);
       let m;
       while ((m = re.exec(text)) !== null) {
-        matches.push({ start: m.index, end: m.index + m[0].length, type: 'email' });
+        matches.push({
+          start: m.index,
+          end: m.index + m[0].length,
+          type: "email",
+        });
         if (m[0].length === 0) re.lastIndex++;
       }
     }
 
-    if (types.NUMERIC && types.NUMERIC !== 'off') {
+    if (types.NUMERIC && types.NUMERIC !== "off") {
       const re = new RegExp(NUMERIC_RE.source, NUMERIC_RE.flags);
-      const conservative = (types.NUMERIC === 'conservative');
+      const conservative = types.NUMERIC === "conservative";
       let m;
       while ((m = re.exec(text)) !== null) {
         if (!conservative || _hasContextLabel(text, m.index)) {
-          matches.push({ start: m.index, end: m.index + m[0].length, type: 'numeric' });
+          matches.push({
+            start: m.index,
+            end: m.index + m[0].length,
+            type: "numeric",
+          });
         }
         if (m[0].length === 0) re.lastIndex++;
       }
@@ -146,10 +159,10 @@ const BlurrySitePiiDetector = (() => {
       if (start >= text.length) continue;
 
       // textNode → [before][match][after]
-      const afterNode = textNode.splitText(end);   // eslint-disable-line no-unused-vars
+      const afterNode = textNode.splitText(end); // eslint-disable-line no-unused-vars
       const matchNode = textNode.splitText(start);
 
-      const span = document.createElement('span');
+      const span = document.createElement("span");
       span.setAttribute(PII_ATTR, type);
       // NO data-bl-si-blur — PII blur is driven solely by the [data-bl-si-pii]
       // CSS rule, independent of blur-all. blur_engine sweeps never touch these spans.
@@ -176,11 +189,17 @@ const BlurrySitePiiDetector = (() => {
     let anyEnabled = false;
     for (const key of Object.keys(PATTERNS)) {
       const val = types[key];
-      if (key === 'NUMERIC') {
+      if (key === "NUMERIC") {
         // String enum — 'off' is explicitly disabled despite being truthy.
-        if (val && val !== 'off') { enabledTypes[key] = val; anyEnabled = true; }
+        if (val && val !== "off") {
+          enabledTypes[key] = val;
+          anyEnabled = true;
+        }
       } else {
-        if (val) { enabledTypes[key] = true; anyEnabled = true; }
+        if (val) {
+          enabledTypes[key] = true;
+          anyEnabled = true;
+        }
       }
     }
     if (!anyEnabled) return 0;
@@ -188,7 +207,12 @@ const BlurrySitePiiDetector = (() => {
     _activeTypes = enabledTypes;
     let total = 0;
 
-    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null, false);
+    const walker = document.createTreeWalker(
+      rootEl,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false,
+    );
     const nodes = [];
     let node;
     while ((node = walker.nextNode())) nodes.push(node);
@@ -211,7 +235,7 @@ const BlurrySitePiiDetector = (() => {
    */
   function clear(rootEl) {
     if (!rootEl) return;
-    const spans = rootEl.querySelectorAll('[' + PII_ATTR + ']');
+    const spans = rootEl.querySelectorAll("[" + PII_ATTR + "]");
     for (const span of spans) {
       const parent = span.parentNode;
       if (!parent) continue;
@@ -232,7 +256,7 @@ const BlurrySitePiiDetector = (() => {
 
     _observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        if (mutation.type !== 'childList') continue;
+        if (mutation.type !== "childList") continue;
         for (const node of mutation.addedNodes) {
           if (node.nodeType === Node.TEXT_NODE) {
             if (_isExtensionUI(node) || _isInsidePiiSpan(node)) continue;
@@ -260,9 +284,13 @@ const BlurrySitePiiDetector = (() => {
     }
   }
 
-  function getMatchCount() { return _matchCount; }
+  function getMatchCount() {
+    return _matchCount;
+  }
 
-  function getPatterns() { return PATTERNS; }
+  function getPatterns() {
+    return PATTERNS;
+  }
 
   return Object.freeze({
     scan,

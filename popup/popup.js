@@ -388,8 +388,14 @@
     // When disabled, hide all controls except the header toggle.
     if (settings.ENABLED) {
       document.body.removeAttribute('data-disabled');
+      document.body.style.height = '';
     } else {
       document.body.setAttribute('data-disabled', '');
+      // Firefox popup sizing samples body dimensions after DOM mutations (MDN).
+      // Explicitly set body height to the header's rendered height so Firefox
+      // always measures the correct size even if sticky collapse occurs.
+      const header = document.querySelector('.bl-si-header');
+      if (header) document.body.style.height = header.offsetHeight + 'px';
     }
 
     renderBlurCount(pageBlurred);
@@ -467,6 +473,7 @@
     ui.blurAllBtn.addEventListener('click', async () => {
       if (!currentHost) return;
       ui.blurAllBtn.disabled = true;
+      ui.blurAllBtn.dataset.loading = '1';
       try {
         const newState = !Store.getCachedBlurState(currentHost);
         await Store.saveBlurState(currentHost, newState);
@@ -474,8 +481,10 @@
       } catch (err) {
         console.error('[BlurrySite popup] saveBlurState:', err);
         showToast(I18n.t('toast_failed_toggle_blur'));
+      } finally {
+        ui.blurAllBtn.disabled = false;
+        delete ui.blurAllBtn.dataset.loading;
       }
-      ui.blurAllBtn.disabled = false;
       showToast(I18n.t('toast_blur_all'));
     });
 
@@ -754,7 +763,7 @@
       }
 
       // Known browser-reserved chord.
-      const reserved = blsi.ShortcutReserved && blsi.ShortcutReserved.lookup(candidate);
+      const reserved = blsi.ShortcutLabel.lookup(candidate);
       if (reserved) {
         notes.push('Overrides a browser shortcut: ' + reserved.label + '. The browser key will no longer work on pages where this extension is active.');
       }

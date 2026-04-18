@@ -71,6 +71,9 @@
   /* Button states */
   --bl-si-btn-blur-active:    #22c55e;
   --bl-si-btn-blur-inactive:  var(--bl-si-frost-bg);
+
+  /* Scrollbar */
+  --bl-si-scrollbar-thumb:    rgba(148, 163, 184, 0.2);
 }
 
 /* ---------- Light Mode ---------- */
@@ -86,6 +89,7 @@
   --bl-si-frost-blur:      16px;
   --bl-si-frost-border:    rgba(255, 255, 255, 0.6);
   --bl-si-frost-shadow:    0 4px 16px rgba(0, 0, 0, 0.06);
+  --bl-si-scrollbar-thumb: rgba(100, 116, 139, 0.25);
 }
 
 /* ---------- Reset & Base ---------- */
@@ -94,16 +98,15 @@
 html {
   font-size: var(--bl-si-font-size-base);
   background: var(--bl-si-bg); /* Solid base behind everything */
-  width: var(--bl-si-popup-width);
+  overflow: hidden; /* Clip any overflow so fixed/absolute elements don't widen the popup window */
 }
 
 body {
-  width: 100%;
+  width: var(--bl-si-popup-width); /* MDN: Firefox uses body (not html) for popup sizing in strict-mode docs */
   min-height: 200px;
   max-height: 600px;
   overflow-y: scroll;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
   background: transparent; /* Let .bl-si-bg blobs show through for frosted glass effect */
   color: var(--bl-si-text);
   font-family: var(--bl-si-font);
@@ -120,7 +123,7 @@ button { cursor: pointer; font-family: inherit; }
 /* ---------- Scrollbar ---------- */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--bl-si-scrollbar-thumb, rgba(148, 163, 184, 0.2)); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bl-si-accent); }
 
 /* ---------- Dynamic Background ---------- */
@@ -370,11 +373,17 @@ button { cursor: pointer; font-family: inherit; }
   border-color: var(--bl-si-btn-blur-active) !important;
   color: #fff !important;
 }
+.bl-si-actions__btn--blur[data-loading] { opacity: 0.6; }
 
 .bl-si-actions__btn--clear:disabled {
   opacity: 0.3;
   cursor: not-allowed !important;
   transform: none !important;
+}
+.bl-si-actions__btn--clear:disabled:hover {
+  background: initial;
+  border-color: initial;
+  box-shadow: none;
 }
 
 .bl-si-actions__btn--picker[data-active="true"] {
@@ -463,6 +472,7 @@ button { cursor: pointer; font-family: inherit; }
 
 .bl-si-section__header:hover { opacity: 0.85; }
 .bl-si-section__header:focus-visible { outline: 2px solid var(--bl-si-accent); outline-offset: 2px; }
+.bl-si-section__header--static { cursor: default; padding: var(--bl-si-spacing-sm) var(--bl-si-spacing-md); }
 
 .bl-si-section__header-left {
   display: flex;
@@ -852,7 +862,7 @@ kbd {
   letter-spacing: 0.5px;
 }
 
-.bl-si-modal__body { padding: 12px 14px; overflow: hidden; }
+.bl-si-modal__body { padding: 12px 14px; overflow: visible; }
 .bl-si-modal__body .bl-si-input { box-sizing: border-box; width: 100%; }
 
 .bl-si-modal__footer {
@@ -920,7 +930,7 @@ kbd {
 .bl-si-capture__warning {
   margin-top: 10px;
   padding: 6px 9px;
-  font-size: 11px;
+  font-size: var(--bl-si-font-size-xs);
   line-height: 1.4;
   color: var(--bl-si-warning, #f59e0b);
   background: rgba(245, 158, 11, 0.08);
@@ -1002,6 +1012,13 @@ kbd {
 .bl-si-rules-list { padding: 0; margin: 0; }
 .bl-si-rules-empty { font-size: var(--bl-si-font-size-sm); color: var(--bl-si-text-dim); text-align: center; padding: 8px 0; display: none; }
 .bl-si-rules-empty.is-visible { display: block; }
+.bl-si-rules-hint {
+  font-size: var(--bl-si-font-size-xs);
+  color: var(--bl-si-text-dim);
+  margin-bottom: 6px;
+}
+.bl-si-rules-add-btn { margin-top: 6px; width: 100%; }
+.bl-si-divider { border: none; border-top: 1px solid var(--bl-si-border); margin: 8px 0; }
 
 .bl-si-rule-item {
   display: flex;
@@ -1074,6 +1091,17 @@ kbd {
   text-overflow: ellipsis;
 }
 
+.bl-si-blur-item__name {
+  font-weight: 500;
+  font-size: var(--bl-si-font-size-xs);
+  color: var(--bl-si-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 40%;
+}
+
 .bl-si-blur-item__remove {
   background: none;
   border: none;
@@ -1082,6 +1110,8 @@ kbd {
   line-height: 1;
   padding: 0 2px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: color 150ms ease;
 }
 
 .bl-si-blur-item__remove:hover { color: var(--bl-si-danger); }
@@ -1158,17 +1188,21 @@ kbd {
 }
 
 .bl-si-footer__debug:hover { color: var(--bl-si-text); background: rgba(255,255,255,0.06); }
-.bl-si-footer__debug[data-active="true"] { color: var(--bl-si-accent, #4ade80); }
-.bl-si-footer__debug[data-active="true"]:hover { color: var(--bl-si-accent, #4ade80); }
+.bl-si-footer__debug[data-active="true"] { color: var(--bl-si-accent); }
+.bl-si-footer__debug[data-active="true"]:hover { color: var(--bl-si-accent); }
 
 /* ---------- Disabled state: only the header is visible ---------- */
 body[data-disabled] {
+  height: auto;
   min-height: auto;
   max-height: none;
-  overflow: hidden;
+  overflow-y: auto;
 }
 body[data-disabled] > *:not(.bl-si-header) {
   display: none;
+}
+body[data-disabled] .bl-si-header {
+  position: relative;
 }
 
 /* ---------- Reduced Motion ---------- */

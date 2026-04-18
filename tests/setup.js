@@ -28,9 +28,8 @@ require('../src/constants.js');
 // via blsi.Actions.
 require('../src/action_registry.js');
 
-// ─── Load shortcut label + reserved helpers ──────────────────────────────────
+// ─── Load shortcut label (includes reserved chord list) ─────────────────────
 require('../src/shortcut_label.js');
-require('../src/shortcut_reserved.js');
 
 // ─── Chrome Extension API mock ────────────────────────────────────────────────
 

@@ -26,8 +26,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `REVEAL_DFS_MAX_DEPTH`, `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; everything else gated. `scope(name)` returns a tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
-| `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. |
-| `src/shortcut_reserved.js` | `blsi.ShortcutReserved` | Minimal reserved-chord warning list (~12 entries). `isReserved(chord)`, `lookup(chord)`, `RESERVED`. Warning only — capture UI allows save regardless. |
+| `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `blsi.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
@@ -43,7 +42,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → shortcut_reserved → url_matcher → selector_utils → storage_manager → tab_privacy → pii_detector → blur_engine → blur_timer → auto_blur → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_manager → tab_privacy → pii_detector → blur_engine → blur_timer → auto_blur → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -209,7 +208,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 221 unit tests, fast
+npm run test:unit          # 535 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -289,3 +288,8 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | Reveal may strip element background color | `data-bl-si-reveal` sets `background-color: transparent` to cancel redacted mode; in gaussian/frosted, this removes legitimate backgrounds during temporary reveal | Acceptable — reveal is temporary (hover/click) |
 | Hover reveal and click reveal work inside shadow roots; picker does not | `reveal_controller` uses `event.composedPath()[0]` to pierce shadow DOM retargeting — reveal now reaches elements inside shadow roots. `picker` still uses `event.target` and cannot reach inside shadow roots. | Hover/click reveal: fixed. Picker: Phase 2 |
 | `isBlurred()` returns false for alwaysBlur elements inside shadow roots | `isBlurAllActive()` checks `document.head` only; elements blurred by CSS injected into a shadow root are not detected. Picker can't reach them anyway until Phase 2. | Phase 2 |
+| Zone overlays misalign on pages with CSS `transform` on ancestor elements | `position:absolute` coordinate space anchors to the nearest transformed ancestor, not the document root — CSS spec behaviour | Known limitation — `position:fixed` screen-anchor zones are unaffected; page-anchor zones may appear offset on transform-heavy pages (rare) |
+| Picker cannot reach into iframes | Picker uses `event.target` and is guarded to main frame only (`IS_MAIN_FRAME`) — zone drawing cannot cross frame boundaries | Phase 2 |
+| Keyboard shortcuts don't fire when focus is inside a cross-origin iframe | Browser delivers keydown to the focused frame; shortcut handler is main-frame only | Phase 2 |
+| Cross-origin iframes with strict `Referrer-Policy` may not blur on initial load | `document.referrer` is empty → `_topHostname` starts empty → blur-all state unknown until postMessage from main frame arrives | Acceptable — resolves within milliseconds once main frame init completes |
+| SPA navigation inside iframes not tracked | `history.pushState` wrapping and popstate/hashchange listeners are main-frame only — URL rule overrides don't update if the iframe itself does SPA navigation | Phase 2 |
