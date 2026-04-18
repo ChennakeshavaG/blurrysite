@@ -342,6 +342,120 @@ Source module: `src/selection_blur.js` → `blsi.SelectionBlur`
 
 ---
 
+## 21. popup_render.test.js (27 tests) — `tests/unit/popup_render.test.js`
+
+Unit tests for `BlurrySitePopupRender` — stateless DOM renderer for the popup main view sections.
+
+### renderHtbSection — blur-all mode renders 4 type chips
+**Asserts:** When `ACTIVE_MODE='blur-all'`, four `.bl-chip` elements appear in `#bl-htb-chips`.
+**Manual:** Load the popup with `ACTIVE_MODE='blur-all'` in settings, open DevTools, confirm `#bl-htb-chips` has 4 children with class `bl-chip`.
+
+### renderHtbSection — active blur-all chip has bl-chip--active class
+**Asserts:** The chip matching `BLUR_MODE` (e.g. `frosted`) has class `bl-chip--active`.
+**Manual:** With `BLUR_MODE='frosted'`, open popup; the Frosted chip should be highlighted amber.
+
+### renderHtbSection — pick-blur mode renders 3 type chips (no redacted/masked)
+**Asserts:** `ACTIVE_MODE='pick-blur'` yields 3 chips; none have `data-type='redacted'` or `'masked'`; one has `data-type='color'`.
+**Manual:** Switch `ACTIVE_MODE` to `pick-blur` in storage, open popup; confirm 3 chips (Gaussian, Frosted, Color).
+
+### renderHtbSection — pick-blur mode shows a note element below chips
+**Asserts:** A `.bl-htb-note` element exists below chips when `ACTIVE_MODE='pick-blur'`.
+**Manual:** In pick-blur mode, note text "Redacted & Masked available in Blur All mode." appears below chips.
+
+### renderHtbSection — blur-all mode shows no note element
+**Asserts:** No `.bl-htb-note` in blur-all mode.
+**Manual:** In blur-all mode, no note text between chips and summary.
+
+### renderHtbSection — blur-all summary has Covers row listing enabled categories
+**Asserts:** Summary has a Covers row; its value includes keys for enabled categories only.
+**Manual:** With TEXT+TABLE enabled (rest off), Covers row shows "Text, Tables".
+
+### renderHtbSection — summary Strength row uses Moderate label for radius 6
+**Asserts:** A Strength summary row exists with value containing `htb_strength_moderate` for `BLUR_RADIUS=6`.
+**Manual:** With `BLUR_RADIUS=6`, Strength row shows "Moderate (6px)".
+
+### renderHtbSection — summary Strength row uses Subtle label for radius 3
+**Asserts:** Strength row value contains `htb_strength_subtle` for `BLUR_RADIUS=3`.
+**Manual:** Set `BLUR_RADIUS=3` in storage, open popup; Strength shows "Subtle (3px)".
+
+### renderHtbSection — summary Strength row uses Strong label for radius 10
+**Asserts:** Strength row value contains `htb_strength_strong` for `BLUR_RADIUS=10`.
+**Manual:** Set `BLUR_RADIUS=10`, confirm "Strong (10px)".
+
+### renderHtbSection — pick-blur mode has no Covers row in summary
+**Asserts:** No `htb_label_covers` in summary when pick-blur mode.
+**Manual:** In pick-blur mode, summary has no Covers row.
+
+### renderHtbSection — color mode shows Color row and no Strength/Reveal rows
+**Asserts:** `PICK_BLUR_TYPE='color'` shows a Color row; no Strength or Reveal row.
+**Manual:** Set `PICK_BLUR_TYPE='color'`, open popup; only Color row visible in summary.
+
+### renderPiiSection — master toggle is checked when EMAIL is true
+**Asserts:** `#bl-pii-master` is checked when `AUTO_DETECT.EMAIL=true`.
+**Manual:** Set `AUTO_DETECT.EMAIL=true` in storage, open popup; PII toggle appears on.
+
+### renderPiiSection — master toggle is unchecked when both are false
+**Asserts:** `#bl-pii-master` unchecked when both EMAIL and NUMERIC are false.
+**Manual:** Both false in storage; toggle appears off.
+
+### renderPiiSection — renders 4 PII mode chips
+**Asserts:** Four `.bl-chip` elements in `#bl-pii-chips`.
+**Manual:** Open popup; PII section shows Gaussian, Frosted, Redacted, Asterisked chips.
+
+### renderPiiSection — active PII chip has bl-chip--active and bl-chip--sky
+**Asserts:** Chip matching `PII_MODE` has both `bl-chip--active` and `bl-chip--sky`.
+**Manual:** With `PII_MODE='redacted'`, the Redacted chip should be highlighted sky/cyan.
+
+### renderAutomateSection — renders 3 summary rows
+**Asserts:** `#bl-automate-summary` has exactly 3 `.bl-summary-row` children.
+**Manual:** Open popup; Automate section shows Timer, Idle, Tab Switch rows.
+
+### renderAutomateSection — TIMER disabled shows Off value
+**Asserts:** Timer row value is `automate_off` when TIMER.ENABLED=false.
+**Manual:** Disable timer in settings; Timer row shows "Off".
+
+### renderAutomateSection — IDLE enabled with value=5 unit=min shows value and unit key
+**Asserts:** Idle row value is "5 automate_unit_min" when IDLE={VALUE:5, UNIT:'min', ENABLED:true}.
+**Manual:** Enable idle with 5 min; row shows "5 min".
+
+### renderAutomateSection — TAB_SWITCH enabled shows On value
+**Asserts:** Tab Switch row value is `automate_on` when TAB_SWITCH.ENABLED=true.
+**Manual:** Enable tab switch; row shows "On".
+
+### renderModesSection — blur-all active: #bl-mode-active gets blur-all and active classes
+**Asserts:** `#bl-mode-active` has `bl-mode-block--blur-all` and `bl-mode-block--active`.
+**Manual:** With `ACTIVE_MODE='blur-all'`, top block shows Blur All styling with amber accent.
+
+### renderModesSection — blur-all active: #bl-mode-waiting gets pick-blur and waiting classes
+**Asserts:** `#bl-mode-waiting` has `bl-mode-block--pick-blur` and `bl-mode-block--waiting`.
+**Manual:** Bottom dimmed block shows "Pick & Blur" label.
+
+### renderModesSection — pick-blur active: #bl-mode-active gets pick-blur and active classes
+**Asserts:** `#bl-mode-active` has `bl-mode-block--pick-blur` and `bl-mode-block--active` when `ACTIVE_MODE='pick-blur'`.
+**Manual:** With `ACTIVE_MODE='pick-blur'`, top block shows sky accent.
+
+### renderModesSection — blur-all active block contains bl-blur-all-toggle checkbox
+**Asserts:** `#bl-blur-all-toggle` checkbox exists inside `#bl-mode-active` for blur-all mode.
+**Manual:** In blur-all mode, mode block contains a toggle switch.
+
+### renderModesSection — bl-blur-all-toggle is checked when ENABLED=true
+**Asserts:** `#bl-blur-all-toggle` is checked when `ENABLED=true`.
+**Manual:** With blur enabled, toggle appears on.
+
+### renderModesSection — bl-blur-all-toggle is unchecked when ENABLED=false
+**Asserts:** `#bl-blur-all-toggle` is unchecked when `ENABLED=false`.
+**Manual:** With blur disabled (but mode=blur-all), toggle appears off.
+
+### renderModesSection — pick-blur active block contains bl-open-picker button
+**Asserts:** `#bl-open-picker` button exists in `#bl-mode-active` for pick-blur mode.
+**Manual:** In pick-blur mode, "Open Picker" button visible in top block.
+
+### renderModesSection — blur-all active block contains subtitle with type and category count
+**Asserts:** Active blur-all block has `.bl-mode-block__subtitle` whose text includes the blur type name and category count.
+**Manual:** With `BLUR_MODE='gaussian'` and 4 categories enabled, subtitle shows "Gaussian · 4 categories".
+
+---
+
 ## Known Test Quality Issues
 
 | Module | Issue |

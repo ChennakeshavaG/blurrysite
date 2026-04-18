@@ -12,7 +12,7 @@
   <!-- ── HEADER ──────────────────────────────────────────────────────── -->
   <header class="bl-header" id="bl-header">
     <div class="bl-header__brand">
-      <span class="bl-header__dot" aria-hidden="true">●</span>
+      <img class="bl-header__logo" id="bl-logo" src="../icons/icon48.png" alt="" aria-hidden="true" width="20" height="20">
       <span class="bl-header__wordmark">Blurry Site</span>
     </div>
     <span class="bl-header__host" id="bl-host"></span>
@@ -85,6 +85,17 @@
 
   </main>
 
+  <!-- ── OFF-STATE VIEW ────────────────────────────────────────────────── -->
+  <div class="bl-off-view" id="bl-view-off" hidden>
+    <img class="bl-off-view__logo" id="bl-logo-off" src="../icons/icon48.png" alt="" aria-hidden="true" width="48" height="48">
+    <p class="bl-off-view__msg" data-i18n="off_state_message">Blurry Site is off</p>
+    <p class="bl-off-view__hint" data-i18n="off_state_hint">All blur is paused on every site</p>
+    <button class="bl-btn-primary bl-off-view__turn-on" id="bl-turn-on" data-i18n="power_turn_on">Turn On</button>
+  </div>
+
+  <!-- ── TOAST ─────────────────────────────────────────────────────────── -->
+  <div class="bl-toast" id="bl-toast" role="status" aria-live="polite" hidden></div>
+
   <!-- ── SUB-PAGES ───────────────────────────────────────────────────── -->
 
   <div class="bl-subpage" id="bl-view-htb-modify" hidden>
@@ -123,11 +134,12 @@
     <div class="bl-subpage__body" id="bl-site-rules-body"></div>
   </div>
 
-  <!-- Scripts: constants → logger → action_registry → storage_manager → popup -->
+  <!-- Scripts: constants → logger → action_registry → storage_manager → popup_render → popup -->
   <script src="../src/constants.js"></script>
   <script src="../src/logger.js"></script>
   <script src="../src/action_registry.js"></script>
   <script src="../src/storage_manager.js"></script>
+  <script src="popup_render.js"></script>
   <script src="popup.js"></script>
 
 </body>
