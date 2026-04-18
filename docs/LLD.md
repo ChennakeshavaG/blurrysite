@@ -73,7 +73,10 @@ type Settings = { ENABLED?: boolean; BLUR_ALL_ACTIVE: boolean; BLUR_ITEMS: objec
 interface BlurEngine {
   // ── Orchestration ──────────────────────────────────────────────────────────
   handleSite(settings: Settings): Promise<void>;
-  handleDocument(settings: Settings, root: Document | ShadowRoot): Promise<void>;
+  handleMainDocument(settings: Settings): Promise<ShadowRoot[]>;       // main doc only
+  handleShadowRoot(settings: Settings, sr: ShadowRoot): Promise<void>; // one shadow root
+  handleIframe(settings: Settings, iframeEl: HTMLIFrameElement): void; // cross-origin only
+  handleDocument(settings: Settings, root: Document | ShadowRoot): Promise<void>; // thin router
 
   // ── CSS injection (per-root) ───────────────────────────────────────────────
   injectRules(root: Document | ShadowRoot, categories: BlurCategories, mode: BlurMode): void;
@@ -128,7 +131,7 @@ handleSite(settings)   [async, mutex — drops concurrent calls]
   _currentSettings = settings
 
   if ENABLED === false:
-    await handleDocument(settings, document)   // teardown path
+    handleMainDocument(settings)   // fire-and-forget — teardown is sync inside
     _isPageBlurred = false
     _reconcileItems([])
     removeAllZoneOverlays()
@@ -143,43 +146,72 @@ handleSite(settings)   [async, mutex — drops concurrent calls]
   _lastReconcileKey = reconcileKey
 
   if pageWideChanged:
-    await handleDocument(settings, document)   // dispatches shadow roots recursively
+    shadowRoots = await handleMainDocument(settings)
+    if shadowRoots.length:
+      await Promise.all(shadowRoots.map(sr → handleShadowRoot(settings, sr)))
+    // iframes: same-origin self-managed via all_frames:true;
+    //          cross-origin stamped by handleIframe in observeRoot MO callback
 
   _isPageBlurred = isActive
   _reconcileItems(BLUR_ITEMS)
 ```
 
-### handleDocument — per-root active/inactive dispatch
+### handleMainDocument — main document dispatch
+
+```
+handleMainDocument(settings)   [async, returns ShadowRoot[]]
+  active = ENABLED !== false && BLUR_ALL_ACTIVE
+  if !active: teardown(document); return []
+
+  cats = BLUR_CATEGORIES, mode = BLUR_MODE, thorough = THOROUGH_BLUR
+  injectRules(document, cats, mode)
+  document.querySelectorAll('[data-bl-si-blur]').forEach(el →
+    if !el.dataset.blSiPii: delete el.dataset.blSiBlur; _clearMaskAttrs(el)
+  )
+  shadowRoots = stampElements(document, cats, thorough, mode)
+  observeRoot(document)
+  return shadowRoots
+```
+
+### handleShadowRoot — one shadow root dispatch
+
+```
+handleShadowRoot(settings, shadowRoot)   [async, void]
+  active = ENABLED !== false && BLUR_ALL_ACTIVE
+  if !active: teardown(shadowRoot); return
+
+  cats = BLUR_CATEGORIES, mode = BLUR_MODE, thorough = THOROUGH_BLUR
+  injectRules(shadowRoot, cats, mode)
+  shadowRoot.querySelectorAll('[data-bl-si-blur]').forEach(el →
+    if !el.dataset.blSiPii: delete el.dataset.blSiBlur; _clearMaskAttrs(el)
+  )
+  nested = stampElements(shadowRoot, cats, thorough, mode)
+  observeRoot(shadowRoot)
+  if nested.length: await Promise.all(nested.map(sr → handleShadowRoot(settings, sr)))
+```
+
+### handleIframe — cross-origin iframe black-box blur
+
+```
+handleIframe(settings, iframeEl)   [sync, void]
+  if !iframeEl || _isExtensionUI(iframeEl): return
+  active = ENABLED !== false && BLUR_ALL_ACTIVE
+
+  // Try contentDocument — throws SecurityError for cross-origin
+  isSameOrigin = false
+  try: isSameOrigin = !!iframeEl.contentDocument; catch: (swallow)
+  if isSameOrigin: return   // all_frames:true — iframe's own content_script handles it
+
+  if active: iframeEl.dataset.blSiBlur = '1'
+  else: delete iframeEl.dataset.blSiBlur
+```
+
+### handleDocument — thin router (backward compat)
 
 ```
 handleDocument(settings, root)   [async]
-  active = ENABLED !== false && BLUR_ALL_ACTIVE
-
-  ── Inactive path ────────────────────────────────────────────────────────
-  teardown(root)
-  return
-
-  ── Active path ──────────────────────────────────────────────────────────
-  cats = BLUR_CATEGORIES, mode = BLUR_MODE, thorough = THOROUGH_BLUR
-
-  // 1. Inject CSS rules for this root (root.head ?? root)
-  injectRules(root, cats, mode)
-
-  // 2. Clear stale text-check stamps in this root only
-  //    querySelectorAll('[data-bl-si-blur]') does NOT pierce shadow boundaries —
-  //    shadow root stamps are cleared when we recurse into them.
-  root.querySelectorAll('[data-bl-si-blur]').forEach(el →
-    if !el.dataset.blSiPii: delete el.dataset.blSiBlur; _clearMaskAttrs(el)
-  )
-
-  // 3. Stamp text-check elements + discover shadow roots — ONE querySelectorAll('*') pass
-  shadowRoots = stampElements(root, cats, thorough, mode)
-
-  // 4. Attach MutationObserver for this root (idempotent)
-  observeRoot(root)
-
-  // 5. Recurse into shadow roots in parallel
-  if shadowRoots.length: await Promise.all(shadowRoots.map(sr → handleDocument(settings, sr)))
+  if !root || root === document: return handleMainDocument(settings)
+  if root instanceof ShadowRoot:  return handleShadowRoot(settings, root)
 ```
 
 ### stampElements — stamp + shadow root discovery
@@ -230,7 +262,8 @@ teardown(root)   [sync]
 - `injectRules` / `removeRules` use `root.head ?? root` — works for both document (styles → `<head>`) and shadow roots (no `.head` → styles go directly into the root).
 - CSS custom properties (`--bl-si-radius`, etc.) set on `:root` in the light DOM are inherited into open shadow roots — no extra propagation needed.
 - `isBlurAllActive()` checks `document.head` only. AlwaysBlur elements inside shadow roots are blurred via CSS injected into each shadow root, but `isBlurred()` / `isVisuallyBlurred()` cannot detect this (they are unaware of which root an element lives in). Picker and reveal interactions with shadow-root elements are therefore not supported in Phase 1 (see Known Limitations in `CLAUDE.md`).
-- MO callback guards new shadow hosts with `!_observers.has(sr)` before calling `handleDocument` — prevents re-processing already-active roots on every MO tick.
+- MO callback guards new shadow hosts with `!_observers.has(sr)` before calling `handleShadowRoot` — prevents re-processing already-active roots on every MO tick.
+- MO callback also calls `handleIframe` for dynamically inserted `<iframe>` elements — cross-origin iframes are stamped as blur black-boxes; same-origin iframes are skipped (their own content_script handles blur via `all_frames:true`).
 
 ---
 

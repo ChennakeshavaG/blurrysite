@@ -910,13 +910,19 @@ const BlurEngine = (() => {
           // activated by a prior handleDocument call and don't need re-processing.
           tryBlurTextCheck(node, thorough);
           if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
-            handleDocument(_currentSettings, node.shadowRoot); // fire-and-forget (async)
+            handleShadowRoot(_currentSettings, node.shadowRoot); // fire-and-forget (async)
+          }
+          if (node.tagName === 'IFRAME' && _currentSettings) {
+            handleIframe(_currentSettings, node);
           }
           const children = node.querySelectorAll('*');
           for (let i = 0; i < children.length; i++) {
             tryBlurTextCheck(children[i], thorough);
             if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
-              handleDocument(_currentSettings, children[i].shadowRoot); // fire-and-forget (async)
+              handleShadowRoot(_currentSettings, children[i].shadowRoot); // fire-and-forget (async)
+            }
+            if (children[i].tagName === 'IFRAME' && _currentSettings) {
+              handleIframe(_currentSettings, children[i]);
             }
           }
         }
@@ -967,23 +973,38 @@ const BlurEngine = (() => {
   }
 
   /**
-   * Apply or remove blur for a single root (document or shadow root). Async
-   * so sibling shadow roots can be dispatched in parallel via Promise.all.
-   * Settings-driven: active = ENABLED !== false && BLUR_ALL_ACTIVE.
-   *
-   * Active path:
-   *   injectRules → clear stale stamps → stampElements (returns ShadowRoot[])
-   *   → observeRoot → await Promise.all(shadowRoots.map(handleDocument))
-   *
-   * Inactive path: teardown(root)
-   *
-   * _isPageBlurred is NOT set here — that is handleSite's responsibility so
-   * recursive shadow root calls don't clobber the flag.
+   * Apply or remove blur for the main document only.
+   * Returns discovered ShadowRoot[] so handleSite can dispatch them.
+   * _isPageBlurred is NOT set here — handleSite's responsibility.
    */
-  async function handleDocument(settings, root) {
+  async function handleMainDocument(settings) {
     const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
     if (!active) {
-      teardown(root);
+      teardown(document);
+      return [];
+    }
+
+    const cats = settings.BLUR_CATEGORIES || DEFAULT_CATS;
+    const mode = settings.BLUR_MODE || null;
+    const thorough = !!settings.THOROUGH_BLUR;
+
+    injectRules(document, cats, mode);
+    document.querySelectorAll('[data-bl-si-blur]').forEach(el => {
+      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; _clearMaskAttrs(el); }
+    });
+    const shadowRoots = stampElements(document, cats, thorough, mode);
+    observeRoot(document);
+    return shadowRoots;
+  }
+
+  /**
+   * Apply or remove blur for one shadow root. Recurses into nested shadow roots.
+   * _isPageBlurred is NOT set here — handleSite's responsibility.
+   */
+  async function handleShadowRoot(settings, shadowRoot) {
+    const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
+    if (!active) {
+      teardown(shadowRoot);
       return;
     }
 
@@ -991,36 +1012,45 @@ const BlurEngine = (() => {
     const mode = settings.BLUR_MODE || null;
     const thorough = !!settings.THOROUGH_BLUR;
 
-    // ── 1. Inject CSS rules for this root ────────────────────────────────────
-    // root.head ?? root handles both document (<head>) and shadow roots
-    // (no .head → styles go directly into the root).
-    injectRules(root, cats, mode);
-
-    // ── 2. Clear stale text-check stamps in this root only ───────────────────
-    // querySelectorAll('[data-bl-si-blur]') does NOT pierce shadow boundaries —
-    // intentional: shadow root stamps are cleared when we recurse into them.
-    // PII spans are skipped — they own their blur lifecycle.
-    root.querySelectorAll('[data-bl-si-blur]').forEach(el => {
-      if (!el.dataset.blSiPii) {
-        delete el.dataset.blSiBlur;
-        _clearMaskAttrs(el);
-      }
+    injectRules(shadowRoot, cats, mode);
+    shadowRoot.querySelectorAll('[data-bl-si-blur]').forEach(el => {
+      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; _clearMaskAttrs(el); }
     });
-
-    // ── 3. Stamp text-check elements + discover shadow roots — ONE pass ───────
-    // stampElements returns the ShadowRoot[] collected during its querySelectorAll('*')
-    // traversal. No mid-loop dispatch — caller owns the recursion.
-    const shadowRoots = stampElements(root, cats, thorough, mode);
-
-    // ── 4. Attach MutationObserver for this root ──────────────────────────────
-    observeRoot(root);
-
-    // ── 5. Recurse into discovered shadow roots — parallel for perf ───────────
-    // Each shadow root gets its own injectRules + stamp + observe cycle.
-    // Promise.all lets siblings proceed concurrently instead of serially.
-    if (shadowRoots.length) {
-      await Promise.all(shadowRoots.map(sr => handleDocument(settings, sr)));
+    const nested = stampElements(shadowRoot, cats, thorough, mode);
+    observeRoot(shadowRoot);
+    if (nested.length) {
+      await Promise.all(nested.map(sr => handleShadowRoot(settings, sr)));
     }
+  }
+
+  /**
+   * Stamp or unstamp a cross-origin <iframe> element as a blur black-box.
+   * Same-origin iframes are skipped — all_frames:true gives them their own
+   * content_script that handles blur independently.
+   */
+  function handleIframe(settings, iframeEl) {
+    if (!iframeEl || _isExtensionUI(iframeEl)) return;
+    const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
+
+    let isSameOrigin = false;
+    try { isSameOrigin = !!iframeEl.contentDocument; } catch (_) {}
+    if (isSameOrigin) return;
+
+    if (active) {
+      iframeEl.dataset.blSiBlur = '1';
+    } else {
+      delete iframeEl.dataset.blSiBlur;
+    }
+  }
+
+  /**
+   * Thin router — routes to handleMainDocument or handleShadowRoot.
+   * Kept on the public API for backward compatibility and unit tests.
+   */
+  async function handleDocument(settings, root) {
+    if (!root || root === document) return handleMainDocument(settings);
+    if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot)
+      return handleShadowRoot(settings, root);
   }
 
   /**
@@ -1056,7 +1086,7 @@ const BlurEngine = (() => {
    * Settings must include:
    *   BLUR_ALL_ACTIVE {boolean} — whether blur-all is on for this host
    *   BLUR_ITEMS      {Array}   — per-host blur items (dynamic + sticky)
-   * Both are folded in by the caller (content_script._reconcile) before calling.
+   * Both are folded in by the caller (content_script._syncFromStorage) before calling.
    *
    * Storage reads live in content_script — handleSite is stateless/pure w.r.t.
    * storage. Every caller MUST await — concurrent calls are dropped (mutex).
@@ -1070,7 +1100,7 @@ const BlurEngine = (() => {
 
       // ── Extension disabled — full teardown including items ──────────────────
       if (settings.ENABLED === false) {
-        handleDocument(settings, document);
+        handleMainDocument(settings);
         _isPageBlurred = false;
         _reconcileItems([]);
         removeAllZoneOverlays(); // safety net for orphaned zones
@@ -1091,9 +1121,10 @@ const BlurEngine = (() => {
       _lastReconcileKey = reconcileKey;
 
       if (pageWideChanged) {
-        // handleDocument is async — awaiting it here ensures shadow roots
-        // are fully processed (inject + stamp + observe) before item reconcile.
-        await handleDocument(settings, document);
+        const shadowRoots = await handleMainDocument(settings);
+        if (shadowRoots.length) {
+          await Promise.all(shadowRoots.map(sr => handleShadowRoot(settings, sr)));
+        }
       }
       _isPageBlurred = isActive;
 
@@ -1164,9 +1195,11 @@ const BlurEngine = (() => {
     // Caller must fold BLUR_ALL_ACTIVE and BLUR_ITEMS into settings before calling.
     handleSite,
 
-    // Per-root active/inactive dispatch (async). Public for unit tests;
-    // all production callers go through handleSite.
-    handleDocument,
+    // Per-root dispatch. Public for unit tests; all production callers go through handleSite.
+    handleDocument,       // thin router — backward compat / tests
+    handleMainDocument,   // main document only, returns ShadowRoot[]
+    handleShadowRoot,     // one shadow root, recurses into nested
+    handleIframe,         // cross-origin iframes only
     observeRoot,
     disconnectObserver,
     get isPageBlurred() {

@@ -5,19 +5,14 @@
   "description": "Look behind your back! Is anyone peeking intentionally or glancing by mistake. Or you are in a meeting and afraid of sharing your dog or cat pics or could be something more. Or ever wished to control amount of content you can share. Sometimes the answer would be `Just blur stuff out`. This tool got your back!!! Blur anything you want on a website. Configure and forget...",
   "default_locale": "en",
 
-  "permissions": [
-    "storage",
-    "activeTab",
-    "tabs",
-    "contextMenus"
-  ],
+  "permissions": ["storage", "activeTab", "tabs", "contextMenus"],
 
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "host_permissions": ["<all_urls>"],
 
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"],
+    "service_worker": "background.js",
+    "type": "module"
   },
 
   "content_scripts": [
@@ -29,7 +24,6 @@
         "src/logger.js",
         "src/action_registry.js",
         "src/shortcut_label.js",
-        "src/shortcut_reserved.js",
         "src/url_matcher.js",
         "src/selector_utils.js",
         "src/storage_manager.js",
@@ -47,7 +41,7 @@
       ],
       "css": ["styles/content.css"],
       "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true
     }
   ],
 
@@ -93,10 +87,12 @@
     "128": "icons/icon128.png"
   },
 
-  "web_accessible_resources": [{
-    "resources": ["_locales/*/*.json"],
-    "matches": ["<all_urls>"]
-  }],
+  "web_accessible_resources": [
+    {
+      "resources": ["_locales/*/*.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
 
   "browser_specific_settings": {
     "gecko": {

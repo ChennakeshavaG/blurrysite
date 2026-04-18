@@ -138,6 +138,7 @@ const BlurrySiteReveal = (() => {
 
   function _revealElement(el) {
     if (_isZoneOverlay(el)) {
+      el.style.setProperty('transition', 'backdrop-filter var(--bl-si-transition-duration, 150ms) ease, -webkit-backdrop-filter var(--bl-si-transition-duration, 150ms) ease', 'important');
       el.style.setProperty('backdrop-filter', 'none', 'important');
       el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
     } else {
@@ -229,32 +230,43 @@ const BlurrySiteReveal = (() => {
       : e.target;
     if (!(target instanceof Element)) return;
 
-    const tag = target.tagName.toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || tag === 'select' ||
-        tag === 'button' || target.isContentEditable) return;
-
     const zone = _findZoneAtPoint(e.clientX, e.clientY);
     if (zone) {
-      if (zone === clickRevealedEl) return;
+      if (zone === clickRevealedEl) return; // already revealed — let click act
       dismissClickReveal();
       _revealElement(zone);
       clickRevealedEl = zone;
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
       return;
     }
 
     const blurredEl = findBlurredTarget(target, e.clientX, e.clientY);
-    if (!blurredEl) return;
 
-    if (blurredEl === clickRevealedEl) return;
+    // Click is inside the currently revealed area (the element itself or any
+    // child) — pass through so links navigate, buttons fire, inputs focus.
+    if (clickRevealedEl && (blurredEl === clickRevealedEl ||
+        (clickRevealedEl.contains && clickRevealedEl.contains(target)))) {
+      return;
+    }
 
+    // Click outside any blurred element — dismiss reveal and pass through.
+    if (!blurredEl) {
+      dismissClickReveal();
+      return;
+    }
+
+    // First click on a blurred element — intercept: reveal instead of act.
+    // Listener runs at capture phase so preventDefault() is not yet too late
+    // for links (<a href>) and buttons.
     dismissClickReveal();
     _revealElement(blurredEl);
     clickRevealedEl = blurredEl;
     revealAncestorChain(blurredEl);
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
   }
 
   function onRevealKeydown(e) {
@@ -334,11 +346,11 @@ const BlurrySiteReveal = (() => {
     // handler, so it always reaches us.
     document.addEventListener('mouseover', onRevealMouseOver, true);
     document.addEventListener('mouseout', onRevealMouseOut, true);
-    // Click + keydown stay at bubble phase. At capture, stopPropagation()
-    // would kill the page's own click handlers (React, links, buttons) before
-    // they fire — too aggressive. WhatsApp doesn't stop click propagation for
-    // chat items, only hover events.
-    document.addEventListener('click', onRevealClick);
+    // Capture phase — must run before the target's own handlers so that
+    // preventDefault() is still effective for links and buttons. stopPropagation
+    // is only called when actively intercepting a first-click on a blurred
+    // element; clicks inside already-revealed areas pass through untouched.
+    document.addEventListener('click', onRevealClick, true);
     document.addEventListener('keydown', onRevealKeydown);
     _installed = true;
   }
@@ -347,7 +359,7 @@ const BlurrySiteReveal = (() => {
     if (!_installed) return;
     document.removeEventListener('mouseover', onRevealMouseOver, true);
     document.removeEventListener('mouseout', onRevealMouseOut, true);
-    document.removeEventListener('click', onRevealClick);
+    document.removeEventListener('click', onRevealClick, true);
     document.removeEventListener('keydown', onRevealKeydown);
     clearAll();
     _installed = false;

@@ -41,20 +41,19 @@ Rules:
  1. content_i18n.js       → blsi.ContentI18n (popup/content i18n loader: init, t, currentLang)
  2. logger.js             → blsi.Logger (flow logger; toggle persisted at chrome.storage.local.blsi_debug; cross-context sync via storage.onChanged)
  3. action_registry.js    → blsi.Actions (single source of truth for shortcut-driven actions)
- 4. shortcut_label.js     → blsi.ShortcutLabel (platform-aware label rendering + canonical chord keys)
- 5. shortcut_reserved.js  → blsi.ShortcutReserved (minimal browser-reserved chord warning list)
- 6. url_matcher.js        → blsi.UrlMatcher
- 7. selector_utils.js     → blsi.SelectorUtils
- 8. storage_manager.js    → blsi.Storage
- 9. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
-10. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/observeMutations/stopObserving)
-11. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
-12. blur_timer.js         → blsi.BlurTimer (countdown timer; start/stop/getRemaining/isActive)
-13. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
-14. reveal_controller.js  → blsi.Reveal
-15. shortcut_handler.js   → blsi.Shortcuts
-16. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
-17. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
+ 4. shortcut_label.js     → blsi.ShortcutLabel (platform-aware label rendering + canonical chord keys + reserved chord list)
+ 5. url_matcher.js        → blsi.UrlMatcher
+ 6. selector_utils.js     → blsi.SelectorUtils
+ 7. storage_manager.js    → blsi.Storage
+ 8. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
+ 9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/observeMutations/stopObserving)
+10. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
+11. blur_timer.js         → blsi.BlurTimer (countdown timer; start/stop/getRemaining/isActive)
+12. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
+13. reveal_controller.js  → blsi.Reveal
+14. shortcut_handler.js   → blsi.Shortcuts
+15. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
+16. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
 18. picker.js             → blsi.Picker
 19. content_script.js     → (no global, binds all above)
 ```
@@ -109,14 +108,18 @@ A module may only depend on modules loaded before it.
 - `_structuralTags` is derived from `STRUCTURE.textCheck` and prevents thorough-mode bypass for structural containers (`<div>`, `<section>`, etc.) to avoid nested-blur leaks on hover reveal. `<li>`/`<dt>`/`<dd>` were moved to `STRUCTURE.alwaysBlur` (not textCheck) so CSS injection covers `::marker` pseudo-elements unconditionally — they are no longer in `_structuralTags`.
 
 #### Single orchestration entry point: `handleSite(settings)`
-- `async handleSite(settings)` — one arg: the full resolved settings snapshot. Caller (content_script `_reconcile()`) folds `BLUR_ALL_ACTIVE` and `BLUR_ITEMS` into the settings object before calling. Handles enable / disable / refresh / item diff / extension-disabled teardown in one pass. Safe to call from any path — init, storage onChange, shortcut, picker callback, SPA URL change.
+- `async handleSite(settings)` — one arg: the full resolved settings snapshot. Caller (content_script `_syncFromStorage()`) folds `BLUR_ALL_ACTIVE` and `BLUR_ITEMS` into the settings object before calling. Handles enable / disable / refresh / item diff / extension-disabled teardown in one pass. Safe to call from any path — init, storage onChange, shortcut, picker callback, SPA URL change.
 - `BLUR_ALL_ACTIVE` (boolean) and `BLUR_ITEMS` (array) must be folded into settings by the caller. Engine never reads storage — all data arrives via the settings argument.
-- `handleDocument(settings, root)` — works on any root (`document` OR `shadowRoot`). Settings-driven: active path injects rules + stamps elements + observes; inactive path calls `teardown(root)`. Shadow roots are dispatched immediately during `stampElements` traversal.
-- `teardown(root)` — disconnects observer, removes injected style, clears stamps, recurses into shadow roots. Used by `unblurAll()` (alias: `teardown(document)`) and the inactive path of `handleDocument`.
+- `handleSite` calls `handleMainDocument(settings)` (awaited) to get `shadowRoots[]`, then `Promise.all(shadowRoots.map(sr => handleShadowRoot(settings, sr)))`. Iframes: same-origin are self-managed via `all_frames:true`; cross-origin iframes are stamped by `handleIframe` in the MO callback when dynamically inserted.
+- `handleMainDocument(settings)` — main document only. Active path: injectRules + clear stale stamps + stampElements + observeRoot, returns `ShadowRoot[]`. Inactive path: `teardown(document)`, returns `[]`.
+- `handleShadowRoot(settings, shadowRoot)` — one shadow root. Active path: injectRules + clear stale stamps + stampElements + observeRoot, recurses into nested shadow roots via `Promise.all`. Inactive path: `teardown(shadowRoot)`.
+- `handleIframe(settings, iframeEl)` — cross-origin iframes only. Stamps `data-bl-si-blur='1'` on the `<iframe>` element itself when active (CSS filter blurs the rendered output as an opaque box). Skips same-origin iframes (their own content_script handles blur via `all_frames:true`). Called from the `observeRoot` MO callback when an iframe is dynamically inserted.
+- `handleDocument(settings, root)` — thin router kept for backward compatibility and unit tests. Routes to `handleMainDocument` or `handleShadowRoot` based on root type.
+- `teardown(root)` — disconnects observer, removes injected style, clears stamps, recurses into shadow roots. Used by `unblurAll()` (alias: `teardown(document)`) and the inactive path of `handleMainDocument`/`handleShadowRoot`. The `querySelectorAll('*')` stamp-clearing pass already covers `<iframe>` elements — no separate cleanup needed.
 - `injectRules(root, categories, mode)` — injects a `<style id="bl-si-blur-styles">` into `root.head ?? root`. Stateless — no DOM branch on root type. Calls `removeRules(root)` first (replace semantics).
 - `removeRules(root)` — removes the injected style from `root.head ?? root`.
-- `stampElements(root, categories, thorough, mode, shadowCb)` — single `querySelectorAll('*')` pass; stamps `data-bl-si-blur` and dispatches shadow roots via `shadowCb` in the same loop. Pass `null` for `shadowCb` to skip shadow dispatch.
-- `observeRoot(root)` — attaches a `MutationObserver` to `root.body ?? root`, keyed in `_observers` (WeakMap, auto-GCs with detached shadow roots). Observer is gated by `_pickerActive` and `_isPageBlurred`.
+- `stampElements(root, categories, thorough, mode)` — single `querySelectorAll('*')` pass; stamps `data-bl-si-blur` on text-check elements, returns discovered `ShadowRoot[]`.
+- `observeRoot(root)` — attaches a `MutationObserver` to `root.body ?? root`, keyed in `_observers` (WeakMap, auto-GCs with detached shadow roots). Observer is gated by `_pickerActive` and `_isPageBlurred`. MO callback calls `handleShadowRoot` for new shadow hosts and `handleIframe` for dynamically inserted iframes.
 - Private state: `_isPageBlurred`, `_observers` (WeakMap), `_handling` (mutex), `_dynamicCounter`, `_stickyCounter`, `_pickerActive`, `_currentSettings`, `_activeItems` (Map of currently-applied items by id). Do not introduce parallel state in callers.
 - Internal helpers `applyItem(item)` / `removeItem(item)` are private. `allocateDynamicName()` / `allocateStickyName()` / `resetCounters()` remain public — picker callbacks need them for item naming before writing to storage.
 - Item reconciliation via `_activeItems` Map (keyed by `selector` for dynamic, `id` for sticky). Items in desired but not tracked → `applyItem`; tracked but not in desired → `removeItem`. Counter seeding happens inside `applyItem` — high-water mark from item names, so callers only need `resetCounters()` once on init.
@@ -165,11 +168,7 @@ A module may only depend on modules loaded before it.
 - Mac renders Unicode glyphs (`⌘⇧⌥⌃`) and concatenates without separators; Win/Linux spells out mods (`Ctrl`, `Shift`, `Alt`, `Win`) joined by `+`.
 - `chordKey(chord)` produces the canonical `"<sorted mods>|<code>"` string used for conflict detection. `bindingKey(binding)` joins chord keys with a space for sequence comparison.
 - `CODE_TO_LABEL` is the complete letter/digit/symbol/function/numpad map. Unknown codes fall back to the code string itself.
-
-### shortcut_reserved.js
-- Minimal (~12 entry) list of browser-reserved chords with per-platform filters (`any`, `mac`, `win`). `blsi.ShortcutReserved`.
-- `isReserved(chord)` / `lookup(chord)` match against the current platform only.
-- Not a deny list — capture UI shows a warning but always allows save.
+- `isReserved(chord)` / `lookup(chord)` / `RESERVED` — 14-entry browser-reserved chord hint list with per-platform filters (`any`, `mac`, `win`). Not a deny list — capture UI shows a warning but always allows save.
 
 ### shortcut_handler.js
 - `init(shortcuts, callbacks)` accepts the v2 shape: `{ ACTION_ID: { binding: [{code, mods}] } }`. Multi-chord bindings (length > 1) are skipped in phase 1 with a logger warning.
@@ -200,10 +199,10 @@ A module may only depend on modules loaded before it.
 - Pass `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
 - `Reveal.init({ getMode: () => settings.REVEAL_MODE, isPickerActive: () => isPickerActive })` — pass functions, not values, so reveal state stays consistent without re-init on every settings change.
 - `GET_STATUS` response: `{ isPageBlurred: Engine.isPageBlurred, isPickerActive, blurredCount: document.querySelectorAll('[data-bl-si-blur]').length }`.
-- Async message handlers that need `sendResponse` must `return true` from `handleMessage`. `TOGGLE_BLUR_ALL`, `CLEAR_ALL_BLUR`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` are all async (storage write + `_reconcile()`), so they return `true`.
+- Async message handlers that need `sendResponse` must `return true` from `handleMessage`. `TOGGLE_BLUR_ALL`, `CLEAR_ALL_BLUR`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` are all async (storage write + `_syncFromStorage()`), so they return `true`.
 - `settings.BLUR_CATEGORIES` is `{ TEXT, MEDIA, FORM, TABLE, STRUCTURE }` (UPPER_SNAKE_CASE).
-- **All blur state changes go through `_reconcile()`.** The pattern is: write to Storage, then `await _reconcile()`. This applies to toggle, clear-all, context menu, picker callbacks, settings change, and init. `_reconcile()` reads `getBlurState` + `getBlurItems` from storage and calls `Engine.handleSite({ ...settings, BLUR_ALL_ACTIVE, BLUR_ITEMS })`. Engine never reads storage.
-- **Every `_reconcile()` call site MUST `await`.** The reconciler is async; fire-and-forget invocations let concurrent onChange events interleave two reconciles that corrupt the engine's `_activeItems` Map.
-- `applyState` awaits `_reconcile()` at the end — no per-field branching on categories/mode/thorough/radius. Engine skips the page-wide nuke when nothing structural changed (see `_lastReconcileKey` in blur_engine.js).
+- **All blur state changes go through `_syncFromStorage()`.** The pattern is: write to Storage, then `await _syncFromStorage()`. This applies to toggle, clear-all, context menu, picker callbacks, settings change, and init. `_syncFromStorage()` reads `getBlurState` + `getBlurItems` from storage and calls `Engine.handleSite({ ...settings, BLUR_ALL_ACTIVE, BLUR_ITEMS })`. Engine never reads storage.
+- **Every `_syncFromStorage()` call site MUST `await`.** The reconciler is async; fire-and-forget invocations let concurrent onChange events interleave two reconciles that corrupt the engine's `_activeItems` Map.
+- `applyState` awaits `_syncFromStorage()` at the end — no per-field branching on categories/mode/thorough/radius. Engine skips the page-wide nuke when nothing structural changed (see `_lastReconcileKey` in blur_engine.js).
 - Settings resolution goes through `UrlMatcher.resolveSettings(location.href, globalSettings, rules)` → `applyState(newSettings, prev)` — used by init, `onSettingsChanged`, `onRulesChanged`, and `onUrlChange` (SPA).
-- Storage onChange for `blurred_items` / `blur_all_hosts` collapses to a direct `_reconcile()` call — no diff logic in content_script.
+- Storage onChange for `blurred_items` / `blur_all_hosts` collapses to a direct `_syncFromStorage()` call — no diff logic in content_script.

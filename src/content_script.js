@@ -34,9 +34,10 @@
    * the shortcut handler's escape-key gate, AND the blur engine's observer
    * gate in one call. Any path that deactivates the picker MUST go through
    * this — callers that update only a subset leave the observer silent for
-   * subsequent DOM mutations.
+   * subsequent DOM mutations. No-op in iframes (picker is main-frame only).
    */
   function setPickerActive(active) {
+    if (!IS_MAIN_FRAME) return;
     isPickerActive = active;
     Shortcuts._setPickerActive(active);
     Engine._setPickerActiveForObserver(active);
@@ -44,6 +45,19 @@
 
   /** Hostname used as the storage key for persisted blur items */
   const hostname = location.hostname;
+
+  /** True when running in the top-level document, false inside any iframe */
+  const IS_MAIN_FRAME = window === window.top;
+
+  /**
+   * Top-level page hostname — used exclusively for blur_all_hosts lookup so
+   * cross-origin iframes follow the parent page's blur-all state rather than
+   * their own. Seeded from document.referrer on initial load; updated via
+   * postMessage from the main frame thereafter.
+   */
+  let _topHostname = IS_MAIN_FRAME
+    ? location.hostname
+    : (() => { try { return new URL(document.referrer).hostname; } catch (_) { return ''; } })();
 
   // ─── Module aliases (synchronous — loaded before this script by manifest) ──
 
@@ -57,13 +71,12 @@
   const log = blsi.Logger.scope('content');
 
   /**
-   * Reads the current blur state + items from storage and calls Engine.handleSite()
-   * with the resolved settings. All _reconcile() call sites have been replaced
-   * with this helper — storage is the single source of truth; handleSite is pure.
+   * Reads blur state + items from storage and calls Engine.handleSite() with the
+   * resolved settings. Storage is the single source of truth; handleSite is pure.
    */
-  async function _reconcile() {
+  async function _syncFromStorage() {
     const [isActive, items] = await Promise.all([
-      Store.getBlurState(hostname),
+      Store.getBlurState(_topHostname),  // iframes follow top-level page blur-all state
       Store.getBlurItems(hostname),
     ]);
     await Engine.handleSite({ ...settings, BLUR_ALL_ACTIVE: isActive, BLUR_ITEMS: items });
@@ -83,7 +96,7 @@
       const item = { type: 'dynamic', name, selector };
       log.flow('picker.blur', { name, selector });
       await Store.saveBlurItem(hostname, item);
-      await _reconcile();
+      await _syncFromStorage();
     },
 
     async onUnblur(el) {
@@ -91,7 +104,7 @@
       if (!selector) return;
       log.flow('picker.unblur', { selector });
       await Store.removeBlurItem(hostname, selector);
-      await _reconcile();
+      await _syncFromStorage();
     },
 
     async onStickyBlur(zoneRect) {
@@ -114,14 +127,14 @@
 
       log.flow('picker.stickyBlur', { name, id, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height } });
       await Store.saveBlurItem(hostname, item);
-      await _reconcile();
+      await _syncFromStorage();
       Shortcuts.showToast(name);
     },
 
     async onStickyUnblur(zoneId) {
       log.flow('picker.stickyUnblur', { zoneId });
       await Store.removeBlurItem(hostname, zoneId);
-      await _reconcile();
+      await _syncFromStorage();
     },
 
     onModeChange(mode) {
@@ -155,7 +168,7 @@
       log.flow('trigger.clearAll', { source: 'shortcut', hostname });
       await Store.clearHost(hostname);
       await Store.saveBlurState(hostname, false);
-      await _reconcile();
+      await _syncFromStorage();
     },
     async SCREENSHOT() {
       try {
@@ -207,6 +220,13 @@
     const { type } = message;
     log.flow('msg.in', { type });
 
+    // Iframes don't handle chrome.runtime messages — they receive state via
+    // chrome.storage.onChanged and postMessage from the main frame.
+    if (!IS_MAIN_FRAME) {
+      if (sendResponse) sendResponse({ ok: false, reason: 'iframe' });
+      return false;
+    }
+
     // Fire-token dedup for trigger messages. Check-then-stamp: a fresh stamp
     // means a prior handleMessage call (same tick/ms) already handled this
     // action — drop this one as a duplicate relay.
@@ -230,13 +250,13 @@
 
     switch (type) {
       // ── Toggle blur-all mode ──────────────────────────────────────────────
-      // Write storage, then reconcile DOM via _reconcile().
+      // Write storage first, then sync DOM from storage.
       case MSG.TOGGLE_BLUR_ALL: {
         const newState = !Engine.isPageBlurred;
         log.flow('trigger.toggleBlurAll', { nextState: newState, hostname });
         (async () => {
           await Store.saveBlurState(hostname, newState);
-          await _reconcile();
+          await _syncFromStorage();
           if (sendResponse) sendResponse({ isPageBlurred: newState });
         })();
         return true;
@@ -273,7 +293,7 @@
         (async () => {
           await Store.clearHost(hostname);
           await Store.saveBlurState(hostname, false);
-          await _reconcile();
+          await _syncFromStorage();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -297,7 +317,7 @@
         log.flow('trigger.contextBlur', { name, selector: sel });
         (async () => {
           await Store.saveBlurItem(hostname, item);
-          await _reconcile();
+          await _syncFromStorage();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -330,7 +350,7 @@
         log.flow('trigger.contextUnblur', { selector: sel });
         (async () => {
           await Store.removeBlurItem(hostname, sel);
-          await _reconcile();
+          await _syncFromStorage();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -361,8 +381,8 @@
 
   // ─── Idempotent state application ─────────────────────────────────────────────
   // Thin coordinator — applies resolved settings to CSS vars, shortcuts, picker,
-  // reveal, then awaits _reconcile() to reconcile DOM. Idempotent. Async —
-  // all callers must `await` so onChange events don't start overlapping reconciles.
+  // reveal, then awaits _syncFromStorage() to push storage state to DOM. Idempotent.
+  // Async — all callers must `await` so onChange events don't overlap.
 
   async function applyState(newSettings, prev) {
     const old = prev || settings;
@@ -376,11 +396,13 @@
     // CSS custom properties (cheap, idempotent)
     applySettingsToDom();
 
-    // Shortcuts (init is already idempotent — destroy + re-create)
-    if (settings.ENABLED) {
-      Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
-    } else {
-      Shortcuts.destroy();
+    // Shortcuts — main frame only (iframes don't capture keyboard)
+    if (IS_MAIN_FRAME) {
+      if (settings.ENABLED) {
+        Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
+      } else {
+        Shortcuts.destroy();
+      }
     }
 
     // Picker settings (if active)
@@ -396,11 +418,13 @@
       }
     }
 
-    // Tab privacy (hide title + favicon)
-    if (settings.TAB_PRIVACY && settings.ENABLED) {
-      blsi.TabPrivacy.enable();
-    } else {
-      blsi.TabPrivacy.disable();
+    // Tab privacy — main frame only (tab title is a tab-level concern)
+    if (IS_MAIN_FRAME) {
+      if (settings.TAB_PRIVACY && settings.ENABLED) {
+        blsi.TabPrivacy.enable();
+      } else {
+        blsi.TabPrivacy.disable();
+      }
     }
 
     // Clear stale reveal state on mode change / disable
@@ -408,38 +432,40 @@
       Reveal.clearAll();
     }
 
-    // Delegate blur reconciliation to _reconcile() — reads storage, calls handleSite.
-    await _reconcile();
+    // Delegate blur reconciliation to _syncFromStorage() — reads storage, calls handleSite.
+    await _syncFromStorage();
 
-    // Auto-blur (idle / tab switch)
-    if ((settings.AUTO_BLUR_IDLE || settings.AUTO_BLUR_TAB_SWITCH) && settings.ENABLED) {
-      blsi.AutoBlur.init({
-        idleTimeout: settings.IDLE_TIMEOUT_SECONDS,
-        tabSwitch: settings.AUTO_BLUR_TAB_SWITCH,
-        idle: settings.AUTO_BLUR_IDLE,
-        onIdle: async () => {
-          await Store.saveBlurState(hostname, true);
-          await _reconcile();
-        },
-        onActive: async () => {
-          await Store.saveBlurState(hostname, false);
-          await _reconcile();
-        },
-      });
-    } else {
-      blsi.AutoBlur.destroy();
-    }
-
-    // Blur timer
-    if (settings.BLUR_TIMER_MINUTES > 0 && settings.ENABLED) {
-      if (!blsi.BlurTimer.isActive()) {
-        blsi.BlurTimer.start(settings.BLUR_TIMER_MINUTES, async () => {
-          await Store.saveBlurState(hostname, false);
-          await _reconcile();
+    // Auto-blur + blur timer — main frame only (tab-level concerns; storage writes
+    // use hostname which is the top page's hostname — iframes follow via onChange)
+    if (IS_MAIN_FRAME) {
+      if ((settings.AUTO_BLUR_IDLE || settings.AUTO_BLUR_TAB_SWITCH) && settings.ENABLED) {
+        blsi.AutoBlur.init({
+          idleTimeout: settings.IDLE_TIMEOUT_SECONDS,
+          tabSwitch: settings.AUTO_BLUR_TAB_SWITCH,
+          idle: settings.AUTO_BLUR_IDLE,
+          onIdle: async () => {
+            await Store.saveBlurState(hostname, true);
+            await _syncFromStorage();
+          },
+          onActive: async () => {
+            await Store.saveBlurState(hostname, false);
+            await _syncFromStorage();
+          },
         });
+      } else {
+        blsi.AutoBlur.destroy();
       }
-    } else if (settings.BLUR_TIMER_MINUTES === 0) {
-      blsi.BlurTimer.stop();
+
+      if (settings.BLUR_TIMER_MINUTES > 0 && settings.ENABLED) {
+        if (!blsi.BlurTimer.isActive()) {
+          blsi.BlurTimer.start(settings.BLUR_TIMER_MINUTES, async () => {
+            await Store.saveBlurState(hostname, false);
+            await _syncFromStorage();
+          });
+        }
+      } else if (settings.BLUR_TIMER_MINUTES === 0) {
+        blsi.BlurTimer.stop();
+      }
     }
 
     // PII auto-detection — scan after blur reconciliation so PII spans don't
@@ -481,10 +507,9 @@
       // Storage read failed — use defaults.
     }
 
-    // 2b. Initialize the content-script i18n helper with the user's chosen
-    //     LANGUAGE. Picker toolbar reads from blsi.ContentI18n at build time,
-    //     so this must complete before the picker is ever activated.
-    if (blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
+    // 2b. Initialize the content-script i18n helper — main frame only because
+    //     the picker toolbar (the only consumer) is main-frame only.
+    if (IS_MAIN_FRAME && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
       try { await blsi.ContentI18n.init(globalSettings.LANGUAGE); }
       catch (_e) { /* picker falls back to English literals */ }
     }
@@ -504,9 +529,12 @@
     });
 
     // 6. Track the last right-clicked element for context menu blur/unblur.
-    document.addEventListener('contextmenu', (e) => {
-      lastContextMenuTarget = e.target instanceof Element ? e.target : null;
-    }, true);
+    //    Main frame only — context menu actions are always dispatched to the main frame.
+    if (IS_MAIN_FRAME) {
+      document.addEventListener('contextmenu', (e) => {
+        lastContextMenuTarget = e.target instanceof Element ? e.target : null;
+      }, true);
+    }
 
     // 7. If the extension is disabled, subscribe to changes (so re-enable works)
     //    but skip shortcuts + blur restore.
@@ -518,7 +546,7 @@
     // 8–9. Apply all stored settings — single authoritative call that covers
     //      blur restore, PII scan, AutoBlur, BlurTimer, shortcuts, and CSS vars.
     //      applyState(settings, null): old = prev ?? settings → changedKeys = []
-    //      → logging skipped, every block runs unconditionally. _reconcile() is
+    //      → logging skipped, every block runs unconditionally. _syncFromStorage() is
     //      called inside, so no separate reconcile step is needed.
     Engine.resetCounters();
     await applyState(settings, null);
@@ -526,6 +554,24 @@
     // 10. Subscribe AFTER initial restore so we don't race with cross-tab events
     //     during the cold-start window.
     Store.onChange(handleStorageChange);
+
+    // 11a. Iframes: listen for topHostname updates from the main frame.
+    //      Sets _topHostname when document.referrer was blocked (cross-origin,
+    //      strict referrer policy), then re-syncs blur-all state from storage.
+    if (!IS_MAIN_FRAME) {
+      window.addEventListener('message', (event) => {
+        if (event.source !== window.parent) return;
+        if (!event.data || event.data.type !== 'BLSI_SETTINGS_CHANGED') return;
+        _topHostname = event.data.topHostname || _topHostname;
+        _syncFromStorage();
+      });
+    }
+
+    // 11b. Main frame: broadcast topHostname to all child iframes so they can
+    //      correctly resolve blur-all state even with strict referrer policies.
+    if (IS_MAIN_FRAME) {
+      _broadcastToFrames();
+    }
 
     log.flow('init.done', {
       enabled: settings.ENABLED,
@@ -535,10 +581,24 @@
     });
   }
 
+  // ─── iframe postMessage broadcast ────────────────────────────────────────────
+  // Notifies all direct child iframes that settings may have changed, passing
+  // topHostname so cross-origin iframes can resolve blur-all state correctly
+  // even when document.referrer is blocked by a strict referrer policy.
+
+  function _broadcastToFrames() {
+    for (let i = 0; i < window.frames.length; i++) {
+      try {
+        window.frames[i].postMessage(
+          { type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }, '*'
+        );
+      } catch (_) {}
+    }
+  }
+
   // ─── Storage change subscriber ────────────────────────────────────────────────
   // Routes changes: settings/rules go through applyState for URL-rule resolution;
-  // items/blur-all delegate directly to _reconcile() (reconciler handles diffing
-  // internally). Async — always await the downstream call.
+  // items/blur-all delegate directly to _syncFromStorage(). Async — always await.
 
   async function handleStorageChange(key, newValue) {
     if (!Engine) return;
@@ -551,9 +611,11 @@
         break;
       case 'blurred_items':
       case 'blur_all_hosts':
-        await _reconcile();
+        await _syncFromStorage();
         break;
     }
+    // Notify child iframes so they re-sync with the updated storage state.
+    if (IS_MAIN_FRAME) _broadcastToFrames();
   }
 
   async function onSettingsChanged(newRawSettings) {
@@ -611,25 +673,28 @@
     }
   }
 
-  window.addEventListener('popstate', onUrlChange);
-  window.addEventListener('hashchange', onUrlChange);
+  // SPA URL change detection — main frame only. Iframe-internal navigation is
+  // a Phase 2 concern; for now iframes keep the settings resolved at load time.
+  if (IS_MAIN_FRAME) {
+    window.addEventListener('popstate', onUrlChange);
+    window.addEventListener('hashchange', onUrlChange);
 
-  // Wrap history.pushState/replaceState for SPA frameworks (YouTube, React Router, etc.)
-  // that navigate without firing popstate.
-  // Wrap history methods for SPA detection. Use try-catch so a bug in our
-  // handler never breaks the page's own navigation.
-  const _origPushState = history.pushState;
-  const _origReplaceState = history.replaceState;
-  history.pushState = function() {
-    const result = _origPushState.apply(this, arguments);
-    try { onUrlChange(); } catch (_) {}
-    return result;
-  };
-  history.replaceState = function() {
-    const result = _origReplaceState.apply(this, arguments);
-    try { onUrlChange(); } catch (_) {}
-    return result;
-  };
+    // Wrap history.pushState/replaceState for SPA frameworks (YouTube, React Router, etc.)
+    // that navigate without firing popstate. Use try-catch so a bug in our
+    // handler never breaks the page's own navigation.
+    const _origPushState = history.pushState;
+    const _origReplaceState = history.replaceState;
+    history.pushState = function() {
+      const result = _origPushState.apply(this, arguments);
+      try { onUrlChange(); } catch (_) {}
+      return result;
+    };
+    history.replaceState = function() {
+      const result = _origReplaceState.apply(this, arguments);
+      try { onUrlChange(); } catch (_) {}
+      return result;
+    };
+  }
 
   // ─── DOM-ready guard ──────────────────────────────────────────────────────────
 
