@@ -79,16 +79,17 @@ const BlurrySitePopup = (() => {
     document.getElementById('bl-theme-toggle').addEventListener('click', toggleTheme);
 
     document.getElementById('bl-power').addEventListener('click', async () => {
-      _settings.ENABLED = !_settings.ENABLED;
-      await blsi.Storage.saveSettings(_settings);
+      const next = { ..._settings, ENABLED: !_settings.ENABLED };
+      await blsi.Storage.saveSettings(next);
+      _settings = next;
       renderPowerButton(_settings.ENABLED);
-      // Notify active tab to apply or tear down
+      // Notify active tab to apply or tear down (no-op on chrome:// pages)
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) {
           chrome.tabs.sendMessage(tabs[0].id, {
             type: blsi.POPUP.UPDATE_SETTINGS,
             settings: _settings,
-          });
+          }).catch(() => {});
         }
       });
     });
