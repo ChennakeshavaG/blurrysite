@@ -179,8 +179,8 @@ const Constants = (() => {
     IDLE_TIMEOUT_SECONDS: 300,
 
     AUTO_DETECT: Object.freeze({
-      EMAIL:   false,   // email addresses (local@domain.tld)
-      NUMERIC: 'off',   // 'off' | 'standard' | 'conservative'
+      EMAIL:   false,
+      NUMERIC: false,
     }),
 
     // SHORTCUTS intentionally omitted here — built lazily by buildDefaultSettings()
@@ -371,22 +371,15 @@ const Constants = (() => {
         ? settings.IDLE_TIMEOUT_SECONDS
         : defaults.IDLE_TIMEOUT_SECONDS;
 
-    // AUTO_DETECT: EMAIL is boolean; NUMERIC is 'off'|'standard'|'conservative'
+    // AUTO_DETECT: both EMAIL and NUMERIC are now booleans
     result.AUTO_DETECT = {};
     const ad =
       settings.AUTO_DETECT && typeof settings.AUTO_DETECT === "object"
         ? settings.AUTO_DETECT
         : {};
     for (const key of Object.keys(defaults.AUTO_DETECT)) {
-      if (key === "NUMERIC") {
-        result.AUTO_DETECT[key] =
-          ["off", "standard", "conservative"].includes(ad[key])
-            ? ad[key]
-            : defaults.AUTO_DETECT[key];
-      } else {
-        result.AUTO_DETECT[key] =
-          typeof ad[key] === "boolean" ? ad[key] : defaults.AUTO_DETECT[key];
-      }
+      result.AUTO_DETECT[key] =
+        typeof ad[key] === "boolean" ? ad[key] : defaults.AUTO_DETECT[key];
     }
 
     // BLUR_CATEGORIES: each key must be boolean
