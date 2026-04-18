@@ -66,18 +66,20 @@ A module may only depend on modules loaded before it.
 ## Module-Specific Rules
 
 ### pii_detector.js
-- Two patterns only: `EMAIL` (standard `local@domain.tld`, pre-filtered by `text.includes('@')`) and `NUMERIC` (5 sub-patterns ordered by specificity: currency prefix `$500`, currency code suffix `1234 USD`, comma-grouped thousands `1,234,567`, phone-like groups `111-222-333`, 4+ digit bare `17150`). Do NOT re-add per-type patterns — the single NUMERIC regex is intentionally broad.
-- `EMAIL` is boolean. `NUMERIC` is a string enum: `'off' | 'standard' | 'conservative'`. **Never treat `'off'` as falsy** — it is a truthy string. Always gate with `NUMERIC && NUMERIC !== 'off'`.
-- `scan()` creates `enabledTypes` by normalizing EMAIL to boolean but preserving the NUMERIC string value. `_activeTypes` stores this normalized shape for `observeMutations`.
-- **Conservative mode** (`NUMERIC === 'conservative'`): `_hasContextLabel(text, matchIndex)` scans a 100-char window for Tier A sensitive labels (`balance`, `salary`, `account`, `invoice`, etc.). If a price suppressor (`/month`, `cart`, `qty`, `units`, etc.) is found in the window, the match is skipped regardless of labels. If no label is found, the match is also skipped (conservative = doubt favours not hiding).
-- **Standard mode** (`NUMERIC === 'standard'`): every regex match is hidden — no context check.
-- PII spans carry `[data-bl-si-pii="email"|"numeric"]` **only** — no `[data-bl-si-blur]`. Blur is driven by `[data-bl-si-pii]:not([data-bl-si-reveal])` in `content.css`, fully independent of blur-all state.
-- `scan(rootEl, types)` — `TreeWalker(NodeFilter.SHOW_TEXT)` collects all text nodes first (DOM changes during walk would break the iterator), then processes each. Skips extension UI and already-wrapped nodes.
-- `_wrapTextNode(textNode, matches)` — processes matches right-to-left to preserve offsets across multiple `splitText` calls in the same node.
-- `clear(rootEl)` — removes all `[data-bl-si-pii]` spans, restores text via `replaceChild(textNode)` + `parent.normalize()`. Resets `_matchCount`.
-- `observeMutations(rootEl)` — `MutationObserver` on `childList+subtree`. Requires `scan()` first so `_activeTypes` is set.
-- `types` argument shape matches `settings.AUTO_DETECT` exactly — pass it directly.
-- `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — `reveal_controller` can therefore find and reveal PII spans via hover/click.
+- `EMAIL` is boolean. `NUMERIC` is boolean. Gate with `Boolean(NUMERIC)` — no string enum.
+- `NUMERIC_PROFILE` (`'precise' | 'aggressive'`) is a developer-only constant inside the IIFE. Users only see on/off.
+- **falsePositivesCheck pattern**: each check is `(matchText, text, matchIndex) => boolean`. Return `true` to suppress. Adding a check: (1) write the function, (2) add to `FALSE_POSITIVE_CHECKS.precise` (and optionally `.aggressive`), (3) add tests, (4) update `docs/TEST_VALIDATION.md` and the design spec.
+- `_falsePositivesCheck` runs the active profile's checks. Never put suppression logic directly in `_findMatches`.
+- Active profile checks: `precise` = [isYear, isVersion, isPublicPrice, isCountNoise]; `aggressive` = [isVersion].
+- `isYear` suppresses 4-digit numbers in 1000–2099 (dates, copyright years).
+- `isVersion` suppresses numbers preceded by `v`/`V` or followed by `.digit` (semver build numbers).
+- `isPublicPrice` suppresses matches near `/month`, `/year`, `cart`, `qty`, `quantity`, `units`, `rating`, `reviews`, `stars` (100-char window).
+- `isCountNoise` suppresses matches near `unread`, `notifications`, `messages`, `followers`, `following`, `likes`, `views`, `comments`, `results`, `items`, `members`, `subscribers`, `posts`, `connections` (150-char window).
+- PII spans carry `[data-bl-si-pii="email"|"numeric"]` only — no `[data-bl-si-blur]`. Independent of blur-all.
+- `scan(rootEl, types)` — `TreeWalker(NodeFilter.SHOW_TEXT)` collects all text nodes first, then processes each. Skips extension UI and already-wrapped nodes.
+- `clear(rootEl)` — removes all `[data-bl-si-pii]` spans, restores text, resets `_matchCount`.
+- `observeMutations(rootEl)` — requires `scan()` first so `_activeTypes` is set.
+- `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — reveal_controller can find and reveal PII spans.
 
 ### blur_engine.js
 - `applyBlur` is idempotent — guards via direct `element.dataset.blSiBlur` attribute check, NOT `isBlurred()`. `isBlurred()` is used by picker / context-menu unblur paths to check whether a clicked element has a stored item; those paths intentionally ignore role-only matches because there is no storage entry to remove.

@@ -1,6 +1,6 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-This document maps every unit test to the user-facing behavior it protects. **532 tests across 20 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
+This document maps every unit test to the user-facing behavior it protects. **538 tests across 20 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
 
 ---
 
@@ -76,16 +76,16 @@ Source module: `src/picker.js` → `blsi.Picker`
 
 ---
 
-## 4. pii_detector.test.js (57 tests) — `tests/unit/pii_detector.test.js`
+## 4. pii_detector.test.js (60 tests) — `tests/unit/pii_detector.test.js`
 
 Source module: `src/pii_detector.js` → `blsi.PiiDetector`
 
 | Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
 | EMAIL (5) | `scan(root, ['EMAIL'])` wraps `local@domain.tld` in `[data-bl-si-pii]` span; ignores non-email text; handles multiple emails in one text node; handles emails adjacent to punctuation | Enable email PII toggle | Email addresses visible in screenshots/screenshares |
-| NUMERIC currency prefix (4+1) | `$1,234.56`, `€999`, `£42.00`, `¥10000` wrapped; bare `$` not wrapped | Enable numeric PII (standard) | Currency amounts visible in screenshare |
+| NUMERIC currency prefix (4+1) | `$1,234.56`, `€999`, `£42.00`, `¥10000` wrapped; bare `$` not wrapped | Enable numeric PII | Currency amounts visible in screenshare |
 | NUMERIC currency code (2) | `USD 1,234`, `EUR 500` wrapped; `USD` alone not wrapped | Enable numeric PII | Currency-coded amounts escape detection |
-| NUMERIC 4+ digits (7) | `\d{4,}` pattern: 4-digit numbers wrapped; 3-digit numbers skipped; numbers inside words skipped; phone numbers wrapped; account numbers wrapped; postal codes wrapped; numbers after price-suppressor skipped in conservative mode | Enable numeric PII | Short account numbers (4-digit) not blurred; false negatives on financial data |
+| NUMERIC 4+ digits (7) | `\d{4,}` pattern: 4-digit numbers wrapped; 3-digit numbers skipped; numbers inside words skipped; phone numbers wrapped; account numbers wrapped; postal codes wrapped | Enable numeric PII | Short account numbers (4-digit) not blurred; false negatives on financial data |
 | NUMERIC phone-like groups (6) | `123-456-7890`, `(555) 123-4567`, `+1-800-555-0100`, international formats wrapped | Enable numeric PII | Phone numbers visible in screenshare |
 | PII independence (2) | PII spans carry `[data-bl-si-pii]` only, not `[data-bl-si-blur]`; PII blur active when blur-all is off | PII toggle active, blur-all off | PII content exposed when user uses extension without blur-all |
 | Multi-type/null (3) | `scan(root, ['EMAIL','NUMERIC'])` applies both; `scan(root, null)` applies all active types; `scan(root, [])` is no-op | Auto-detect with multiple types enabled | One PII type silently skipped when multiple enabled |
@@ -93,11 +93,12 @@ Source module: `src/pii_detector.js` → `blsi.PiiDetector`
 | clear() (2) | `clear(root)` unwraps all `[data-bl-si-pii]` spans; restores original text nodes | Disable PII toggle | PII spans linger in DOM after toggle off |
 | getMatchCount / getPatterns (2) | Count increments per match; `getPatterns()` returns object keyed by type with regex | Popup PII count display | Wrong count shown; pattern inspection broken |
 | stopObserving (1) | `stopObserving()` disconnects MutationObserver; new DOM nodes not scanned | Page unload, extension disabled | Memory leak on long-lived pages |
-| Default settings (1) | `AUTO_DETECT.EMAIL = false`, `AUTO_DETECT.NUMERIC = 'off'` by default | Fresh install | PII scanning active without user opting in |
-| NUMERIC 'off' mode (2) | `NUMERIC = 'off'` — no numeric patterns applied even with `scan(root, ['NUMERIC'])` | Numeric mode set to off | Numbers blurred when user explicitly disabled numeric detection |
-| NUMERIC 'standard' mode (4) | All numeric patterns applied broadly; matches wide set of number formats | Enable standard numeric | Financial numbers escape detection |
-| NUMERIC 'conservative' mode (9) | Only numbers near Tier A labels (`balance`, `salary`, `account`, `invoice`) matched; price-suppressor (`/month`, `cart`, `qty`) suppresses match; standalone numbers not matched | Enable conservative numeric | Conservative mode blurs unrelated numbers, or misses labeled financial data |
-| Mode contrast (1) | Conservative mode matches fewer elements than standard on same DOM | Compare mode outputs | User cannot trust mode distinction |
+| Default settings (1) | `AUTO_DETECT.EMAIL = false`, `AUTO_DETECT.NUMERIC = false` by default | Fresh install | PII scanning active without user opting in |
+| Boolean gating (2) | `NUMERIC = true` detects bare 5-digit number; `NUMERIC = false` produces zero numeric spans | Enable / disable numeric PII toggle | Numbers blurred when user disabled numeric detection, or financial numbers escape when enabled |
+| isYear suppression (4) | 4-digit year in 1000–2099 suppressed; 5-digit number not suppressed as year; 4-digit above 2099 detected; 3-digit number below threshold produces no match | Enable numeric PII on pages with dates/years | Copyright years and publication dates blurred unnecessarily |
+| isVersion suppression (4) | Number preceded by lowercase `v` suppressed; preceded by uppercase `V` suppressed; followed by `.digit` suppressed; bare number with no version context detected | Enable numeric PII on pages with version strings | Version numbers blurred; or legitimate financial numbers suppressed |
+| isPublicPrice suppression (4) | `/month` in window suppresses currency amount; `qty` suppresses; `/year` suppresses; no price context → number detected | Enable numeric PII on e-commerce pages | Public pricing blurred on shopping pages; or financial balances missed |
+| isCountNoise suppression (4) | `unread` in window suppresses number; `followers` suppresses; `results` suppresses; no count context → number detected | Enable numeric PII on social/dashboard pages | Unread counts and follower numbers blurred; or invoice totals missed |
 
 ---
 
@@ -268,9 +269,9 @@ Source module: `src/constants.js` → `globalThis.blsi`
 | BLUR_CATEGORIES (3) | Default has all 5 keys (`TEXT`, `MEDIA`, `FORM`, `TABLE`, `STRUCTURE`); all boolean; default values match doc | Fresh install | Category toggle broken for default-off categories |
 | buildDefaultSettings (2) | Returns object with `SHORTCUTS` populated from `blsi.Actions.defaultBindings()`; result is a fresh clone each call | Settings reset, first install | Shortcuts not in default settings; factory reset breaks shortcuts |
 | deepMerge (4) | Nested objects merged recursively; arrays replaced not merged; null source returns target; nested null key handled | Settings partial update | Nested settings key overwritten instead of merged; null key crashes |
-| validateSettings (12) | Migrates legacy `PICKER_MODE: 'sticky'` → `'sticky-page'`; removes unknown keys; coerces wrong types to default; preserves valid shortcuts; rejects invalid modifier; handles empty object; handles null; returns new object (does not mutate); `AUTO_DETECT.NUMERIC` enum validated; `BLUR_RADIUS` clamped to range; `REVEAL_MODE` enum validated; deeply nested unknown keys stripped | Storage read on startup | Bad stored settings crash content_script; legacy settings not migrated |
+| validateSettings (12) | Migrates legacy `PICKER_MODE: 'sticky'` → `'sticky-page'`; removes unknown keys; coerces wrong types to default; preserves valid shortcuts; rejects invalid modifier; handles empty object; handles null; returns new object (does not mutate); `AUTO_DETECT.NUMERIC` coerced to boolean; `BLUR_RADIUS` clamped to range; `REVEAL_MODE` enum validated; deeply nested unknown keys stripped | Storage read on startup | Bad stored settings crash content_script; legacy settings not migrated |
 | Immutability (2) | `DEFAULT_SETTINGS` is frozen at top level; `BLUR_CATEGORIES` sub-object is frozen | (internal integrity) | Runtime mutation of defaults corrupts subsequent fresh installs |
-| Boundary values (11) | `BLUR_RADIUS` min/max; `MAX_PATTERN_LENGTH`; empty string shortcut binding; chord with all mods; chord with no mods; `REVEAL_MODE` all valid enum values; `NUMERIC` all valid enum values; `MODIFIER_CODES` array non-empty; `REVEAL_DFS_MAX_DEPTH` is positive integer | Edge case settings input | Out-of-range values accepted; enum values outside spec accepted |
+| Boundary values (11) | `BLUR_RADIUS` min/max; `MAX_PATTERN_LENGTH`; empty string shortcut binding; chord with all mods; chord with no mods; `REVEAL_MODE` all valid enum values; `NUMERIC` boolean coercion (truthy/falsy); `MODIFIER_CODES` array non-empty; `REVEAL_DFS_MAX_DEPTH` is positive integer | Edge case settings input | Out-of-range values accepted; enum values outside spec accepted |
 
 ---
 

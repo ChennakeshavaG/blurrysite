@@ -31,7 +31,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
 | `src/storage_manager.js` | `blsi.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
-| `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — text-node split approach; wraps matches in `[data-bl-si-pii]` spans with `[data-bl-si-blur]` |
+| `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all |
 | `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
 | `src/blur_timer.js` | `blsi.BlurTimer` | `start(minutes, onExpire)`, `stop()`, `getRemaining()`, `isActive()` — countdown timer that fires `onExpire` when elapsed |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
@@ -146,20 +146,16 @@ Controls automatic PII detection. Same shape everywhere — no flattening needed
 ```js
 settings.AUTO_DETECT = {
   EMAIL:   false,   // boolean — email addresses (local@domain.tld)
-  NUMERIC: 'off',   // 'off' | 'standard' | 'conservative'
+  NUMERIC: false,   // boolean — financial numbers, phone-like groups, currency amounts
 }
 ```
 
 - `EMAIL` is a boolean. Default `false`.
-- `NUMERIC` is a string enum. Default `'off'`.
-  - `'standard'` — broad regex, hides all matched numbers. Best for screen sharing.
-  - `'conservative'` — label-context aware; only hides numbers near Tier A labels (balance, salary, account, invoice, etc.) with no price-suppressor present (/month, cart, qty).
+- `NUMERIC` is a boolean. Default `false`.
 
 Default values live in `src/constants.js` → `DEFAULTS.AUTO_DETECT`.
 
-The popup shows a master toggle (sets `EMAIL=true`/`NUMERIC='standard'` on enable) and a NUMERIC dropdown (`off`/`standard`/`conservative`). The master toggle's `expandKeys` uses `{ key, onValue, offValue }` objects; `popup.js patchManySettings` handles both plain key strings and object entries.
-
-**Gate check** — `'off'` is a truthy string; always use explicit check: `NUMERIC && NUMERIC !== 'off'` rather than `Boolean(NUMERIC)`.
+The master toggle's `expandKeys` sets both `EMAIL` and `NUMERIC` to `true`/`false` atomically.
 
 PII blur is **independent of blur-all**. PII spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`. The `[data-bl-si-pii]:not([data-bl-si-reveal])` CSS rule in `content.css` drives their blur. Enabling PII detection means those spans stay blurred whether or not blur-all is on.
 
@@ -208,7 +204,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 535 unit tests, fast
+npm run test:unit          # 538 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
