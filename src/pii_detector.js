@@ -16,6 +16,11 @@
 const BlurrySitePiiDetector = (() => {
   "use strict";
 
+  // Developer-facing profile switch. 'precise' runs all false-positive checks.
+  // 'aggressive' runs only high-confidence checks (isVersion).
+  // Flip this constant to change strictness — not exposed to users.
+  const NUMERIC_PROFILE = 'precise'; // 'aggressive' | 'precise'
+
   // ── PII patterns ───────────────────────────────────────────────────────────
   // All patterns use the /g flag; _findMatches clones via new RegExp(re.source, re.flags)
   // to reset lastIndex before each call, so patterns are safe to share.
@@ -44,26 +49,59 @@ const BlurrySitePiiDetector = (() => {
     NUMERIC: { regex: NUMERIC_RE, label: "numeric" },
   });
 
-  const PII_ATTR = "data-bl-si-pii";
+  // ── False-positive checks ──────────────────────────────────────────────────
+  // Each check: (matchText, text, matchIndex) => boolean
+  //   return true  → suppress this match (it is a false positive)
+  //   return false → keep this match
+  //
+  // To add a new check:
+  //   1. Write a function following the signature above.
+  //   2. Add it to FALSE_POSITIVE_CHECKS.precise (and optionally .aggressive).
+  //   3. Add unit tests: one true-positive case + one false-positive case.
+  //   4. Update docs/TEST_VALIDATION.md and docs/superpowers/specs/2026-04-18-pii-numeric-false-positives-design.md.
 
-  // ── Conservative mode — label-context filter ───────────────────────────────
-  // Only used when types.NUMERIC === 'conservative'. Checks the 100-char text
-  // window around the match for Tier A sensitive labels (positive signal) and
-  // price suppressors (negative signal — indicates public pricing, not PII).
-  // Decision: suppressor present → skip; Tier A label → hide; neither → skip.
-
-  const SENSITIVE_LABELS =
-    /balance|salary|wages|account|invoice|subtotal|total due|amount due|net pay|credit card|card number|ssn|social security|passport|sort code|routing|iban|swift/i;
-  const PRICE_SUPPRESSORS =
-    /\/mo(?:nth)?|\/yr(?:ear)?|per month|per year|\bcart\b|\bqty\b|\bquantity\b|\bunits\b|\bcount\b|\brating\b|\breviews?\b|\bstars?\b/i;
-
-  function _hasContextLabel(text, matchIndex) {
-    const start = Math.max(0, matchIndex - 100);
-    const end = Math.min(text.length, matchIndex + 100);
-    const win = text.slice(start, end);
-    if (PRICE_SUPPRESSORS.test(win)) return false;
-    return SENSITIVE_LABELS.test(win);
+  function isYear(matchText /*, _text, _index */) {
+    if (!/^\d{4}$/.test(matchText)) return false;
+    const n = Number(matchText);
+    return n >= 1000 && n <= 2099;
   }
+
+  function isVersion(matchText, text, matchIndex) {
+    const before = matchIndex > 0 ? text[matchIndex - 1] : '';
+    if (before === 'v' || before === 'V') return true;
+    const afterIdx = matchIndex + matchText.length;
+    return text[afterIdx] === '.' && /\d/.test(text[afterIdx + 1] || '');
+  }
+
+  const _PUBLIC_PRICE_RE =
+    /\/mo(?:nth)?|\/y(?:r|ear)|per month|per year|\bcart\b|\bqty\b|\bquantity\b|\bunits\b|\bcount\b|\brating\b|\breviews?\b|\bstars?\b/i;
+
+  function isPublicPrice(_matchText, text, matchIndex) {
+    const start = Math.max(0, matchIndex - 100);
+    const end   = Math.min(text.length, matchIndex + 100);
+    return _PUBLIC_PRICE_RE.test(text.slice(start, end));
+  }
+
+  const _COUNT_NOISE_RE =
+    /unread|notifications?|messages?|followers?|following|likes?|views?|comments?|results?|items?|members?|subscribers?|posts?|connections?/i;
+
+  function isCountNoise(_matchText, text, matchIndex) {
+    const start = Math.max(0, matchIndex - 150);
+    const end   = Math.min(text.length, matchIndex + 150);
+    return _COUNT_NOISE_RE.test(text.slice(start, end));
+  }
+
+  const FALSE_POSITIVE_CHECKS = Object.freeze({
+    aggressive: [isVersion],
+    precise:    [isYear, isVersion, isPublicPrice, isCountNoise],
+  });
+
+  function _falsePositivesCheck(matchText, text, matchIndex) {
+    const checks = FALSE_POSITIVE_CHECKS[NUMERIC_PROFILE] || [];
+    return checks.some(fn => fn(matchText, text, matchIndex));
+  }
+
+  const PII_ATTR = "data-bl-si-pii";
 
   let _observer = null;
   let _matchCount = 0;
@@ -115,17 +153,12 @@ const BlurrySitePiiDetector = (() => {
       }
     }
 
-    if (types.NUMERIC && types.NUMERIC !== "off") {
+    if (types.NUMERIC) {
       const re = new RegExp(NUMERIC_RE.source, NUMERIC_RE.flags);
-      const conservative = types.NUMERIC === "conservative";
       let m;
       while ((m = re.exec(text)) !== null) {
-        if (!conservative || _hasContextLabel(text, m.index)) {
-          matches.push({
-            start: m.index,
-            end: m.index + m[0].length,
-            type: "numeric",
-          });
+        if (!_falsePositivesCheck(m[0], text, m.index)) {
+          matches.push({ start: m.index, end: m.index + m[0].length, type: "numeric" });
         }
         if (m[0].length === 0) re.lastIndex++;
       }
@@ -180,7 +213,7 @@ const BlurrySitePiiDetector = (() => {
   /**
    * Scan rootEl for PII text and wrap matches in blur spans.
    * @param {Element} rootEl
-   * @param {Object}  types  — { EMAIL: bool, NUMERIC: 'off'|'standard'|'conservative' }
+   * @param {Object}  types  — { EMAIL: bool, NUMERIC: bool }
    * @returns {number} match count
    */
   function scan(rootEl, types) {
@@ -189,17 +222,10 @@ const BlurrySitePiiDetector = (() => {
     let anyEnabled = false;
     for (const key of Object.keys(PATTERNS)) {
       const val = types[key];
-      if (key === "NUMERIC") {
-        // String enum — 'off' is explicitly disabled despite being truthy.
-        if (val && val !== "off") {
-          enabledTypes[key] = val;
-          anyEnabled = true;
-        }
-      } else {
-        if (val) {
-          enabledTypes[key] = true;
-          anyEnabled = true;
-        }
+      // both EMAIL and NUMERIC are booleans
+      if (val) {
+        enabledTypes[key] = true;
+        anyEnabled = true;
       }
     }
     if (!anyEnabled) return 0;

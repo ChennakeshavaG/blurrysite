@@ -15,7 +15,7 @@
 /* === TEST QUALITY ANNOTATIONS ===
  * COVERS: scan() for EMAIL and NUMERIC types; clear(); getMatchCount(); getPatterns();
  *         stopObserving() safety; PII independence from blur-all; multi-type detection;
- *         NUMERIC modes ('off', 'standard', 'conservative'); phone-like grouping rule;
+ *         NUMERIC boolean mode; falsePositivesCheck chain (isYear, isVersion, isPublicPrice, isCountNoise); phone-like grouping rule;
  *         extension UI exclusion; double-scan idempotency; null/disabled-type guards.
  *
  * REDUNDANT TESTS:
@@ -25,17 +25,12 @@
  *   - "NUMERIC — hyphen-separated phone", "mixed-width space-separated phone",
  *     "space-separated phone", "space-separated credit card" all verify the grouped-
  *     sequence rule with different separators/lengths. Candidate for test.each.
- *   - "NUMERIC 'conservative' — number with Tier A label", "salary label triggers hide",
- *     "account label triggers hide", "invoice label triggers hide" all probe conservative-
- *     mode Tier A label matching with different keywords. Could be a single test.each.
  *
  * OPTIMIZATION OPPORTUNITIES:
  *   - Currency prefix tests (4) — test.each([['$1,234.56','dollar'],['€500','euro'],
  *     ['£250','pound'],['₹50,000','rupee']]) checking toBeGreaterThan(0) each.
  *   - Phone-like grouping tests (4) — test.each with [separator, input, expectedText]
  *     tuples covering hyphen, single-space, mixed-width-space, and card variants.
- *   - Conservative Tier A label tests (4) — test.each([['Balance',94750],['salary',75000],
- *     ['Account','4111111111111111'],['Invoice','#00123456']]) checking count > 0.
  *   - Invalid input tests in other files pattern applies here too: test.each for
  *     start(0)/start(-5) could be mirrored in any future numeric-threshold tests.
  *
@@ -435,124 +430,119 @@ describe('pii_detector.js', () => {
 
   test('all AUTO_DETECT defaults off — scan returns 0', () => {
     document.body.innerHTML = '<p>user@example.com and 17150 and $500</p>';
-    const defaultAutoDetect = { EMAIL: false, NUMERIC: 'off' };
+    const defaultAutoDetect = { EMAIL: false, NUMERIC: false };
     expect(blsi.PiiDetector.scan(document.body, defaultAutoDetect)).toBe(0);
     expect(document.querySelector('[data-bl-si-pii]')).toBeNull();
   });
 
-  // ── NUMERIC mode: 'off' ────────────────────────────────────────────────────
-
-  test("NUMERIC 'off' — no numeric spans created", () => {
-    document.body.innerHTML = '<p>Balance: 94750</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'off' });
-    expect(count).toBe(0);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
-  });
-
-  test("NUMERIC 'off' truthy string does not trigger scan via old some(Boolean) pattern", () => {
-    // 'off' is truthy — verify the module does NOT blur when NUMERIC='off'
-    document.body.innerHTML = '<p>17150 and $500</p>';
-    const count = blsi.PiiDetector.scan(document.body, { EMAIL: false, NUMERIC: 'off' });
-    expect(count).toBe(0);
-  });
-
-  // ── NUMERIC mode: 'standard' ───────────────────────────────────────────────
-
-  test("NUMERIC 'standard' — bare 4+ digit number is hidden", () => {
-    document.body.innerHTML = '<p>17150</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'standard' });
-    expect(count).toBe(1);
+  test('NUMERIC true — bare 5-digit number detected', () => {
+    document.body.innerHTML = '<p>Account: 17150</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('17150');
   });
 
-  test("NUMERIC 'standard' — hides number even with no context label", () => {
-    document.body.innerHTML = '<p>Version 1234 released.</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'standard' });
-    expect(count).toBe(1);
-  });
-
-  test("NUMERIC 'standard' — hides $9.99/month (currency prefix matched)", () => {
-    document.body.innerHTML = '<p>Only $9/month</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'standard' });
-    expect(count).toBe(1);
-  });
-
-  test("NUMERIC 'standard' string — scan runs (not blocked by boolean check)", () => {
-    document.body.innerHTML = '<p>Account: 4111111111111111</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'standard' });
-    expect(count).toBeGreaterThan(0);
-    expect(blsi.PiiDetector.getMatchCount()).toBeGreaterThan(0);
-  });
-
-  // ── NUMERIC mode: 'conservative' ──────────────────────────────────────────
-
-  test("NUMERIC 'conservative' — bare number without label: not hidden", () => {
-    document.body.innerHTML = '<p>17150</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBe(0);
+  test('NUMERIC false — no numeric spans created', () => {
+    document.body.innerHTML = '<p>Account: 17150</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: false })).toBe(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
   });
 
-  // OPTIMIZE: the four Tier A label tests below differ only in label keyword and number; collapse with test.each([['Balance',94750],['salary',75000],['Account','4111111111111111'],['Invoice','#00123456']])
-  test("NUMERIC 'conservative' — number with Tier A label: hidden", () => {
-    document.body.innerHTML = '<p>Balance: 94750</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBe(1);
+  // ── falsePositivesCheck: isYear ────────────────────────────────────────────
+
+  test('isYear — 4-digit year in 1000–2099 is suppressed', () => {
+    // 2024 is a common year, not PII — precise mode suppresses it
+    document.body.innerHTML = '<p>Published in 2024.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
+  });
+
+  test('isYear — 5-digit number is NOT suppressed as a year', () => {
+    document.body.innerHTML = '<p>Account: 20245</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('20245');
+  });
+
+  test('isYear — 4-digit number above 2099 is NOT suppressed', () => {
+    // 9999 is out of the year range — kept as potential PII
+    document.body.innerHTML = '<p>Error code: 9999</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+  });
+
+  test('isYear — 4-digit number below 1000 is NOT suppressed as year', () => {
+    // No 4-digit number < 1000 can match \b\d{4,}\b — this is a safety assertion
+    document.body.innerHTML = '<p>Error code: 999</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+  });
+
+  // ── falsePositivesCheck: isVersion ────────────────────────────────────────
+
+  test('isVersion — number preceded by lowercase v is suppressed', () => {
+    document.body.innerHTML = '<p>Running v17150 build.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
+  });
+
+  test('isVersion — number preceded by uppercase V is suppressed', () => {
+    document.body.innerHTML = '<p>V17150 release notes</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+  });
+
+  test('isVersion — number followed by .digit is suppressed', () => {
+    document.body.innerHTML = '<p>Build 17150.3 deployed.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+  });
+
+  test('isVersion — bare number with no version context is NOT suppressed', () => {
+    // "17150" with space before and space after — not a version
+    document.body.innerHTML = '<p>Account 17150 overdue</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('17150');
+  });
+
+  // ── falsePositivesCheck: isPublicPrice ────────────────────────────────────
+
+  test('isPublicPrice — /month in window suppresses currency amount', () => {
+    document.body.innerHTML = '<p>Only $9/month</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+  });
+
+  test('isPublicPrice — qty in window suppresses number', () => {
+    document.body.innerHTML = '<p>qty: 5000 units</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+  });
+
+  test('isPublicPrice — /year in window suppresses number', () => {
+    document.body.innerHTML = '<p>$94750/year salary package</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+  });
+
+  test('isPublicPrice — no price context: number is detected', () => {
+    document.body.innerHTML = '<p>Account balance: 94750</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('94750');
   });
 
-  // REDUNDANT: same conservative Tier A assertion as "number with Tier A label"; only the label keyword differs
-  test("NUMERIC 'conservative' — salary label triggers hide", () => {
-    document.body.innerHTML = '<p>Your salary of 75000 has been credited.</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBe(1);
+  // ── falsePositivesCheck: isCountNoise ────────────────────────────────────
+
+  test('isCountNoise — "unread" in window suppresses number', () => {
+    document.body.innerHTML = '<p>12345 unread messages</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
   });
 
-  // REDUNDANT: same conservative Tier A assertion as "number with Tier A label"; only the label keyword differs
-  test("NUMERIC 'conservative' — account label triggers hide", () => {
-    document.body.innerHTML = '<p>Account: 4111111111111111</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBeGreaterThan(0);
+  test('isCountNoise — "followers" in window suppresses number', () => {
+    document.body.innerHTML = '<p>10234 followers</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
   });
 
-  // REDUNDANT: same conservative Tier A assertion as "number with Tier A label"; only the label keyword differs
-  test("NUMERIC 'conservative' — invoice label triggers hide", () => {
-    document.body.innerHTML = '<p>Invoice #00123456 due 30 days</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBeGreaterThan(0);
+  test('isCountNoise — "results" in window suppresses number', () => {
+    document.body.innerHTML = '<p>Showing 12345 results</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
   });
 
-  test("NUMERIC 'conservative' — price suppressor prevents hide", () => {
-    // "Balance" label present but "/month" suppressor cancels it
-    document.body.innerHTML = '<p>$9.99/month</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBe(0);
-  });
-
-  test("NUMERIC 'conservative' — qty suppressor prevents hide", () => {
-    document.body.innerHTML = '<p>qty: 5000 units</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBe(0);
-  });
-
-  test("NUMERIC 'conservative' — public version number not hidden", () => {
-    document.body.innerHTML = '<p>Version 2024.1</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(count).toBe(0);
-  });
-
-  // ── Mode contrast: standard vs conservative ────────────────────────────────
-
-  test('standard hides bare 17150; conservative does not (no label)', () => {
-    document.body.innerHTML = '<p>17150</p>';
-    const standardCount = blsi.PiiDetector.scan(document.body, { NUMERIC: 'standard' });
-    expect(standardCount).toBe(1);
-
-    blsi.PiiDetector.clear(document.body);
-    blsi.PiiDetector.stopObserving();
-
-    const conservativeCount = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
-    expect(conservativeCount).toBe(0);
+  test('isCountNoise — no count context: number is detected', () => {
+    document.body.innerHTML = '<p>Invoice total: 12345</p>';
+    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
   });
 
   // MISSING: no test for greedy match trailing punctuation ("5000," — does comma get captured inside span?)
