@@ -299,4 +299,17 @@ describe('renderModesSection', () => {
     BlurrySitePopupRender.renderModesSection(makeSettings({ ACTIVE_MODE: 'pick-blur' }));
     expect(document.getElementById('bl-open-picker')).toBeTruthy();
   });
+
+  test('blur-all active block contains subtitle with type and category count', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({
+      ACTIVE_MODE: 'blur-all',
+      BLUR_MODE: 'gaussian',
+      BLUR_CATEGORIES: { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true },
+    }));
+    const subtitle = document.querySelector('#bl-mode-active .bl-mode-block__subtitle');
+    expect(subtitle).toBeTruthy();
+    // The subtitle contains the chip label key and the category count
+    expect(subtitle.textContent).toContain('htb_chip_gaussian');
+    expect(subtitle.textContent).toContain('4');
+  });
 });
