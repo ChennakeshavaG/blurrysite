@@ -471,8 +471,7 @@
     // PII auto-detection — scan after blur reconciliation so PII spans don't
     // conflict with the blur engine's text-check stamping.
     const anyDetect = settings.AUTO_DETECT && (
-      settings.AUTO_DETECT.EMAIL ||
-      (settings.AUTO_DETECT.NUMERIC && settings.AUTO_DETECT.NUMERIC !== 'off')
+      settings.AUTO_DETECT.EMAIL || Boolean(settings.AUTO_DETECT.NUMERIC)
     );
     if (anyDetect && settings.ENABLED) {
       blsi.PiiDetector.scan(document.body, settings.AUTO_DETECT);

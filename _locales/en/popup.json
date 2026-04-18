@@ -69,12 +69,6 @@
   "detect_pii": "Sensitive Data (PII)",
   "detect_pii_hint": "Automatically blur emails, phone numbers, SSNs, credit cards, and financial figures.",
 
-  "pii_numeric_label": "Numeric Detection",
-  "pii_numeric_hint": "Standard hides all numbers — best for screen sharing. Conservative only hides numbers near sensitive labels like Balance, Salary, or Account.",
-  "pii_numeric_off": "Off",
-  "pii_numeric_standard": "Standard (screen-share safe)",
-  "pii_numeric_conservative": "Conservative (labels only)",
-
   "cat_text": "Text",
   "cat_text_hint": "Headings, paragraphs, links, and inline text.",
   "cat_media": "Images & Video",

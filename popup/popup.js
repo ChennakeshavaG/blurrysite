@@ -214,7 +214,7 @@
 
     // Master toggle with expandKeys: write all sub-keys atomically.
     // Each entry is either a plain key string (value passed through) or an
-    // { key, onValue, offValue } object (for non-boolean sub-keys like NUMERIC).
+    // { key, onValue, offValue } object — used for non-boolean expandKey values.
     const config = Configs.ALL.find(c => c.key === key);
     if (config && config.expandKeys) {
       patchManySettings(config.expandKeys.map(entry => {
