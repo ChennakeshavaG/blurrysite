@@ -290,24 +290,7 @@ Source module: `src/logger.js` → `blsi.Logger`
 
 ---
 
-## 17. popup_i18n.test.js (14 tests) — `tests/unit/popup_i18n.test.js`
-
-Source module: `popup/popup_i18n.js` → `blsi.PopupI18n`
-
-| Group | What it asserts | User trigger | User impact |
-|---|---|---|---|
-| Module exposure (1) | `blsi.PopupI18n` exposed with `init`, `t`, `currentLang` | Popup load | Popup i18n unavailable; all strings broken |
-| Language init (3) | `init('en')` loads English strings; `t('BLUR_ALL')` returns English text; `currentLang` reflects init arg | Popup open with explicit lang | Popup shows wrong language |
-| Auto resolution (4) | `init()` without arg resolves from `chrome.i18n.getUILanguage()`; falls back to `'en'` for unsupported locale; `'zh-CN'` resolved to `'zh_CN'` file variant; partial locale match (`'fr-CA'` → `'fr'`) | Non-English Chrome browser | Popup stays in English for supported locales |
-| Re-init (1) | `init('fr')` after `init('en')` updates `currentLang` and `t()` output | (internal lifecycle) | Language not updated when popup re-initializes |
-| Unknown key (1) | `t('DOES_NOT_EXIST')` returns the key string as fallback; no throw | Missing translation key in new feature | Popup crashes or shows blank on missing key |
-| Warn dedup (2) | Missing key warning logged once per key; not repeated on subsequent `t()` calls | (log hygiene) | Console flooded with repeated missing-key warnings |
-| Interpolation (1) | `t('TIMER_LABEL', { minutes: 5 })` → `'5 minutes'` (placeholder substitution) | Timer display in popup | Popup shows raw `{{minutes}}` placeholder |
-| Fallback caching (1) | Fallback (key-as-string) result cached; `init()` bust clears cache | Re-init after language switch | Stale fallback returned after language change |
-
----
-
-## 18. content_i18n.test.js (11 tests) — `tests/unit/content_i18n.test.js`
+## 17. content_i18n.test.js (11 tests) — `tests/unit/content_i18n.test.js`
 
 Source module: `src/content_i18n.js` → `blsi.ContentI18n`
 
@@ -359,5 +342,5 @@ Source module: `src/selection_blur.js` → `blsi.SelectionBlur`
 | `pii_detector` | NUMERIC regex was `\d{5,}` instead of `\d{4,}` in source — fixed 2026-04-17. Tests were correct; source was wrong. 4-digit account numbers were silently passing through. |
 | `screenshot` | `download does not throw` is a vacuous test — jsdom cannot simulate anchor click behavior. The assertion only verifies the call does not throw, not that a download was initiated. |
 | `screenshot` | `cancelCrop removes the overlay` has no DOM assertion — only verifies no-throw. If `cancelCrop` is a no-op, the test still passes. Needs a `document.querySelector` assertion against the overlay element. |
-| `content_i18n` | Tests 2–7 are structurally identical to `popup_i18n` tests. This is intentional: the two modules have the same public API but different language resolution sources (`navigator.language` vs `chrome.i18n.getUILanguage()`). The duplication is load-bearing. |
+| `content_i18n` | Tests 2–7 cover the same API shape (`init`, `t`, `currentLang`) as the deleted `popup_i18n` tests, but using a different language resolution source (`navigator.language` vs the old `chrome.i18n.getUILanguage()`). |
 | `selector_utils` | The entire class-based selector strategy branch inside `getSelector` (fallback via class name list when no `data-bl-si-id` and no element id) has zero test coverage. Selector correctness in class-heavy SPAs is untested. |
