@@ -60,34 +60,26 @@ const ALLOW_LIST = [
   // wrong layer.
   { file: 'src/picker.js', contains: "_t('" },
 
-  // Popup rewrites the popup title every init via shortcut_modal_title
-  // concatenation — "Change Shortcut: <Action Label>". The string after
-  // the colon comes from action.label (deferred-indefinitely surface per
-  // I18N_PLAN §3.3). The linter shouldn't flag the concatenation target.
-  { file: 'popup/popup.js', contains: 'blsi.Actions.get(actionId).label' },
-
-  // Rule edit/delete buttons render layman 'edit' / 'del' text via
-  // I18n.t('rule_edit_btn') / I18n.t('rule_delete_btn'). Flagged because
-  // the call is on .textContent; the linter has no way to see across the
-  // assignment.  Already i18n'd, allow.
-  { file: 'popup/popup.js', contains: "I18n.t('rule_edit_btn')" },
-  { file: 'popup/popup.js', contains: "I18n.t('rule_delete_btn')" },
-
-  // blur-item remove × button — title set via I18n.t('tt_remove_blur_item').
-  { file: 'popup/popup.js', contains: "I18n.t('tt_remove_blur_item')" },
-
-  // Toast flow logs on/off message — already goes through I18n.t with
-  // ternary branch. Linter sees two string literals.
-  { file: 'popup/popup.js', contains: "I18n.t(next ? 'toast_flow_logs_on'" },
-
   // flashElementIndicator badge text is passed through Picker's _t shim
   // at the call site.
   { file: 'src/picker.js', contains: 'flashElementIndicator(target,' },
 
-  // Version tag prefix — `ui.extVersion.textContent = 'v' + manifest.version`.
-  // The literal 'v' is a version sigil, not user-facing copy. Not worth an
-  // i18n key; the rest of the string comes from manifest.json.
-  { file: 'popup/popup.js', contains: "'v' + manifest.version" },
+  // Version sigil — 'v' prefix is not translatable copy; the rest of the
+  // string comes from the manifest. New popup.js reads via getManifest().
+  { file: 'popup/popup.js', contains: "chrome.runtime.getManifest().version" },
+
+  // New popup scaffold (Plan 1) — aria-label and title attrs are English
+  // stubs. These will gain data-i18n attributes in Plan 2 when the i18n
+  // system is wired into the new popup.
+  { file: 'popup/popup.html', contains: 'aria-label="Toggle theme"' },
+  { file: 'popup/popup.html', contains: 'title="Toggle theme"' },
+  { file: 'popup/popup.html', contains: 'title="Toggle Blurry Site on/off"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Power on/off"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Blur type"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Auto-detect PII on/off"' },
+  { file: 'popup/popup.html', contains: 'aria-label="PII blur mode"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Settings"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Back"' },
 ];
 
 // Patterns whose RHS is an i18n call — always OK.
