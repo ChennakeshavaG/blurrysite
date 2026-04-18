@@ -1,6 +1,6 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-This document maps every unit test to the user-facing behavior it protects. **568 tests across 19 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
+This document maps every unit test to the user-facing behavior it protects. **595 tests across 20 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
 
 ---
 
@@ -76,7 +76,7 @@ Source module: `src/picker.js` → `blsi.Picker`
 
 ---
 
-## 4. pii_detector.test.js (60 tests) — `tests/unit/pii_detector.test.js`
+## 4. pii_detector.test.js (62 tests) — `tests/unit/pii_detector.test.js`
 
 Source module: `src/pii_detector.js` → `blsi.PiiDetector`
 

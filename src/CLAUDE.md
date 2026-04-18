@@ -77,6 +77,7 @@ A module may only depend on modules loaded before it.
 - `isCountNoise` suppresses matches near `unread`, `notifications`, `messages`, `followers`, `following`, `likes`, `views`, `comments`, `results`, `items`, `members`, `subscribers`, `posts`, `connections` (150-char window).
 - PII spans carry `[data-bl-si-pii="email"|"numeric"]` only — no `[data-bl-si-blur]`. Independent of blur-all.
 - `scan(rootEl, types)` — `TreeWalker(NodeFilter.SHOW_TEXT)` collects all text nodes first, then processes each. Skips extension UI and already-wrapped nodes.
+- `_wrapTextNode(textNode, matches)` — processes matches right-to-left so earlier offsets stay valid after each `splitText`. Each match: `splitText(end)` then `splitText(start)` then `replaceChild(span, matchNode)`. Spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`.
 - `clear(rootEl)` — removes all `[data-bl-si-pii]` spans, restores text, resets `_matchCount`.
 - `observeMutations(rootEl)` — requires `scan()` first so `_activeTypes` is set.
 - `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — reveal_controller can find and reveal PII spans.

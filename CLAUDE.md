@@ -233,7 +233,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 538 unit tests, fast
+npm run test:unit          # 595 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
