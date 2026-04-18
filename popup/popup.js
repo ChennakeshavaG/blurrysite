@@ -69,7 +69,7 @@ const BlurrySitePopup = (() => {
 
   // ── Save settings + re-render + notify tab ────────────────────────────────
   async function _saveAndApply(patch) {
-    const next = { ..._settings, ...patch };
+    const next = blsi.deepMerge(_settings, patch);
     await blsi.Storage.saveSettings(next);
     _settings = next;
     BlurrySitePopupRender.renderAll(_settings);
@@ -81,7 +81,7 @@ const BlurrySitePopup = (() => {
         chrome.tabs.sendMessage(tabs[0].id, {
           type: blsi.POPUP.UPDATE_SETTINGS,
           settings: _settings,
-        }).catch(() => {});
+        }, () => { void chrome.runtime.lastError; });
       }
     });
   }
@@ -93,7 +93,8 @@ const BlurrySitePopup = (() => {
       btn.classList.toggle('is-off', !enabled);
       btn.title = enabled ? 'Disable Blurry Site' : 'Enable Blurry Site';
     }
-    document.getElementById('bl-view-main').hidden = !enabled;
+    const mainView = document.getElementById('bl-view-main');
+    if (mainView) mainView.hidden = !enabled;
     const offView = document.getElementById('bl-view-off');
     if (offView) offView.hidden = enabled;
   }
@@ -111,7 +112,8 @@ const BlurrySitePopup = (() => {
     document.getElementById('bl-view-main').hidden = !isMain || !_settings.ENABLED;
     document.getElementById('bl-view-off').hidden   = isMain ? _settings.ENABLED : true;
     for (const id of SUB_VIEWS) {
-      document.getElementById(id).hidden = id !== viewId;
+      const el = document.getElementById(id);
+      if (el) el.hidden = id !== viewId;
     }
   }
 
@@ -166,9 +168,7 @@ const BlurrySitePopup = (() => {
     document.getElementById('bl-pii').addEventListener('change', async (e) => {
       if (e.target.id !== 'bl-pii-master') return;
       const on = e.target.checked;
-      await _saveAndApply({
-        AUTO_DETECT: { ...(_settings.AUTO_DETECT), EMAIL: on, NUMERIC: on },
-      });
+      await _saveAndApply({ AUTO_DETECT: { EMAIL: on, NUMERIC: on } });
       _notifyTab();
     });
 
