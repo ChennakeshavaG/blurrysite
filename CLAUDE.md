@@ -23,7 +23,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `REVEAL_DFS_MAX_DEPTH`, `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()` |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `REVEAL_DFS_MAX_DEPTH`, `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()`. Enums: `REVEAL_MODES`, `BLUR_MODES`, `PICKER_MODES`, `ACTIVE_MODES`, `PICK_BLUR_MODES`, `PII_MODES`, `TIMER_UNITS`, `IDLE_UNITS`, `PATTERN_TYPES`, `SUPPORTED_LANGUAGES`, `CSS`, `IDS` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; everything else gated. `scope(name)` returns a tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
@@ -158,6 +158,35 @@ Default values live in `src/constants.js` → `DEFAULTS.AUTO_DETECT`.
 The master toggle's `expandKeys` sets both `EMAIL` and `NUMERIC` to `true`/`false` atomically.
 
 PII blur is **independent of blur-all**. PII spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`. The `[data-bl-si-pii]:not([data-bl-si-reveal])` CSS rule in `content.css` drives their blur. Enabling PII detection means those spans stay blurred whether or not blur-all is on.
+
+### Settings Shape: Popup redesign keys
+
+New keys added for the popup redesign. Same shape everywhere — no flattening needed.
+
+**`ACTIVE_MODE`** — which top-level mode is active: `'blur-all'` (default) | `'pick-blur'`. Switching modes is destructive: stored blur items for the deactivated mode are deleted from storage. Use `blsi.ACTIVE_MODES` enum.
+
+**`PICK_BLUR_TYPE`** — blur type for Pick & Blur mode: `'gaussian'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'masked'` — those are PII-only types. Use `blsi.PICK_BLUR_MODES` enum.
+
+**`PICK_BLUR_COLOR`** — color for Pick & Blur `'color'` type:
+```js
+settings.PICK_BLUR_COLOR = { HEX: '#000000', OPACITY: 1.0 }
+// HEX: 6-char hex string (validated: must match /^#[0-9a-fA-F]{6}$/)
+// OPACITY: number 0–1 inclusive
+```
+
+**`PII_MODE`** — blur type for auto-detect PII rendering: `'gaussian'` (default) | `'frosted'` | `'redacted'` | `'asterisked'`. Use `blsi.PII_MODES` enum.
+
+**`AUTOMATE`** — automation trigger settings:
+```js
+settings.AUTOMATE = {
+  TIMER:      { VALUE: 0, UNIT: 'min', ENABLED: false },  // VALUE 0–99; UNIT from TIMER_UNITS
+  IDLE:       { VALUE: 5, UNIT: 'min', ENABLED: false },  // VALUE 1–99; UNIT from IDLE_UNITS (no 'hr')
+  TAB_SWITCH: { ENABLED: false },
+}
+```
+- `TIMER.UNIT` accepts `blsi.TIMER_UNITS` (`'sec'` | `'min'` | `'hr'`). `VALUE: 0` means disabled.
+- `IDLE.UNIT` accepts `blsi.IDLE_UNITS` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `VALUE` min is 1.
+- `TAB_SWITCH.ENABLED` is boolean only.
 
 ---
 

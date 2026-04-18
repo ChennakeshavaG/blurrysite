@@ -541,4 +541,257 @@ describe('BlurrySite constants', () => {
     // MISSING: no test for TRANSITION_DURATION boundary values (0, 2000, -1, 2001)
     // MISSING: no test for IDLE_TIMEOUT_SECONDS validation (30 min, 3600 max, out-of-range rejection)
   });
+
+  // ── New popup redesign enums ────────────────────────────────────────────────
+
+  describe('ACTIVE_MODES enum', () => {
+    test('has blur-all and pick-blur values', () => {
+      expect(blsi.ACTIVE_MODES).toEqual({ BLUR_ALL: 'blur-all', PICK_BLUR: 'pick-blur' });
+    });
+    test('is frozen', () => {
+      expect(Object.isFrozen(blsi.ACTIVE_MODES)).toBe(true);
+    });
+  });
+
+  describe('PICK_BLUR_MODES enum', () => {
+    test('has gaussian, frosted, color — no redacted or masked', () => {
+      expect(blsi.PICK_BLUR_MODES).toEqual({
+        GAUSSIAN: 'gaussian',
+        FROSTED: 'frosted',
+        COLOR: 'color',
+      });
+    });
+    test('is frozen', () => {
+      expect(Object.isFrozen(blsi.PICK_BLUR_MODES)).toBe(true);
+    });
+  });
+
+  describe('PII_MODES enum', () => {
+    test('has gaussian, frosted, redacted, asterisked', () => {
+      expect(blsi.PII_MODES).toEqual({
+        GAUSSIAN: 'gaussian',
+        FROSTED: 'frosted',
+        REDACTED: 'redacted',
+        ASTERISKED: 'asterisked',
+      });
+    });
+    test('is frozen', () => {
+      expect(Object.isFrozen(blsi.PII_MODES)).toBe(true);
+    });
+  });
+
+  describe('TIMER_UNITS enum', () => {
+    test('has sec, min, hr', () => {
+      expect(blsi.TIMER_UNITS).toEqual({ SEC: 'sec', MIN: 'min', HR: 'hr' });
+    });
+    test('is frozen', () => {
+      expect(Object.isFrozen(blsi.TIMER_UNITS)).toBe(true);
+    });
+  });
+
+  describe('IDLE_UNITS enum', () => {
+    test('has sec and min only — no hr (Chrome API cap is 3000 s)', () => {
+      expect(blsi.IDLE_UNITS).toEqual({ SEC: 'sec', MIN: 'min' });
+    });
+    test('does not contain hr', () => {
+      expect(blsi.IDLE_UNITS).not.toHaveProperty('HR');
+    });
+    test('is frozen', () => {
+      expect(Object.isFrozen(blsi.IDLE_UNITS)).toBe(true);
+    });
+  });
+
+  // ── New popup redesign DEFAULT_SETTINGS keys ────────────────────────────────
+
+  describe('DEFAULT_SETTINGS — new popup redesign keys', () => {
+    test('ACTIVE_MODE defaults to blur-all', () => {
+      expect(blsi.DEFAULT_SETTINGS.ACTIVE_MODE).toBe('blur-all');
+    });
+
+    test('PICK_BLUR_TYPE defaults to gaussian', () => {
+      expect(blsi.DEFAULT_SETTINGS.PICK_BLUR_TYPE).toBe('gaussian');
+    });
+
+    test('PICK_BLUR_COLOR defaults to opaque black', () => {
+      expect(blsi.DEFAULT_SETTINGS.PICK_BLUR_COLOR).toEqual({ HEX: '#000000', OPACITY: 1.0 });
+    });
+
+    test('PICK_BLUR_COLOR is frozen', () => {
+      expect(Object.isFrozen(blsi.DEFAULT_SETTINGS.PICK_BLUR_COLOR)).toBe(true);
+    });
+
+    test('PII_MODE defaults to gaussian', () => {
+      expect(blsi.DEFAULT_SETTINGS.PII_MODE).toBe('gaussian');
+    });
+
+    test('AUTOMATE has correct default structure', () => {
+      expect(blsi.DEFAULT_SETTINGS.AUTOMATE).toEqual({
+        TIMER: { VALUE: 0, UNIT: 'min', ENABLED: false },
+        IDLE: { VALUE: 5, UNIT: 'min', ENABLED: false },
+        TAB_SWITCH: { ENABLED: false },
+      });
+    });
+
+    test('AUTOMATE is frozen (top-level and nested)', () => {
+      expect(Object.isFrozen(blsi.DEFAULT_SETTINGS.AUTOMATE)).toBe(true);
+      expect(Object.isFrozen(blsi.DEFAULT_SETTINGS.AUTOMATE.TIMER)).toBe(true);
+      expect(Object.isFrozen(blsi.DEFAULT_SETTINGS.AUTOMATE.IDLE)).toBe(true);
+      expect(Object.isFrozen(blsi.DEFAULT_SETTINGS.AUTOMATE.TAB_SWITCH)).toBe(true);
+    });
+
+    test('buildDefaultSettings includes all new keys', () => {
+      const s = blsi.buildDefaultSettings();
+      expect(s).toHaveProperty('ACTIVE_MODE');
+      expect(s).toHaveProperty('PICK_BLUR_TYPE');
+      expect(s).toHaveProperty('PICK_BLUR_COLOR');
+      expect(s).toHaveProperty('PII_MODE');
+      expect(s).toHaveProperty('AUTOMATE');
+    });
+  });
+
+  // ── validateSettings — new popup redesign keys ──────────────────────────────
+
+  describe('validateSettings — new popup redesign keys', () => {
+    function base() { return blsi.buildDefaultSettings(); }
+
+    // ACTIVE_MODE
+    test('ACTIVE_MODE: pick-blur passes through', () => {
+      const r = blsi.validateSettings({ ...base(), ACTIVE_MODE: 'pick-blur' });
+      expect(r.ACTIVE_MODE).toBe('pick-blur');
+    });
+    test('ACTIVE_MODE: invalid value falls back to blur-all', () => {
+      const r = blsi.validateSettings({ ...base(), ACTIVE_MODE: 'unknown' });
+      expect(r.ACTIVE_MODE).toBe('blur-all');
+    });
+    test('ACTIVE_MODE: missing key falls back to default', () => {
+      const s = base(); delete s.ACTIVE_MODE;
+      const r = blsi.validateSettings(s);
+      expect(r.ACTIVE_MODE).toBe('blur-all');
+    });
+
+    // PICK_BLUR_TYPE
+    test('PICK_BLUR_TYPE: color passes through', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_TYPE: 'color' });
+      expect(r.PICK_BLUR_TYPE).toBe('color');
+    });
+    test('PICK_BLUR_TYPE: redacted is rejected (not a Pick & Blur type)', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_TYPE: 'redacted' });
+      expect(r.PICK_BLUR_TYPE).toBe('gaussian');
+    });
+    test('PICK_BLUR_TYPE: masked is rejected', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_TYPE: 'masked' });
+      expect(r.PICK_BLUR_TYPE).toBe('gaussian');
+    });
+
+    // PICK_BLUR_COLOR
+    test('PICK_BLUR_COLOR: valid hex + opacity pass through', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_COLOR: { HEX: '#ff3300', OPACITY: 0.5 } });
+      expect(r.PICK_BLUR_COLOR).toEqual({ HEX: '#ff3300', OPACITY: 0.5 });
+    });
+    test('PICK_BLUR_COLOR: 3-char hex falls back to default hex', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_COLOR: { HEX: '#f30', OPACITY: 1.0 } });
+      expect(r.PICK_BLUR_COLOR.HEX).toBe('#000000');
+    });
+    test('PICK_BLUR_COLOR: named color "red" falls back to default hex', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_COLOR: { HEX: 'red', OPACITY: 1.0 } });
+      expect(r.PICK_BLUR_COLOR.HEX).toBe('#000000');
+    });
+    test('PICK_BLUR_COLOR: opacity > 1 falls back to 1.0', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_COLOR: { HEX: '#ffffff', OPACITY: 1.5 } });
+      expect(r.PICK_BLUR_COLOR.OPACITY).toBe(1.0);
+    });
+    test('PICK_BLUR_COLOR: opacity < 0 falls back to 1.0', () => {
+      const r = blsi.validateSettings({ ...base(), PICK_BLUR_COLOR: { HEX: '#ffffff', OPACITY: -0.1 } });
+      expect(r.PICK_BLUR_COLOR.OPACITY).toBe(1.0);
+    });
+    test('PICK_BLUR_COLOR: missing key falls back to defaults', () => {
+      const s = base(); delete s.PICK_BLUR_COLOR;
+      const r = blsi.validateSettings(s);
+      expect(r.PICK_BLUR_COLOR).toEqual({ HEX: '#000000', OPACITY: 1.0 });
+    });
+
+    // PII_MODE
+    test('PII_MODE: asterisked passes through', () => {
+      const r = blsi.validateSettings({ ...base(), PII_MODE: 'asterisked' });
+      expect(r.PII_MODE).toBe('asterisked');
+    });
+    test('PII_MODE: redacted passes through', () => {
+      const r = blsi.validateSettings({ ...base(), PII_MODE: 'redacted' });
+      expect(r.PII_MODE).toBe('redacted');
+    });
+    test('PII_MODE: invalid value falls back to gaussian', () => {
+      const r = blsi.validateSettings({ ...base(), PII_MODE: 'bogus' });
+      expect(r.PII_MODE).toBe('gaussian');
+    });
+
+    // AUTOMATE.TIMER
+    test('AUTOMATE.TIMER: valid value + sec unit pass through', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: { VALUE: 30, UNIT: 'sec', ENABLED: true }, IDLE: s.AUTOMATE.IDLE, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.TIMER).toEqual({ VALUE: 30, UNIT: 'sec', ENABLED: true });
+    });
+    test('AUTOMATE.TIMER: VALUE 0 is valid (timer off)', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: { VALUE: 0, UNIT: 'min', ENABLED: false }, IDLE: s.AUTOMATE.IDLE, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.TIMER.VALUE).toBe(0);
+    });
+    test('AUTOMATE.TIMER: VALUE 100 (above max 99) falls back to 0', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: { VALUE: 100, UNIT: 'min', ENABLED: false }, IDLE: s.AUTOMATE.IDLE, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.TIMER.VALUE).toBe(0);
+    });
+    test('AUTOMATE.TIMER: hr unit passes through', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: { VALUE: 2, UNIT: 'hr', ENABLED: true }, IDLE: s.AUTOMATE.IDLE, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.TIMER.UNIT).toBe('hr');
+    });
+
+    // AUTOMATE.IDLE
+    test('AUTOMATE.IDLE: valid value + min unit pass through', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: s.AUTOMATE.TIMER, IDLE: { VALUE: 10, UNIT: 'min', ENABLED: true }, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.IDLE).toEqual({ VALUE: 10, UNIT: 'min', ENABLED: true });
+    });
+    test('AUTOMATE.IDLE: hr unit rejected (Chrome API cap) — falls back to min', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: s.AUTOMATE.TIMER, IDLE: { VALUE: 2, UNIT: 'hr', ENABLED: true }, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.IDLE.UNIT).toBe('min');
+    });
+    test('AUTOMATE.IDLE: VALUE 0 (below min 1) falls back to 5', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: s.AUTOMATE.TIMER, IDLE: { VALUE: 0, UNIT: 'min', ENABLED: false }, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.IDLE.VALUE).toBe(5);
+    });
+
+    // AUTOMATE.TAB_SWITCH
+    test('AUTOMATE.TAB_SWITCH: enabled true passes through', () => {
+      const s = base();
+      s.AUTOMATE = { TIMER: s.AUTOMATE.TIMER, IDLE: s.AUTOMATE.IDLE, TAB_SWITCH: { ENABLED: true } };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.TAB_SWITCH.ENABLED).toBe(true);
+    });
+
+    // AUTOMATE missing entirely
+    test('AUTOMATE missing falls back to full defaults', () => {
+      const s = base(); delete s.AUTOMATE;
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE).toEqual(blsi.DEFAULT_SETTINGS.AUTOMATE);
+    });
+
+    // AUTOMATE partial — missing sub-keys
+    test('AUTOMATE.TIMER missing falls back to default timer', () => {
+      const s = base();
+      s.AUTOMATE = { IDLE: s.AUTOMATE.IDLE, TAB_SWITCH: s.AUTOMATE.TAB_SWITCH };
+      const r = blsi.validateSettings(s);
+      expect(r.AUTOMATE.TIMER).toEqual(blsi.DEFAULT_SETTINGS.AUTOMATE.TIMER);
+    });
+  });
+
 });

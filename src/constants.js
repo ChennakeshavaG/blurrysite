@@ -112,6 +112,43 @@ const Constants = (() => {
     STICKY_SCREEN: "sticky-screen",
   });
 
+  // Active blur mode — which top-level mode is currently selected.
+  // Switching modes is destructive: stored blur items for the deactivated mode
+  // are deleted from chrome.storage.
+  const ACTIVE_MODES = Object.freeze({
+    BLUR_ALL: 'blur-all',
+    PICK_BLUR: 'pick-blur',
+  });
+
+  // Pick & Blur blur types — separate set from BLUR_MODES (no Redacted/Masked).
+  // Color is a solid-cover mode exclusive to Pick & Blur.
+  const PICK_BLUR_MODES = Object.freeze({
+    GAUSSIAN: 'gaussian',
+    FROSTED: 'frosted',
+    COLOR: 'color',
+  });
+
+  // PII auto-detect blur types — independent of blur-all and pick-blur.
+  const PII_MODES = Object.freeze({
+    GAUSSIAN: 'gaussian',
+    FROSTED: 'frosted',
+    REDACTED: 'redacted',
+    ASTERISKED: 'asterisked',
+  });
+
+  // Timer unit options — supports hours (no Chrome API constraint on setTimeout).
+  const TIMER_UNITS = Object.freeze({
+    SEC: 'sec',
+    MIN: 'min',
+    HR: 'hr',
+  });
+
+  // Idle unit options — hr excluded: Chrome idle API hard cap is 3000 s (50 min).
+  const IDLE_UNITS = Object.freeze({
+    SEC: 'sec',
+    MIN: 'min',
+  });
+
   const PATTERN_TYPES = Object.freeze({
     WILDCARD: "wildcard",
     REGEX: "regex",
@@ -195,6 +232,29 @@ const Constants = (() => {
       FORM: false,
       TABLE: true,
       STRUCTURE: true, // Safe with data-bl-si-blur (no classList = no framework loops)
+    }),
+
+    // ── Popup redesign keys ───────────────────────────────────────────────────
+    // Which top-level mode is active. Destructive switch — other mode's items deleted.
+    ACTIVE_MODE: 'blur-all',
+
+    // Blur type used in Pick & Blur mode (gaussian | frosted | color).
+    PICK_BLUR_TYPE: 'gaussian',
+
+    // Color used in Pick & Blur 'color' type. HEX is a 6-char hex string; OPACITY 0–1.
+    PICK_BLUR_COLOR: Object.freeze({
+      HEX: '#000000',
+      OPACITY: 1.0,
+    }),
+
+    // Blur type used by auto-detect PII rendering.
+    PII_MODE: 'gaussian',
+
+    // Automate trigger settings. VALUE is 1–99; UNIT is from TIMER_UNITS / IDLE_UNITS.
+    AUTOMATE: Object.freeze({
+      TIMER: Object.freeze({ VALUE: 0, UNIT: 'min', ENABLED: false }),
+      IDLE: Object.freeze({ VALUE: 5, UNIT: 'min', ENABLED: false }),
+      TAB_SWITCH: Object.freeze({ ENABLED: false }),
     }),
   });
 
@@ -395,6 +455,84 @@ const Constants = (() => {
           : defaults.BLUR_CATEGORIES[key];
     }
 
+    // ── Popup redesign keys ─────────────────────────────────────────────────
+
+    result.ACTIVE_MODE = Object.values(ACTIVE_MODES).includes(settings.ACTIVE_MODE)
+      ? settings.ACTIVE_MODE
+      : defaults.ACTIVE_MODE;
+
+    result.PICK_BLUR_TYPE = Object.values(PICK_BLUR_MODES).includes(settings.PICK_BLUR_TYPE)
+      ? settings.PICK_BLUR_TYPE
+      : defaults.PICK_BLUR_TYPE;
+
+    const pbc =
+      settings.PICK_BLUR_COLOR && typeof settings.PICK_BLUR_COLOR === 'object'
+        ? settings.PICK_BLUR_COLOR
+        : {};
+    result.PICK_BLUR_COLOR = {
+      HEX:
+        typeof pbc.HEX === 'string' && /^#[0-9a-fA-F]{6}$/.test(pbc.HEX)
+          ? pbc.HEX
+          : defaults.PICK_BLUR_COLOR.HEX,
+      OPACITY:
+        typeof pbc.OPACITY === 'number' && pbc.OPACITY >= 0 && pbc.OPACITY <= 1
+          ? pbc.OPACITY
+          : defaults.PICK_BLUR_COLOR.OPACITY,
+    };
+
+    result.PII_MODE = Object.values(PII_MODES).includes(settings.PII_MODE)
+      ? settings.PII_MODE
+      : defaults.PII_MODE;
+
+    const automateIn =
+      settings.AUTOMATE && typeof settings.AUTOMATE === 'object' ? settings.AUTOMATE : {};
+    const timerIn =
+      automateIn.TIMER && typeof automateIn.TIMER === 'object' ? automateIn.TIMER : {};
+    const idleIn =
+      automateIn.IDLE && typeof automateIn.IDLE === 'object' ? automateIn.IDLE : {};
+    const tabIn =
+      automateIn.TAB_SWITCH && typeof automateIn.TAB_SWITCH === 'object'
+        ? automateIn.TAB_SWITCH
+        : {};
+    result.AUTOMATE = {
+      TIMER: {
+        VALUE:
+          typeof timerIn.VALUE === 'number' &&
+          timerIn.VALUE >= 0 &&
+          timerIn.VALUE <= 99
+            ? timerIn.VALUE
+            : defaults.AUTOMATE.TIMER.VALUE,
+        UNIT: Object.values(TIMER_UNITS).includes(timerIn.UNIT)
+          ? timerIn.UNIT
+          : defaults.AUTOMATE.TIMER.UNIT,
+        ENABLED:
+          typeof timerIn.ENABLED === 'boolean'
+            ? timerIn.ENABLED
+            : defaults.AUTOMATE.TIMER.ENABLED,
+      },
+      IDLE: {
+        VALUE:
+          typeof idleIn.VALUE === 'number' &&
+          idleIn.VALUE >= 1 &&
+          idleIn.VALUE <= 99
+            ? idleIn.VALUE
+            : defaults.AUTOMATE.IDLE.VALUE,
+        UNIT: Object.values(IDLE_UNITS).includes(idleIn.UNIT)
+          ? idleIn.UNIT
+          : defaults.AUTOMATE.IDLE.UNIT,
+        ENABLED:
+          typeof idleIn.ENABLED === 'boolean'
+            ? idleIn.ENABLED
+            : defaults.AUTOMATE.IDLE.ENABLED,
+      },
+      TAB_SWITCH: {
+        ENABLED:
+          typeof tabIn.ENABLED === 'boolean'
+            ? tabIn.ENABLED
+            : defaults.AUTOMATE.TAB_SWITCH.ENABLED,
+      },
+    };
+
     // SHORTCUTS: new shape. Each entry is { binding: [{code, mods}, ...] }.
     // Malformed entries fall back to the registry default.
     result.SHORTCUTS = {};
@@ -474,6 +612,11 @@ const Constants = (() => {
     REVEAL_MODES,
     BLUR_MODES,
     PICKER_MODES,
+    ACTIVE_MODES,
+    PICK_BLUR_MODES,
+    PII_MODES,
+    TIMER_UNITS,
+    IDLE_UNITS,
     PATTERN_TYPES,
     SUPPORTED_LANGUAGES,
     CSS,

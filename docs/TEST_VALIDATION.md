@@ -1,6 +1,6 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-This document maps every unit test to the user-facing behavior it protects. **538 tests across 20 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
+This document maps every unit test to the user-facing behavior it protects. **568 tests across 19 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
 
 ---
 
@@ -255,7 +255,7 @@ Source module: `src/selector_utils.js` → `blsi.SelectorUtils`
 
 ---
 
-## 15. constants.test.js (54 tests) — `tests/unit/constants.test.js`
+## 15. constants.test.js (91 tests) — `tests/unit/constants.test.js`
 
 Source module: `src/constants.js` → `globalThis.blsi`
 
@@ -272,6 +272,13 @@ Source module: `src/constants.js` → `globalThis.blsi`
 | validateSettings (12) | Migrates legacy `PICKER_MODE: 'sticky'` → `'sticky-page'`; removes unknown keys; coerces wrong types to default; preserves valid shortcuts; rejects invalid modifier; handles empty object; handles null; returns new object (does not mutate); `AUTO_DETECT.NUMERIC` coerced to boolean; `BLUR_RADIUS` clamped to range; `REVEAL_MODE` enum validated; deeply nested unknown keys stripped | Storage read on startup | Bad stored settings crash content_script; legacy settings not migrated |
 | Immutability (2) | `DEFAULT_SETTINGS` is frozen at top level; `BLUR_CATEGORIES` sub-object is frozen | (internal integrity) | Runtime mutation of defaults corrupts subsequent fresh installs |
 | Boundary values (11) | `BLUR_RADIUS` min/max; `MAX_PATTERN_LENGTH`; empty string shortcut binding; chord with all mods; chord with no mods; `REVEAL_MODE` all valid enum values; `NUMERIC` boolean coercion (truthy/falsy); `MODIFIER_CODES` array non-empty; `REVEAL_DFS_MAX_DEPTH` is positive integer | Edge case settings input | Out-of-range values accepted; enum values outside spec accepted |
+| ACTIVE_MODES enum (2) | `blsi.ACTIVE_MODES` has `BLUR_ALL: 'blur-all'` and `PICK_BLUR: 'pick-blur'`; object is frozen | Mode switch in popup | Wrong mode string stored; mode switch silently no-ops |
+| PICK_BLUR_MODES enum (2) | Has `GAUSSIAN`, `FROSTED`, `COLOR` only — no `REDACTED` or `MASKED`; frozen | Pick & Blur type selector | Redacted/masked type accepted as Pick & Blur type; wrong blur applied |
+| PII_MODES enum (2) | Has `GAUSSIAN`, `FROSTED`, `REDACTED`, `ASTERISKED`; frozen | PII blur type selector | PII type string rejected or wrong type stored |
+| TIMER_UNITS enum (2) | Has `SEC`, `MIN`, `HR`; frozen | Timer unit dropdown | Timer unit string rejected; timer misconfigured |
+| IDLE_UNITS enum (3) | Has `SEC` and `MIN` only; `HR` absent; frozen | Idle unit dropdown | `hr` idle unit stored → Chrome API max exceeded → auto-blur fires wrong |
+| DEFAULT_SETTINGS — popup redesign keys (8) | `ACTIVE_MODE` = `'blur-all'`; `PICK_BLUR_TYPE` = `'gaussian'`; `PICK_BLUR_COLOR` = `{HEX:'#000000', OPACITY:1.0}` (frozen); `PII_MODE` = `'gaussian'`; `AUTOMATE` default structure correct (TIMER/IDLE/TAB_SWITCH nested objects frozen); `buildDefaultSettings` includes all 5 keys | Fresh install | New popup UI keys missing from defaults; controls show undefined values |
+| validateSettings — popup redesign keys (33) | `ACTIVE_MODE`, `PICK_BLUR_TYPE`, `PICK_BLUR_COLOR`, `PII_MODE`, `AUTOMATE` validation — valid values pass through, invalid/missing fall back to defaults; `PICK_BLUR_TYPE` rejects `redacted`/`masked`; `PICK_BLUR_COLOR` validates 6-char hex and 0–1 opacity; `AUTOMATE.IDLE` rejects `hr` unit (Chrome API cap); `AUTOMATE.TIMER` VALUE 100 clamped to default 0; missing sub-keys fall back individually | Settings saved from popup with invalid/missing values | Corrupt settings silently accepted; blur type / color / automate triggers misconfigured |
 
 ---
 
