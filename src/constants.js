@@ -250,7 +250,8 @@ const Constants = (() => {
     // Blur type used by auto-detect PII rendering.
     PII_MODE: 'gaussian',
 
-    // Automate trigger settings. VALUE is 1–99; UNIT is from TIMER_UNITS / IDLE_UNITS.
+    // Automate trigger settings.
+    // TIMER.VALUE: 0–99 (0 = disabled). IDLE.VALUE: 1–99. UNIT from TIMER_UNITS / IDLE_UNITS respectively.
     AUTOMATE: Object.freeze({
       TIMER: Object.freeze({ VALUE: 0, UNIT: 'min', ENABLED: false }),
       IDLE: Object.freeze({ VALUE: 5, UNIT: 'min', ENABLED: false }),
