@@ -1,827 +1,362 @@
 # Blurry Site — Test Validation & Manual Replication Guide
 
-**532 unit tests across 20 test files.** Last updated 2026-04-15 after shadow host reveal fix (parentElement boundary + host-chain walk).
-
-## N5. action_registry.test.js (11 tests) — `tests/unit/action_registry.test.js`
-
-Covers `blsi.Actions`:
-
-| Group | What it asserts | Manual replication |
-|---|---|---|
-| Exposure + shape | Registry is exposed, contains exactly 3 actions, each action has full metadata (`id`, `label`, `description`, `defaultBinding`, `messageType`, `chromeCommand`) | DevTools: `blsi.Actions.list()` — 3 entries, every action metadata present |
-| Default binding shape | Each default binding chord has `{code, mods}` with valid modifier names | `blsi.Actions.defaultBindings()` — inspect returned object |
-| Frozen registry | `ACTIONS`, individual entries, and `defaultBinding` arrays are frozen | `Object.isFrozen(blsi.Actions.ACTIONS)` → true |
-| Mutable clone | `defaultBindings()` produces a fresh clone; mutation does not affect registry | Mutate result → `blsi.Actions.get(id).defaultBinding` unchanged |
-| Uniqueness | `messageType` and `chromeCommand` are unique across actions | — |
-| Unknown lookup | `get('DOES_NOT_EXIST')` returns undefined | — |
-
-## N6. shortcut_label.test.js (19 tests) — `tests/unit/shortcut_label.test.js`
-
-Covers `blsi.ShortcutLabel`:
-
-| Group | What it asserts | Manual replication |
-|---|---|---|
-| Code labels | Letters `A-Z`, digits `0-9`, symbols (`-`, `=`, `[`), named keys (`Enter`, `Esc`), arrows (`↑↓←→`), function keys, numpad, unknown → fallback | DevTools: `blsi.ShortcutLabel.codeLabel('KeyB')` → `'B'` |
-| Platform rendering | Mac returns `⌥⇧B`, Windows returns `Alt+Shift+B` for the same chord | Run test on both platforms |
-| Empty / null chord | Gracefully returns empty string | `blsi.ShortcutLabel.chordLabel(null)` → `''` |
-| Binding label | Single-chord matches `chordLabel`; multi-chord joined by space | `blsi.ShortcutLabel.bindingLabel([{code:'KeyG',mods:['Alt']}, {code:'KeyI',mods:['Alt']}])` |
-| Canonical chord key | Mod order doesn't affect key; different codes/mods produce different keys; format is `"<sorted mods>\|<code>"` | `chordKey({code:'KeyB', mods:['Shift','Alt']})` → `'Alt+Shift\|KeyB'` |
-| Binding key | Multi-chord canonical form joins chord keys with space | — |
-
-## N7. shortcut_reserved.test.js (10 tests) — `tests/unit/shortcut_reserved.test.js`
-
-Covers `blsi.ShortcutReserved`:
-
-| Group | What it asserts | Manual replication |
-|---|---|---|
-| Exposure | Module is loaded with `isReserved`, `lookup`, `RESERVED` | `blsi.ShortcutReserved` in DevTools |
-| Browser chords | `Ctrl+T`, `Ctrl+W`, `F5`, `F12` are reserved | In popup capture, enter Ctrl+T → warning appears |
-| Non-reserved | `Alt+Shift+B` (default binding), `Ctrl+Shift+K` → not flagged | — |
-| Mod order agnostic | `[Shift, Control]` treated same as `[Control, Shift]` | — |
-| Platform filter | `Meta+Q` reserved only on Mac; platform-consistent result | — |
-| Frozen | `RESERVED` array is frozen | — |
+This document maps every unit test to the user-facing behavior it protects. **532 tests across 20 test files**, all passing. Run the full suite with `npm run test:unit` (fast, no coverage) or `npm test` (with coverage, ~91% line coverage on `src/`).
 
 ---
 
+## 1. blur_engine.test.js (110 tests) — `tests/unit/blur_engine.test.js`
 
+Source module: `src/blur_engine.js` → `blsi.BlurEngine`
 
-## N4. logger.test.js (10 tests) — `tests/unit/logger.test.js`
-
-Covers `blsi.Logger`:
-
-| Test | Asserts | Manual replication |
-|---|---|---|
-| `log/warn/flow are silent by default` | gated methods do not call console when toggle is off | DevTools on any page. With toggle off, `blsi.Logger.flow('x')` produces no output. |
-| `error() always writes regardless of toggle` | `console.error` fires even when disabled, prefix `[BLSI]` | `blsi.Logger.error('boom')` → console error appears with `[BLSI]` prefix. |
-| `enable() flips state and persists to storage` | sets `_enabled=true`, writes `blsi_debug=true` | Click popup debug button. Reload page → flow logs still on. `chrome.storage.local.get('blsi_debug', console.log)` → `{blsi_debug:true}`. |
-| `disable() flips state off and persists` | sets `_enabled=false`, writes `blsi_debug=false` | Click button again → logs go silent. |
-| `flow() emits the event tag and payload when enabled` | output contains tag + data object | Enable, then `blsi.Logger.flow('test', {a:1})` → `[BLSI] HH:MM:SS.mmm ⟶ test {a:1}`. |
-| `scope() prefixes with the scope tag and respects the gate` | scoped flow output contains `[name]` | Enable, then `blsi.Logger.scope('foo').flow('hi')` → `[BLSI] ts [foo] ⟶ hi`. |
-| `scope().error always writes` | scoped error fires regardless of toggle | Disable, then `blsi.Logger.scope('foo').error('x')` → still appears. |
-| `chrome.storage.onChanged listener syncs cross-context state` | flipping `blsi_debug` updates `Logger.enabled` in other contexts | Tab A: `chrome.storage.local.set({blsi_debug:true})`. Tab B without reload: `blsi.Logger.enabled` → `true`. |
-| `onChanged listener ignores non-local areas and unrelated keys` | non-local area / other key changes do not affect state | (automated only) |
-| `initial state read from storage when blsi_debug=true` | enable persists across page reload | Enable in popup → reload page → first content_script `init.start` flow event appears in console. |
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| injectRules (8) | `injectRules` adds a `<style>` tag with `bl-si-blurred` CSS rules; `removeRules` removes it; duplicate calls are idempotent; radius var updates propagate; shadow-root injection works | Page load, blur-all toggle | No blur CSS on page — every blur operation is visually broken |
+| stampElements (4) | `stampElements` assigns `data-bl-si-id` to elements that lack one; returns `ShadowRoot[]` for shadow hosts; does not re-stamp already-stamped elements | Picker click, sticky zone restore | Elements lose identity across re-renders; sticky zones re-blur wrong nodes |
+| tryBlurTextCheck (2) | Returns true when text content matches active categories; returns false otherwise | Blur-all with category filters active | Category filter silently blurs or un-blurs wrong elements |
+| applyBlur (3) | Adds `bl-si-blurred` class; applies to element in shadow DOM; does not double-apply | Picker click, sticky zone restore | Blur does not appear on screen |
+| removeBlur (2) | Removes `bl-si-blurred` class; no-ops on unblurred element | Unblur item from popup, clear-all shortcut | Blur persists after user removes it |
+| toggleBlur (1) | Toggles class on/off | (internal use) | Toggle shortcut produces wrong state |
+| isBlurred (4) | Returns true for `bl-si-blurred` class present; false otherwise; checks shadow DOM element; checks element inside blurred parent | Popup "blurred items" list | Popup shows wrong blur state |
+| unblurAll (1) | Removes `bl-si-blurred` from all elements in document | Alt+Shift+U shortcut, clear-all popup button | Clear-all leaves blur residue on page |
+| shouldBlurElement (4) | Skips extension UI elements, toolbar, overlay; respects `BLUR_CATEGORIES` filter; returns false for disabled category | Blur-all toggle with category settings | Extension blurs its own toolbar; or category toggles have no effect |
+| CATEGORY_SELECTORS (1) | All 5 category selectors (`TEXT`, `MEDIA`, `FORM`, `TABLE`, `STRUCTURE`) are defined and non-empty | Settings → blur categories panel | A category toggle silently does nothing |
+| matchesActiveCategories (2) | Returns true when element matches an active category; false when category is disabled | Blur-all with category filter | Category filter ignored — wrong elements blurred/skipped |
+| Zone overlays — createZoneOverlay (8) | Overlay element created with correct geometry, class, name label, anchor type; appended to correct parent | Picker → draw sticky zone | Sticky zone is invisible or misplaced |
+| Zone overlays — removeZoneOverlay (4) | Named zone removed from DOM; no-op on unknown name; `getZoneOverlays` count decrements | Popup → remove zone item | Zone overlay lingers after deletion |
+| Zone overlays — removeAllZoneOverlays (2) | All zone overlays cleared | Clear-all shortcut, page unload | Zone overlays stay on page after navigation |
+| Zone overlays — getZoneOverlays (1) | Returns live list matching created zones | Popup zone list rendering | Popup shows wrong zone count |
+| handleSite item reconciliation (5) | Adds newly stored items; removes items deleted from storage; does not re-blur already-blurred items | Storage update pushed to content_script | Blur disappears on SPA navigation, or duplicate blur applied |
+| Counters (5) | `resetCounters` zeroes blur/unblur counts; `allocateDynamicName` returns incrementing names; `allocateStickyName` returns incrementing sticky names | Any blur action | Name collisions between zones; counter drift after reset |
+| Page-wide reconcile (16) | `handleDocument` applies blur to all matching elements; respects category filters; handles empty storage; handles SPA re-renders; `observeRoot`/`disconnectObserver` wire MutationObserver | Page load (RESTORE message), SPA navigation | Blur does not restore after navigation; new DOM nodes not blurred |
+| Category coverage audit (7) | Every element tag in `CATEGORY_SELECTORS` is covered by exactly one category; no tag appears in two categories | Any blur-all with categories | Tag silently uncovered — element never blurred; or double-blurred |
+| ARIA role coverage (7) | Elements with ARIA roles (`role="img"`, `role="table"`, etc.) are matched by the correct category selector | Accessibility-heavy pages | ARIA-driven widgets escape blur |
+| Shadow DOM (12) | `handleDocument` traverses open shadow roots; `injectRules` injects into shadow root; `stampElements` returns shadow host list; blur applied inside shadow DOM | Pages with Web Components | Shadow DOM content never blurred |
+| Custom element stamping RC-1 (5) | Custom elements (`<my-card>`) stamped with `data-bl-si-id`; re-stamp after disconnect/reconnect uses same id | SPA with custom elements | Sticky zone re-blur targets wrong node after SPA re-render |
+| List element placement RC-2 (3) | `<li>` inside `<ul>` inside blurred container correctly identified as STRUCTURE category | Blur-all on page with lists | List items escape blur despite STRUCTURE enabled |
+| Reveal descendant cascade RC-3 (2) | `data-bl-si-reveal` on ancestor causes descendant text to appear revealed; removing attribute restores blur | Hover/click reveal on nested content | Nested content stays blurred even when ancestor is revealed |
 
 ---
 
-New test files added in the 2026-04-11 refactor:
+## 2. reveal_controller.test.js (17 tests) — `tests/unit/reveal_controller.test.js`
 
-## N1. url_matcher.test.js (20 tests) — `tests/unit/url_matcher.test.js`
+Source module: `src/reveal_controller.js` → `blsi.Reveal`
 
-Covers the extracted `blsi.UrlMatcher`:
-
-| Group | Cases | Manual replication |
-|---|---|---|
-| Wildcard hostname | exact, subdomain, domain-boundary attack (`notexample.com`), `*.example.com` root-skip | DevTools on any page: `blsi.UrlMatcher.matchesPattern(location.href, 'example.com', 'wildcard')` — expect `true` only on example.com + subdomains |
-| Scheme + port + path | scheme restriction, `:8080` port, `/app*` prefix wildcard, trailing-slash tolerance, default port normalization | `matchesPattern('https://example.com:8080/app/home', 'example.com:8080/app*', 'wildcard')` → `true` |
-| Regex mode | valid pattern, case insensitivity, ReDoS guard (`(a+)+`, `a**`), invalid regex fallback | `matchesPattern('https://example.com/', '(a+)+', 'regex')` → `false` (not a timeout) |
-| MAX_PATTERN_LENGTH | 501-char pattern rejected | `matchesPattern(url, 'a'.repeat(501), 'wildcard')` → `false` |
-| resolveSettings | deep merge, first-match-wins, non-matching fall-through, null rules tolerated | Create two rules with same pattern, different `BLUR_RADIUS`. Open a matching page. Popup "Current page" shows the FIRST rule's radius |
-
-## N2. reveal_controller.test.js (16 tests) — `tests/unit/reveal_controller.test.js`
-
-Covers the extracted `blsi.Reveal`:
-
-| Group | Cases | Manual replication |
-|---|---|---|
-| Click mode | reveal on click, second click on same element keeps reveal (link pass-through), first click calls preventDefault, second click does NOT preventDefault, dismiss on Escape, input/textarea skip, picker-active block, mode=none disables | Popup: set REVEAL_MODE=click. Blur an `<a href>`, click it → unblurs but does NOT navigate. Click it again → navigates to the link. Press Escape after first click → re-blurs without navigating. Click a form `<input>` that is blurred → stays blurred |
-| Hover mode | reveal on mouseover, 50ms mouseout debounce | Set REVEAL_MODE=hover. Mouseover blurred element → reveals. Move away → stays revealed ~50ms then hides |
-| Lifecycle | clearAll wipes reveal state, destroy removes listeners | Toggle reveal mode in popup — any active reveal snaps back |
-
-## N3. blur_engine.test.js — 18 new tests for folded-in controller APIs
-
-Added under `applyItem / removeItem`, `counters`, `enableBlurAll / disableBlurAll / refreshBlurAll`. Covers:
-
-- Dynamic item apply/remove via selector, sticky item zone creation + path-mismatch skip, null-item no-op.
-- `allocateDynamicName` / `allocateStickyName` increment + `resetCounters` zeroes both.
-- `applyItem` seeds counters from item name (high-water mark) so session counters never collide with persisted names.
-- `enableBlurAll` injects rules + sets `isPageBlurred=true`; `disableBlurAll` removes rules + clears state; `refreshBlurAll` is a no-op when inactive and re-renders when active.
-- `_setPickerActiveForObserver` is exposed as a public method (MutationObserver gate).
-
-**Manual replication for folded APIs:** Load the extension, Alt+Shift+B to enable blur-all, then `blsi.BlurEngine.isPageBlurred` in DevTools → `true`. Alt+Shift+B again → `false`. Blur a specific element via the picker, then Alt+Shift+B twice — the picker item survives the blur-all toggle.
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Click mode (8) | `init({ getMode: ()=>'click' })` — click on blurred element adds `data-bl-si-reveal`; second click removes it (toggle); click on non-blurred element is no-op; `clearAll` removes all reveal attributes | Settings → reveal mode = click, then click blurred element | Click reveal silently broken; elements stay blurred or permanently revealed |
+| Hover mode (2) | `init({ getMode: ()=>'hover' })` — pointerenter adds `data-bl-si-reveal`; pointerleave removes it | Settings → reveal mode = hover, hover over blurred element | Hover reveal broken; element stays blurred on hover |
+| clearAll (1) | `clearAll()` removes every `data-bl-si-reveal` attribute across document | Popup "lock screen" action, `destroy()` | Revealed elements stay exposed after lock |
+| composedPath shadow DOM (2) | `event.composedPath()[0]` used instead of `event.target`; reveal reaches elements inside shadow roots | Hover/click on blurred Web Component internals | Shadow DOM content cannot be revealed |
+| Shadow host reveal (2) | Clicking a shadow host (non-shadow-root element) propagates reveal to the host; parent-chain walk respects boundary | Click reveal on custom element | Shadow component stays blurred even after click |
+| destroy (1) | `destroy()` removes event listeners; subsequent clicks/hovers produce no reveal | Page unload, extension disabled | Memory leak; reveal events fire on dead pages |
+| Input skip (1) | Reveal does not trigger on `<input>` or `<textarea>` elements | Click/hover on a blurred form input | Form interaction accidentally reveals the field |
 
 ---
 
-## 1. blur_engine.test.js (60 tests)
+## 3. picker.test.js (63 tests) — `tests/unit/picker.test.js`
 
-### applyBlur (9 tests)
+Source module: `src/picker.js` → `blsi.Picker`
 
-| # | Test | Manual Replication |
-|---|---|---|
-| 1 | adds bl-si-blurred class to element | DevTools console: `PrivacyBlurEngine.applyBlur(document.querySelector('div'), 8)`. Inspect element — `bl-si-blurred` class present. |
-| 2 | sets --bl-si-radius CSS custom property | Same as above with radius 12. Styles pane shows `--bl-si-radius: 12px` inline. |
-| 3 | uses default radius of 8px when not specified | `PrivacyBlurEngine.applyBlur(el)` — no second arg. Check `--bl-si-radius: 8px`. |
-| 4 | applies CSS filter directly on img elements | Select an `<img>`, apply blur with radius 10. Image appears blurred. Elements panel shows `style="filter: blur(10px)"`. |
-| 5 | creates canvas overlay for video elements | Find an HTML5 `<video>`, apply blur. A `<canvas class="bl-si-canvas-overlay">` appears as sibling in DOM. |
-| 6 | starts RAF animation loop for video elements | Blur a playing video. Performance panel shows continuous animation frame callbacks. Canvas updates with video frames. |
-| 7 | does not throw on null element | `PrivacyBlurEngine.applyBlur(null)` — no error in console. |
-| 8 | does not throw on element not in DOM | `let d = document.createElement('div'); PrivacyBlurEngine.applyBlur(d, 8)` — no error. |
-| 9 | calling applyBlur twice is idempotent | Blur same element twice. Only one `bl-si-blurred` class, no duplicate side effects. |
-
-### removeBlur (6 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 10 | removes bl-si-blurred class | Blur then unblur any element. Class disappears, visual blur gone. |
-| 11 | clears --bl-si-radius custom property | Blur with custom radius, unblur. `--bl-si-radius` gone from styles. |
-| 12 | removes canvas overlay from DOM for video | Blur a video (canvas appears), unblur — canvas removed from DOM. |
-| 13 | cancels rAF loop on video removeBlur | Blur+unblur video. Performance panel shows RAF callbacks stop. |
-| 14 | does not throw on null element | `PrivacyBlurEngine.removeBlur(null)` — no error. |
-| 15 | does not throw on non-blurred element | `PrivacyBlurEngine.removeBlur(anyCleanElement)` — no error, no change. |
-
-### toggleBlur (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 16 | applies blur when element is not blurred | `toggleBlur(el, 8)` on clean element — becomes blurred. |
-| 17 | removes blur when element is already blurred | Blur first, then `toggleBlur` — blur removed. |
-| 18 | second toggle re-applies blur | Toggle 3 times. Final state: blurred (on/off/on). |
-
-### isBlurred (4 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 19 | returns false for unblurred element | `PrivacyBlurEngine.isBlurred(anyCleanElement)` — `false`. |
-| 20 | returns true for blurred element | Blur element, check `isBlurred(el)` — `true`. |
-| 21 | returns false after blur removed | Blur, unblur, check — `false`. |
-| 22 | returns false for null | `PrivacyBlurEngine.isBlurred(null)` — `false`, no error. |
-
-### blurAllContent (5 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 23 | blurs all img elements | On image-heavy page, `blurAllContent(8)`. All images blur. |
-| 24 | blurs all p elements | Same on text-heavy page. All paragraphs blur. |
-| 25 | blurs all heading elements h1-h6 | All headings on page blur. |
-| 26 | blurs video elements | HTML5 video gets canvas overlay. |
-| 27 | does not throw on empty DOM | `about:blank`, `blurAllContent(8)` — no error. |
-
-### unblurAll (5 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 28 | removes blur from all blurred elements | Blur several elements, `unblurAll()`. All return to normal. |
-| 29 | does not affect non-blurred elements | Note unblurred element state, `unblurAll()`, verify unchanged. |
-| 30 | does not throw on empty DOM | `about:blank`, `unblurAll()` — no error. |
-| 31 | cleans up orphaned canvas overlays | Manually insert `<canvas class="bl-si-canvas-overlay">`, `unblurAll()` — canvas removed. |
-| 32 | cleans up orphaned text-node wrappers | Insert `<span class="bl-si-text-node-wrapper">text</span>`, `unblurAll()` — span replaced by text. |
-
-### Text content handling (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 33 | wraps bare text nodes in span | Find `<div>` with only text, blur it. DOM shows text inside `<span class="bl-si-text-node-wrapper">`. |
-| 34 | unwraps text nodes when removing blur | Blur then unblur text div. Wrapper disappears, text restored. |
-| 35 | does not wrap whitespace-only text nodes | Create `<div>   </div>`, blur — no wrapper appears. |
-
-### Background-image elements (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 36 | applies blur class to elements with background-image | Find div with CSS `background-image` (hero banner), blur. Class `bl-si-blurred` applied. |
-| 37 | does not apply direct style.filter on background-image elements | Same element — `style.filter` should NOT be set inline. Blur via CSS class only. |
-
-### Video blur edge cases (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 38 | handles detached video gracefully | `let v = document.createElement('video'); PrivacyBlurEngine.applyBlur(v, 8)` — no throw, class added. |
-| 39 | no duplicate canvases on re-apply | Blur a video, count `.bl-si-canvas-overlay` — should be 1. |
-| 40 | removeBlur on img clears inline filter | Blur img (filter visible), unblur — `style.filter` cleared. |
-
-### blurAllContent advanced (5 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 41 | blurs span elements with text | `blurAllContent()` — text-containing spans blur. |
-| 42 | blurs link elements with text | Text links blur. |
-| 43 | blurs button elements with text | Buttons with text labels blur. |
-| 44 | does not double-blur already blurred elements | Blur one element individually, then `blurAllContent()` — no double-processing. |
-| 45 | blurs canvas elements | Chart canvases get blur class. |
-
-### toggleBlur edge cases (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 46 | does not throw on null | `PrivacyBlurEngine.toggleBlur(null)` — no error. |
-| 47 | does not throw on non-Element | `PrivacyBlurEngine.toggleBlur('hello')` — no error. |
-| 48 | uses custom radius when toggling on | `toggleBlur(el, 15)` — check `--bl-si-radius: 15px`. |
-
-### Zone overlay engine (12 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 49 | createZoneOverlay injects overlay div into document.body | Call `PrivacyBlurEngine.createZoneOverlay({id:'z1', x:10, y:20, width:100, height:50})`. Inspect DOM — `document.body` has a child with `data-bl-si-zone="z1"`. |
-| 50 | createZoneOverlay sets position styles from coordinates | Same as above. Inspect styles — `position:fixed`, `left:10px`, `top:20px`, `width:100px`, `height:50px`. |
-| 51 | createZoneOverlay overlay has bl-si-zone-overlay class | Same overlay. Element has `class="bl-si-zone-overlay"`. |
-| 52 | createZoneOverlay returns null for missing id | `createZoneOverlay({x:0, y:0, width:10, height:10})` — returns `null`. |
-| 53 | createZoneOverlay replaces existing overlay with same id | Create overlay with id `z1`, then create another with same id. Only one `[data-bl-si-zone="z1"]` in DOM. |
-| 54 | removeZoneOverlay removes overlay from DOM and tracking | Create overlay `z1`, call `removeZoneOverlay('z1')`. No `[data-bl-si-zone="z1"]` in DOM. `getZoneOverlays()` returns empty. |
-| 55 | removeZoneOverlay no-op for unknown id | `removeZoneOverlay('nonexistent')` — no error, no DOM change. |
-| 56 | getZoneOverlays returns all active overlays | Create 3 overlays. `getZoneOverlays().length === 3`. |
-| 57 | getZoneOverlays returns empty array when none exist | No overlays created. `getZoneOverlays()` returns `[]`. |
-| 58 | removeAllZoneOverlays removes all overlays | Create 3 overlays, call `removeAllZoneOverlays()`. `getZoneOverlays()` returns `[]`, no overlay elements in DOM. |
-| 59 | unblurAll removes zone overlays along with data-bl-si-blur elements | Blur elements and create zone overlays. `unblurAll()`. Both blurred elements and zone overlays removed. |
-| 60 | _isExtensionUI excludes zones: zone overlay not treated as blur target | Create zone overlay, call `blurAllContent()`. Zone overlay does not get `bl-si-blurred` class. |
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Activation (3) | `activate()` sets `bl-si-picker-active` on `<html>`; `isActive` getter returns true; second `activate()` is idempotent | Alt+Shift+P shortcut | Picker CSS not applied; hover highlight missing |
+| Hover highlight (3) | Mousing over elements in picker mode adds `bl-si-hover-highlight`; moving to another element transfers highlight; extension UI elements skipped | Mouse movement during picker | No visual feedback which element will be blurred |
+| Click behavior (4) | Click blurs the highlighted element; picker mode ends; `callbacks.onBlur` called with element; extension UI click is no-op | Click element in picker mode | Blur does not apply on click; picker stays active forever |
+| Escape key (2) | Pressing Escape calls `deactivate()`; `isActive` becomes false | Esc key while picker active | Picker cannot be dismissed; page interaction blocked |
+| Deactivation (6) | `deactivate()` removes `bl-si-picker-active`; removes hover highlight; removes event listeners; `isActive` false; toolbar hidden | Alt+Shift+P second press, Escape | Picker CSS lingers; hover highlights remain |
+| setSettings (3) | `setSettings({ PICKER_MODE })` updates internal mode without re-activating; `PICKER_MODE: 'dynamic'` vs sticky affects click callback | Settings → picker mode dropdown | Wrong zone type created; picker ignores mode setting |
+| isActive getter (4) | Returns true only when activated; false after deactivate; false before first activate; reflects class on `<html>` | Popup status query | Popup shows wrong picker state |
+| Hover highlight cleanup (2) | `bl-si-hover-highlight` removed when picker deactivated mid-hover; cleaned on `mouseleave` | Deactivate while hovering | Stale highlight remains on element after picker closed |
+| Toolbar (2) | Picker toolbar (`#bl-si-picker-toolbar`) shown on activate; hidden on deactivate | Alt+Shift+P toggle | No "Escape to cancel" toolbar feedback |
+| Click boundary conditions (2) | Click outside blurred element in dynamic mode; click on already-blurred element toggles | Click in empty space; click on blurred element | Picker clicks in empty space cause errors; toggle broken |
+| Sticky mode (10) | `PICKER_MODE: 'sticky-page'` enters zone-drawing flow on mousedown; mousemove draws preview; mouseup creates zone; anchor stored as `'page'`; `'sticky-screen'` stores `anchor: 'screen'`; zone name increments | Picker → draw box on page | Sticky zone not created; wrong anchor type; zone misplaced on scroll |
+| setMode (6) | `setMode('dynamic')`, `setMode('sticky-page')`, `setMode('sticky-screen')` all accepted; mode reflected in next interaction; invalid mode rejected | Settings → picker mode change while picker open | Mode change silently ignored; wrong zone type on next draw |
+| i18n integration (7) | Toolbar labels use `blsi.t()` for locale strings; English default; locale change updates labels; missing key falls back to key string | Extension installed in non-English browser | Toolbar shows raw key names instead of translated labels |
+| Additional (9) | Pointer capture, zone resize abort on Escape mid-draw, min zone size guard, destroy while drawing | Edge cases during zone drawing | Half-drawn zones committed; tiny mis-clicks create zones |
 
 ---
 
-## 2. picker.test.js (30 tests)
+## 4. pii_detector.test.js (57 tests) — `tests/unit/pii_detector.test.js`
 
-### activate (3 tests)
+Source module: `src/pii_detector.js` → `blsi.PiiDetector`
 
-| # | Test | Manual Replication |
-|---|---|---|
-| 1 | adds bl-si-picker-active class to html | Press Alt+Shift+P. Crosshair cursor appears. `<html>` has `bl-si-picker-active`. |
-| 2 | creates toolbar element in DOM | Toolbar appears at top with "Click to blur" instructions. `#bl-si-picker-toolbar` in DOM. |
-| 3 | calling activate twice is safe | Press Alt+Shift+P twice. Only one toolbar exists. |
-
-### hover highlight (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 4 | adds bl-si-hover-highlight on mouseover | Activate picker, hover over a paragraph. Outline highlight appears. |
-| 5 | removes bl-si-hover-highlight on mouseout | Move mouse away from element. Highlight disappears. |
-| 6 | does not throw if target is null on mouseover | Edge case — cursor enters from outside viewport. No crash. |
-
-### click (4 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 7 | calls onBlur when element is not blurred | Click any unblurred element in picker mode. Element gets blurred. |
-| 8 | calls onUnblur when element has bl-si-blurred | Click a blurred element in picker mode. Blur removed (toggle). |
-| 9 | click prevents default event | Click a link in picker mode. Page does NOT navigate. |
-| 10 | click stops event propagation | Click a button with page handlers. Button blurred, handler does not fire. |
-
-### Escape key (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 11 | pressing Escape deactivates picker | Press Escape during picker mode. Crosshair gone, toolbar removed. |
-| 12 | pressing Escape triggers onDeactivate callback | Content script updates `isPickerActive = false`. |
-
-### deactivate (5 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 13 | removes bl-si-picker-active class | Deactivate picker. Normal cursor restored. |
-| 14 | removes toolbar from DOM | Toolbar disappears from page. |
-| 15 | calls onDeactivate callback | Content script notified of deactivation. |
-| 16 | no blur/unblur after deactivation | Click elements after deactivating. No blur occurs — normal page interaction. |
-| 17 | deactivate when not active does not throw | Defensive call succeeds silently. |
-
-### setSettings (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 18 | updates blurRadius property | Change blur radius in popup while picker active. Subsequent clicks use new radius. |
-| 19 | setSettings before activate does not throw | Settings can be configured before picker starts. |
-| 20 | partial settings update preserves existing | Change only blur radius. Highlight color unchanged. |
-
-### isActive (4 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 21 | returns false before activation | Before any action, picker is inactive. |
-| 22 | returns true after activation | After Alt+Shift+P, picker is active. |
-| 23 | returns false after deactivation | After Escape, picker is inactive again. |
-| 24 | returns false after Escape deactivation | Same as 23, specifically Escape-triggered. |
-
-### hover highlight cleanup (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 25 | removes all hover highlights on deactivation | Hover quickly over elements, press Escape. No stale highlights remain. |
-| 26 | hover highlight switches between elements | Hover A (highlighted), move to B. B highlighted, A not. |
-
-### toolbar (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 27 | toolbar has correct ID and class | Inspect toolbar: `id="bl-si-picker-toolbar"`, `class="bl-si-toolbar"`. |
-| 28 | toolbar removed on Escape | Press Escape. Toolbar gone from DOM. |
-
-### click boundary conditions (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 29 | clicking with no callbacks does not throw | Defensive edge case — no crash on malformed callbacks. |
-| 30 | does not highlight html or body on mouseover | Move mouse to empty page area. No full-page highlight. |
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| EMAIL (5) | `scan(root, ['EMAIL'])` wraps `local@domain.tld` in `[data-bl-si-pii]` span; ignores non-email text; handles multiple emails in one text node; handles emails adjacent to punctuation | Enable email PII toggle | Email addresses visible in screenshots/screenshares |
+| NUMERIC currency prefix (4+1) | `$1,234.56`, `€999`, `£42.00`, `¥10000` wrapped; bare `$` not wrapped | Enable numeric PII (standard) | Currency amounts visible in screenshare |
+| NUMERIC currency code (2) | `USD 1,234`, `EUR 500` wrapped; `USD` alone not wrapped | Enable numeric PII | Currency-coded amounts escape detection |
+| NUMERIC 4+ digits (7) | `\d{4,}` pattern: 4-digit numbers wrapped; 3-digit numbers skipped; numbers inside words skipped; phone numbers wrapped; account numbers wrapped; postal codes wrapped; numbers after price-suppressor skipped in conservative mode | Enable numeric PII | Short account numbers (4-digit) not blurred; false negatives on financial data |
+| NUMERIC phone-like groups (6) | `123-456-7890`, `(555) 123-4567`, `+1-800-555-0100`, international formats wrapped | Enable numeric PII | Phone numbers visible in screenshare |
+| PII independence (2) | PII spans carry `[data-bl-si-pii]` only, not `[data-bl-si-blur]`; PII blur active when blur-all is off | PII toggle active, blur-all off | PII content exposed when user uses extension without blur-all |
+| Multi-type/null (3) | `scan(root, ['EMAIL','NUMERIC'])` applies both; `scan(root, null)` applies all active types; `scan(root, [])` is no-op | Auto-detect with multiple types enabled | One PII type silently skipped when multiple enabled |
+| Scan behavior (8) | `scan` is idempotent (no double-wrapping); handles nested elements; handles empty text nodes; handles text split across siblings; `getMatchCount()` returns total wrapped count; `getPatterns()` returns active pattern map | Any scan invocation | Match count wrong in popup; double-wrapping corrupts DOM |
+| clear() (2) | `clear(root)` unwraps all `[data-bl-si-pii]` spans; restores original text nodes | Disable PII toggle | PII spans linger in DOM after toggle off |
+| getMatchCount / getPatterns (2) | Count increments per match; `getPatterns()` returns object keyed by type with regex | Popup PII count display | Wrong count shown; pattern inspection broken |
+| stopObserving (1) | `stopObserving()` disconnects MutationObserver; new DOM nodes not scanned | Page unload, extension disabled | Memory leak on long-lived pages |
+| Default settings (1) | `AUTO_DETECT.EMAIL = false`, `AUTO_DETECT.NUMERIC = 'off'` by default | Fresh install | PII scanning active without user opting in |
+| NUMERIC 'off' mode (2) | `NUMERIC = 'off'` — no numeric patterns applied even with `scan(root, ['NUMERIC'])` | Numeric mode set to off | Numbers blurred when user explicitly disabled numeric detection |
+| NUMERIC 'standard' mode (4) | All numeric patterns applied broadly; matches wide set of number formats | Enable standard numeric | Financial numbers escape detection |
+| NUMERIC 'conservative' mode (9) | Only numbers near Tier A labels (`balance`, `salary`, `account`, `invoice`) matched; price-suppressor (`/month`, `cart`, `qty`) suppresses match; standalone numbers not matched | Enable conservative numeric | Conservative mode blurs unrelated numbers, or misses labeled financial data |
+| Mode contrast (1) | Conservative mode matches fewer elements than standard on same DOM | Compare mode outputs | User cannot trust mode distinction |
 
 ---
 
-## 3. shortcut_handler.test.js (19 tests)
+## 5. auto_blur.test.js (11 tests) — `tests/unit/auto_blur.test.js`
 
-### multi-key shortcut detection (6 tests)
+Source module: `src/auto_blur.js` → `blsi.AutoBlur`
 
-| # | Test | Manual Replication |
-|---|---|---|
-| 1 | fires TOGGLE_BLUR_ALL when Alt+Shift+B pressed | Hold Alt+Shift+B simultaneously. All elements blur. |
-| 2 | fires TOGGLE_PICKER when Alt+Shift+P pressed | Hold Alt+Shift+P. Picker activates with crosshair cursor. |
-| 3 | fires CLEAR_ALL when Alt+Shift+U pressed | Hold Alt+Shift+U. All blur removed. |
-| 4 | does NOT fire when wrong modifier side is held | Hold right-Alt instead of left-Alt with Shift+B. No action fires. |
-| 5 | does NOT fire when primary modifier is not held | Press Shift+B without Alt. No action fires. |
-| 6 | does NOT fire when not all keys are held | Press Alt+B without Shift. No action fires. |
-
-### callback routing (1 test)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 7 | different shortcuts fire different callbacks | Alt+Shift+B fires blur-all, Alt+Shift+P fires picker, Alt+Shift+U fires clear. Each triggers its own callback. |
-
-### Escape key (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 8 | Escape fires onExitPicker when picker active | Activate picker (Alt+Shift+P), press Escape. Picker deactivates. |
-| 9 | does NOT fire onExitPicker when picker inactive | Press Escape on any page without picker. No extension effect. |
-
-### early-exit guards (4 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 10 | ignores repeated keydown events | Hold Alt+Shift+B. Only fires once, repeated keydowns ignored. |
-| 11 | ignores events during IME composition | Use CJK input method, press Alt+Shift+B during composition. Extension ignores it. |
-| 12 | ignores Dead key events | Use European keyboard, press accent dead key. Extension ignores it. |
-| 13 | ignores AltGraph events | On German QWERTZ keyboard, press AltGr+B. Extension ignores it. |
-
-### destroy and re-init (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 14 | removes listeners so shortcuts stop firing | After destroy, Alt+Shift+B no longer triggers blur-all. |
-| 15 | re-calling init replaces previous listener | Change settings in popup. New settings take effect immediately, old listener removed. |
-
-### init edge cases (4 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 16 | supports single modifier + single key | Configure shortcut with one modifier and one key. Fires correctly. |
-| 17 | supports MetaLeft as primary modifier | On macOS, set modifier to Command. Cmd+Shift+B triggers. |
-| 18 | handles empty shortcuts object gracefully | Corrupted/empty shortcuts silently disable all shortcuts. No crash. |
-| 19 | handles null shortcuts gracefully | Null shortcuts input does not throw. Shortcuts disabled. |
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Basic state (1) | `isIdle()` returns false immediately after `init()` | Page load | Wrong idle state reported before any idle period |
+| Idle detection (2) | After idle timeout with no activity, `onIdle` callback fires; `isIdle()` becomes true | User walks away from keyboard | Auto-blur never triggers; sensitive content stays visible |
+| Idle→Active (1) | Any pointer/keyboard event resets idle timer; `onActive` fires; `isIdle()` false | User returns to keyboard | Page stays blurred after user returns |
+| Tab visibility (2) | `visibilitychange` to hidden fires `onTabSwitch`; returning to visible fires `onActive` | User switches browser tabs | Tab-switch blur does not trigger |
+| Lifecycle (2) | `destroy()` removes all listeners; subsequent events produce no callbacks; second `destroy()` is safe | Extension unloaded | Memory leak; stale callbacks fire on dead page |
+| Mode isolation (2) | `init` without `onIdle` is safe; `init` without `onTabSwitch` is safe | Partial callback config | Unconfigured callback throws; breaks auto-blur init |
 
 ---
 
-## 4. selector_utils.test.js (35 tests)
+## 6. tab_privacy.test.js (11 tests) — `tests/unit/tab_privacy.test.js`
 
-### getSelector (8 tests)
+Source module: `src/tab_privacy.js` → `blsi.TabPrivacy`
 
-| # | Test | Manual Replication |
-|---|---|---|
-| 1 | returns #id when element has unique ID | `PrivacyBlurSelectorUtils.getSelector(document.querySelector('#content'))` — returns `'#content'`. |
-| 2 | no ID selector for duplicate IDs | Inject two elements with same ID. `getSelector` returns `[data-bl-si-id="..."]` instead. |
-| 3 | stamps data-bl-si-id on ID-less element | Pick any ID-less element, call `getSelector`. Element gets `data-bl-si-id` attribute in DOM. |
-| 4 | returns data-bl-si-id attribute selector | Same — returned string matches `[data-bl-si-id="..."]` format. |
-| 5 | reuses existing data-bl-si-id on repeat calls | Call `getSelector` twice on same element. Same selector both times. |
-| 6 | returns null for body element | `getSelector(document.body)` — `null`. |
-| 7 | returns null for null input | `getSelector(null)` — `null`. |
-| 8 | generated selector round-trips via querySelector | Get selector, use it with `document.querySelector()`. Returns same element. |
-
-### generateId (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 9 | returns 8-character string | `PrivacyBlurSelectorUtils.generateId()` — 8 chars. |
-| 10 | returns hex string (0-9, a-f) | Output matches `/^[0-9a-f]{8}$/`. |
-| 11 | returns unique values on repeated calls | Generate 50 IDs in a Set — nearly all unique. |
-
-### restoreSelector (6 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 12 | returns element for valid selector | `restoreSelector('#some-real-id')` — returns the element. |
-| 13 | returns null for stale selector | `restoreSelector('#nonexistent')` — `null`. |
-| 14 | returns null for invalid CSS selector | `restoreSelector('##bad!!!')` — `null`, no error. |
-| 15 | returns null for null input | `restoreSelector(null)` — `null`. |
-| 16 | returns null for empty string | `restoreSelector('')` — `null`. |
-| 17 | returns element by data-bl-si-id selector | Create element with `data-bl-si-id="abc12345"`, restore — found. |
-
-### restoreAllSelectors (6 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 18 | filters out stale selectors | Mix of valid/stale selectors — only valid ones returned. |
-| 19 | all stale returns empty array | All selectors point to removed elements — `[]`. |
-| 20 | empty array returns empty array | `restoreAllSelectors([])` — `[]`. |
-| 21 | invalid selector in array does not throw | `restoreAllSelectors(['##bad'])` — no error, returns `[]`. |
-| 22 | non-array input returns empty array | `restoreAllSelectors(null)` — `[]`. |
-| 23 | all valid returns all elements | 3 elements by ID — all 3 returned. |
-
-### getSelector edge cases (7 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 24 | returns null for documentElement | `getSelector(document.documentElement)` — `null`. |
-| 25 | returns null for undefined | `getSelector(undefined)` — `null`. |
-| 26 | handles special characters in ID | Element with `id="my:special.id"` — CSS-escaped selector works. |
-| 27 | handles numeric-starting ID | Element with `id="123numeric"` — CSS-escaped selector works. |
-| 28 | whitespace-only ID falls back to data-bl-si-id | `id="   "` treated as absent. Uses `data-bl-si-id`. |
-| 29 | does not re-stamp existing data-bl-si-id | Pre-set `data-bl-si-id`, call `getSelector` — value unchanged. |
-| 30 | different elements get different IDs | Two elements get different `data-bl-si-id` values. |
-
-### restoreSelector edge cases (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 31 | returns null for undefined | `restoreSelector(undefined)` — `null`. |
-| 32 | returns null for numeric input | `restoreSelector(42)` — `null`. |
-| 33 | handles complex selectors | `.container > .text` — works with `querySelector`. |
-
-### generateId robustness (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 34 | 100 IDs all match hex format | Stress test — all 100 match `/^[0-9a-f]{8}$/`. |
-| 35 | high uniqueness over 500 generations | Set of 500 IDs has >= 495 unique entries. |
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Basic toggle (2) | `enable()` sets `document.title` to `…`; `isActive` getter returns true | Enable tab privacy in popup | Tab title still visible in OS task switcher during screenshare |
+| Disable/restore (2) | `disable()` restores original title; `isActive` false | Disable tab privacy | Original title not restored; page title permanently replaced |
+| State tracking (1) | `enable()` after `enable()` is idempotent — title stays `…`, isActive stays true | Double-enable edge case | Title set to `…` then original title on second call |
+| Idempotence (1) | `disable()` after `disable()` is safe | Double-disable edge case | Throws or corrupts title on redundant disable |
+| Favicon creation (2) | `enable()` replaces favicon with blank canvas data URL; favicon `<link>` created if absent | Enable tab privacy | Recognizable site favicon visible in tab strip during screenshare |
+| Disable safety (1) | `disable()` when no stored favicon is safe (no throw) | Fresh page with no favicon | Disable throws on pages without favicons |
+| Multiple favicons (1) | All `rel="icon"` and `rel="shortcut icon"` links replaced on enable | Pages with multiple favicon variants | Some favicon variants escape replacement |
 
 ---
 
-## 5. storage_manager.test.js (33 tests)
+## 7. blur_timer.test.js (9 tests) — `tests/unit/blur_timer.test.js`
 
-### saveBlurItem (2 tests)
+Source module: `src/blur_timer.js` → `blsi.BlurTimer`
 
-| # | Test | Manual Replication |
-|---|---|---|
-| 1 | sends SAVE_BLUR_ITEM message with hostname and item | Open background worker DevTools, blur an element. Confirm `SAVE_BLUR_ITEM` message with correct hostname/item. |
-| 2 | resolves with the response from background | Blur succeeds — no console errors. |
-
-### removeBlurItem (1 test)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 3 | sends REMOVE_BLUR_ITEM message with correct payload | Unblur an element, monitor background logs for `REMOVE_BLUR_ITEM`. |
-
-### getBlurItems (4 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 4 | resolves with items array from background response | Blur elements, reload page. `getBlurItems(location.hostname)` returns saved items. |
-| 5 | resolves with empty array when background returns no items | Visit a page with no blurred elements. Returns `[]`. |
-| 6 | sends GET_BLUR_ITEMS message with correct hostname | Navigate to a page, monitor messages. Hostname matches `location.hostname`. |
-| 7 | resolves with empty array when response is null | Robustness against null background response. |
-
-### clearHost (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 8 | sends CLEAR_HOST with hostname | Use popup "Clear this site" button. Monitor background for `CLEAR_HOST`. |
-| 9 | does not send CLEAR_ALL accidentally | Only `CLEAR_HOST` appears in logs, not `CLEAR_ALL`. |
-
-### clearAll (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 10 | sends CLEAR_ALL message | Use popup "Clear all sites" button. Monitor background for `CLEAR_ALL`. |
-| 11 | no hostname in CLEAR_ALL | Message payload has no hostname field. |
-
-### getSettings (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 12 | returns merged defaults when storage empty | Clear extension storage. `getSettings()` returns all default values. |
-| 13 | stored values override defaults | Save custom settings via popup. `getSettings()` reflects overrides. |
-| 14 | fills missing keys with defaults | Only change blur radius. Other settings remain at defaults. |
-
-### saveSettings (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 15 | sends partial settings to background | Change one setting. Only that partial is in the `SAVE_SETTINGS` message. |
-| 16 | sends SAVE_SETTINGS message type | Confirm message type in logs. |
-
-### error handling (5 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 17 | rejects when sendMessage triggers lastError | Disable/reload extension while page open. `saveBlurItem` attempt produces error. |
-| 18 | getBlurItems handles sendMessage error gracefully by rejecting | Same scenario during page load. |
-| 19 | rejects when sendMessage throws synchronously | Extension fully unloaded. Stale content script `saveBlurItem` gets rejection. |
-| 20 | clearAll rejects on lastError | Background suspended during clearAll. |
-| 21 | clearHost rejects on lastError | Background suspended during clearHost. |
-
-### guard clauses (7 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 22 | saveBlurItem returns early for empty hostname | Programmatic guard — `sendMessage` never called with empty hostname. |
-| 23 | saveBlurItem returns early for null item | Same — null item blocked. |
-| 24 | removeBlurItem returns early for empty hostname | Same pattern. |
-| 25 | getBlurItems returns empty array for empty hostname | Returns `[]` without messaging background. |
-| 26 | clearHost early return for empty hostname | Same pattern. |
-| 27 | saveSettings early return for null | Null input blocked. |
-| 28 | saveSettings early return for non-object | String input blocked. |
-
-### DEFAULT_SETTINGS (3 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 29 | exposes DEFAULT_SETTINGS publicly | DevTools: `PrivacyBlurStorage.DEFAULT_SETTINGS` is defined. |
-| 30 | contains expected keys | Object has `blurRadius`, `highlightColor`, `transitionDuration`, `revealOnHover`, `enabled`. |
-| 31 | contains shortcuts sub-object | `DEFAULT_SETTINGS.shortcuts` has `chordKey1`, `chordKey2`, `chordModifier`. |
-
-### getSettings merging (2 tests)
-
-| # | Test | Manual Replication |
-|---|---|---|
-| 32 | returns complete object for null response | Clear all storage. Defaults still returned. |
-| 33 | stored values override defaults | Save overrides, confirm merge precedence. |
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Basic state (1) | `isActive()` false before `start()`; `getRemaining()` returns 0 | Fresh page load | Timer shown as active before user sets it |
+| Start/stop (2) | `start(minutes, onExpire)` sets `isActive()` true; `stop()` clears timer and sets false | Popup → set blur timer | Timer runs forever with no stop; or cannot be started |
+| Timer expiry (1) | After elapsed minutes, `onExpire` callback fires; `isActive()` becomes false | Timer countdown reaches zero | Blur does not auto-apply when timer expires |
+| Remaining time (2) | `getRemaining()` decrements over time; returns 0 after expiry | Popup timer display | Wrong time remaining shown |
+| Error handling (1) | `start(0)` or `start(-1)` throws or is no-op; does not start infinite loop | Invalid timer input in popup | Zero-duration timer fires immediately or runs forever |
+| Replacement (1) | Calling `start()` while timer active replaces previous timer | User changes timer duration mid-countdown | Both timers fire; double-blur |
 
 ---
 
-## Category-Based Blur Tests (blur_engine.test.js)
+## 8. shortcut_handler.test.js (25 tests) — `tests/unit/shortcut_handler.test.js`
 
-Tests added for the category-aware `blurAllContent(radius, options)` API.
+Source module: `src/shortcut_handler.js` → `blsi.Shortcuts`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | blurs only media elements when only media category enabled | img blurred, p and input not | Set up DOM with img+p+input, call blurAllContent with only media ON, check classes |
-| 2 | blurs only text elements when only text category enabled | p blurred, img and input not | Set up DOM with p+img+input, call with only text ON |
-| 3 | blurs form elements when form category enabled | input, textarea, select all blurred | Set up form elements, call with only form ON |
-| 4 | does not blur form elements when form category off | input not blurred, p blurred | Default-like categories (form OFF), verify input skipped |
-| 5 | blurs table cells when table category enabled | td blurred | Table with td, call with only table ON |
-| 6 | blurs structure elements with text when structure enabled | div with text blurred | Div with bare text, call with only structure ON |
-| 7 | does not blur empty structure elements | div without direct text not blurred | Div with only span child, call with structure ON |
-| 8 | backward compatible: no options defaults to all categories on | p and img blurred | Call blurAllContent(8) with no second arg |
-| 9 | backward compatible: empty options defaults to all categories on | p and img blurred | Call blurAllContent(8, {}) |
-| 10 | does not throw when all categories off | no elements blurred, no throw | Call with all categories false |
-| 11 | text-check elements only blurred with meaningful text | span with text blurred, empty span not | Three spans: text, empty, whitespace-only |
-| 12 | new text elements (strong, em, code) blurred when text on | all three blurred | strong+em+code with text, text category ON |
-| 13 | button is in form category, not structure | button not blurred by structure, blurred by form | Test with structure-only then form-only |
-| 14 | invalidateSelectorCache causes rebuild | form ON then OFF produces different results | Blur with form ON, invalidate, blur with form OFF |
-| 15 | matchesActiveCategories true for img when media on | returns true | Create img, call with media ON |
-| 16 | matchesActiveCategories false for img when media off | returns false | Create img, call with media OFF |
-| 17 | matchesActiveCategories false for unknown tags | returns false | Create custom-widget, call with all ON |
-| 18 | matchesActiveCategories false for null | returns false | Call with null element |
-| 19 | matchesActiveCategories defaults to all categories | returns true for p | Call without categories arg |
-| 20 | CATEGORY_SELECTORS is frozen | Object.isFrozen returns true | Check frozen state |
-| 21 | CATEGORY_SELECTORS has 5 categories | exactly 5 keys | Check key count |
-| 22 | each category has alwaysBlur and textCheck arrays | both are arrays | Iterate and check |
-
-## Constants Tests (constants.test.js)
-
-### Message type categories (3 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 1 | exposes all storage message types | `GET_BLUR_ITEMS`, `SAVE_BLUR_ITEM`, `REMOVE_BLUR_ITEM`, `CLEAR_HOST`, `CLEAR_ALL`, `GET_SETTINGS`, `SAVE_SETTINGS`, `GET_RULES`, `SAVE_RULES` | `blsi.STORAGE.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'` in DevTools |
-| 2 | exposes all command message types | `TOGGLE_BLUR_ALL`, `TOGGLE_PICKER`, `CLEAR_ALL_BLUR`, `RESTORE`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` | `blsi.COMMAND.TOGGLE_BLUR_ALL` in DevTools |
-| 3 | exposes all popup message types | `UPDATE_SETTINGS`, `GET_STATUS`, `UNBLUR_ITEM` | `blsi.POPUP.UNBLUR_ITEM === 'UNBLUR_ITEM'` in DevTools |
-
-### Flat shorthand access (1 test)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 4 | all message types accessible at top level | `blsi.SAVE_BLUR_ITEM === 'SAVE_BLUR_ITEM'`, plus command and popup types | `blsi.SAVE_BLUR_ITEM` in DevTools |
-
-### isValid (3 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 5 | returns true for known message types | `isValid('GET_BLUR_ITEMS')` etc. return `true` | `blsi.isValid('GET_BLUR_ITEMS')` in DevTools |
-| 6 | returns false for unknown strings | `isValid('UNKNOWN_TYPE')` returns `false` | `blsi.isValid('FOO')` in DevTools |
-| 7 | returns false for non-string input | `isValid(null)`, `isValid(42)` return `false` | `blsi.isValid(null)` in DevTools |
-
-### categoryOf (4 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 8 | returns correct category for storage types | `categoryOf('SAVE_BLUR_ITEM')` returns `'STORAGE'` | `blsi.categoryOf('SAVE_BLUR_ITEM')` in DevTools |
-| 9 | returns correct category for command types | `categoryOf('TOGGLE_BLUR_ALL')` returns `'COMMAND'` | `blsi.categoryOf('TOGGLE_BLUR_ALL')` in DevTools |
-| 10 | returns correct category for popup types | `categoryOf('UPDATE_SETTINGS')` returns `'POPUP'` | `blsi.categoryOf('UPDATE_SETTINGS')` in DevTools |
-| 11 | returns null for unknown types | `categoryOf('UNKNOWN')` returns `null` | `blsi.categoryOf('FOO')` in DevTools |
-
-### DEFAULT_SETTINGS (4 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 12 | contains all expected top-level keys | BLUR_RADIUS=10, TRANSITION_DURATION=200, etc. | `blsi.DEFAULT_SETTINGS` in DevTools |
-| 13 | is frozen (immutable) | `Object.isFrozen` returns `true` | `Object.isFrozen(blsi.DEFAULT_SETTINGS)` in DevTools |
-| 14 | SHORTCUTS is frozen with 3 actions | 3 keys, all defined | Check `Object.keys(blsi.DEFAULT_SETTINGS.SHORTCUTS).length` |
-| 15 | each shortcut has primaryModifier and keys array | all shortcuts have required shape | Inspect each shortcut object |
-
-### DEFAULT_SETTINGS.BLUR_CATEGORIES (3 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 16 | DEFAULTS.BLUR_CATEGORIES exists and is frozen | defined and frozen | Check Object.isFrozen |
-| 17 | has correct default values | text:true, media:true, form:false, table:true, structure:true | Compare each key |
-| 18 | has exactly 5 keys | length is 5 | Check Object.keys length |
-
-### buildDefaultSettings (2 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 19 | returns a mutable deep clone | clone can be modified without affecting original | Modify clone, check original unchanged |
-| 20 | nested objects are also cloned | modifying nested clone does not affect frozen original | Change BLUR_CATEGORIES.FORM on clone |
-
-### deepMerge (4 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 21 | merges flat keys | `{A:1,B:2}` + `{B:3}` = `{A:1,B:3}` | `blsi.deepMerge({A:1},{A:2})` in DevTools |
-| 22 | merges nested objects | nested override replaces inner key only | Test with nested objects |
-| 23 | blocks prototype pollution keys | `__proto__` and `constructor` ignored | Attempt pollution, verify safe |
-| 24 | does not mutate base | frozen base survives merge | Merge over frozen object |
-
-### validateSettings (8 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 25 | returns full defaults for null input | null yields complete defaults | `blsi.validateSettings(null)` in DevTools |
-| 26 | preserves valid values | custom values kept | Pass valid overrides, check preserved |
-| 27 | replaces out-of-range BLUR_RADIUS with default | 999, -1, 'abc' all reset to 10 | `blsi.validateSettings({BLUR_RADIUS:999})` |
-| 28 | replaces invalid REVEAL_MODE with default | 'invalid', 42 reset to 'hover' | Test with bad REVEAL_MODE |
-| 29 | replaces invalid HIGHLIGHT_COLOR with default | 'red', '#fff' reset to '#f59e0b' | Test with bad color |
-| 30 | replaces non-boolean category values with defaults | 'yes', 1 reset to boolean defaults | Test with non-boolean categories |
-| 31 | replaces broken shortcut binding with default | missing keys restored | Test with broken shortcut shape |
-| 32 | fills missing keys with defaults | empty object gets all defaults | `blsi.validateSettings({})` |
-
-### Immutability (2 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 33 | top-level pb namespace is extensible | `typeof pb === 'object'` | Modules attach to pb at runtime |
-| 34 | category objects are frozen | STORAGE, COMMAND, POPUP all frozen | Check `Object.isFrozen(blsi.STORAGE)` |
-
-### validateSettings boundary values (10 tests)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 35 | BLUR_RADIUS accepts min boundary (2) | radius 2 accepted | `blsi.validateSettings({BLUR_RADIUS:2})` |
-| 36 | BLUR_RADIUS accepts max boundary (30) | radius 30 accepted | `blsi.validateSettings({BLUR_RADIUS:30})` |
-| 37 | BLUR_RADIUS rejects below min (1) | radius 1 reset to default | `blsi.validateSettings({BLUR_RADIUS:1})` |
-| 38 | BLUR_RADIUS rejects above max (31) | radius 31 reset to default | `blsi.validateSettings({BLUR_RADIUS:31})` |
-| 39 | SHORTCUTS rejects empty keys array | empty keys falls back to default | Test with `keys: []` |
-| 40 | SHORTCUTS rejects keys exceeding limit (11) | 11 keys falls back to default | Test with 11-element keys array |
-| 41 | deepMerge stops at depth limit | depth 6+ returns override directly | Test with deeply nested object |
-| 42 | PICKER_MODE defaults to sticky | `DEFAULT_SETTINGS.PICKER_MODE === 'sticky'` | `blsi.DEFAULT_SETTINGS.PICKER_MODE` in DevTools |
-| 43 | PICKER_MODE validates against enum | 'sticky' and 'dynamic' accepted, 'invalid' rejected | `blsi.validateSettings({PICKER_MODE:'invalid'})` resets to default |
-| 44 | PICKER_MODES enum exists | `PICKER_MODES.STICKY === 'sticky'`, `PICKER_MODES.DYNAMIC === 'dynamic'` | `blsi.PICKER_MODES.STICKY` in DevTools |
-| 45 | BLUR_MODE validates against enum | 'gaussian' and 'frosted' accepted, 'invalid' rejected | `blsi.validateSettings({BLUR_MODE:'invalid'})` resets to default |
-
-## Category Storage Tests (storage_manager.test.js)
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 1 | returns blurCategories merged with defaults | partial override preserved, defaults kept | Mock response with {form:true}, check all 5 keys |
-| 2 | returns default blurCategories when none saved | all defaults present | Mock response with {}, check defaults |
-
-## pii_detector.test.js (31 tests) — `tests/unit/pii_detector.test.js`
-
-Covers `blsi.PiiDetector`:
-
-| # | Test Name | Asserts | Manual Replication |
-|---|---|---|---|
-| 1 | detects email addresses | scan finds `user@example.com`, wraps in `[data-bl-si-pii="email"][data-bl-si-blur="1"]` | Enable PII toggle, visit page with email, verify span wrapping |
-| 2 | detects phone numbers | scan finds `+1-555-123-4567`, wraps in `[data-bl-si-pii="phone"]` | Visit page with phone number, enable toggle |
-| 3 | detects SSN patterns | scan finds `123-45-6789`, wraps in `[data-bl-si-pii="ssn"]` | Visit page with SSN format |
-| 4 | detects credit card patterns | scan finds `4111 1111 1111 1111`, wraps | Visit page with CC number |
-| 5 | detects financial figures | scan finds `$1,234.56` | Visit page with dollar amount |
-| 6 | detects Euro currency symbol | `€500` matched | Visit page with € amount |
-| 7 | detects Indian Rupee symbol | `₹50,000` matched | Visit page with ₹ amount |
-| 8 | respects per-type toggles — disabled types are skipped | EMAIL:true finds email, SSN:false skips SSN | Enable only email, visit page with both |
-| 9 | returns 0 when no types are enabled | empty types object → 0 | Pass empty object, nothing wrapped |
-| 10 | does not match invalid email | `not@email` and `@handle` not matched | Verify invalid patterns unaffected |
-| 11 | SSN pattern requires separators | `123456789` (no dashes) not matched | Bare 9-digit number ignored |
-| 12 | skips already-wrapped PII nodes | double-scan count stays at 0 | Scan twice; no duplicate spans |
-| 13 | skips extension UI elements | toolbar content ignored | Inject email inside `#bl-si-picker-toolbar` |
-| 14 | skips text nodes inside toast | toast content ignored | Inject email in `.bl-si-toast` |
-| 15 | skips empty text nodes | whitespace-only nodes return 0 | Pass `<p>   </p>` |
-| 16 | handles multiple matches in one text node | two emails in one `<p>` → count 2 | Visit paragraph with two emails |
-| 17 | handles multiple PII types in one text node | email + phone in one `<p>` → count 2 | Visit paragraph with email and phone |
-| 18 | preserves surrounding text after wrapping | `textContent` identical to original | Verify `<p>` text unchanged post-scan |
-| 19 | clear() unwraps all PII spans and restores text | `[data-bl-si-pii]` gone, text intact | Scan then clear, verify DOM |
-| 20 | clear() resets match count | `getMatchCount()` → 0 after clear | Scan → check count > 0; clear → count 0 |
-| 21 | getPatterns() returns the pattern definitions | `PATTERNS.EMAIL.regex` is RegExp | `blsi.PiiDetector.getPatterns().EMAIL` |
-| 22 | getMatchCount() tracks total matches | two emails → count 2 | Scan 2-email page, check count |
-| 23 | scan with null rootEl returns 0 | `scan(null, types)` → 0 | — |
-| 24 | scan with null types returns 0 | `scan(body, null)` → 0 | — |
-| 25 | stopObserving is safe to call when no observer is active | no throw | `blsi.PiiDetector.stopObserving()` with no prior `observeMutations` |
-| 26 | double scan does not re-wrap already wrapped nodes | single span after two scans | Scan same page twice, verify one span |
-| 27 | PII blur survives blur-all teardown (data-bl-si-blur preserved on PII spans) | blur_engine sweep skips PII spans; stamp remains | Enable PII, blur-all off, verify spans still blurred |
-| 28 | all AUTO_DETECT defaults false — scan returns 0 and wraps nothing | default `{EMAIL:false,...}` → 0, no spans | Verify feature is inert before user enables toggle |
-| 29 | _matchCount accumulates across separate scan calls on different nodes | scan p1 → 1, scan p2 → 2 | Scan two separate paragraphs sequentially |
+| Action matching (7) | `init(shortcuts, callbacks)` fires correct callback when matching chord pressed; matches regardless of left/right modifier key; Alt+Shift+B fires `TOGGLE_BLUR_ALL`; Alt+Shift+P fires `TOGGLE_PICKER`; Alt+Shift+U fires `CLEAR_ALL`; custom re-bound chord fires correctly; old chord after rebind does not fire | Any keyboard shortcut | Shortcut silently fails; user cannot blur/unblur via keyboard |
+| Guards (8) | Event in `<input>` skipped; event in `<textarea>` skipped; event during picker active skipped unless Escape; `_setPickerActive(true)` blocks non-Escape shortcuts; AltGr chord not mis-matched as Alt; `metaKey` on non-Mac not matched as Meta; `defaultPrevented` event skipped; shortcut with empty binding array is no-op | Typing in form fields with shortcuts configured | Shortcut fires while user types in a text field |
+| Escape handling (3) | Escape key calls `callbacks.onEscape`; fires even when picker active; does not fire `onEscape` when `isPickerActive` false | Press Escape during picker | Picker cannot be dismissed; escape handler not called |
+| Fire token (2) | `_getFireToken()` returns unique token per call; tokens differ across invocations | (internal dedup) | Same keydown event processed twice in content_script dedup |
+| Lifecycle (5) | `destroy()` removes keydown listener; subsequent keypresses produce no callbacks; second `destroy()` is safe; `init()` after `destroy()` re-registers; callbacks object is optional | Extension disable/reload | Memory leak; dead-page shortcuts still fire |
 
 ---
 
-## Category E2E Test (mutation_loop.spec.js)
+## 9. shortcut_label.test.js (21 tests) — `tests/unit/shortcut_label.test.js`
 
-| # | Test Name | Asserts | Manual Replication |
+Source module: `src/shortcut_label.js` → `blsi.ShortcutLabel`
+
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | MutationObserver respects categories: form elements not blurred when form OFF | injected input/textarea not blurred, injected p blurred | Activate blur-all with default categories, inject input+textarea+p via console, check classes |
+| Code labels — letters/digits (8) | `codeLabel('KeyB')` → `'B'`; `codeLabel('Digit3')` → `'3'`; symbols (`Minus`, `Equal`, `BracketLeft`); named keys (`Enter`, `Escape`, `Space`, `Tab`, `Backspace`); arrows → `↑↓←→`; function keys `F1`–`F12`; numpad keys; unknown code → raw code as fallback | Shortcut display in popup | Popup shows raw `KeyB` instead of `B`; user cannot read their shortcuts |
+| Modifier labels (1) | Platform-aware: Mac renders `⌥⇧⌘⌃`; Windows/Linux renders `Alt Shift Ctrl Win` | Platform detection at install | Wrong modifier symbols shown on wrong platform |
+| Chord label (3) | `chordLabel({code, mods})` combines mod + key; empty mods produces key only; null/undefined chord returns `''` | Shortcut display, capture UI | Chord rendered without modifiers; null chord throws |
+| Binding label (3) | Single-chord binding matches `chordLabel`; multi-chord binding joined by space; empty binding returns `''` | Shortcut display in popup | Multi-chord binding shown without separator |
+| Chord key (4) | `chordKey` output is mod-order-independent; different codes produce different keys; same chord regardless of mod order; format is `"Alt+Shift\|KeyB"` | Shortcut dedup / storage key | Different mod orderings treated as different shortcuts |
+| Binding key (2) | Multi-chord canonical form joins chord keys with space; single chord matches `chordKey` | Shortcut storage/lookup | Multi-chord binding stored with wrong key; lookup fails |
 
 ---
 
-## Shadow DOM Tests (blur_engine.test.js) — 14 new tests
+## 10. shortcut_reserved.test.js (10 tests) — `tests/unit/shortcut_reserved.test.js`
 
-Added under `describe('shadow DOM')` in `tests/unit/blur_engine.test.js`.
-Uses jsdom `attachShadow({ mode: 'open' })` to build real shadow roots.
+Source module: `src/shortcut_reserved.js` → `blsi.ShortcutReserved`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | injectRules injects style into shadow root | `sr.querySelector('#bl-si-blur-styles')` not null after `injectRules(sr, cats, mode)` | Load extension; open DevTools on a page with web components; inspect shadow root — look for `<style id="bl-si-blur-styles">` inside it when blur-all is on |
-| 2 | injectRules style in shadow root does not appear in document head | `document.head.querySelector('#bl-si-blur-styles')` is null after injecting only into sr | Same as above — confirm main `<head>` has its own separate style element |
-| 3 | removeRules removes style from shadow root | style is null after `injectRules` then `removeRules` | Turn blur-all off — style element should disappear from shadow root |
-| 4 | stampElements stamps text-check elements inside shadow root | `<span>text</span>` inside sr gets `data-bl-si-blur="1"`, empty `<span>` does not | With blur-all on, inspect shadow root elements — text-bearing spans should have `data-bl-si-blur` |
-| 5 | stampElements returns discovered shadow roots | return value of `stampElements(document, ...)` contains sr when host is in document.body | N/A — internal API, no direct manual equivalent |
-| 6 | stampElements returns empty array when no shadow roots present | `[]` when no shadow hosts exist | N/A — internal |
-| 7 | handleDocument active path injects rules into shadow root | sr has `#bl-si-blur-styles` after `handleDocument(activeSettings, sr)` | Same as test 1 |
-| 8 | handleDocument active path stamps text-check elements inside shadow root | `<span>text</span>` in sr has `data-bl-si-blur` after active `handleDocument` | Same as test 4 |
-| 9 | handleDocument inactive path removes rules and stamps from shadow root | style + stamp both gone after inactive `handleDocument` following active | Turn blur-all off — shadow root cleaned up |
-| 10 | handleDocument recurses into nested shadow roots | nested sr (sr → innerHost → nestedSr) gets style + stamp after one `handleDocument(sr)` call | Inspect nested web component tree with blur-all on — innermost shadow root has style element |
-| 11 | teardown removes stamps and rules recursively from nested shadow roots | single `teardown(sr)` clears both sr and nestedSr style + stamps | Same as test 10 with blur-all turned off |
-| 12 | handleSite stamps elements inside shadow roots when blur-all active | end-to-end: shadow root gets style + stamp after `handleSite({BLUR_ALL_ACTIVE:true,...})` | Enable blur-all extension-wide; inspect any page with web components |
-| 13 | handleSite cleans up shadow roots when blur-all deactivated | shadow root style + stamps removed after `handleSite({BLUR_ALL_ACTIVE:false,...})` | Disable blur-all; inspect same shadow root — style element gone |
-| 14 | handleDocument called twice on same shadow root yields one style element | `sr.querySelectorAll('#bl-si-blur-styles').length === 1` | Trigger multiple rapid reconciles; open DevTools — should see exactly one style element per shadow root |
+| Reserved chords (5) | `isReserved({code:'KeyT', mods:['Control']})` → true (Ctrl+T); `Ctrl+W`, `F5`, `F12`, `Ctrl+L` all reserved; `lookup()` returns description string | User binds a reserved chord in popup | No warning shown; user binds extension to browser shortcut that silently fails |
+| Non-reserved (2) | `Alt+Shift+B`, `Ctrl+Shift+K` → `isReserved` false | Default extension chords | Default bindings incorrectly flagged as reserved |
+| Mod order agnostic (1) | `[Shift, Control]` and `[Control, Shift]` produce same `isReserved` result | Any chord with multiple modifiers | Same chord flagged reserved in one order but not another |
+| Platform filter (1) | `Meta+Q` reserved on Mac; may be non-reserved on Windows | Platform-specific behavior | Mac-only reserved chord mis-flagged on Windows |
+| Frozen (1) | `RESERVED` array is frozen | (internal integrity) | Runtime code mutates reserved list; warning check breaks |
 
 ---
 
-## RC-1: Custom Element Host Stamping (blur_engine.test.js) — 4 new tests
+## 11. action_registry.test.js (13 tests) — `tests/unit/action_registry.test.js`
 
-Added under `describe('custom element stamping (RC-1)')` in `tests/unit/blur_engine.test.js`.
-Verifies custom elements (hyphenated tag names) are stamped by `stampElements` when STRUCTURE or TEXT category is active.
+Source module: `src/action_registry.js` → `blsi.Actions`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | stampElements stamps custom element host when text content present | `<shreddit-foo>content</shreddit-foo>` gets `data-bl-si-blur="1"` when STRUCTURE+TEXT active | Enable blur-all on Reddit; inspect `<shreddit-dynamic-ad-link>` in DevTools — should have `data-bl-si-blur` attribute |
-| 2 | stampElements does not stamp custom element host when no text content | empty `<shreddit-bar>` has no `data-bl-si-blur` in normal (non-thorough) mode | Empty custom element should not be blurred unless it renders visible content |
-| 3 | stampElements stamps custom element host in thorough mode regardless of text | empty custom element gets `data-bl-si-blur` when `thorough=true` | Enable THOROUGH_BLUR; inspect empty custom element — should be blurred |
-| 4 | stampElements does not stamp custom element when STRUCTURE and TEXT both disabled | `<shreddit-qux>some text</shreddit-qux>` not stamped when TEXT=false, STRUCTURE=false | Disable TEXT and STRUCTURE categories; custom elements should not be blurred |
+| Exposure (2) | `blsi.Actions` exposed with `list`, `get`, `ids`, `defaultBindings`, `ACTIONS` | Extension load | Action registry unavailable; shortcuts cannot initialize |
+| Metadata shape (2) | Each action has `id`, `label`, `description`, `defaultBinding`, `messageType`, `chromeCommand`; `list()` returns 3 entries | Popup shortcut editor display | Missing fields cause popup to crash or show blank labels |
+| Frozen (2) | `ACTIONS` object and individual action entries are frozen; `defaultBinding` arrays are frozen | (internal integrity) | Action entries mutated at runtime; binding changes bleed across contexts |
+| defaultBindings clone (2) | `defaultBindings()` returns fresh clone; mutating clone does not affect source | Settings reset to defaults | Mutating defaults corrupts factory reset |
+| Uniqueness (2) | All `messageType` values unique; all `chromeCommand` values unique | Any message dispatch | Two actions share message type; one action silently hijacks the other |
+| Edge cases (1) | `get('DOES_NOT_EXIST')` returns `undefined` without throwing | Unknown action lookup | Registry throws on unknown id; content_script crashes |
+| Count (1) | Exactly 3 actions registered | (structural integrity) | Extra undocumented action present; missing action means shortcut non-functional |
+| Extra (1) | `ids()` array length matches `list()` length | (structural integrity) | ids/list out of sync |
 
 ---
 
-## RC-2: List Element Category Placement (blur_engine.test.js) — 3 new tests
+## 12. storage_manager.test.js (~31 tests) — `tests/unit/storage_manager.test.js`
 
-Added under `describe('CATEGORY_SELECTORS list element placement (RC-2)')` in `tests/unit/blur_engine.test.js`.
-Verifies `li`, `dt`, `dd` are in `STRUCTURE.alwaysBlur` (CSS injection) not `textCheck` (JS stamp).
+Source module: `src/storage_manager.js` → `blsi.Storage`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | li is in STRUCTURE.alwaysBlur not textCheck | `CATEGORY_SELECTORS.STRUCTURE.alwaysBlur` contains `'li'`; `textCheck` does not | Open DevTools on any page with blur-all + STRUCTURE; inspect `<style id="bl-si-blur-styles">` — should contain `li` in the CSS selector string |
-| 2 | dt and dd are in STRUCTURE.alwaysBlur not textCheck | same for `dt` and `dd` | Same as above — `dt` and `dd` in injected CSS |
-| 3 | injectRules includes li in alwaysBlur CSS when STRUCTURE active | injected `<style>` textContent contains `'li'` | Enable blur-all with STRUCTURE on; inspect injected style — list elements covered |
+| saveBlurItem (2+) | Sends `SAVE_BLUR_ITEM` message with `{host, item}`; item persisted across calls | Picker click blurs element | Blur not saved; disappears on page reload |
+| removeBlurItem (1) | Sends `REMOVE_BLUR_ITEM`; item no longer in `getBlurItems` result | Popup → remove item | Item re-appears after removal |
+| getBlurItems (4) | Returns array for host; empty array for unknown host; filters to current host only; handles storage error gracefully | Page load RESTORE | Wrong items restored; items from other sites appear |
+| clearHost (2) | Removes all items for host; items for other hosts untouched | Popup → clear this site | Items from other sites deleted; or site items persist after clear |
+| clearAll (2) | Removes all blur items everywhere; sends `CLEAR_ALL` message | Popup → clear all sites | Some items survive clear-all |
+| getSettings (3) | Returns merged settings (storage + defaults); missing keys filled from defaults; returns `DEFAULT_SETTINGS` shape | Any settings access | Missing settings key causes crash or wrong default behavior |
+| saveSettings (2) | Sends `SAVE_SETTINGS` with partial object; subsequent `getSettings` reflects change | Any settings change in popup | Setting change not persisted; reverts on reload |
+| getRules / saveRules (4) | `getRules` returns array; empty when none set; `saveRules` persists; subsequent get reflects saved rules | URL rules panel in popup | URL rules not persisted; site-specific settings lost |
+| getBlurState / saveBlurState (2) | Persists and retrieves `{ blurAll, host }` shape | blur-all toggle persistence | Blur-all state not remembered across reload |
+| Guard clauses (7+) | `saveBlurItem(null)` no-op; `removeBlurItem(undefined)` no-op; invalid host rejected; `saveSettings({})` is safe no-op; message send failure handled without throw | Invalid inputs from popup | Storage functions throw on bad input; crash popup |
 
 ---
 
-## RC-3: Reveal Descendant Cascade Rule (blur_engine.test.js) — 2 new tests
+## 13. url_matcher.test.js (20 tests) — `tests/unit/url_matcher.test.js`
 
-Added under `describe('reveal descendant cascade rule (RC-3)')` in `tests/unit/blur_engine.test.js`.
-Verifies `injectRules` includes the `[data-bl-si-reveal] [data-bl-si-blur]` descendant combinator rule.
+Source module: `src/url_matcher.js` → `blsi.UrlMatcher`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | injectRules includes descendant-reveal cascade rule for data-bl-si-blur | injected CSS contains `[data-bl-si-reveal] [data-bl-si-blur]` | Enable THOROUGH_BLUR + REVEAL_MODE=hover; hover over a `<p>` with multiple `<span>` children — all spans inside the hovered `<p>` should clear, no blurred islands |
-| 2 | injectRules includes descendant-reveal cascade rule for data-bl-si-pii | injected CSS contains `[data-bl-si-reveal] [data-bl-si-pii]` | Enable PII detection + THOROUGH_BLUR; hover over a `<p>` containing a PII-stamped span — PII span should also reveal with the ancestor |
+| Wildcard mode (11) | `matchesPattern('https://example.com/page', 'example.com/*')` → true; `*` matches any path; `*.example.com` matches subdomains; exact match; no match on wrong host; protocol agnostic; trailing slash handling; `MAX_PATTERN_LENGTH` enforced; empty pattern; pattern with query string; path prefix wildcard | URL rules configured in popup | Site-specific rules not applied; rules apply to wrong sites |
+| Regex mode (4) | Pattern wrapped in `/` treated as regex; valid regex matches; invalid regex caught gracefully; regex flags not supported (no `//i`) | Advanced users using regex patterns | Regex rule silently does nothing; invalid regex crashes matcher |
+| resolveSettings (5) | `resolveSettings(url, rules, defaultSettings)` returns base settings when no rule matches; merges matching rule's overrides; first-match wins for overlapping rules; empty rules returns defaults; null URL returns defaults | Page load on site with URL rules | Rule overrides not applied; wrong settings used for site |
 
 ---
 
-## Slot-Projected Text Blur (blur_engine.test.js) — 2 new tests
+## 14. selector_utils.test.js (35 tests) — `tests/unit/selector_utils.test.js`
 
-Added under `describe('custom element stamping (RC-1)')` in `tests/unit/blur_engine.test.js`.
-Verifies that shadow DOM elements with `<slot>` descendants are stamped (slotted content appears blurred) while structural wrappers with only a slot are not.
+Source module: `src/selector_utils.js` → `blsi.SelectorUtils`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | stampElements stamps shadow DOM `<a>` containing a `<slot>` (no direct text) | `<a><slot></slot></a>` inside a shadow root gets `data-bl-si-blur="1"` | Enable blur-all; inspect Reddit ad element shadow DOM — the shadow `<a>` should have `data-bl-si-blur`; slotted ad text should be blurred |
-| 2 | stampElements does NOT stamp structural element containing only a slot (text gate still strict) | `<div><slot></slot></div>` inside shadow root has no stamp | Shadow DOM layout wrappers (div with slot) should not be stamped — prevents nested-blur artifacts |
+| getSelector core (8) | Returns `[data-bl-si-id="…"]` for stamped element; falls back to tag+id for un-stamped; falls back to tag+class for no-id; handles `<body>` and `<html>`; handles detached element; handles SVG element; unique selector per unique element; handles `null` | Restore saved blur items on page load | Selector resolves to wrong element; blur re-applied to wrong node |
+| generateId (3) | Returns string of `[a-z0-9]`; length ≥ 8; uniqueness across 1000 calls | Any element stamping | ID collision — two elements share selector |
+| restoreSelector (6) | `restoreSelector(doc, selector)` finds element by `[data-bl-si-id]`; falls back to `querySelector`; returns null when not found; handles prefixed selector; works after SPA re-render stamped new id | RESTORE message on page load | Saved blur item does not re-blur correct element |
+| restoreAllSelectors (6) | `restoreAllSelectors(doc, items)` applies `restoreSelector` to each item; skips null results; returns array of resolved elements; handles empty array; handles items with no selector; count matches found elements | Bulk restore on page load | Some items not restored; array length wrong |
+| getSelector edge cases (7) | Iframe element; element with no parent; very deep nesting; element with whitespace-only class; multiple classes; class name with special chars; element removed mid-call | Complex DOM structures | Selector generation throws or produces unparseable string |
+| restoreSelector edge cases (3) | Selector with CSS special chars in id value; selector targeting `<html>`; malformed selector string | Restoring items with special characters in page | Malformed selector throws; crashes content_script on restore |
+| generateId robustness (2) | Crypto-random source used when available; falls back to Math.random | Environments without crypto.getRandomValues | IDs predictable; collision risk in large pages |
 
 ---
 
-## ComposedPath Shadow DOM Reveal (reveal_controller.test.js) — 2 new tests
+## 15. constants.test.js (54 tests) — `tests/unit/constants.test.js`
 
-Added under `describe('blsi.Reveal — composedPath (shadow DOM pierce)')` in `tests/unit/reveal_controller.test.js`.
-Verifies that `onRevealMouseOver` and `onRevealClick` use `composedPath()[0]` to reveal the actual element inside a shadow root, bypassing shadow DOM event retargeting.
+Source module: `src/constants.js` → `globalThis.blsi`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | onRevealMouseOver reveals composedPath target, not retargeted e.target | inner blurred `<span>` gets `data-bl-si-reveal`; shadow host does not | Enable blur-all + REVEAL_MODE=hover; hover over `<pdp-back-button>` on Reddit — SVG inside should unblur |
-| 2 | onRevealClick reveals composedPath target, not retargeted e.target | same for click reveal mode | Enable REVEAL_MODE=click; click on a shadow-DOM blurred element — it should reveal |
+| Message types (3) | `blsi.STORAGE`, `blsi.COMMAND`, `blsi.POPUP` objects exist with correct string values; no undefined entries | Any message send | Message type string mismatch → message silently dropped |
+| Flat shorthand (1) | `blsi.COMMAND.TOGGLE_BLUR_ALL === 'TOGGLE_BLUR_ALL'` etc. match values used in background.js | Runtime message dispatch | Handler key mismatch → blur/unblur commands never received |
+| isValid (3) | `isValid('TOGGLE_BLUR_ALL')` → true; unknown type → false; null/undefined → false | Message validation in background.js | Invalid messages processed; valid messages rejected |
+| categoryOf (4) | Returns correct `BLUR_CATEGORIES` key for known type; returns null for unknown; handles all 5 categories | Category filter logic | Wrong category returned; category toggle affects wrong elements |
+| DEFAULT_SETTINGS (4) | All expected top-level keys present (`BLUR_RADIUS`, `REVEAL_MODE`, `THOROUGH_BLUR`, `PICKER_MODE`, `BLUR_CATEGORIES`, `AUTO_DETECT`); no unknown keys; types correct | Fresh install, settings reset | Wrong defaults applied; setting key missing causes crash |
+| BLUR_CATEGORIES (3) | Default has all 5 keys (`TEXT`, `MEDIA`, `FORM`, `TABLE`, `STRUCTURE`); all boolean; default values match doc | Fresh install | Category toggle broken for default-off categories |
+| buildDefaultSettings (2) | Returns object with `SHORTCUTS` populated from `blsi.Actions.defaultBindings()`; result is a fresh clone each call | Settings reset, first install | Shortcuts not in default settings; factory reset breaks shortcuts |
+| deepMerge (4) | Nested objects merged recursively; arrays replaced not merged; null source returns target; nested null key handled | Settings partial update | Nested settings key overwritten instead of merged; null key crashes |
+| validateSettings (12) | Migrates legacy `PICKER_MODE: 'sticky'` → `'sticky-page'`; removes unknown keys; coerces wrong types to default; preserves valid shortcuts; rejects invalid modifier; handles empty object; handles null; returns new object (does not mutate); `AUTO_DETECT.NUMERIC` enum validated; `BLUR_RADIUS` clamped to range; `REVEAL_MODE` enum validated; deeply nested unknown keys stripped | Storage read on startup | Bad stored settings crash content_script; legacy settings not migrated |
+| Immutability (2) | `DEFAULT_SETTINGS` is frozen at top level; `BLUR_CATEGORIES` sub-object is frozen | (internal integrity) | Runtime mutation of defaults corrupts subsequent fresh installs |
+| Boundary values (11) | `BLUR_RADIUS` min/max; `MAX_PATTERN_LENGTH`; empty string shortcut binding; chord with all mods; chord with no mods; `REVEAL_MODE` all valid enum values; `NUMERIC` all valid enum values; `MODIFIER_CODES` array non-empty; `REVEAL_DFS_MAX_DEPTH` is positive integer | Edge case settings input | Out-of-range values accepted; enum values outside spec accepted |
 
 ---
 
-## Shadow Host Reveal — parentElement boundary (reveal_controller.test.js) — 2 new tests
+## 16. logger.test.js (10 tests) — `tests/unit/logger.test.js`
 
-Added under `describe('blsi.Reveal — shadow host reveal (parentElement boundary)')` in `tests/unit/reveal_controller.test.js`.
-Verifies that `findBlurredTarget` walks the shadow host chain (via `getRootNode().host`) when `parentElement` returns null at a shadow root boundary.
+Source module: `src/logger.js` → `blsi.Logger`
 
-| # | Test Name | Asserts | Manual Replication |
+| Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| 1 | hover over element inside shadow root reveals blurred shadow host | `<rpl-badge data-bl-si-blur>` → #shadow-root → `<span>NEW</span>`. Hovering the span reveals the host (host gets `data-bl-si-reveal`). | Enable blur-all + REVEAL_MODE=hover; hover over `<rpl-badge>` on Reddit — "NEW" badge text inside shadow root should unblur on hover |
-| 2 | hover over shadow DOM child finds blurred light DOM ancestor of host | `<div data-bl-si-blur>` wraps an unblurred `<custom-el>` whose shadow root contains `<span>`. Hovering the span reveals the outer `<div>`. | Enable blur-all; find a page with nested custom elements where blur is on a light-DOM ancestor — hover reveal should still work |
+| Silent by default (1) | `log`, `warn`, `flow` produce no console output when `enabled = false` (default) | Normal user operation | Debug noise in user's console on production install |
+| Error always writes (1) | `error()` writes to console regardless of `enabled` state | Any runtime error | Errors silently swallowed; bugs invisible to users |
+| Enable/disable (2) | `enable()` sets `enabled` true and writes to `chrome.storage.local`; `disable()` restores silence | Developer toggle in DevTools: `blsi.Logger.enable()` | Debug log toggle not persisted across pages |
+| Flow/scope (3) | `flow(tag, data)` writes structured log; `scope(name)` returns tagged logger with all methods; `scope` logger inherits enabled state | Developer debugging with named scopes | Scoped logger methods undefined; flow logging broken |
+| Cross-context sync (2) | `chrome.storage.onChanged` listener flips `enabled` when `blsi_debug` key changes; popup and content_script stay in sync | DevTools enable in popup context visible in content_script | Debug toggle in one context not seen in others |
+| Init from storage (1) | On load, reads `blsi_debug` from storage; `enabled` reflects stored value | Page reload while debug on | Debug mode resets after every navigation |
+
+---
+
+## 17. popup_i18n.test.js (14 tests) — `tests/unit/popup_i18n.test.js`
+
+Source module: `popup/popup_i18n.js` → `blsi.PopupI18n`
+
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Module exposure (1) | `blsi.PopupI18n` exposed with `init`, `t`, `currentLang` | Popup load | Popup i18n unavailable; all strings broken |
+| Language init (3) | `init('en')` loads English strings; `t('BLUR_ALL')` returns English text; `currentLang` reflects init arg | Popup open with explicit lang | Popup shows wrong language |
+| Auto resolution (4) | `init()` without arg resolves from `chrome.i18n.getUILanguage()`; falls back to `'en'` for unsupported locale; `'zh-CN'` resolved to `'zh_CN'` file variant; partial locale match (`'fr-CA'` → `'fr'`) | Non-English Chrome browser | Popup stays in English for supported locales |
+| Re-init (1) | `init('fr')` after `init('en')` updates `currentLang` and `t()` output | (internal lifecycle) | Language not updated when popup re-initializes |
+| Unknown key (1) | `t('DOES_NOT_EXIST')` returns the key string as fallback; no throw | Missing translation key in new feature | Popup crashes or shows blank on missing key |
+| Warn dedup (2) | Missing key warning logged once per key; not repeated on subsequent `t()` calls | (log hygiene) | Console flooded with repeated missing-key warnings |
+| Interpolation (1) | `t('TIMER_LABEL', { minutes: 5 })` → `'5 minutes'` (placeholder substitution) | Timer display in popup | Popup shows raw `{{minutes}}` placeholder |
+| Fallback caching (1) | Fallback (key-as-string) result cached; `init()` bust clears cache | Re-init after language switch | Stale fallback returned after language change |
+
+---
+
+## 18. content_i18n.test.js (11 tests) — `tests/unit/content_i18n.test.js`
+
+Source module: `src/content_i18n.js` → `blsi.ContentI18n`
+
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| Module exposure (1) | `blsi.ContentI18n` exposed with `init`, `t`, `currentLang` | Content script load | Content script i18n unavailable; toast messages broken |
+| Language init (3) | `init('en')` resolves English strings; `t('key')` returns correct text; `currentLang` reflects resolved language | Content script initialization | Toast and content-side strings show wrong language |
+| Auto resolution (3) | `init()` resolves from `navigator.language` (not `chrome.i18n`); falls back to `'en'`; partial match (`'de-AT'` → `'de'`) | User browser locale | Content script uses wrong language source; mismatches popup locale |
+| Parameter fallback (1) | `t('KEY', 'fallback string')` returns fallback when key missing | Missing key in content strings | Content throws or shows blank when key missing |
+| Key as fallback (1) | `t('MISSING_KEY')` returns `'MISSING_KEY'` string when no fallback provided | Any missing content string | Content script crashes on unknown key |
+| Warn dedup (1) | Missing key warning emitted once per key per session | (log hygiene) | Console flooded on pages with missing content strings |
+| Fetch failure (1) | Network failure loading locale JSON falls back to English silently | Offline use, CSP restriction | Content script crashes on i18n load failure |
+
+---
+
+## 19. screenshot.test.js (7 tests) — `tests/unit/screenshot.test.js`
+
+Source module: `src/screenshot.js` → `blsi.Screenshot`
+
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| captureViewport (3) | `captureViewport()` sends `CAPTURE_VISIBLE_TAB` message and resolves with data URL; handles rejection; resolves with null on no permission | Popup → screenshot button | Screenshot fails silently; error not surfaced to user |
+| download (1) | `download(dataUrl, filename)` creates `<a>` with `download` attribute and clicks it without throwing (jsdom limitation — see Known Issues) | Screenshot → download button | Download triggered with wrong filename or not at all |
+| startCrop (1) | `startCrop()` creates overlay element and attaches it to document body | Screenshot → crop mode button | Crop overlay not shown; crop UI broken |
+| cancelCrop (2) | `cancelCrop()` removes overlay; `cancelCrop()` when no overlay active is safe (no throw — see Known Issues) | Escape during crop, cancel button | Crop overlay not removed; subsequent screenshot attempts broken |
+
+---
+
+## 20. selection_blur.test.js (13 tests) — `tests/unit/selection_blur.test.js`
+
+Source module: `src/selection_blur.js` → `blsi.SelectionBlur`
+
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| blurSelection (6) | `blurSelection(range)` wraps selection in `[data-bl-si-blur]` span with unique id; works on text-only range; works on partially-selected element; handles collapsed range (no-op); handles null range; result appears in `getSelectionBlurs()` | Text selection → blur shortcut or context menu | Text selection blur creates no span; selection not blurred |
+| clearAll (1) | `clearAll()` unwraps all selection blur spans; restores text nodes | Clear-all shortcut, page unload | Selection blurs linger after clear-all |
+| getSelectionBlurs (1) | Returns array of `{ id, selector, text }` for all active selection blurs | Popup → selection blur list | Wrong list shown; items missing from popup |
+| removeSelectionBlur (1) | `removeSelectionBlur(id)` removes specific span by id; restores text | Popup → remove single selection blur | Wrong item removed; or item cannot be removed |
+| ID uniqueness (1) | IDs from `blurSelection` calls never repeat across 100 calls | Multiple text selections on same page | ID collision — removing one selection blurs removes both |
+| destroy (1) | `destroy()` removes event listeners and clears state; subsequent calls are safe | Extension unloaded | Memory leak; event handlers fire on dead page |
+| Edge cases (2) | Range spanning two block elements; range containing inline elements (bold, links) — span correctly wraps content | Complex text selections | Selection blur fails on formatted text; span corrupts nested HTML |
 
 ---
 
 ## Known Test Quality Issues
 
-| File | Test | Issue |
-|---|---|---|
-| blur_engine | #9 (applyBlur idempotent) | Weak — `classList.add` is inherently idempotent. Would pass without the `isBlurred` guard. |
-| blur_engine | #36-37 (background-image) | jsdom may not detect inline `backgroundImage` via `getComputedStyle`, taking generic path instead. Test passes but may not exercise the intended branch. |
-| blur_engine | #39 (video no duplicate canvases) | Misleading name — only calls `applyBlur` once, never tests re-apply. |
-| blur_engine | #40 (img filter clear) | Misplaced in "video blur edge cases" describe block. |
-| picker | #6 (null target mouseover) | Name says "null" but tests Document target (non-Element). |
-| picker | #20 (partial settings) | Claims to test partial merge but only asserts onBlur fires. |
-| picker | #26 (highlight switches) | Does not verify el1 loses highlight when el2 gains it. |
-| selector_utils | #16 (empty string) | Overly permissive assertion (`== null || instanceof Element`). Should be `toBeNull()`. |
-| storage_manager | #15-16, 22-28 | Guard clause and settings tests may be incompatible with the `buildStubSource()` stub. Stub does not match real source contract. |
+| Module | Issue |
+|---|---|
+| `pii_detector` | NUMERIC regex was `\d{5,}` instead of `\d{4,}` in source — fixed 2026-04-17. Tests were correct; source was wrong. 4-digit account numbers were silently passing through. |
+| `screenshot` | `download does not throw` is a vacuous test — jsdom cannot simulate anchor click behavior. The assertion only verifies the call does not throw, not that a download was initiated. |
+| `screenshot` | `cancelCrop removes the overlay` has no DOM assertion — only verifies no-throw. If `cancelCrop` is a no-op, the test still passes. Needs a `document.querySelector` assertion against the overlay element. |
+| `content_i18n` | Tests 2–7 are structurally identical to `popup_i18n` tests. This is intentional: the two modules have the same public API but different language resolution sources (`navigator.language` vs `chrome.i18n.getUILanguage()`). The duplication is load-bearing. |
+| `selector_utils` | The entire class-based selector strategy branch inside `getSelector` (fallback via class name list when no `data-bl-si-id` and no element id) has zero test coverage. Selector correctness in class-heavy SPAs is untested. |

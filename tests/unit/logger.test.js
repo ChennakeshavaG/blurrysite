@@ -14,6 +14,29 @@
  *  - initial state is read from chrome.storage.local on load
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * Covers: gated log/warn/flow, un-gated error, enable/disable persistence,
+ *         scope() tagging + gate, flow() payload output, cross-context
+ *         onChanged sync, initial state hydration from chrome.storage.
+ *
+ * Redundant:
+ *   "error() always writes regardless of toggle" and "scope().error always writes"
+ *   both verify the un-gated error path. Duplication is intentional — root vs
+ *   scoped variant — but the two tests together form a single logical contract.
+ *
+ * Optimization opportunities:
+ *   enable/disable state assertions repeat the same freshLoad + enable/disable
+ *   pattern. A shared resetToDisabled() helper before each toggle test would
+ *   eliminate the repeated setup boilerplate.
+ *
+ * Missing coverage:
+ *   - scope().warn() respecting the gate (warn is gated but never tested on scope)
+ *   - Explicit enabled===false check before any enable() is called in a fresh load
+ *   - Two independent scopes sharing the same _enabled state (cross-scope coupling)
+ *   - _ts() timestamp format: HH:MM:SS.mmm prefix present on every log output
+ *
+ * === END ANNOTATIONS === */
+
 'use strict';
 
 const path = require('path');
@@ -57,6 +80,7 @@ describe('logger.js', () => {
     chrome.storage.local.get.mockReset();
   });
 
+  // USER IMPACT: debug logging off by default — users don't see dev messages in DevTools
   test('log/warn/flow are silent by default', () => {
     blsi.Logger.log('hello');
     blsi.Logger.warn('warn');
@@ -65,6 +89,7 @@ describe('logger.js', () => {
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
+  // USER IMPACT: critical errors always logged — developers catch issues even with debug off
   test('error() always writes regardless of toggle', () => {
     blsi.Logger.error('boom');
     expect(consoleErrorSpy).toHaveBeenCalled();
@@ -73,6 +98,8 @@ describe('logger.js', () => {
     expect(args).toContain('boom');
   });
 
+  // USER IMPACT: user toggles debug in popup — persists across reloads via chrome.storage
+  // OPTIMIZE: enable/disable pair tests share the same freshLoad+enable/disable pattern — extract resetToDisabled() helper
   test('enable() flips state and persists to storage', () => {
     blsi.Logger.enable();
     expect(blsi.Logger.enabled).toBe(true);
@@ -92,6 +119,7 @@ describe('logger.js', () => {
     expect(consoleLogSpy.mock.calls.some((c) => c.includes('quiet'))).toBe(false);
   });
 
+  // USER IMPACT: debug tracing across contexts — [content] vs [bg] prefixes isolate errors by module
   test('flow() emits the event tag and payload when enabled', () => {
     blsi.Logger.enable();
     consoleLogSpy.mockClear();
@@ -113,6 +141,7 @@ describe('logger.js', () => {
     expect(matched).toEqual(expect.arrayContaining(['msg.in', { type: 'X' }]));
   });
 
+  // REDUNDANT: mirrors "error() always writes regardless of toggle" — intentional duplication covering scoped variant (root vs scope)
   test('scope().error always writes', () => {
     const s = blsi.Logger.scope('bg');
     s.error('fatal');
@@ -122,6 +151,7 @@ describe('logger.js', () => {
     expect(args).toContain('fatal');
   });
 
+  // USER IMPACT: user enables debug on popup — content script immediately reflects state without reload
   test('chrome.storage.onChanged listener syncs cross-context state', () => {
     expect(typeof onChangedListener).toBe('function');
     expect(blsi.Logger.enabled).toBe(false);
@@ -138,6 +168,10 @@ describe('logger.js', () => {
     expect(blsi.Logger.enabled).toBe(false);
   });
 
+  // MISSING: no test for initial enabled===false (explicit assertion before any enable())
+  // MISSING: no test for two independent scopes sharing the same _enabled flag
+  // MISSING: no test for scope().warn() respecting the gate
+  // MISSING: no test for _ts() timestamp HH:MM:SS.mmm prefix present on log output
   test('initial state read from storage when blsi_debug=true', () => {
     freshLoad({ initial: true });
     expect(blsi.Logger.enabled).toBe(true);

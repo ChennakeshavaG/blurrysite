@@ -4,6 +4,43 @@
  * Unit tests for src/blur_engine.js — hybrid CSS + data-attribute blur engine.
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: injectRules/removeRules, stampElements, tryBlurTextCheck, applyBlur/removeBlur/toggleBlur,
+ *         isBlurred, unblurAll, shouldBlurElement, matchesActiveCategories, CATEGORY_SELECTORS,
+ *         zone overlay CRUD, handleSite reconciler (items + page-wide), counters,
+ *         shadow DOM (injectRules/stampElements/handleDocument/handleSite/teardown/observeRoot),
+ *         custom element stamping, ARIA role matching, reveal cascade rule, li/dt/dd placement.
+ *
+ * REDUNDANT:
+ *   - "applyBlur sets data-bl-si-blur" + "applyBlur idempotent": both assert stamp attribute;
+ *     idempotent test adds no new assertion beyond checking the value is still '1'.
+ *   - "isBlurred true for data-bl-si-blur" + shouldBlurElement "true for always-blur":
+ *     both confirm that isBlurred delegates to shouldBlurElement for always-blur tags.
+ *   - "defaults to page anchor when anchor omitted" + "page anchor uses position: absolute":
+ *     both verify the same default-anchor path; only the zoneData.anchor field differs.
+ *   - category coverage "hgroup/progress+meter/audio" tests each verify a single tag in
+ *     the CSS output — three nearly identical tests for the same CSS-building logic.
+ *
+ * OPTIMIZE:
+ *   - Zone overlay tests (8 createZoneOverlay tests) share the same zoneData shape;
+ *     extract a makeZone(id, overrides) helper to reduce boilerplate.
+ *   - ARIA role tests (7 tests) follow identical injectRules→inspect-css or
+ *     createElement→setAttribute→matchesActiveCategories patterns; use test.each
+ *     over role names and expected boolean outcomes.
+ *   - Shadow DOM tests repeat manual host+shadow+innerHTML setup; extract
+ *     makeShadowRoot(html) helper (already partially done — extend to nested case too).
+ *   - category coverage "hgroup/audio/progress+meter" tests could be one test.each
+ *     parameterised over [tag, categories] pairs.
+ *
+ * MISSING:
+ *   - No direct test for ensureSvgFilter() standalone behavior (filter element shape/attrs).
+ *   - No test for handleSite mutex — concurrent (non-awaited) calls; second should be dropped.
+ *   - No test for MutationObserver callback correctness: observeRoot attaches but mutations
+ *     added after attach are never fired and verified in tests.
+ *   - No test for observeRoot called on a shadow root (vs document).
+ *   - No test for isVisuallyBlurred() (separate from isBlurred).
+ * ===*/
+
 'use strict';
 
 const fs = require('fs');
@@ -65,6 +102,7 @@ afterEach(() => {
 
 describe('blsi.BlurEngine', () => {
 
+  // USER IMPACT: blur-all toggle — CSS rules injected so all matching elements render blurred
   describe('injectRules', () => {
     test('creates style element in head', () => {
       blsi.BlurEngine.injectRules(document, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
@@ -117,6 +155,7 @@ describe('blsi.BlurEngine', () => {
 
   });
 
+  // USER IMPACT: SPA navigation — new DOM elements stamped correctly after route change
   describe('stampElements', () => {
     test('stamps text-check elements with direct text', () => {
       document.body.innerHTML = '<div>text</div><div></div>';
@@ -166,6 +205,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: picker element click — selected element gets blur attribute applied
   describe('applyBlur (picker)', () => {
     test('sets data-bl-si-blur', () => {
       const div = document.createElement('div');
@@ -174,6 +214,7 @@ describe('blsi.BlurEngine', () => {
       expect(div.dataset.blSiBlur).toBe('1');
     });
 
+    // REDUNDANT: both this and "sets data-bl-si-blur" assert dataset.blSiBlur === '1'; second call adds no new assertion
     test('idempotent', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
@@ -212,6 +253,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: picker unblur decision — isBlurred determines whether click triggers onBlur or onUnblur
   describe('isBlurred', () => {
     test('true for data-bl-si-blur', () => {
       const div = document.createElement('div');
@@ -220,6 +262,7 @@ describe('blsi.BlurEngine', () => {
       expect(blsi.BlurEngine.isBlurred(div)).toBe(true);
     });
 
+    // REDUNDANT: overlaps with shouldBlurElement "true for always-blur" — both verify the same always-blur tag path
     test('true for always-blur tag when rules active', () => {
       const p = document.createElement('p');
       document.body.appendChild(p);
@@ -234,8 +277,10 @@ describe('blsi.BlurEngine', () => {
     test('false for null', () => {
       expect(blsi.BlurEngine.isBlurred(null)).toBe(false);
     });
+    // MISSING: no test for isBlurred returning false after rules removed from an always-blur tag
   });
 
+  // USER IMPACT: clear all blur shortcut (Alt+Shift+U) — removes every blur without page reload
   describe('unblurAll', () => {
     test('removes rules and data attrs', () => {
       const div = document.createElement('div');
@@ -248,6 +293,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: blur-all toggle — determines per-element eligibility before stamping
   describe('shouldBlurElement', () => {
     const ALL = { TEXT: true, MEDIA: true, FORM: true, TABLE: true, STRUCTURE: true };
 
@@ -273,8 +319,10 @@ describe('blsi.BlurEngine', () => {
     test('false for null', () => {
       expect(blsi.BlurEngine.shouldBlurElement(null, ALL, false)).toBe(false);
     });
+    // MISSING: no test for shouldBlurElement with element whose category is disabled (e.g. img with MEDIA:false)
   });
 
+  // USER IMPACT: settings panel category toggles — only elements in enabled categories are selectable/blurred
   describe('CATEGORY_SELECTORS', () => {
     test('frozen with 5 categories', () => {
       expect(Object.isFrozen(blsi.BlurEngine.CATEGORY_SELECTORS)).toBe(true);
@@ -282,6 +330,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: settings panel category toggles — per-element category membership drives CSS and stamp decisions
   describe('matchesActiveCategories', () => {
     test('true for img when media on', () => {
       const img = document.createElement('img');
@@ -292,10 +341,14 @@ describe('blsi.BlurEngine', () => {
       const img = document.createElement('img');
       expect(blsi.BlurEngine.matchesActiveCategories(img, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false })).toBe(false);
     });
+    // MISSING: no test for matchesActiveCategories with a custom element (hyphenated tag name)
+    // OPTIMIZE: these two tests follow the same img+category on/off pattern — use test.each([tag, cats, expected])
   });
 
   // ── Zone overlay methods ──────────────────────────────────────────────────
 
+  // USER IMPACT: sticky picker — zone overlay rendered at correct document/viewport coordinates
+  // OPTIMIZE: all createZoneOverlay tests share the same zoneData shape; extract makeZone(id, overrides) helper
   describe('createZoneOverlay', () => {
     test('injects overlay div into document.body', () => {
       const el = blsi.BlurEngine.createZoneOverlay({ id: 's_test1', name: 'Sticky 1', x: 10, y: 20, width: 100, height: 50 });
@@ -336,6 +389,7 @@ describe('blsi.BlurEngine', () => {
       expect(el.dataset.blSiZoneAnchor).toBe('page');
     });
 
+    // REDUNDANT: same assertions as "defaults to page anchor when anchor is omitted" — only difference is explicit anchor:'page'
     test('page anchor uses position: absolute', () => {
       const el = blsi.BlurEngine.createZoneOverlay({ id: 's_page', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 });
       expect(el.style.position).toBe('absolute');
@@ -349,6 +403,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: sticky picker cleanup — removing a zone removes its overlay from the page
   describe('removeZoneOverlay', () => {
     test('removes overlay from DOM and tracking', () => {
       blsi.BlurEngine.createZoneOverlay({ id: 's_rm', name: 'S', x: 0, y: 0, width: 10, height: 10 });
@@ -362,6 +417,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: popup zone list — popup queries active overlays to display saved zones
   describe('getZoneOverlays', () => {
     test('returns all active overlays', () => {
       blsi.BlurEngine.createZoneOverlay({ id: 's_a', name: 'A', x: 0, y: 0, width: 10, height: 10 });
@@ -375,6 +431,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // USER IMPACT: clear all blur — all zone overlays removed from the page in one call
   describe('removeAllZoneOverlays', () => {
     test('removes all overlays', () => {
       blsi.BlurEngine.createZoneOverlay({ id: 's_x', name: 'X', x: 0, y: 0, width: 10, height: 10 });
@@ -408,6 +465,7 @@ describe('blsi.BlurEngine', () => {
   });
 
   // ─── blurAll() reconciler: item handling ──────────────────────────────────
+  // USER IMPACT: page restore on load — saved blur items re-applied when extension wakes up
   describe('blurAll — item reconcile', () => {
     beforeEach(() => {
       blsi.BlurEngine.resetCounters();
@@ -466,8 +524,11 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, BLUR_ALL_ACTIVE: fakeStorage.blurState, BLUR_ITEMS: fakeStorage.items });
       expect(document.getElementById('idem').dataset.blSiBlur).toBe('1');
     });
+    // MISSING: no test for dynamic item whose selector matches nothing (element not in DOM)
+    // MISSING: no test for sticky item with anchor:'screen' (position:fixed overlay)
   });
 
+  // USER IMPACT: blur item naming in popup — "Dynamic 1", "Sticky 2" labels in the saved items list
   describe('counters', () => {
     beforeEach(() => {
       blsi.BlurEngine.resetCounters();
@@ -509,6 +570,7 @@ describe('blsi.BlurEngine', () => {
   });
 
   // ─── blurAll() reconciler: page-wide blur-all handling ────────────────────
+  // USER IMPACT: blur-all toggle and settings change — page-wide state reconciled correctly
   describe('blurAll — page-wide reconcile', () => {
     test('storage blurState=true injects rules and flips isPageBlurred', async () => {
       fakeStorage.blurState = true;
@@ -670,6 +732,8 @@ describe('blsi.BlurEngine', () => {
   });
 
   // ─── CATEGORY_SELECTORS coverage — 2026-04 audit additions ────────────────
+  // USER IMPACT: settings category toggles — less-common tags (hgroup, audio, ruby, li, dt, dd) blur correctly
+  // OPTIMIZE: hgroup/audio/progress+meter tests all call injectRules then css.toContain(tag) — use test.each
   describe('category coverage additions', () => {
     const onlyTextCats = { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false };
     const onlyMediaCats = { TEXT: false, MEDIA: true, FORM: false, TABLE: false, STRUCTURE: false };
@@ -682,6 +746,7 @@ describe('blsi.BlurEngine', () => {
       expect(css).toContain('hgroup');
     });
 
+    // REDUNDANT: same injectRules→css.toContain pattern as "hgroup" test above
     test('progress and meter are stamped when FORM is on (alwaysBlur rule)', () => {
       blsi.BlurEngine.injectRules(document,onlyFormCats);
       const css = document.getElementById('bl-si-blur-styles').textContent;
@@ -689,6 +754,7 @@ describe('blsi.BlurEngine', () => {
       expect(css).toContain('meter');
     });
 
+    // REDUNDANT: same injectRules→css.toContain pattern as "hgroup" and "progress/meter" tests above
     test('audio is stamped when MEDIA is on (alwaysBlur rule)', () => {
       blsi.BlurEngine.injectRules(document,onlyMediaCats);
       const css = document.getElementById('bl-si-blur-styles').textContent;
@@ -738,6 +804,8 @@ describe('blsi.BlurEngine', () => {
   });
 
   // ─── ARIA role coverage — 2026-04 audit addition ──────────────────────────
+  // USER IMPACT: GitHub/SPAs with role=button divs — role-based blur rules correct when FORM category toggled
+  // OPTIMIZE: matchesActiveCategories tests (role="button" on/off, plain div) follow the same pattern — use test.each
   describe('ARIA role matching', () => {
     const formOn = { TEXT: false, MEDIA: false, FORM: true, TABLE: false, STRUCTURE: false };
     const formOff = { TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true };
@@ -794,12 +862,16 @@ describe('blsi.BlurEngine', () => {
       blsi.BlurEngine.injectRules(document,formOn);
       expect(document.getElementById('bl-si-blur-styles').textContent).toContain('[role="button"]');
     });
+    // MISSING: no test for role="listbox", "combobox", "switch" — only button/checkbox/slider covered
+    // MISSING: no test that CSS rule correctly uses :not(button):not(input) guard to avoid double-applying to native form elements
   });
 
   // ─── Shadow DOM support ───────────────────────────────────────────────────
   // Uses jsdom's attachShadow({ mode: 'open' }) to create real shadow roots.
   // Tests exercise the root-aware API (injectRules, removeRules, stampElements,
   // handleDocument, handleSite, teardown) in shadow root scope.
+  // USER IMPACT: web component sites (Slack/Discord/Figma) — blur penetrates shadow boundaries
+  // OPTIMIZE: manual host+shadow+innerHTML setup repeated in every test; extend the shared makeShadowRoot() helper
   describe('shadow DOM', () => {
     const textCats = { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false };
 
@@ -987,10 +1059,13 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleDocument(s, sr);
       expect(sr.querySelectorAll('#bl-si-blur-styles').length).toBe(1);
     });
+    // MISSING: no test for MutationObserver callback — observeRoot attaches observer but mutations are never triggered/verified
+    // MISSING: no test for closed shadow roots (mode:'closed') — currently assumed open only
   });
 
   // ── RC-1: Custom element host stamping ──────────────────────────────────
 
+  // USER IMPACT: Reddit/Polymer sites using custom elements — shreddit-post and similar hosts stamped correctly
   describe('custom element stamping (RC-1)', () => {
     test('stampElements stamps custom element host when text content present', () => {
       const host = document.createElement('div');
@@ -1065,6 +1140,7 @@ describe('blsi.BlurEngine', () => {
 
   // ── RC-2: li/dt/dd in alwaysBlur ────────────────────────────────────────
 
+  // USER IMPACT: pages with lists/definition terms — li/dt/dd blurred by CSS rule not JS stamp
   describe('CATEGORY_SELECTORS list element placement (RC-2)', () => {
     test('li is in STRUCTURE.alwaysBlur not textCheck', () => {
       const cats = blsi.BlurEngine.CATEGORY_SELECTORS;
@@ -1089,6 +1165,7 @@ describe('blsi.BlurEngine', () => {
 
   // ── RC-3: Reveal cascade descendant rule ────────────────────────────────
 
+  // USER IMPACT: reveal mode — clicking/hovering blurred container also reveals nested blurred children
   describe('reveal descendant cascade rule (RC-3)', () => {
     test('injectRules includes descendant-reveal cascade rule for data-bl-si-blur', () => {
       blsi.BlurEngine.injectRules(document, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
@@ -1100,6 +1177,56 @@ describe('blsi.BlurEngine', () => {
       blsi.BlurEngine.injectRules(document, { TEXT: true, MEDIA: false, FORM: false, TABLE: false, STRUCTURE: false });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('[data-bl-si-reveal] [data-bl-si-pii]');
+    });
+    // MISSING: no behavioural test confirming the cascade rule actually un-blurs a child element at render time
+  });
+
+  // ── RC-4: handleIframe — cross-origin iframe black-box blur ─────────────
+
+  // USER IMPACT: pages with embedded cross-origin iframes (YouTube, etc.) — iframe element
+  //              itself gets blurred as an opaque box when blur-all is active.
+  describe('handleIframe (RC-4)', () => {
+    function makeIframe() {
+      const f = document.createElement('iframe');
+      document.body.appendChild(f);
+      return f;
+    }
+
+    beforeEach(() => {
+      blsi.BlurEngine.removeRules(document);
+    });
+
+    test('handleIframe stamps cross-origin iframe with data-bl-si-blur when active', () => {
+      const f = makeIframe();
+      // jsdom iframes have no contentDocument (cross-origin simulation) — accessing
+      // contentDocument returns null without throwing, so we patch it to throw.
+      Object.defineProperty(f, 'contentDocument', {
+        get() { throw new DOMException('cross-origin', 'SecurityError'); },
+        configurable: true,
+      });
+      const s = { ENABLED: true, BLUR_ALL_ACTIVE: true };
+      blsi.BlurEngine.handleIframe(s, f);
+      expect(f.dataset.blSiBlur).toBe('1');
+    });
+
+    test('handleIframe removes stamp on inactive path (blur-all off)', () => {
+      const f = makeIframe();
+      f.dataset.blSiBlur = '1'; // pre-stamp
+      Object.defineProperty(f, 'contentDocument', {
+        get() { throw new DOMException('cross-origin', 'SecurityError'); },
+        configurable: true,
+      });
+      const s = { ENABLED: true, BLUR_ALL_ACTIVE: false };
+      blsi.BlurEngine.handleIframe(s, f);
+      expect(f.dataset.blSiBlur).toBeUndefined();
+    });
+
+    test('handleIframe skips same-origin iframe (all_frames handles it)', () => {
+      const f = makeIframe();
+      // jsdom iframes have a real (same-origin) contentDocument — handleIframe should skip.
+      const s = { ENABLED: true, BLUR_ALL_ACTIVE: true };
+      blsi.BlurEngine.handleIframe(s, f);
+      expect(f.dataset.blSiBlur).toBeUndefined();
     });
   });
 });

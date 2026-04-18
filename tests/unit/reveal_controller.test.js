@@ -5,6 +5,32 @@
  * Module exposes blsi.Reveal with: init, destroy, clearAll.
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: click mode (reveal, second-click pass-through, preventDefault, Escape, input skip,
+ *         picker gate, mode=none), hover mode (reveal, 50ms debounce), clearAll,
+ *         shadow DOM composedPath pierce (hover + click), shadow host chain walk, destroy.
+ *
+ * REDUNDANT:
+ *   - "onRevealMouseOver reveals composedPath target" and "onRevealClick reveals composedPath target"
+ *     duplicate the composedPath-override path for two event types; the core logic is identical —
+ *     a single parameterised test over event type would cover both.
+ *
+ * OPTIMIZE:
+ *   - fireClick() and fireMouseOver() are near-identical factory functions; unify as
+ *     fireEvent(type, target, extra?) to reduce duplication.
+ *   - The two composedPath tests could be collapsed into test.each(['mouseover','click']).
+ *
+ * MISSING:
+ *   - No test for revealAncestorChain() — ancestors up to documentElement should receive
+ *     data-bl-si-reveal so parent containers are unblurred when a child is targeted.
+ *   - No test for zone overlay reveal — a .bl-si-zone-overlay with data-bl-si-blur should
+ *     respond to click/hover in the same way as a regular element.
+ *   - No test for clearAll() when nothing is currently revealed (should be a silent no-op).
+ *   - No test for nested shadow roots (two levels deep); existing shadow tests use 1 level only.
+ *   - No test verifying that reveal is NOT applied when the element has no blur attribute
+ *     (non-blurred element clicked in click mode).
+ * ===*/
+
 'use strict';
 
 const fs = require('fs');
@@ -74,6 +100,7 @@ function fireMouseOver(target) {
   document.dispatchEvent(ev);
 }
 
+// USER IMPACT: user clicks blurred element — unblurs for inspection, second click navigates link
 describe('blsi.Reveal — click mode', () => {
   test('click on blurred element reveals it', () => {
     mode = 'click';
@@ -125,13 +152,18 @@ describe('blsi.Reveal — click mode', () => {
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
 
-  test('input elements are skipped (reveal does not fire)', () => {
+  test('first click on blurred input reveals it; second click passes through', () => {
     mode = 'click';
     const input = document.createElement('input');
     document.body.appendChild(input);
     blsi.BlurEngine.applyBlur(input);
+    // First click — intercept and reveal
     fireClick(input);
-    expect(input.dataset.blSiReveal).toBeUndefined();
+    expect(input.dataset.blSiReveal).toBe('1');
+    // Second click — inside revealed area, passes through without re-intercepting
+    const e2 = new MouseEvent('click', { bubbles: true, cancelable: true });
+    input.dispatchEvent(e2);
+    expect(e2.defaultPrevented).toBe(false);
   });
 
   test('picker active blocks click reveal', () => {
@@ -152,8 +184,10 @@ describe('blsi.Reveal — click mode', () => {
     fireClick(el);
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
+  // MISSING: no test verifying click on an unblurred element does nothing (no data-bl-si-reveal added)
 });
 
+// USER IMPACT: user hovers blurred element — temporary reveal with 50ms debounce prevents flicker
 describe('blsi.Reveal — hover mode', () => {
   test('mouseover on blurred element reveals it', () => {
     mode = 'hover';
@@ -180,8 +214,11 @@ describe('blsi.Reveal — hover mode', () => {
     expect(el.dataset.blSiReveal).toBeUndefined();
     jest.useRealTimers();
   });
+  // MISSING: no test for hover mode with mode=none (should not reveal on mouseover)
+  // MISSING: no test for picker-active blocking hover reveal
 });
 
+// USER IMPACT: Escape key or picker activation — all active reveals cleared at once
 describe('blsi.Reveal.clearAll', () => {
   test('clears any active reveal', () => {
     mode = 'click';
@@ -193,8 +230,11 @@ describe('blsi.Reveal.clearAll', () => {
     blsi.Reveal.clearAll();
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
+  // MISSING: no test for clearAll() when nothing is currently revealed (should be a no-op)
 });
 
+// USER IMPACT: web component content — reveal finds actual element not shadow host
+// OPTIMIZE: two tests here are mirror copies for mouseover vs click; collapse with test.each(['hover','click'])
 describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
   test('onRevealMouseOver reveals composedPath target, not retargeted e.target', () => {
     // Simulates shadow DOM event retargeting: e.target = shadow host, but
@@ -219,6 +259,7 @@ describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
     expect(hostEl.dataset.blSiReveal).toBeUndefined();
   });
 
+  // REDUNDANT: same composedPath override logic as "onRevealMouseOver" test above — only event type differs
   test('onRevealClick reveals composedPath target, not retargeted e.target', () => {
     mode = 'click';
     const innerEl = document.createElement('span');
@@ -239,6 +280,7 @@ describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
   });
 });
 
+// USER IMPACT: Reddit/Polymer custom elements — hovering shadow DOM child reveals blurred host or light DOM ancestor
 describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
   test('hover over element inside shadow root reveals blurred shadow host', () => {
     // <rpl-badge data-bl-si-blur="1"> → #shadow-root → <span>NEW</span>
@@ -288,8 +330,10 @@ describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
     expect(wrapper.dataset.blSiReveal).toBe('1');
     expect(host.dataset.blSiReveal).toBeUndefined();
   });
+  // MISSING: no test for nested shadow roots (two levels deep) — inner element inside shadow-of-shadow
 });
 
+// USER IMPACT: picker activation / page navigation — event listeners torn down so reveal stops working
 describe('blsi.Reveal.destroy', () => {
   test('after destroy, clicks no longer reveal', () => {
     mode = 'click';
@@ -300,4 +344,5 @@ describe('blsi.Reveal.destroy', () => {
     fireClick(el);
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
+  // MISSING: no test for destroy when hover mode is active — pending debounce timer should be cancelled
 });

@@ -6,6 +6,49 @@
  *   getSelector, generateId, restoreSelector, restoreAllSelectors
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ *
+ * COVERS:
+ *   - getSelector: unique ID path, duplicate-ID fallback, nth-of-type path, body/null/undefined
+ *     guards, special-character IDs, numeric-start IDs, whitespace-only ID fallback,
+ *     round-trip querySelector verification, selector stability (two calls, same result),
+ *     sibling disambiguation, documentElement guard
+ *   - generateId: 8-char hex string, uniqueness over 50 calls, format over 100 calls,
+ *     uniqueness over 500 calls
+ *   - restoreSelector: valid match, stale selector, invalid CSS syntax (no throw), null,
+ *     empty string, data-attribute selector, undefined, numeric input, complex descendant selector
+ *   - restoreAllSelectors: mixed valid/stale, all stale, empty array, invalid selector in array,
+ *     non-array input, all valid
+ *
+ * REDUNDANT:
+ *   - "returns nth-of-type path when no unique identifier found" (line ~128) and
+ *     "returns nth-of-type path when element has no ID" (line ~138) both create a bare <div>
+ *     with no ID and assert the selector contains 'nth-of-type'. The second adds only a more
+ *     specific prefix assertion — candidate for merging into one test with both assertions.
+ *   - "returns an 8-character string" (generateId, line ~181) and
+ *     "all generated IDs are exactly 8 lowercase hex chars" (generateId robustness, line ~400)
+ *     — the robustness test runs 100 iterations and fully subsumes the single-call test.
+ *   - "returns null (or falsy) when called with body element" (line ~157) and
+ *     "returns null when called with documentElement" (line ~306) test the same excluded-node
+ *     guard; candidate for a single test.each(['body', 'documentElement', null, undefined]) table.
+ *
+ * OPTIMIZATION OPPORTUNITIES:
+ *   - Guard clause tests that assert restoreSelector returns null (null, undefined, numeric,
+ *     empty string inputs) could be merged into a test.each([input, label]) table.
+ *   - restoreAllSelectors non-array / empty inputs could also be a test.each table.
+ *   - getSelector excluded-node tests (body, documentElement) are natural test.each candidates.
+ *
+ * MISSING COVERAGE:
+ *   - Class-based selector strategy — entire code path (e.g. element with unique className but
+ *     no ID) is not exercised; it is unclear if this path exists in the real implementation.
+ *   - Parent-ID context selector — no test for the "#parentId > tag.className" path that some
+ *     implementations use when a unique parent ID is available.
+ *   - CSS.escape fallback — no test for behaviour when the global CSS object is absent.
+ *   - Selector stability across DOM mutations — nth-of-type selectors become stale when siblings
+ *     are inserted before the element; this fragility is undocumented in tests.
+ *   - getSelector on a detached element (not attached to document.body) — return value undefined.
+ */
+
 'use strict';
 
 const fs = require('fs');
@@ -99,6 +142,7 @@ describe('blsi.SelectorUtils', () => {
 
   // ── getSelector ────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user blurs an element — a stable CSS selector is generated so the blur survives page reload and SPA re-renders
   describe('getSelector', () => {
     test('returns #id selector when element has a unique ID', () => {
       const div = document.createElement('div');
@@ -125,6 +169,7 @@ describe('blsi.SelectorUtils', () => {
       expect(selector).not.toBe('#shared');
     });
 
+    // REDUNDANT: same fallback path as "returns nth-of-type path when element has no ID" below; both create a bare <div> — merge into one test with both assertions
     test('returns nth-of-type path when no unique identifier found', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
@@ -135,6 +180,7 @@ describe('blsi.SelectorUtils', () => {
       expect(selector).toContain('nth-of-type');
     });
 
+    // REDUNDANT: same fallback path as "returns nth-of-type path when no unique identifier found" above; only adds a more specific prefix assertion
     test('returns nth-of-type path when element has no ID', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
@@ -154,6 +200,7 @@ describe('blsi.SelectorUtils', () => {
       expect(s1).toBe(s2);
     });
 
+    // REDUNDANT: excluded-node guard; can be merged with "returns null when called with documentElement" into a test.each([document.body, document.documentElement, null, undefined]) table
     test('returns null (or falsy) when called with body element', () => {
       const result = blsi.SelectorUtils.getSelector(document.body);
       expect(result).toBeFalsy();
@@ -173,11 +220,16 @@ describe('blsi.SelectorUtils', () => {
 
       expect(found).toBe(p);
     });
+    // MISSING: no test for class-based selector strategy (unique className, no ID)
+    // MISSING: no test for parent-ID context selector (#parentId > tag.className path)
+    // MISSING: no test for getSelector on a detached element (not in document.body)
   });
 
   // ── generateId ─────────────────────────────────────────────────────────────
 
+  // USER IMPACT: multiple blur items each need a unique ID so they can be independently removed without affecting sibling items
   describe('generateId', () => {
+    // REDUNDANT: "all generated IDs are exactly 8 lowercase hex chars" in the robustness describe runs 100 iterations and fully subsumes this single-call test
     test('returns an 8-character string', () => {
       const id = blsi.SelectorUtils.generateId();
       expect(typeof id).toBe('string');
@@ -201,6 +253,7 @@ describe('blsi.SelectorUtils', () => {
 
   // ── restoreSelector ────────────────────────────────────────────────────────
 
+  // USER IMPACT: page load — saved selectors re-find their elements so blur is reapplied; stale selectors (SPA re-render) return null safely instead of crashing
   describe('restoreSelector', () => {
     test('returns the element when selector is valid and element exists', () => {
       const span = document.createElement('span');
@@ -225,6 +278,7 @@ describe('blsi.SelectorUtils', () => {
       }).not.toThrow();
     });
 
+    // OPTIMIZE: null, empty string, undefined, and numeric inputs all test the same guard; consolidate into a test.each([null, '', undefined, 42]) table
     test('returns null for null input', () => {
       const found = blsi.SelectorUtils.restoreSelector(null);
       expect(found).toBeNull();
@@ -246,10 +300,13 @@ describe('blsi.SelectorUtils', () => {
 
       expect(found).toBe(div);
     });
+    // MISSING: no test for CSS.escape fallback when global CSS object is absent
+    // MISSING: no test for restoreSelector when querySelector returns the first of multiple matches (ambiguous selector)
   });
 
   // ── restoreAllSelectors ────────────────────────────────────────────────────
 
+  // USER IMPACT: extension init — all saved blur items for a page are restored in one pass; stale selectors are silently dropped so partial staleness never blocks the valid items
   describe('restoreAllSelectors', () => {
     test('returns array of found elements for a mix of valid and stale selectors', () => {
       const div = document.createElement('div');
@@ -285,6 +342,7 @@ describe('blsi.SelectorUtils', () => {
       }).not.toThrow();
     });
 
+    // OPTIMIZE: non-array inputs (null, undefined, string, number) all hit the same early-return guard; use test.each([null, undefined, 'string', 42])
     test('returns empty array for non-array input', () => {
       const results = blsi.SelectorUtils.restoreAllSelectors(null);
       expect(Array.isArray(results)).toBe(true);
@@ -298,11 +356,15 @@ describe('blsi.SelectorUtils', () => {
 
       expect(results).toHaveLength(3);
     });
+    // MISSING: no test for restoreAllSelectors preserving order of found elements
+    // MISSING: no test for restoreAllSelectors with duplicate selectors in the input array
   });
 
   // ── getSelector edge cases ────────────────────────────────────────────────
 
+  // USER IMPACT: edge-case element types (special IDs, numeric IDs, whitespace IDs) produce a usable selector so blur still persists
   describe('getSelector edge cases', () => {
+    // REDUNDANT: same excluded-node guard as "returns null (or falsy) when called with body element" above; merge both into a test.each([document.body, document.documentElement]) table
     test('returns null when called with documentElement', () => {
       const result = blsi.SelectorUtils.getSelector(document.documentElement);
       expect(result).toBeFalsy();
@@ -370,10 +432,14 @@ describe('blsi.SelectorUtils', () => {
 
       expect(s1).not.toBe(s2);
     });
+    // MISSING: no test for selector fragility when a sibling is inserted before the element (nth-of-type index shifts)
+    // MISSING: no test for getSelector on an element inside a shadow root
   });
 
   // ── restoreSelector edge cases ────────────────────────────────────────────
 
+  // USER IMPACT: non-string inputs from serialization bugs do not throw and return null cleanly
+  // OPTIMIZE: null, undefined, and numeric inputs all hit the same early-return guard; consolidate into a test.each([undefined, 42]) table alongside the null test in restoreSelector above
   describe('restoreSelector edge cases', () => {
     test('returns null for undefined input', () => {
       const found = blsi.SelectorUtils.restoreSelector(undefined);
@@ -396,7 +462,9 @@ describe('blsi.SelectorUtils', () => {
 
   // ── generateId robustness ─────────────────────────────────────────────────
 
+  // USER IMPACT: high-volume blur sessions (100+ items) still assign unique IDs so no two items collide and accidentally share remove operations
   describe('generateId robustness', () => {
+    // REDUNDANT: subsumes "returns an 8-character string" in the generateId describe above — the 100-iteration loop covers both the length and the format assertions
     test('all generated IDs are exactly 8 lowercase hex chars', () => {
       for (let i = 0; i < 100; i++) {
         const id = blsi.SelectorUtils.generateId();

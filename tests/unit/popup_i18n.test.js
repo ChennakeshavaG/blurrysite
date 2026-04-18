@@ -8,6 +8,34 @@
  * share the same fallback shape and only swap _strings via init(lang).
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * Covers: module exposure on blsi, init() for explicit locales (en/hi_IN/ta_IN),
+ *         auto-resolution via navigator.language, fallback chain, language
+ *         switching, unknown key passthrough, missing-key warn-once dedup,
+ *         re-init clears warn cache, {{placeholder}} interpolation,
+ *         no-op re-fetch when fallback is cached.
+ *
+ * Redundant:
+ *   "init('en') leaves t() returning English fallback", "init('hi_IN') loads Hindi",
+ *   and "init('ta_IN') loads Tamil" are structurally identical (init lang, assert
+ *   t() result) — candidates for test.each.
+ *   "init('auto') with hi-IN navigator", "init('auto') with ta-IN navigator",
+ *   "init('auto') with bare 'hi'", and "init('auto') with unsupported" all test
+ *   auto resolution with different navigator.language values — candidates for test.each.
+ *
+ * Optimization opportunities:
+ *   Language init tests (3) → test.each([['en', 'Hello'], ['hi_IN', 'नमस्ते'], ['ta_IN', 'வணக்கம்']])
+ *   Auto-resolution tests (4) → test.each([['hi-IN', 'hi_IN'], ['ta-IN', 'ta_IN'], ['hi', 'hi_IN'], ['fr', 'en']])
+ *   mockFetch() pattern duplicated in content_i18n.test.js — could be extracted to a shared test utility.
+ *
+ * Missing coverage:
+ *   - init() with entirely unsupported locale string (e.g. 'xyz_XY') — should fall back to English
+ *   - t() with null or undefined key — should not throw
+ *   - Concurrent init() calls (race condition: second call completes before first)
+ *   - Interpolation edge cases: missing placeholder key in replacements, numeric value passed
+ *
+ * === END ANNOTATIONS === */
+
 'use strict';
 
 const path = require('path');
@@ -66,18 +94,21 @@ describe('popup_i18n loader', () => {
 
   // ── init shape ─────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user changes popup language in settings — popup immediately shows correct locale
   test('I18n module is exposed on blsi', () => {
     expect(blsi.I18n).toBeDefined();
     expect(typeof blsi.I18n.init).toBe('function');
     expect(typeof blsi.I18n.t).toBe('function');
   });
 
+  // OPTIMIZE: structurally identical to init('hi_IN') and init('ta_IN') tests — refactor to test.each([['en', EN_BASE, 'Hello'], ['hi_IN', ...], ['ta_IN', ...]])
   test("init('en') leaves t() returning English fallback", async () => {
     mockFetch({ '/en/popup.json': EN_BASE });
     await blsi.I18n.init('en');
     expect(blsi.I18n.t('hello')).toBe('Hello');
   });
 
+  // REDUNDANT: same init-then-assert-t() shape as "init('en')" and "init('ta_IN')" — test.each candidate
   test("init('hi_IN') loads Hindi as primary; missing keys fall back to English", async () => {
     mockFetch({
       '/en/popup.json': EN_BASE,
@@ -88,6 +119,7 @@ describe('popup_i18n loader', () => {
     expect(blsi.I18n.t('only_en')).toBe('EN only');
   });
 
+  // REDUNDANT: same init-then-assert-t() shape as "init('en')" and "init('hi_IN')" — test.each candidate
   test("init('ta_IN') loads Tamil as primary", async () => {
     mockFetch({
       '/en/popup.json': EN_BASE,
@@ -97,6 +129,8 @@ describe('popup_i18n loader', () => {
     expect(blsi.I18n.t('hello')).toBe('வணக்கம்');
   });
 
+  // USER IMPACT: user's OS is Hindi — popup automatically loads Hindi without manual selection
+  // OPTIMIZE: all four auto-resolution tests are structurally identical — test.each([['hi-IN', 'hi_IN'], ['ta-IN', 'ta_IN'], ['hi', 'hi_IN'], ['fr-FR', 'en']])
   test("init('auto') with hi-IN navigator resolves to hi_IN", async () => {
     setNavLanguage('hi-IN');
     mockFetch({
@@ -107,6 +141,7 @@ describe('popup_i18n loader', () => {
     expect(blsi.I18n.t('hello')).toBe('नमस्ते');
   });
 
+  // REDUNDANT: same auto-resolve shape as hi-IN, bare 'hi', and unsupported — test.each candidate
   test("init('auto') with ta-IN navigator resolves to ta_IN", async () => {
     setNavLanguage('ta-IN');
     mockFetch({
@@ -117,6 +152,7 @@ describe('popup_i18n loader', () => {
     expect(blsi.I18n.t('hello')).toBe('வணக்கம்');
   });
 
+  // REDUNDANT: same auto-resolve shape as hi-IN, ta-IN, and unsupported — test.each candidate
   test("init('auto') with bare 'hi' navigator falls back to first hi_* match", async () => {
     setNavLanguage('hi');
     mockFetch({
@@ -127,6 +163,7 @@ describe('popup_i18n loader', () => {
     expect(blsi.I18n.t('hello')).toBe('नमस्ते');
   });
 
+  // REDUNDANT: same auto-resolve shape as hi-IN, ta-IN, and bare 'hi' — test.each candidate
   test("init('auto') with unsupported navigator clamps to English", async () => {
     setNavLanguage('fr-FR');
     mockFetch({ '/en/popup.json': EN_BASE });
@@ -145,12 +182,14 @@ describe('popup_i18n loader', () => {
     expect(blsi.I18n.t('hello')).toBe('Hello');
   });
 
+  // USER IMPACT: partial translation — missing keys show English instead of blank or raw key
   test('unknown key returns the key itself', async () => {
     mockFetch({ '/en/popup.json': EN_BASE });
     await blsi.I18n.init('en');
     expect(blsi.I18n.t('totally_unknown')).toBe('totally_unknown');
   });
 
+  // USER IMPACT: missing translation keys logged once per locale switch — not spammed on every render
   test('missing key logs console.warn once per key per init', async () => {
     mockFetch({ '/en/popup.json': EN_BASE });
     await blsi.I18n.init('en');
@@ -178,6 +217,7 @@ describe('popup_i18n loader', () => {
 
   // ── interpolation ──────────────────────────────────────────────────────────
 
+  // USER IMPACT: popup shows 'Blurred 3 items on this page' — dynamic count inserted correctly
   test('t(key, replacements) interpolates {{name}} placeholders', async () => {
     mockFetch({ '/en/popup.json': EN_BASE });
     await blsi.I18n.init('en');
@@ -186,6 +226,10 @@ describe('popup_i18n loader', () => {
 
   // ── re-init does not re-fetch the cached fallback ──────────────────────────
 
+  // MISSING: no test for init() with unsupported locale string (e.g. 'xyz_XY') falling back to English
+  // MISSING: no test for t() with null or undefined key — should not crash
+  // MISSING: no test for concurrent init() calls (race condition)
+  // MISSING: no test for interpolation edge cases (missing placeholder key, numeric value)
   test("init('en') after fallback is cached fetches nothing extra", async () => {
     // Fallback already loaded by earlier tests; new init('en') should be a no-op fetch-wise.
     mockFetch({ '/en/popup.json': EN_BASE });

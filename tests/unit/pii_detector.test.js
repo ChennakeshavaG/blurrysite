@@ -12,6 +12,44 @@
  *   NUMERIC — currency prefix | currency code suffix | 4+ bare digits
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: scan() for EMAIL and NUMERIC types; clear(); getMatchCount(); getPatterns();
+ *         stopObserving() safety; PII independence from blur-all; multi-type detection;
+ *         NUMERIC modes ('off', 'standard', 'conservative'); phone-like grouping rule;
+ *         extension UI exclusion; double-scan idempotency; null/disabled-type guards.
+ *
+ * REDUNDANT TESTS:
+ *   - "NUMERIC — detects dollar amount", "detects Euro symbol", "detects British Pound",
+ *     "detects Indian Rupee" all verify the currency-prefix sub-pattern with different
+ *     symbols. Could be collapsed into a single test.each over symbol variants.
+ *   - "NUMERIC — hyphen-separated phone", "mixed-width space-separated phone",
+ *     "space-separated phone", "space-separated credit card" all verify the grouped-
+ *     sequence rule with different separators/lengths. Candidate for test.each.
+ *   - "NUMERIC 'conservative' — number with Tier A label", "salary label triggers hide",
+ *     "account label triggers hide", "invoice label triggers hide" all probe conservative-
+ *     mode Tier A label matching with different keywords. Could be a single test.each.
+ *
+ * OPTIMIZATION OPPORTUNITIES:
+ *   - Currency prefix tests (4) — test.each([['$1,234.56','dollar'],['€500','euro'],
+ *     ['£250','pound'],['₹50,000','rupee']]) checking toBeGreaterThan(0) each.
+ *   - Phone-like grouping tests (4) — test.each with [separator, input, expectedText]
+ *     tuples covering hyphen, single-space, mixed-width-space, and card variants.
+ *   - Conservative Tier A label tests (4) — test.each([['Balance',94750],['salary',75000],
+ *     ['Account','4111111111111111'],['Invoice','#00123456']]) checking count > 0.
+ *   - Invalid input tests in other files pattern applies here too: test.each for
+ *     start(0)/start(-5) could be mirrored in any future numeric-threshold tests.
+ *
+ * MISSING COVERAGE:
+ *   - Greedy match with trailing punctuation: "5000," — does the comma get captured
+ *     inside the span or left outside? Contract is ambiguous.
+ *   - Embedded number in word boundary: "model2024x" — \b should prevent match;
+ *     no test verifies the word-boundary guard on 4+ digit bare pattern.
+ *   - PII clear() when both EMAIL and NUMERIC are active on the same page — only
+ *     EMAIL is tested with clear(); no combined-type clear() assertion exists.
+ *   - observeMutations() correctness: add a node to the DOM after scan() and verify
+ *     the mutation observer rescans and wraps the new match.
+ */
+
 'use strict';
 
 const fs   = require('fs');
@@ -50,6 +88,7 @@ function freshLoad() {
 
 const ALL_TYPES = { EMAIL: true, NUMERIC: true };
 
+// USER IMPACT: auto-detect PII — email addresses and financial numbers hidden automatically without user having to manually pick elements
 describe('pii_detector.js', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -98,22 +137,27 @@ describe('pii_detector.js', () => {
 
   // ── Pattern: NUMERIC — currency prefix ────────────────────────────────────
 
+  // OPTIMIZE: these four currency-prefix tests share identical structure; merge with test.each([['$1,234.56','dollar'],['€500','euro'],['£250','pound'],['₹50,000','rupee']])
+  // REDUNDANT: "detects dollar amount" and the three currency tests below all verify the same currency-prefix sub-pattern; the symbol is the only variable
   test('NUMERIC — detects dollar amount', () => {
     document.body.innerHTML = '<p>Total: $1,234.56 due today.</p>';
     expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBeGreaterThan(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).not.toBeNull();
   });
 
+  // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects Euro symbol (€)', () => {
     document.body.innerHTML = '<p>Price: \u20AC500 per unit.</p>';
     expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
   });
 
+  // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects British Pound (£)', () => {
     document.body.innerHTML = '<p>Cost: \u00A3250.00</p>';
     expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
   });
 
+  // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects Indian Rupee (₹)', () => {
     document.body.innerHTML = '<p>Salary: \u20B950,000 monthly.</p>';
     expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
@@ -181,6 +225,7 @@ describe('pii_detector.js', () => {
   // ── Pattern: NUMERIC — phone-like grouped sequences ───────────────────────
   // All 3 variants must wrap as ONE span so hover reveals the whole number.
 
+  // OPTIMIZE: four grouped-sequence tests differ only in separator and input text; collapse with test.each([separator, input, expectedText]) tuples
   test('NUMERIC — hyphen-separated phone (111-222-333) wraps as one span', () => {
     document.body.innerHTML = '<p>Call 111-222-333 now.</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
@@ -188,6 +233,7 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('111-222-333');
   });
 
+  // REDUNDANT: same grouped-sequence assertion as hyphen test; only separator and group widths differ
   test('NUMERIC — mixed-width space-separated phone (111 2222 333) wraps as one span', () => {
     document.body.innerHTML = '<p>Mobile: 111 2222 333</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
@@ -195,6 +241,7 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('111 2222 333');
   });
 
+  // REDUNDANT: same grouped-sequence assertion as hyphen test; space separator instead of hyphen
   test('NUMERIC — space-separated phone (111 222 333) wraps as one span', () => {
     document.body.innerHTML = '<p>Fax: 111 222 333</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
@@ -202,6 +249,7 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('111 222 333');
   });
 
+  // REDUNDANT: same grouped-sequence one-span assertion as phone tests above; input has 4 groups instead of 3
   test('NUMERIC — space-separated credit card (4111 1111 1111 1111) wraps as one span', () => {
     // Ordering: phone-like sub-pattern must fire before 4+ bare so the whole
     // card number becomes a single span, not four separate "1111" spans.
@@ -255,6 +303,9 @@ describe('pii_detector.js', () => {
     expect(piiSpan.textContent).toBe('user@example.com');
   });
 
+  // MISSING: no test for clear() when both EMAIL and NUMERIC matches exist on the same page — only EMAIL is tested with clear()
+  // MISSING: no test for observeMutations() — add a node after scan() and verify the mutation observer rescans it
+
   // ── Multi-type + toggling ───────────────────────────────────────────────────
 
   test('detects both EMAIL and NUMERIC in same node', () => {
@@ -273,6 +324,9 @@ describe('pii_detector.js', () => {
     document.body.innerHTML = '<p>user@example.com</p>';
     expect(blsi.PiiDetector.scan(document.body, null)).toBe(0);
   });
+
+  // MISSING: no test for embedded number in word (e.g. "model2024x") — \b guard should prevent match but is unverified
+  // MISSING: no test for greedy match with trailing punctuation (e.g. "5000,") — comma capture boundary is unspecified
 
   // ── Scan behavior ───────────────────────────────────────────────────────────
 
@@ -439,6 +493,7 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
   });
 
+  // OPTIMIZE: the four Tier A label tests below differ only in label keyword and number; collapse with test.each([['Balance',94750],['salary',75000],['Account','4111111111111111'],['Invoice','#00123456']])
   test("NUMERIC 'conservative' — number with Tier A label: hidden", () => {
     document.body.innerHTML = '<p>Balance: 94750</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
@@ -446,18 +501,21 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('94750');
   });
 
+  // REDUNDANT: same conservative Tier A assertion as "number with Tier A label"; only the label keyword differs
   test("NUMERIC 'conservative' — salary label triggers hide", () => {
     document.body.innerHTML = '<p>Your salary of 75000 has been credited.</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
     expect(count).toBe(1);
   });
 
+  // REDUNDANT: same conservative Tier A assertion as "number with Tier A label"; only the label keyword differs
   test("NUMERIC 'conservative' — account label triggers hide", () => {
     document.body.innerHTML = '<p>Account: 4111111111111111</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
     expect(count).toBeGreaterThan(0);
   });
 
+  // REDUNDANT: same conservative Tier A assertion as "number with Tier A label"; only the label keyword differs
   test("NUMERIC 'conservative' — invoice label triggers hide", () => {
     document.body.innerHTML = '<p>Invoice #00123456 due 30 days</p>';
     const count = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
@@ -496,4 +554,9 @@ describe('pii_detector.js', () => {
     const conservativeCount = blsi.PiiDetector.scan(document.body, { NUMERIC: 'conservative' });
     expect(conservativeCount).toBe(0);
   });
+
+  // MISSING: no test for greedy match trailing punctuation ("5000," — does comma get captured inside span?)
+  // MISSING: no test for embedded number in word ("model2024x" — word boundary \b should prevent match)
+  // MISSING: no test for clear() with both EMAIL and NUMERIC active simultaneously
+  // MISSING: no test for observeMutations() — new node added after scan should be picked up and rescanned
 });

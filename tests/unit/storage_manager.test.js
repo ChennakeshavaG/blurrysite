@@ -10,6 +10,43 @@
  * READ operations use chrome.runtime.sendMessage → background.js.
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ *
+ * COVERS:
+ *   - saveBlurItem: write path, append, dedup by selector, per-host limit, guard clauses
+ *   - removeBlurItem: remove by ID, empty-host cleanup
+ *   - getBlurItems: read array, missing host, null storage, guard clause
+ *   - clearHost / clearAll: partial and full wipe of blurred_items
+ *   - getSettings / saveSettings: defaults merge, write validation, guard clauses
+ *   - getRules / saveRules: read/write rules array
+ *   - getBlurState / saveBlurState: per-host blur-all toggle persistence
+ *   - error handling block: null-storage safety for getBlurItems and getSettings
+ *   - guard clauses block: invalid hostname, null item, bad type, prototype pollution
+ *
+ * REDUNDANT:
+ *   - "getBlurItems returns empty array when blurred_items is null" appears in
+ *     getBlurItems describe (line ~174) AND again in error handling describe (line ~302).
+ *     The error handling copy adds no new assertion.
+ *   - "getSettings returns defaults when storage returns null" appears in
+ *     getSettings describe (line ~223) AND again in error handling describe (line ~308).
+ *     Both assert BLUR_RADIUS === 6; the second is a pure duplicate.
+ *
+ * OPTIMIZATION OPPORTUNITIES:
+ *   - Guard clause tests (9 tests across saveBlurItem/removeBlurItem/getBlurItems/
+ *     clearHost/saveSettings) all follow the same pattern:
+ *     call with invalid input → expect no chrome.storage call.
+ *     Candidate for test.each([hostname, item, expectedCalls]) table.
+ *
+ * MISSING COVERAGE:
+ *   - initCache() / cache initialization path — never exercised
+ *   - onChange(callback) subscriber pattern — not tested at all
+ *   - getCachedBlurState(hostname) synchronous read path — not tested
+ *   - saveBlurItem deduplication when item uses a zone name (non-selector key) — not covered
+ *   - clearHost when hostname does not exist in storage — no-op behaviour untested
+ *   - getRules / saveRules guard clauses (null input, non-array) — not tested
+ *   - saveRules sanitization logic detail (which fields are stripped) — single happy path only
+ */
+
 'use strict';
 
 const fs = require('fs');
@@ -63,6 +100,7 @@ describe('blsi.Storage', () => {
 
   // ── saveBlurItem (direct storage write) ─────────────────────────────────
 
+  // USER IMPACT: user blurs an element — item persists across page reload; duplicate selector rejected; per-host cap enforced
   describe('saveBlurItem', () => {
     test('writes item to chrome.storage.local', async () => {
       mockStorageGet({ blurred_items: {} });
@@ -126,6 +164,7 @@ describe('blsi.Storage', () => {
 
   // ── removeBlurItem (direct storage write) ─────────────────────────────
 
+  // USER IMPACT: user clicks unblur on an element — item removed from storage; empty host key cleaned up so storage stays lean
   describe('removeBlurItem', () => {
     test('removes item by ID from storage', async () => {
       const items = [
@@ -153,6 +192,7 @@ describe('blsi.Storage', () => {
 
   // ── getBlurItems (direct storage read) ────────────────────────────────
 
+  // USER IMPACT: page load — all previously blurred elements are restored from storage
   describe('getBlurItems', () => {
     test('returns items array from storage', async () => {
       const items = [
@@ -171,6 +211,7 @@ describe('blsi.Storage', () => {
       expect(result).toHaveLength(0);
     });
 
+    // REDUNDANT: same null-blurred_items assertion repeated in the 'error handling' describe below
     test('returns empty array when blurred_items is null', async () => {
       mockStorageGet({ blurred_items: null });
       expect(await blsi.Storage.getBlurItems('x.com')).toEqual([]);
@@ -181,10 +222,13 @@ describe('blsi.Storage', () => {
       await blsi.Storage.getBlurItems('x.com');
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
+    // MISSING: no test for getBlurItems with a hostname whose value is undefined (key present, value undefined)
+    // MISSING: no test for getBlurItems returning a frozen/immutable copy vs. a live reference
   });
 
   // ── clearHost (direct storage write) ──────────────────────────────────
 
+  // USER IMPACT: user clicks "clear this site" button — all blurs for that host removed; other sites unaffected
   describe('clearHost', () => {
     test('deletes hostname from blurred_items', async () => {
       mockStorageGet({ blurred_items: { 'x.com': [{ type: 'dynamic', name: 'D1', selector: '#a' }], 'y.com': [] } });
@@ -195,10 +239,13 @@ describe('blsi.Storage', () => {
       expect(setCall.blurred_items['x.com']).toBeUndefined();
       expect(setCall.blurred_items['y.com']).toBeDefined();
     });
+    // MISSING: no test for clearHost when hostname is not present in storage (no-op case)
+    // MISSING: no test verifying clearHost does not touch the blur_all_hosts or settings keys
   });
 
   // ── clearAll (direct storage write) ───────────────────────────────────
 
+  // USER IMPACT: user clicks "clear all sites" button — entire blurred_items map wiped; clean slate without reinstalling
   describe('clearAll', () => {
     test('overwrites blurred_items with empty object', async () => {
       await blsi.Storage.clearAll();
@@ -212,6 +259,7 @@ describe('blsi.Storage', () => {
 
   // ── getSettings (direct storage read + merge defaults) ─────────────────
 
+  // USER IMPACT: user changes blur radius in popup — setting survives reload; corrupt storage falls back to safe defaults
   describe('getSettings', () => {
     test('returns merged settings from storage', async () => {
       mockStorageGet({ settings: { BLUR_RADIUS: 12 } });
@@ -220,16 +268,20 @@ describe('blsi.Storage', () => {
       expect(settings.ENABLED).toBe(true); // default merged in
     });
 
+    // REDUNDANT: same null-settings → defaults assertion repeated in the 'error handling' describe below
     test('returns full defaults when no settings in storage', async () => {
       mockStorageGet({ settings: null });
       const settings = await blsi.Storage.getSettings();
       expect(settings.BLUR_RADIUS).toBe(6);
       expect(settings.HIGHLIGHT_COLOR).toBe('#f59e0b');
     });
+    // MISSING: no test for getSettings running validateSettings on stale/corrupt stored data
+    // MISSING: no test that getSettings result contains SHORTCUTS from action registry
   });
 
   // ── saveSettings (direct storage write) ───────────────────────────────
 
+  // USER IMPACT: user saves settings in popup — changes written atomically; invalid shapes rejected before they corrupt storage
   describe('saveSettings', () => {
     test('validates and writes settings to storage', async () => {
       const fullSettings = blsi.buildDefaultSettings();
@@ -250,6 +302,7 @@ describe('blsi.Storage', () => {
 
   // ── getRules / saveRules ──────────────────────────────────────────────
 
+  // USER IMPACT: user creates a URL-specific rule — rule persisted and loaded on next page visit matching the pattern
   describe('getRules', () => {
     test('returns rules array from storage', async () => {
       mockStorageGet({ rules: [{ id: 'r1', pattern: '*.test.com' }] });
@@ -262,8 +315,10 @@ describe('blsi.Storage', () => {
       mockStorageGet({ rules: null });
       expect(await blsi.Storage.getRules()).toEqual([]);
     });
+    // MISSING: no test for getRules when stored value is not an array (corrupt data)
   });
 
+  // USER IMPACT: user saves URL rules — rules written to storage so resolveSettings can apply per-URL overrides
   describe('saveRules', () => {
     test('sanitizes and writes rules to storage', async () => {
       const rules = [{ id: 'r1', pattern: '*.example.com', patternType: 'wildcard', settings: {} }];
@@ -274,18 +329,25 @@ describe('blsi.Storage', () => {
       expect(saved).toHaveLength(1);
       expect(saved[0].pattern).toBe('*.example.com');
     });
+    // MISSING: no test for saveRules with null or non-array input (guard clause)
+    // MISSING: no test for saveRules stripping unknown fields from each rule object
+    // OPTIMIZE: saveRules + getRules happy paths could be combined into a round-trip test
   });
 
   // ── getBlurState / saveBlurState ──────────────────────────────────────
 
+  // USER IMPACT: blur-all toggle state persists between page navigations within the same hostname
   describe('getBlurState', () => {
     test('returns blur state from background', async () => {
       mockStorageGet({ blur_all_hosts: { 'example.com': true } });
       const result = await blsi.Storage.getBlurState('example.com');
       expect(result).toBe(true);
     });
+    // MISSING: no test for getBlurState returning false/undefined when hostname not in map
+    // MISSING: no test for getBlurState when blur_all_hosts key is null in storage
   });
 
+  // USER IMPACT: blur-all toggle written immediately so next page load restores correct blur state
   describe('saveBlurState', () => {
     test('writes blur state to storage', async () => {
       mockStorageGet({ blur_all_hosts: {} });
@@ -298,22 +360,29 @@ describe('blsi.Storage', () => {
 
   // ── Error handling ────────────────────────────────────────────────────
 
+  // USER IMPACT: corrupt or missing storage does not crash the extension on page load
   describe('error handling', () => {
+    // REDUNDANT: identical to "returns empty array when blurred_items is null" in the getBlurItems describe above
     test('getBlurItems returns empty array when storage returns null', async () => {
       mockStorageGet({ blurred_items: null });
       const result = await blsi.Storage.getBlurItems('x.com');
       expect(result).toEqual([]);
     });
 
+    // REDUNDANT: identical to "returns full defaults when no settings in storage" in the getSettings describe above
     test('getSettings returns defaults when storage returns null', async () => {
       mockStorageGet({ settings: null });
       const result = await blsi.Storage.getSettings();
       expect(result.BLUR_RADIUS).toBe(6);
     });
+    // MISSING: no test for chrome.storage.local.get throwing (runtime error path)
+    // MISSING: no test for chrome.runtime.lastError set during a storage callback
   });
 
   // ── Guard clauses ─────────────────────────────────────────────────────
 
+  // USER IMPACT: malformed calls from content_script bugs or popup race conditions do not corrupt storage
+  // OPTIMIZE: all 9 tests below follow the same "invalid input → no chrome.storage call" pattern; refactor with test.each([description, fn]) to eliminate boilerplate
   describe('guard clauses', () => {
     test('saveBlurItem returns early for empty hostname', async () => {
       await blsi.Storage.saveBlurItem('', { type: 'dynamic', name: 'D1', selector: '#el' });
@@ -359,5 +428,7 @@ describe('blsi.Storage', () => {
       await blsi.Storage.saveBlurItem('__proto__', { type: 'dynamic', name: 'D1', selector: '#x' });
       expect(chrome.storage.local.get).not.toHaveBeenCalled();
     });
+    // MISSING: no test for saveBlurItem rejecting 'constructor' or 'toString' as hostname (other pollution vectors)
+    // MISSING: no test for removeBlurItem with a null or missing selector argument
   });
 });

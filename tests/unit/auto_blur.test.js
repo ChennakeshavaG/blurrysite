@@ -6,6 +6,37 @@
  *   init, destroy, isIdle
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: idle timeout triggering onIdle; activity resetting the idle timer; onActive
+ *         callback on user activity after idle; tab visibility change triggering
+ *         onIdle/onActive; destroy() removing listeners; double init() replacing
+ *         previous callbacks; mode isolation (idle-only vs tab-switch-only).
+ *
+ * REDUNDANT TESTS:
+ *   - "idle detection triggers onIdle after timeout" and "user activity after idle triggers
+ *     onActive" both set up the same idle timer with identical init() arguments; they could
+ *     share a beforeEach or be merged with extra assertions in one test.
+ *   - "tab switch triggers onIdle when hidden" and "tab becoming visible triggers onActive"
+ *     are complementary visibility state tests with near-identical setup; merging into one
+ *     test with sequential hide/show assertions would eliminate duplicated Object.defineProperty
+ *     boilerplate.
+ *
+ * OPTIMIZATION OPPORTUNITIES:
+ *   - Tests 4-5 (visibility tests) repeat the same Object.defineProperty(document,'hidden',...)
+ *     pattern twice each; extract a local setHiddenState(value) helper to reduce repetition.
+ *   - Activity event type coverage could use test.each(['mousemove','keydown','scroll',
+ *     'touchstart']) if those are all the events the module listens to.
+ *
+ * MISSING COVERAGE:
+ *   - No test for all activity event types: only mousemove is exercised; keydown, scroll,
+ *     and touchstart are not verified to reset the idle timer.
+ *   - No test for double destroy() call — should be safe and not throw.
+ *   - No test for init() with missing onIdle or onActive callbacks — module should not crash
+ *     if callbacks are omitted.
+ *   - No test for edge-case idleTimeout values: 0 or Infinity — should either be rejected
+ *     or handled gracefully without broken timer state.
+ */
+
 'use strict';
 
 const path = require('path');
@@ -17,6 +48,7 @@ function freshLoad() {
   jest.isolateModules(() => { require(MODULE_PATH); });
 }
 
+// USER IMPACT: user enables auto-blur — page blurs automatically when user is idle or switches tabs, protecting data from wandering eyes during screen sharing
 describe('auto_blur.js', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -32,6 +64,8 @@ describe('auto_blur.js', () => {
     expect(blsi.AutoBlur.isIdle()).toBe(false);
   });
 
+  // USER IMPACT: user leaves desk — page auto-blurs after idle timeout to protect data from wandering eyes
+  // REDUNDANT: shares identical init() arguments with "user activity after idle triggers onActive"; could merge with extra assertions
   test('idle detection triggers onIdle after timeout', () => {
     const onIdle = jest.fn();
     const onActive = jest.fn();
@@ -54,6 +88,7 @@ describe('auto_blur.js', () => {
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
+  // REDUNDANT: same idle timer setup as "idle detection triggers onIdle after timeout"; could be merged as additional assertions in that test
   test('user activity after idle triggers onActive', () => {
     const onActive = jest.fn();
     blsi.AutoBlur.init({ idleTimeout: 5, idle: true, tabSwitch: false, onIdle: jest.fn(), onActive });
@@ -66,6 +101,9 @@ describe('auto_blur.js', () => {
     expect(blsi.AutoBlur.isIdle()).toBe(false);
   });
 
+  // USER IMPACT: user alt-tabs during screen share — page blurs instantly on tab switch
+  // REDUNDANT: complementary to "tab becoming visible triggers onActive"; both use identical Object.defineProperty setup; could merge into one test asserting both states
+  // OPTIMIZE: extract setHiddenState(value) helper to avoid repeating Object.defineProperty(document,'hidden',...) in both visibility tests
   test('tab switch triggers onIdle when hidden', () => {
     const onIdle = jest.fn();
     blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive: jest.fn() });
@@ -79,6 +117,7 @@ describe('auto_blur.js', () => {
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
   });
 
+  // REDUNDANT: complementary to "tab switch triggers onIdle when hidden"; both share the same Object.defineProperty visibility setup
   test('tab becoming visible triggers onActive', () => {
     const onActive = jest.fn();
     blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle: jest.fn(), onActive });
@@ -91,6 +130,7 @@ describe('auto_blur.js', () => {
     expect(onActive).toHaveBeenCalledTimes(1);
   });
 
+  // USER IMPACT: user disables auto-blur in settings — timer and listeners removed cleanly, no stale callbacks fire
   test('destroy removes all listeners and resets state', () => {
     const onIdle = jest.fn();
     blsi.AutoBlur.init({ idleTimeout: 5, idle: true, tabSwitch: true, onIdle, onActive: jest.fn() });
@@ -112,6 +152,7 @@ describe('auto_blur.js', () => {
     expect(onIdle2).toHaveBeenCalledTimes(1);
   });
 
+  // USER IMPACT: user chooses idle-only mode — tab switches do not trigger blur (mode isolation)
   test('idle-only mode does not respond to visibility changes', () => {
     const onIdle = jest.fn();
     blsi.AutoBlur.init({ idleTimeout: 300, idle: true, tabSwitch: false, onIdle, onActive: jest.fn() });
@@ -123,6 +164,7 @@ describe('auto_blur.js', () => {
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
   });
 
+  // USER IMPACT: user chooses tab-switch-only mode — idle timeout never fires (mode isolation)
   test('tab-switch-only mode does not set idle timer', () => {
     const onIdle = jest.fn();
     blsi.AutoBlur.init({ idleTimeout: 5, idle: false, tabSwitch: true, onIdle, onActive: jest.fn() });
@@ -130,4 +172,9 @@ describe('auto_blur.js', () => {
     jest.advanceTimersByTime(10 * 1000);
     expect(onIdle).not.toHaveBeenCalled(); // idle is false, no timer should fire
   });
+
+  // MISSING: no test for all activity event types — only mousemove verified; keydown, scroll, touchstart not covered
+  // MISSING: no test for double destroy() call — should be safe and not throw
+  // MISSING: no test for init() with missing onIdle/onActive callbacks — should not crash on missing optional callbacks
+  // MISSING: no test for edge-case idleTimeout values (0 or Infinity) — behavior on invalid input is unspecified
 });

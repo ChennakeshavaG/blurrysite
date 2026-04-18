@@ -6,6 +6,32 @@
  *   enable, disable, isActive
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: enable() replaces title and all favicon hrefs with generic placeholders;
+ *         disable() restores original title and favicon hrefs; isActive() state reflection;
+ *         double-enable idempotency (original not overwritten by placeholder);
+ *         enable() when no favicon exists (creates blank then removes on disable());
+ *         disable() no-op when not active; multiple favicon link element variants.
+ *
+ * REDUNDANT TESTS:
+ *   - "disable() restores original title" and "disable() restores original favicon href"
+ *     both call enable() then disable() and assert restoration; they could be merged into
+ *     a single "disable() restores all tab identifiers" test with both assertions.
+ *
+ * OPTIMIZATION OPPORTUNITIES:
+ *   - Favicon assertion pattern (icon.href matches /^data:image\/png;base64,/) is repeated
+ *     across at least 5 tests; extract expectBlankFavicon(icon) and expectOriginalFavicon(icon,
+ *     url) helpers to reduce repetition and make assertion intent clearer.
+ *
+ * MISSING COVERAGE:
+ *   - No test for title change between enable() and disable(): if the page updates document.title
+ *     while privacy is active, disable() should restore the pre-enable title, not the changed one.
+ *   - No test for enable()/disable()/enable() cycle to verify state machine consistency across
+ *     multiple activations.
+ *   - No test for a favicon whose href attribute is missing or empty — module should not crash
+ *     when restoring a corrupt/absent href.
+ */
+
 'use strict';
 
 const path = require('path');
@@ -17,6 +43,7 @@ function freshLoad() {
   jest.isolateModules(() => { require(MODULE_PATH); });
 }
 
+// USER IMPACT: user enables tab privacy before screen sharing — tab title and favicon replaced so meeting participants cannot read sensitive page identity
 describe('tab_privacy.js', () => {
   beforeEach(() => {
     // jsdom reads document.title from the <title> element, so set it via DOM
@@ -29,6 +56,7 @@ describe('tab_privacy.js', () => {
     document.head.innerHTML = '';
   });
 
+  // USER IMPACT: user enables tab privacy before screen share — tab title and favicon replaced with generic versions
   test('enable() replaces document.title with generic placeholder', () => {
     blsi.TabPrivacy.enable();
     expect(document.title).toBe('Tab');
@@ -40,12 +68,16 @@ describe('tab_privacy.js', () => {
     expect(icon.href).toMatch(/^data:image\/png;base64,/);
   });
 
+  // USER IMPACT: share session ends — original tab title and favicon restored so user sees their real page again
+  // REDUNDANT: "disable() restores original title" and "disable() restores original favicon href" both call enable()+disable() and check restoration; could be one test with both assertions
   test('disable() restores original title', () => {
     blsi.TabPrivacy.enable();
     blsi.TabPrivacy.disable();
     expect(document.title).toBe('My Banking App');
   });
 
+  // REDUNDANT: same enable()+disable() sequence as "disable() restores original title"; only the asserted property differs
+  // OPTIMIZE: favicon href assertion (/^data:image\/png;base64,/) is repeated here and in multiple tests; extract expectBlankFavicon(icon) helper
   test('disable() restores original favicon href', () => {
     blsi.TabPrivacy.enable();
     blsi.TabPrivacy.disable();
@@ -53,6 +85,7 @@ describe('tab_privacy.js', () => {
     expect(icon.href).toBe('https://example.com/favicon.ico');
   });
 
+  // USER IMPACT: popup queries privacy status — can show accurate toggle state in the UI
   test('isActive() reflects current state', () => {
     expect(blsi.TabPrivacy.isActive()).toBe(false);
     blsi.TabPrivacy.enable();
@@ -61,6 +94,7 @@ describe('tab_privacy.js', () => {
     expect(blsi.TabPrivacy.isActive()).toBe(false);
   });
 
+  // USER IMPACT: user double-clicks enable — second call is safe, original title not lost
   test('double enable is idempotent — does not nest originals', () => {
     blsi.TabPrivacy.enable();
     // Title is now 'Tab'. If we enable again, it should NOT store 'Tab' as the original.
@@ -95,6 +129,8 @@ describe('tab_privacy.js', () => {
     expect(document.title).toBe(originalTitle);
   });
 
+  // USER IMPACT: site has apple-touch-icon and shortcut icon — all favicon variants replaced and restored, not just the first one found
+  // OPTIMIZE: favicon href assertion pattern repeated again here; same expectBlankFavicon() helper would clean this up
   test('handles multiple favicon link elements', () => {
     document.head.innerHTML = `
       <link rel="icon" href="https://example.com/icon16.png">
@@ -116,4 +152,8 @@ describe('tab_privacy.js', () => {
     expect(hrefs).toContain('https://example.com/icon32.png');
     expect(hrefs).toContain('https://example.com/apple.png');
   });
+
+  // MISSING: no test for title change between enable() and disable() — page updates title while privacy is on; disable() should restore pre-enable title, not the updated one
+  // MISSING: no test for enable()/disable()/enable() cycle — state machine consistency across multiple activations is unverified
+  // MISSING: no test for favicon with missing or empty href attribute — module should not crash when restoring a corrupt link element
 });

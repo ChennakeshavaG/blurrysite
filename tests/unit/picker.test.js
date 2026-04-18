@@ -19,6 +19,42 @@
  * because picker.js depends on them being loaded first via manifest.json.
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: activate (idempotent, toolbar, class), hover highlight (add/remove/null), click (blur/unblur/
+ *         preventDefault/stopPropagation), Escape (deactivate/callback), deactivate (class, toolbar,
+ *         callback, listener teardown, no-throw when inactive), setSettings (radius, before-activate,
+ *         partial), isActive (false/true/after-deactivate/after-Escape), hover cleanup, toolbar
+ *         (ID+class, Escape removal), click boundary (no-callbacks, body/html skip), sticky mode
+ *         (draw preview, onStickyBlur, min size, Escape cancel-draw, zone unblur), setMode (sticky↔dynamic,
+ *         cancel draw, onModeChange, invalid, no-op), i18n integration (t(), empty prefix, rebuildToolbar,
+ *         ContentI18n missing).
+ *
+ * REDUNDANT:
+ *   - "removes the toolbar from the DOM" (deactivate describe) and "toolbar is removed when picker is
+ *     deactivated via Escape" (toolbar describe) both assert getElementById returns null after deactivation
+ *     through different code paths — minimal extra coverage for a separate test.
+ *   - "calling activate twice is safe" and "activates in sticky mode by default" both call activate and
+ *     check isActive; sticky-mode test adds a hover-highlight assertion but the activation path overlaps.
+ *   - "switches from sticky to dynamic" and "switches from dynamic to sticky" are exact mirror tests;
+ *     parameterise with test.each([['sticky-page','dynamic',true],['dynamic','sticky-page',false]]).
+ *
+ * OPTIMIZE:
+ *   - i18n fallback tests (4 tests checking the same t(key,fallback) pattern) — use test.each over
+ *     [ContentI18n stub, expectedText] pairs.
+ *   - Sticky mode draw tests repeat fireMouseDown/fireMouseMove/fireMouseUp sequence — extract
+ *     simulateDraw(startX, startY, endX, endY) helper.
+ *   - isActive tests (4 tests) follow activate→[action]→expect(isActive) pattern — test.each candidate.
+ *
+ * MISSING:
+ *   - No test for toolbar drag behavior (_wireDrag, _onDragStart, _onDragMove, _onDragEnd).
+ *   - No test for tooltip show/hide on chip hover (if tooltips are implemented).
+ *   - No test for onStickyBlur callback data shape — only width/height checked; x, y, anchor,
+ *     scrollWidth, scrollHeight not asserted.
+ *   - No test for minimum zone size toast message text content.
+ *   - No test for findClassedParent logic in dynamic mode (clicking child of blurred parent).
+ *   - No test for setMode called when picker is not active (should no-op or throw gracefully).
+ * ===*/
+
 'use strict';
 
 const fs = require('fs');
@@ -206,6 +242,7 @@ describe('blsi.Picker', () => {
 
   // ── activate ───────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user presses Alt+Shift+P — crosshair cursor and toolbar appear to signal picker mode
   describe('activate', () => {
     /**
      * Verifies that activation adds the pb-picker-active class to <html>.
@@ -252,6 +289,7 @@ describe('blsi.Picker', () => {
 
   // ── hover highlight ────────────────────────────────────────────────────────
 
+  // USER IMPACT: user moves mouse in picker mode — outline shows exactly which element will be blurred
   describe('hover highlight', () => {
     /**
      * Verifies that hovering over an element adds the highlight class.
@@ -302,6 +340,7 @@ describe('blsi.Picker', () => {
 
   // ── click ──────────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user clicks element in picker — element blurred or unblurred, page navigation not triggered
   describe('click', () => {
     /**
      * Verifies that clicking an unblurred element calls the onBlur callback.
@@ -395,6 +434,7 @@ describe('blsi.Picker', () => {
 
   // ── Escape key ─────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user presses Escape — picker exits immediately without losing page state
   describe('Escape key', () => {
     /**
      * Verifies that pressing Escape deactivates the picker.
@@ -433,6 +473,7 @@ describe('blsi.Picker', () => {
 
   // ── deactivate ─────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user closes picker — cursor restores, toolbar disappears, accidental clicks no longer blur
   describe('deactivate', () => {
     /**
      * Verifies that deactivation removes the crosshair cursor class.
@@ -455,6 +496,7 @@ describe('blsi.Picker', () => {
      * after deactivation would block page content and confuse users.
      * Reproduce: Activate (creates toolbar), deactivate, query for toolbar.
      */
+    // REDUNDANT: same assertion (toolbar is null after deactivation) also appears in the toolbar describe block's "toolbar is removed when picker is deactivated via Escape" — paths differ but the assertion is identical for the direct-deactivate case
     test('removes the toolbar from the DOM', () => {
       blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
       expect(document.getElementById('bl-si-picker-toolbar')).not.toBeNull();
@@ -513,6 +555,7 @@ describe('blsi.Picker', () => {
 
   // ── setSettings ────────────────────────────────────────────────────────────
 
+  // USER IMPACT: popup settings panel open while picker active — blur radius change takes effect immediately
   describe('setSettings', () => {
     /**
      * Verifies that setSettings can update blur radius while picker is active.
@@ -563,6 +606,8 @@ describe('blsi.Picker', () => {
 
   // ── isActive getter ───────────────────────────────────────────────────────
 
+  // USER IMPACT: popup toggle button and GET_STATUS query — correct active state drives UI button label
+  // OPTIMIZE: four sequential activate→[action]→check(isActive) tests; use test.each over action names
   describe('isActive', () => {
     /**
      * Verifies isActive is false before any activation.
@@ -618,6 +663,7 @@ describe('blsi.Picker', () => {
 
   // ── Hover highlight cleanup ───────────────────────────────────────────────
 
+  // USER IMPACT: user exits picker via Escape or toolbar — stale hover outlines removed from page
   describe('hover highlight cleanup', () => {
     /**
      * Verifies that ALL hover highlights are removed on deactivation.
@@ -666,6 +712,7 @@ describe('blsi.Picker', () => {
 
   // ── Toolbar interaction ────────────────────────────────────────────────────
 
+  // USER IMPACT: picker toolbar renders correctly and is cleaned up — ID/class needed for CSS z-index and deactivate()
   describe('toolbar', () => {
     /**
      * Verifies that the toolbar has the correct ID and CSS class.
@@ -690,6 +737,7 @@ describe('blsi.Picker', () => {
      * deactivate() — otherwise the toolbar persists as a phantom overlay.
      * Reproduce: Activate, fire Escape, verify toolbar is gone.
      */
+    // REDUNDANT: same getElementById(toolbar) === null assertion as "removes the toolbar from the DOM" in deactivate describe — different code path (Escape vs direct deactivate()) but identical assertion
     test('toolbar is removed when picker is deactivated via Escape', () => {
       blsi.Picker.activate({ pickerMode: 'dynamic' }, { onDeactivate: jest.fn() });
 
@@ -697,10 +745,12 @@ describe('blsi.Picker', () => {
 
       expect(document.getElementById('bl-si-picker-toolbar')).toBeNull();
     });
+    // MISSING: no test for toolbar chip click changing mode (chip is rendered but not tested for click behavior)
   });
 
   // ── Click boundary conditions ─────────────────────────────────────────────
 
+  // USER IMPACT: defensive robustness — no crash when callbacks omitted or structural elements clicked
   describe('click boundary conditions', () => {
     /**
      * Verifies that clicking with no callbacks provided does not crash.
@@ -737,6 +787,8 @@ describe('blsi.Picker', () => {
 
   // ── Sticky mode ──────────────────────────────────────────────────────────
 
+  // USER IMPACT: user sketches zone — box drawn with correct coordinates, saved as sticky blur item
+  // OPTIMIZE: fireMouseDown/fireMouseMove/fireMouseUp sequence repeated across 6 tests; extract simulateDraw(startX,startY,endX,endY)
   describe('sticky mode', () => {
     function fireMouseDown(target, x, y) {
       const event = new MouseEvent('mousedown', {
@@ -765,6 +817,7 @@ describe('blsi.Picker', () => {
       return event;
     }
 
+    // REDUNDANT: activation path overlaps with "calling activate twice is safe" in activate describe; hover-highlight assertion here is the only new check
     test('activates in sticky mode by default', () => {
       blsi.Picker.activate({}, {});
       expect(blsi.Picker.isActive).toBe(true);
@@ -776,6 +829,7 @@ describe('blsi.Picker', () => {
       expect(el.classList.contains('bl-si-hover-highlight')).toBe(false);
     });
 
+    // REDUNDANT: isActive === true here duplicates the same assertion in "activates in sticky mode by default" above
     test('activates in sticky mode when pickerMode is sticky', () => {
       blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
       expect(blsi.Picker.isActive).toBe(true);
@@ -879,6 +933,8 @@ describe('blsi.Picker', () => {
 
   // ── setMode ──────────────────────────────────────────────────────────────
 
+  // USER IMPACT: user switches picker mode via toolbar chip — hover highlight toggles on/off accordingly
+  // OPTIMIZE: "switches from sticky to dynamic" and "switches from dynamic to sticky" are exact mirrors; use test.each
   describe('setMode', () => {
     test('switches from sticky to dynamic', () => {
       blsi.Picker.activate({ pickerMode: 'sticky-page' }, {});
@@ -892,6 +948,7 @@ describe('blsi.Picker', () => {
       expect(el.classList.contains('bl-si-hover-highlight')).toBe(true);
     });
 
+    // REDUNDANT: mirror of "switches from sticky to dynamic" — same activate→setMode→fireMouseover→check(highlight) pattern, only direction reversed
     test('switches from dynamic to sticky', () => {
       blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
       blsi.Picker.setMode('sticky-page');
@@ -945,6 +1002,8 @@ describe('blsi.Picker', () => {
     });
   });
 
+  // USER IMPACT: non-English locales — toolbar labels and chip text render in the correct language
+  // OPTIMIZE: four i18n tests swap ContentI18n stub and check toolbar.textContent; use test.each over [stub, expectedText] pairs
   describe('i18n integration (Phase 2)', () => {
     let originalContentI18n;
 
@@ -1012,6 +1071,7 @@ describe('blsi.Picker', () => {
       expect(toolbar.textContent).toContain('Element');
       expect(toolbar.textContent).toContain('Clear');
     });
+    // MISSING: no test for rebuildToolbar() preserving active mode chip state after language swap
   });
 
 });

@@ -6,6 +6,31 @@
  *   blurSelection, init, destroy, clearAll, getSelectionBlurs, removeSelectionBlur
  */
 
+/* === TEST QUALITY ANNOTATIONS ===
+ * COVERS: blurSelection (wraps text, preserves surrounding text, null on collapsed/whitespace/extension-UI),
+ *         clearAll (removes all spans, restores text), getSelectionBlurs (returns records with id+text),
+ *         removeSelectionBlur (by ID, non-existent ID no-op), unique IDs, destroy (clears all blurs).
+ *
+ * REDUNDANT:
+ *   - "destroy clears all blurs" and "clearAll removes all blur spans" test the same outcome — destroy()
+ *     calls clearAll() internally, so both assert querySelectorAll('[data-bl-si-selection]').length === 0.
+ *     The destroy test adds no new behaviour beyond confirming the delegation.
+ *
+ * OPTIMIZE:
+ *   - blurSelection null-return tests (collapsed, whitespace, extension-UI) all call blurSelection() and
+ *     expect(result).toBeNull() — candidate for test.each over [html, startOffset, endOffset] inputs.
+ *
+ * MISSING:
+ *   - No test for multi-node range — selection spanning multiple elements (e.g. Hello <span>World</span> Foo)
+ *     exercises the TreeWalker cross-node split path in _wrapRange.
+ *   - No test for partial text node wrapping with non-zero startOffset and endOffset mid-node, verifying
+ *     that only the targeted substring is wrapped and siblings are preserved as separate text nodes.
+ *   - No test for sequential selections in the same paragraph — second blurSelection after first creates
+ *     two independent spans in the same parent.
+ *   - No test for TreeWalker correctness with NodeFilter.SHOW_TEXT — confirming only text nodes are visited.
+ *   - No test for blurSelection when the selection contains a mix of text and element nodes (e.g. <b>).
+ * ===*/
+
 'use strict';
 
 const path = require('path');
@@ -35,6 +60,7 @@ function selectText(element, startOffset, endOffset) {
   return sel;
 }
 
+// USER IMPACT: user selects text and blurs — specific text snippet blurred without affecting surrounding content
 describe('selection_blur.js', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -96,7 +122,10 @@ describe('selection_blur.js', () => {
     const result = blsi.SelectionBlur.blurSelection();
     expect(result).toBeNull();
   });
+  // MISSING: no test for getSelectionBlurs() returning empty array when no blurs active
+  // OPTIMIZE: null-return tests (collapsed/whitespace/extension-UI) all assert result===null — use test.each over input variants
 
+  // USER IMPACT: user clears all blur — all text selections unblurred and DOM restored
   test('clearAll removes all selection blur spans', () => {
     document.body.innerHTML = '<p>Hello World Foo</p>';
     const p = document.querySelector('p');
@@ -125,6 +154,7 @@ describe('selection_blur.js', () => {
     expect(blurs[0].id).toBeTruthy();
   });
 
+  // USER IMPACT: user right-clicks blurred text to unblur — only that span removed, others preserved
   test('removeSelectionBlur removes a specific blur by ID', () => {
     document.body.innerHTML = '<p>Hello World</p>';
     const p = document.querySelector('p');
@@ -151,6 +181,7 @@ describe('selection_blur.js', () => {
     expect(r1.id).not.toBe(r2.id);
   });
 
+  // REDUNDANT: destroy() delegates to clearAll() internally — this test duplicates "clearAll removes all selection blur spans"; the only new assertion is that destroy() itself does not throw
   test('destroy clears all blurs', () => {
     document.body.innerHTML = '<p>Hello World</p>';
     const p = document.querySelector('p');
@@ -165,4 +196,7 @@ describe('selection_blur.js', () => {
     document.body.innerHTML = '<p>Hello</p>';
     expect(() => blsi.SelectionBlur.removeSelectionBlur('fake_id')).not.toThrow();
   });
+  // MISSING: no test for multi-node range spanning two sibling elements
+  // MISSING: no test for partial text node wrapping (non-zero startOffset + endOffset mid-string)
+  // MISSING: no test for sequential selections in the same paragraph creating two independent spans
 });
