@@ -34,6 +34,9 @@ require('../src/shortcut_label.js');
 // ─── Chrome Extension API mock ────────────────────────────────────────────────
 
 global.chrome = {
+  i18n: {
+    getMessage: jest.fn((key) => key),
+  },
   runtime: {
     sendMessage: jest.fn(),
     onMessage: {
