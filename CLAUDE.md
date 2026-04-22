@@ -5,15 +5,15 @@
 A Chrome/Firefox MV3 browser extension. Vanilla JS only — no bundler, no ES modules, no TypeScript.
 All source files are IIFEs that assign a single `window.BlurrySite*` global.
 
-Full design docs: `docs/HLD.md` (architecture), `docs/LLD.md` (contracts + algorithms), `docs/CROSS_BROWSER.md` (compatibility + extensibility gaps).
+Full design docs: `docs/architecture.md` (architecture), `docs/module-contracts.md` (contracts + algorithms), `docs/browser-compatibility.md` (compatibility + extensibility gaps).
 
 ---
 
 ## Before Any Change
 
 1. Run tests first to confirm green baseline: `npm run test:unit`
-2. Check `docs/LLD.md` for the module contract you're touching — do not introduce new public API surface without updating that file.
-3. If adding a new `chrome.runtime.sendMessage` message type, update **both** `background.js` (handler) and the relevant source module, and add it to the protocol table in `docs/HLD.md §6`.
+2. Check `docs/module-contracts.md` for the module contract you're touching — do not introduce new public API surface without updating that file.
+3. If adding a new `chrome.runtime.sendMessage` message type, update **both** `background.js` (handler) and the relevant source module, and add it to the protocol table in `docs/architecture.md §6`.
 
 ---
 
@@ -252,7 +252,7 @@ Follow the pattern in any existing `tests/unit/*.test.js`:
 2. Use `require(MODULE_PATH)` to load the source (enables coverage)
 3. Provide a `buildStubSource()` that matches the public contract exactly
 4. `afterEach` or `beforeEach` must clean up any DOM and call `destroy()` if applicable
-5. **Add every new test to `docs/TEST_VALIDATION.md`** with manual replication steps
+5. **Add every new test to `docs/test-validation.md`** with manual replication steps
 
 ---
 
@@ -274,14 +274,14 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 
 | What changed | Update |
 |---|---|
-| Added/removed/renamed a public API method on any module | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` module-specific rules, `docs/LLD.md` contract |
-| Added/removed a `chrome.runtime.sendMessage` type | `src/constants.js` (source of truth), `CLAUDE.md` Message Protocol tables, `docs/HLD.md §6` protocol table |
+| Added/removed/renamed a public API method on any module | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` module-specific rules, `docs/module-contracts.md` contract |
+| Added/removed a `chrome.runtime.sendMessage` type | `src/constants.js` (source of truth), `CLAUDE.md` Message Protocol tables, `docs/architecture.md §6` protocol table |
 | Changed a default value (blur radius, chord keys, etc.) | `src/constants.js` DEFAULTS — all other files reference it |
-| Changed settings shape (new keys, renamed keys) | `CLAUDE.md` Settings Shape section, `docs/LLD.md` |
-| Added/removed/renamed a `blsi.Model` method or storage key | `CLAUDE.md` Module Globals table (`src/storage_model.js` row), `src/CLAUDE.md` storage_model.js rules, `docs/LLD.md` contract |
+| Changed settings shape (new keys, renamed keys) | `CLAUDE.md` Settings Shape section, `docs/module-contracts.md` |
+| Added/removed/renamed a `blsi.Model` method or storage key | `CLAUDE.md` Module Globals table (`src/storage_model.js` row), `src/CLAUDE.md` storage_model.js rules, `docs/module-contracts.md` contract |
 | Added a new source file under `src/` | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` load order, `manifest.json` content_scripts |
-| Added/modified/removed a unit test | `docs/TEST_VALIDATION.md` — add entry with test name, assertion, and manual replication steps |
-| Added a new test file | `docs/TEST_VALIDATION.md` new section, `tests/CLAUDE.md` if test patterns differ |
+| Added/modified/removed a unit test | `docs/test-validation.md` — add entry with test name, assertion, and manual replication steps |
+| Added a new test file | `docs/test-validation.md` new section, `tests/CLAUDE.md` if test patterns differ |
 | Changed test loading pattern or setup | `CLAUDE.md` Testing section, `tests/CLAUDE.md` |
 | Changed keyboard shortcut handling | `CLAUDE.md` Settings Shape section, `src/CLAUDE.md` shortcut_handler rules |
 | Changed CSS class names or IDs | `CLAUDE.md` CSS class constants table |
@@ -303,8 +303,8 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | Issue | Root cause | Status |
 |---|---|---|
 | ~~DRM video shows dark overlay~~ | Fixed — CSS `filter: blur()` works on DRM video (DRM blocks pixel extraction, not CSS rendering) | Resolved |
-| SPA selector staleness | `data-bl-si-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/CROSS_BROWSER.md §6.3` |
-| Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/CROSS_BROWSER.md §6.6` |
+| SPA selector staleness | `data-bl-si-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/browser-compatibility.md §6.3` |
+| Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/browser-compatibility.md §6.6` |
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |
 | `position: sticky` inside blurred containers stops sticking | CSS `filter` creates stacking context — spec behaviour | Same root cause as `position: fixed` issue |
 | `<select>` dropdown options visible when opened | CSS filter only blurs closed state | Known limitation |
