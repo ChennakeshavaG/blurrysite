@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>BlurrySite Icons</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f0f0f; font-family: system-ui, sans-serif; padding: 56px 48px; display: flex; flex-direction: column; gap: 64px; }
+
+  h1 { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #333; margin-bottom: 40px; }
+
+  .band { display: flex; flex-direction: column; gap: 20px; }
+  .band-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #2a2a2a; }
+
+  .row { display: flex; align-items: flex-end; gap: 28px; flex-wrap: wrap; }
+
+  .item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .size-label { font-size: 9px; letter-spacing: 0.08em; color: #2e2e2e; }
+
+  img { display: block; image-rendering: auto; }
+  img.pixel { image-rendering: pixelated; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #1a1a1a; border: 1px solid #242424;
+    border-radius: 6px; padding: 6px 10px;
+  }
+  .chip img { border-radius: 2px; }
+  .chip-label { font-size: 10px; color: #3a3a3a; letter-spacing: 0.06em; }
+
+  .light-bg { background: #ececec; padding: 10px; border-radius: 6px; }
+  .light-bg .size-label { color: #b0b0b0; }
+
+  .divider { height: 1px; background: #191919; }
+
+  /* SVG preview */
+  .svg-row { display: flex; gap: 32px; align-items: flex-start; }
+  .svg-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .svg-item .size-label { font-size: 9px; color: #2e2e2e; letter-spacing: 0.08em; }
+  .svg-item.light { background: #ececec; padding: 12px; border-radius: 6px; }
+  .svg-item.light .size-label { color: #b0b0b0; }
+</style>
+</head>
+<body>
+
+<h1>BlurrySite — Production Icons</h1>
+
+<!-- SVG masters -->
+<div class="band">
+  <div class="band-label">SVG masters</div>
+  <div class="svg-row">
+    <div class="svg-item">
+      <img src="logo-dark.svg" width="200" height="200"/>
+      <span class="size-label">logo-dark.svg</span>
+    </div>
+    <div class="svg-item light">
+      <img src="logo-light.svg" width="200" height="200"/>
+      <span class="size-label">logo-light.svg</span>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- Dark PNGs -->
+<div class="band">
+  <div class="band-label">Dark — PNG rasters</div>
+  <div class="row">
+    <div class="item">
+      <img src="logo-dark.png" width="256" height="256"/>
+      <span class="size-label">512 px master</span>
+    </div>
+    <div class="item">
+      <img src="icon128.png" width="128" height="128"/>
+      <span class="size-label">128 px</span>
+    </div>
+    <div class="item">
+      <img class="pixel" src="icon48.png" width="48" height="48"/>
+      <span class="size-label">48 px</span>
+    </div>
+    <div class="item">
+      <img class="pixel" src="icon32.png" width="32" height="32"/>
+      <span class="size-label">32 px</span>
+    </div>
+    <div class="item">
+      <img class="pixel" src="icon16.png" width="16" height="16"/>
+      <span class="size-label">16 px</span>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- Light PNGs -->
+<div class="band">
+  <div class="band-label">Light — PNG rasters</div>
+  <div class="row">
+    <div class="item light-bg">
+      <img src="logo-light.png" width="256" height="256"/>
+      <span class="size-label">512 px master</span>
+    </div>
+    <div class="item light-bg">
+      <img src="icon128-light.png" width="128" height="128"/>
+      <span class="size-label">128 px</span>
+    </div>
+    <div class="item light-bg">
+      <img class="pixel" src="icon48-light.png" width="48" height="48"/>
+      <span class="size-label">48 px</span>
+    </div>
+    <div class="item light-bg">
+      <img class="pixel" src="icon32-light.png" width="32" height="32"/>
+      <span class="size-label">32 px</span>
+    </div>
+    <div class="item light-bg">
+      <img class="pixel" src="icon16-light.png" width="16" height="16"/>
+      <span class="size-label">16 px</span>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- In-context chips -->
+<div class="band">
+  <div class="band-label">In-context — toolbar chip simulation</div>
+  <div class="row">
+    <div class="chip">
+      <img src="icon16.png" width="16" height="16"/>
+      <span class="chip-label">Blurry Site</span>
+    </div>
+    <div class="chip">
+      <img src="icon32.png" width="16" height="16"/>
+      <span class="chip-label">Blurry Site</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
