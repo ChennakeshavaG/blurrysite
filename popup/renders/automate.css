@@ -1,0 +1,100 @@
+/* popup_automate.css — Automate sub-page styles
+ *
+ * Reuses from popup.css:
+ *   .bl-toggle, .bl-toggle__track, .bl-section__hint,
+ *   .bl-form-row, .bl-form-row__label,
+ *   .bl-btn-primary
+ */
+
+/* ── Automate block ──────────────────────────────────────────────────── */
+.bl-auto-block {
+  margin-bottom: 20px;
+}
+
+.bl-auto-block__title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bl-text-dim);
+  margin-bottom: 10px;
+}
+
+.bl-auto-block__desc {
+  font-size: 11px;
+  color: var(--bl-text-muted);
+  margin-top: 4px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+/* ── Number + unit input row ─────────────────────────────────────────── */
+.bl-auto-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.bl-auto-num {
+  width: 52px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--bl-raised);
+  background: var(--bl-surface);
+  color: var(--bl-text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: center;
+  -moz-appearance: textfield;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.bl-auto-num::-webkit-inner-spin-button,
+.bl-auto-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.bl-auto-num:focus { border-color: var(--bl-amber); }
+.bl-auto-num:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.bl-auto-unit {
+  padding: 5px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--bl-raised);
+  background: var(--bl-surface);
+  color: var(--bl-text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.bl-auto-unit:focus { border-color: var(--bl-amber); }
+.bl-auto-unit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Start / Stop button ─────────────────────────────────────────────── */
+.bl-auto-start-stop {
+  margin-left: auto;
+  padding: 5px 14px;
+  font-size: 12px;
+}
+
+.bl-auto-start-stop--stop {
+  background: var(--bl-danger);
+  border-color: var(--bl-danger);
+}
+.bl-auto-start-stop--stop:hover {
+  background: color-mix(in srgb, var(--bl-danger) 85%, white);
+}
+
+/* ── Validation error / API warning ─────────────────────────────────── */
+.bl-auto-error {
+  font-size: 11px;
+  color: var(--bl-danger);
+  margin-top: 5px;
+}
+
+.bl-auto-warn {
+  font-size: 11px;
+  color: var(--bl-amber);
+  margin-top: 5px;
+}
+

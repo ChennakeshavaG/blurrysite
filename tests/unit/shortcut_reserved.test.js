@@ -11,38 +11,6 @@
  *   - Mac-only entries only fire on Mac, Win-only only on non-Mac, 'any' everywhere.
  */
 
-/* === TEST QUALITY ANNOTATIONS ===
- * FILE COVERS:
- *   - API surface: isReserved, lookup, RESERVED exposed on blsi.ShortcutLabel
- *   - Positive isReserved checks: Ctrl+T, Ctrl+W, F5, F12
- *   - Positive lookup check: Ctrl+T label regex match
- *   - Negative isReserved checks: Alt+Shift+B (TOGGLE_BLUR_ALL default), Ctrl+Shift+K
- *   - Negative lookup: returns null for non-reserved chord
- *   - Mod-order agnostic: [Shift,Control] same as [Control,Shift]
- *   - Platform conditional: Meta+Q reserved only on Mac
- *   - RESERVED array is frozen
- *
- * REDUNDANT TESTS:
- *   - "Ctrl+W is reserved", "F5 is reserved", "F12 is reserved" follow the exact same
- *     isReserved(chord) === true pattern as "Ctrl+T is reserved" — all 4 are test.each candidates.
- *   - "Alt+Shift+B is NOT reserved" and "Control+Shift+KeyK is NOT reserved" are both
- *     negative isReserved assertions; could be merged into a single test with two expect calls,
- *     or expressed as a test.each negative table.
- *
- * OPTIMIZATION OPPORTUNITIES:
- *   - Reserved positive tests → test.each([['Ctrl+T', {code:'KeyT', mods:['Control']}], ...])
- *   - Negative tests → test.each([['Alt+Shift+B', {...}], ['Ctrl+Shift+K', {...}]])
- *   - Platform-conditional test — consider separate IS_MAC=true and IS_MAC=false branches
- *     via module reload with mocked navigator.platform to cover both paths in one run.
- *
- * MISSING COVERAGE:
- *   - Only 4-5 reserved entries out of 13+ are exercised by isReserved positive tests.
- *   - No test that each RESERVED entry has the required shape: { key, label, platform }.
- *   - lookup() return value is only tested via regex match — no assertion on exact label string.
- *   - No test for null or undefined chord passed to isReserved() (defensive / crash guard).
- *   - No test for null or undefined chord passed to lookup() (defensive / crash guard).
- */
-
 'use strict';
 
 // Loaded by tests/setup.js.
@@ -55,42 +23,42 @@ describe('blsi.ShortcutLabel reserved API', () => {
     expect(Array.isArray(blsi.ShortcutLabel.RESERVED)).toBe(true);
   });
 
-  // OPTIMIZE: "Ctrl+T", "Ctrl+W", "F5", "F12" isReserved positive tests are structurally identical; convert to test.each([['Ctrl+T',{code:'KeyT',mods:['Control']}],...])
-  test('Ctrl+T is reserved (cross-platform browser shortcut)', () => {
+  test('Ctrl+T is reserved — lookup returns label matching /tab/i', () => {
     const entry = blsi.ShortcutLabel.lookup({ code: 'KeyT', mods: ['Control'] });
     expect(entry).not.toBeNull();
     expect(entry.label).toMatch(/tab/i);
   });
 
-  // REDUNDANT: same isReserved === true pattern as "Ctrl+T is reserved" above
-  test('Ctrl+W is reserved', () => {
-    expect(blsi.ShortcutLabel.isReserved({ code: 'KeyW', mods: ['Control'] })).toBe(true);
+  // All 'any'-platform entries must be reserved regardless of runtime platform.
+  test.each([
+    ['Ctrl+N',       { code: 'KeyN', mods: ['Control'] }],
+    ['Ctrl+W',       { code: 'KeyW', mods: ['Control'] }],
+    ['Ctrl+Tab',     { code: 'Tab',  mods: ['Control'] }],
+    ['Ctrl+Shift+T', { code: 'KeyT', mods: ['Control', 'Shift'] }],
+    ['Ctrl+Shift+N', { code: 'KeyN', mods: ['Control', 'Shift'] }],
+    ['F5',           { code: 'F5',   mods: [] }],
+    ['F11',          { code: 'F11',  mods: [] }],
+    ['F12',          { code: 'F12',  mods: [] }],
+  ])('%s is reserved (cross-platform)', (_label, chord) => {
+    expect(blsi.ShortcutLabel.isReserved(chord)).toBe(true);
   });
 
-  // REDUNDANT: same isReserved === true pattern as "Ctrl+T is reserved" above
-  test('F5 is reserved (reload)', () => {
-    expect(blsi.ShortcutLabel.isReserved({ code: 'F5', mods: [] })).toBe(true);
-  });
-
-  // REDUNDANT: same isReserved === true pattern as "Ctrl+T is reserved" above
-  test('F12 is reserved (DevTools)', () => {
-    expect(blsi.ShortcutLabel.isReserved({ code: 'F12', mods: [] })).toBe(true);
-  });
-
-  // USER IMPACT: platform-specific reserved chord detection — Mac users see warnings for Cmd+Q; Windows users do not
-  // OPTIMIZE: negative tests below could be test.each([['Alt+Shift+B',{code:'KeyB',mods:['Alt','Shift']}],['Ctrl+Shift+K',{code:'KeyK',mods:['Control','Shift']}]])
-  // REDUNDANT: "Alt+Shift+B is NOT reserved" and "Control+Shift+KeyK is NOT reserved" are both isReserved === false assertions; one test with two expect calls suffices
-  test('Alt+Shift+B is NOT reserved (the default TOGGLE_BLUR_ALL binding)', () => {
+  test('custom bindings are not reserved', () => {
     expect(blsi.ShortcutLabel.isReserved({ code: 'KeyB', mods: ['Alt', 'Shift'] })).toBe(false);
-  });
-
-  // REDUNDANT: same isReserved === false pattern as "Alt+Shift+B is NOT reserved" above
-  test('Control+Shift+KeyK is NOT reserved', () => {
     expect(blsi.ShortcutLabel.isReserved({ code: 'KeyK', mods: ['Control', 'Shift'] })).toBe(false);
   });
 
   test('lookup returns null for non-reserved chords', () => {
     expect(blsi.ShortcutLabel.lookup({ code: 'KeyQ', mods: ['Alt', 'Shift'] })).toBeNull();
+  });
+
+  // Defensive guards — must not throw on bad input.
+  test('isReserved(null) returns false without throwing', () => {
+    expect(blsi.ShortcutLabel.isReserved(null)).toBe(false);
+  });
+
+  test('lookup(undefined) returns null without throwing', () => {
+    expect(blsi.ShortcutLabel.lookup(undefined)).toBeNull();
   });
 
   // USER IMPACT: mod-order agnostic matching — "Shift+Ctrl+T" and "Ctrl+Shift+T" both trigger the reserved warning

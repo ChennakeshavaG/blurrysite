@@ -65,8 +65,12 @@ const ALLOW_LIST = [
   { file: 'src/picker.js', contains: 'flashElementIndicator(target,' },
 
   // Version sigil — 'v' prefix is not translatable copy; the rest of the
-  // string comes from the manifest. New popup.js reads via getManifest().
-  { file: 'popup/popup.js', contains: "chrome.runtime.getManifest().version" },
+  // string comes from the manifest. popup_ui.js reads via getManifest().
+  { file: 'popup/popup_ui.js', contains: "chrome.runtime.getManifest().version" },
+
+  // showToast calls in popup.js pass i18n message keys, not user-visible
+  // literals. The linter cannot distinguish a key from a literal string.
+  { file: 'popup/popup.js', contains: "showToast('toast_" },
 
   // New popup scaffold (Plan 1) — aria-label and title attrs are English
   // stubs. These will gain data-i18n attributes in Plan 2 when the i18n
@@ -79,7 +83,7 @@ const ALLOW_LIST = [
   { file: 'popup/popup.html', contains: 'aria-label="Auto-detect PII on/off"' },
   { file: 'popup/popup.html', contains: 'aria-label="PII blur mode"' },
   { file: 'popup/popup.html', contains: 'aria-label="Settings"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Back"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Close"' },
 ];
 
 // Patterns whose RHS is an i18n call — always OK.

@@ -68,7 +68,7 @@ function buildStubSource() {
       try { return new URL(url).hostname.endsWith(pattern); } catch (_) { return false; }
     }
     function resolveSettings(url, globals, rules) {
-      return blsi.deepMerge(blsi.DEFAULT_SETTINGS, globals || {});
+      return blsi.deep_merge(blsi.DEFAULT_MODEL.settings, globals || {});
     }
     blsi.UrlMatcher = { matchesPattern: matchesPattern, resolveSettings: resolveSettings, MAX_PATTERN_LENGTH: 500 };
   })();
@@ -168,43 +168,43 @@ describe('UrlMatcher.matchesPattern — regex mode', () => {
 // USER IMPACT: user stacks URL-specific rules — first matching rule wins; non-matching URLs fall through to global settings
 describe('UrlMatcher.resolveSettings', () => {
   test('no rules → returns merged defaults over globals', () => {
-    const globals = { BLUR_RADIUS: 20 };
+    const globals = { blur_radius: 20 };
     const resolved = resolveSettings('https://example.com/', globals, []);
-    expect(resolved.BLUR_RADIUS).toBe(20);
-    expect(resolved.BLUR_CATEGORIES).toBeDefined();
+    expect(resolved.blur_radius).toBe(20);
+    expect(resolved.blur_categories).toBeDefined();
   });
 
   test('first-match-wins among rules', () => {
-    const globals = { BLUR_RADIUS: 10 };
+    const globals = { blur_radius: 10 };
     const rules = [
-      { pattern: 'example.com', patternType: 'wildcard', settings: { BLUR_RADIUS: 30 } },
-      { pattern: 'example.com', patternType: 'wildcard', settings: { BLUR_RADIUS: 99 } },
+      { hostname_value: 'example.com', hostname_type: 'wildcard', settings: { blur_radius: 30 } },
+      { hostname_value: 'example.com', hostname_type: 'wildcard', settings: { blur_radius: 99 } },
     ];
     const resolved = resolveSettings('https://example.com/', globals, rules);
-    expect(resolved.BLUR_RADIUS).toBe(30);
+    expect(resolved.blur_radius).toBe(30);
   });
 
   test('non-matching rule falls through to globals', () => {
-    const globals = { BLUR_RADIUS: 10 };
+    const globals = { blur_radius: 10 };
     const rules = [
-      { pattern: 'other.com', patternType: 'wildcard', settings: { BLUR_RADIUS: 99 } },
+      { hostname_value: 'other.com', hostname_type: 'wildcard', settings: { blur_radius: 99 } },
     ];
     const resolved = resolveSettings('https://example.com/', globals, rules);
-    expect(resolved.BLUR_RADIUS).toBe(10);
+    expect(resolved.blur_radius).toBe(10);
   });
 
   test('rule settings deep-merged (partial override preserves other keys)', () => {
-    const globals = { BLUR_RADIUS: 10, HIGHLIGHT_COLOR: '#fff' };
+    const globals = { blur_radius: 10, reveal_mode: 'hover' };
     const rules = [
-      { pattern: 'example.com', patternType: 'wildcard', settings: { BLUR_RADIUS: 50 } },
+      { hostname_value: 'example.com', hostname_type: 'wildcard', settings: { blur_radius: 50 } },
     ];
     const resolved = resolveSettings('https://example.com/', globals, rules);
-    expect(resolved.BLUR_RADIUS).toBe(50);
-    expect(resolved.HIGHLIGHT_COLOR).toBe('#fff');
+    expect(resolved.blur_radius).toBe(50);
+    expect(resolved.reveal_mode).toBe('hover');
   });
 
   test('null/undefined rules array tolerated', () => {
-    const globals = { BLUR_RADIUS: 10 };
+    const globals = { blur_radius: 10 };
     expect(() => resolveSettings('https://example.com/', globals, null)).not.toThrow();
     expect(() => resolveSettings('https://example.com/', globals, undefined)).not.toThrow();
   });

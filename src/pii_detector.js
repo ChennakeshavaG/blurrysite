@@ -112,8 +112,8 @@ const BlurrySitePiiDetector = (() => {
   function _isExtensionUI(node) {
     const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     if (!el) return false;
-    const toolbarId = blsi.IDS
-      ? blsi.IDS.PICKER_TOOLBAR
+    const toolbarId = blsi.ids
+      ? blsi.ids.picker_toolbar
       : "bl-si-picker-toolbar";
     return (
       el.id === toolbarId ||
@@ -140,7 +140,7 @@ const BlurrySitePiiDetector = (() => {
   function _findMatches(text, types) {
     const matches = [];
 
-    if (types.EMAIL && text.includes("@")) {
+    if (types.email && text.includes("@")) {
       const re = new RegExp(EMAIL_RE.source, EMAIL_RE.flags);
       let m;
       while ((m = re.exec(text)) !== null) {
@@ -153,7 +153,7 @@ const BlurrySitePiiDetector = (() => {
       }
     }
 
-    if (types.NUMERIC) {
+    if (types.numeric) {
       const re = new RegExp(NUMERIC_RE.source, NUMERIC_RE.flags);
       let m;
       while ((m = re.exec(text)) !== null) {
@@ -220,14 +220,9 @@ const BlurrySitePiiDetector = (() => {
     if (!rootEl || !types) return 0;
     const enabledTypes = {};
     let anyEnabled = false;
-    for (const key of Object.keys(PATTERNS)) {
-      const val = types[key];
-      // both EMAIL and NUMERIC are booleans
-      if (val) {
-        enabledTypes[key] = true;
-        anyEnabled = true;
-      }
-    }
+    // types uses lowercase keys: { email: bool, numeric: bool }
+    if (types.email) { enabledTypes.email = true; anyEnabled = true; }
+    if (types.numeric) { enabledTypes.numeric = true; anyEnabled = true; }
     if (!anyEnabled) return 0;
 
     _activeTypes = enabledTypes;

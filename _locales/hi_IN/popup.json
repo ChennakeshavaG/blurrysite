@@ -7,6 +7,7 @@
 
   "btn_blur_all": "सब धुंधला",
   "btn_clear_all": "सब साफ़",
+  "btn_modify": "बदलें →",
   "btn_picker": "चुनें और धुंधला",
 
   "section_general": "सामान्य",
@@ -180,6 +181,7 @@
   "htb_chip_redacted": "Redacted",
   "htb_chip_masked": "Masked",
   "htb_chip_color": "Color",
+  "htb_label_mode": "Mode",
   "htb_label_covers": "Covers",
   "htb_label_strength": "Strength",
   "htb_label_reveal": "Reveal",
@@ -207,5 +209,7 @@
   "mode_blur_all_off_hint": "Off — page is visible.",
   "mode_pick_blur_empty": "No elements picked yet. Open the picker to start.",
   "mode_open_picker": "Open Picker",
-  "mode_blur_all_cats": "categories"
+  "mode_blur_all_cats": "categories",
+
+  "htb_opacity": "Opacity"
 }

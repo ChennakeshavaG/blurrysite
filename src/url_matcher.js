@@ -21,7 +21,7 @@
 const BlurrySiteUrlMatcher = (() => {
   'use strict';
 
-  const PT = blsi.PATTERN_TYPES;
+  const PT = blsi.pattern_types;
 
   /** Max pattern string length to prevent ReDoS and storage abuse. */
   const MAX_PATTERN_LENGTH = 500;
@@ -114,7 +114,7 @@ const BlurrySiteUrlMatcher = (() => {
     if (!pattern || typeof pattern !== 'string') return false;
     if (pattern.length > MAX_PATTERN_LENGTH) return false;
 
-    if (patternType === PT.REGEX) {
+    if (patternType === PT.regex) {
       try {
         if (/([+*?])\s*[)]\s*[+*?{]/.test(pattern) || /([+*?{])\s*\1/.test(pattern)) {
           return false;
@@ -150,12 +150,12 @@ const BlurrySiteUrlMatcher = (() => {
    * Rule settings are partial — deep-merged over the global settings.
    */
   function resolveSettings(url, globalSettings, urlRules) {
-    let resolved = blsi.deepMerge(blsi.DEFAULT_SETTINGS, globalSettings);
+    let resolved = blsi.deep_merge(blsi.DEFAULT_MODEL.settings, globalSettings);
 
     if (Array.isArray(urlRules)) {
       for (const rule of urlRules) {
-        if (matchesPattern(url, rule.pattern, rule.patternType)) {
-          resolved = blsi.deepMerge(resolved, rule.settings || {});
+        if (matchesPattern(url, rule.hostname_value, rule.hostname_type)) {
+          resolved = blsi.deep_merge(resolved, rule.settings || {});
           break;
         }
       }

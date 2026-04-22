@@ -30,7 +30,7 @@
 const Shortcuts = (() => {
   'use strict';
 
-  const _CSS = (blsi.CSS) || {};
+  const _CSS = (blsi.css) || {};
   const _log = blsi.Logger ? blsi.Logger.scope('shortcuts') : null;
 
   // ── Internal state ─────────────────────────────────────────────────────────
@@ -101,12 +101,12 @@ const Shortcuts = (() => {
     }
 
     const toast = document.createElement('div');
-    toast.className = _CSS.TOAST || 'bl-si-toast';
+    toast.className = _CSS.toast || 'bl-si-toast';
     toast.setAttribute('role', 'status');
     toast.setAttribute('aria-live', 'polite');
 
     const msgSpan = document.createElement('span');
-    msgSpan.className = _CSS.TOAST_MESSAGE || 'bl-si-toast__message';
+    msgSpan.className = _CSS.toast_message || 'bl-si-toast__message';
     msgSpan.textContent = text;
     toast.appendChild(msgSpan);
 
@@ -114,7 +114,7 @@ const Shortcuts = (() => {
     currentToastEl = toast;
 
     const removeTimer = setTimeout(() => {
-      toast.classList.add(_CSS.TOAST_EXITING || 'bl-si-toast--exiting');
+      toast.classList.add(_CSS.toast_exiting || 'bl-si-toast--exiting');
       setTimeout(() => {
         if (toast.parentNode) toast.parentNode.removeChild(toast);
         if (currentToastEl === toast) currentToastEl = null;
@@ -182,7 +182,7 @@ const Shortcuts = (() => {
 
       // ── Skip pure modifier keydowns ──────────────────────────────────────
       // Wait for the user to press a non-modifier key before matching.
-      if (blsi.MODIFIER_CODES && blsi.MODIFIER_CODES.has(event.code)) return;
+      if (blsi.modifier_codes && blsi.modifier_codes.has(event.code)) return;
 
       // ── Match against registered bindings ────────────────────────────────
       const eventMods = modsFromEvent(event);

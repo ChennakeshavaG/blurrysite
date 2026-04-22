@@ -1,0 +1,192 @@
+/* ── Site Rules sub-page styles ─────────────────────────────────────── */
+
+.bl-rules-hint {
+  font-size: 11px;
+  color: var(--bl-text-muted);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.bl-rules-empty {
+  font-size: 12px;
+  color: var(--bl-text-muted);
+  text-align: center;
+  padding: 20px 0;
+  font-style: italic;
+}
+
+.bl-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.bl-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bl-raised);
+}
+
+.bl-rule-row:last-child {
+  border-bottom: none;
+}
+
+.bl-rule-row__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bl-rule-row__name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bl-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bl-rule-row__pattern {
+  font-size: 10px;
+  color: var(--bl-text-muted);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bl-rule-edit-btn {
+  font-size: 11px;
+  background: none;
+  border: 1px solid var(--bl-raised);
+  border-radius: 5px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+  padding: 2px 8px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.bl-rule-edit-btn:hover {
+  color: var(--bl-text-primary);
+  border-color: var(--bl-text-muted);
+}
+
+.bl-rule-delete-btn {
+  font-size: 14px;
+  background: none;
+  border: none;
+  color: var(--bl-text-dim);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.bl-rule-delete-btn:hover {
+  color: var(--bl-danger);
+}
+
+.bl-rule-add-btn {
+  margin-top: 12px;
+  font-size: 12px;
+  background: none;
+  border: 1px dashed var(--bl-raised);
+  border-radius: 7px;
+  width: 100%;
+  padding: 8px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.bl-rule-add-btn:hover {
+  color: var(--bl-cyan);
+  border-color: var(--bl-cyan);
+}
+
+.bl-rule-form {
+  margin-top: 12px;
+  background: var(--bl-surface);
+  border: 1px solid var(--bl-raised);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bl-rule-form__label {
+  font-size: 11px;
+  color: var(--bl-text-muted);
+  display: block;
+  margin-bottom: 3px;
+}
+
+.bl-rule-form__input {
+  width: 100%;
+  background: var(--bl-raised);
+  border: 1px solid var(--bl-raised);
+  border-radius: 6px;
+  color: var(--bl-text-primary);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.bl-rule-form__input:focus {
+  border-color: var(--bl-text-muted);
+}
+
+.bl-rule-form__error {
+  font-size: 10px;
+  color: var(--bl-danger);
+  margin-top: 3px;
+}
+
+.bl-rule-form__type {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.bl-rule-form__radio {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+  accent-color: var(--bl-amber);
+}
+
+.bl-rule-form__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.bl-rule-save-btn {
+  font-size: 12px;
+  padding: 5px 16px;
+  background: var(--bl-amber);
+  color: var(--bl-base);
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bl-rule-cancel-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  background: none;
+  border: 1px solid var(--bl-raised);
+  border-radius: 6px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+}

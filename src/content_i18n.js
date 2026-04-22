@@ -83,7 +83,7 @@ const ContentI18n = (() => {
       _fallback = await _loadJSON('en');
     }
 
-    const supported = (blsi && blsi.SUPPORTED_LANGUAGES) || ['auto', 'en'];
+    const supported = (blsi && blsi.supported_languages) || ['auto', 'en'];
     let lang = requestedLang || 'auto';
     if (!supported.includes(lang)) lang = 'auto';
     if (lang === 'auto') {

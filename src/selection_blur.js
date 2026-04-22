@@ -21,7 +21,7 @@ const BlurrySiteSelectionBlur = (() => {
   function _isExtensionUI(node) {
     const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     if (!el) return false;
-    const toolbarId = blsi.IDS ? blsi.IDS.PICKER_TOOLBAR : 'bl-si-picker-toolbar';
+    const toolbarId = blsi.ids ? blsi.ids.picker_toolbar : 'bl-si-picker-toolbar';
     return (
       el.id === toolbarId ||
       el.closest('#' + toolbarId) !== null ||

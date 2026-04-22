@@ -15,12 +15,12 @@
 const Picker = (() => {
   'use strict';
 
-  const CLS = blsi.CSS || {};
-  const _IDS = blsi.IDS || {};
-  const PM = blsi.PICKER_MODES || {
-    DYNAMIC: 'dynamic',
-    STICKY_PAGE: 'sticky-page',
-    STICKY_SCREEN: 'sticky-screen',
+  const CLS = blsi.css || {};
+  const _IDS = blsi.ids || {};
+  const PM = blsi.picker_modes || {
+    dynamic:       'dynamic',
+    sticky_page:   'sticky-page',
+    sticky_screen: 'sticky-screen',
   };
   const MIN_ZONE_SIZE = 10;
 
@@ -37,7 +37,7 @@ const Picker = (() => {
 
   /** True iff `mode` is either of the sticky variants. */
   function _isSticky(mode) {
-    return mode === PM.STICKY_PAGE || mode === PM.STICKY_SCREEN;
+    return mode === PM.sticky_page || mode === PM.sticky_screen;
   }
 
   // ─── Internal state ──────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ const Picker = (() => {
   let isActive = false;
 
   /** Current picker mode: 'dynamic' | 'sticky-page' | 'sticky-screen' */
-  let currentMode = PM.STICKY_PAGE;
+  let currentMode = PM.sticky_page;
 
   /** Currently hovered DOM element while picker is active (dynamic mode). */
   let hoveredElement = null;
@@ -55,8 +55,8 @@ const Picker = (() => {
 
   /** Active settings snapshot: { blurRadius, highlightColor, pickerMode, … } */
   let activeSettings = {
-    blurRadius: blsi.DEFAULT_SETTINGS.BLUR_RADIUS,
-    highlightColor: blsi.DEFAULT_SETTINGS.HIGHLIGHT_COLOR,
+    blurRadius: blsi.DEFAULT_MODEL.settings.blur_radius,
+    highlightColor: blsi.DEFAULT_MODEL.settings.highlight_color,
   };
 
   /** Callbacks provided by content_script: { onBlur, onUnblur, onStickyBlur, onStickyUnblur, onDeactivate, onModeChange } */
@@ -113,20 +113,20 @@ const Picker = (() => {
   // "Blur An: Area on page" / "Blur An: Area on screen". Keeping these in
   // the same grammatical form makes the picker feel like a single sentence.
   function _modeChipLabel(mode) {
-    if (mode === PM.STICKY_PAGE) return _t('pickerChipLabelStickyPage', 'Area on page');
-    if (mode === PM.STICKY_SCREEN) return _t('pickerChipLabelStickyScreen', 'Area on screen');
+    if (mode === PM.sticky_page) return _t('pickerChipLabelStickyPage', 'Area on page');
+    if (mode === PM.sticky_screen) return _t('pickerChipLabelStickyScreen', 'Area on screen');
     return _t('pickerChipLabelDynamic', 'Element');
   }
 
   // Long description shown in the chip's tooltip (hover).
   function _modeChipDescription(mode) {
-    if (mode === PM.STICKY_PAGE) return _t('pickerChipDescStickyPage', 'Sketch a box over a region of the page. Scrolls with the content. Click to switch mode.');
-    if (mode === PM.STICKY_SCREEN) return _t('pickerChipDescStickyScreen', 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode.');
+    if (mode === PM.sticky_page) return _t('pickerChipDescStickyPage', 'Sketch a box over a region of the page. Scrolls with the content. Click to switch mode.');
+    if (mode === PM.sticky_screen) return _t('pickerChipDescStickyScreen', 'Sketch a box fixed to your screen. Stays put when you scroll — great for screen-sharing. Click to switch mode.');
     return _t('pickerChipDescDynamic', 'Tap an element on the page to blur it. The blur follows that item. Click to switch mode.');
   }
 
   function _cycleMode(mode) {
-    const order = [PM.DYNAMIC, PM.STICKY_PAGE, PM.STICKY_SCREEN];
+    const order = [PM.dynamic, PM.sticky_page, PM.sticky_screen];
     const idx = order.indexOf(mode);
     return order[(idx + 1) % order.length];
   }
@@ -200,8 +200,8 @@ const Picker = (() => {
     if (toolbarEl) return;
 
     toolbarEl = document.createElement('div');
-    toolbarEl.id = (_IDS.PICKER_TOOLBAR || 'bl-si-picker-toolbar');
-    toolbarEl.className = (CLS.TOOLBAR || 'bl-si-toolbar');
+    toolbarEl.id = (_IDS.picker_toolbar || 'bl-si-picker-toolbar');
+    toolbarEl.className = (CLS.toolbar || 'bl-si-toolbar');
     toolbarEl.setAttribute('data-bl-si-toolbar', 'true');
 
     // Bubble-phase stopPropagation: prevents toolbar events from reaching
@@ -434,7 +434,7 @@ const Picker = (() => {
   // ─── Mode switching ──────────────────────────────────────────────────────────
 
   function setMode(mode) {
-    if (mode !== PM.DYNAMIC && !_isSticky(mode)) return;
+    if (mode !== PM.dynamic && !_isSticky(mode)) return;
     if (mode === currentMode) return;
 
     // Cancel any in-progress sticky drag
@@ -442,7 +442,7 @@ const Picker = (() => {
 
     // Clean up dynamic mode state
     if (hoveredElement) {
-      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
+      hoveredElement.classList.remove((CLS.hover_highlight || 'bl-si-hover-highlight'));
       hoveredElement = null;
     }
 
@@ -485,7 +485,7 @@ const Picker = (() => {
     e.stopPropagation();
 
     const previewEl = document.createElement('div');
-    previewEl.className = (CLS.ZONE_DRAWING || 'bl-si-zone-drawing');
+    previewEl.className = (CLS.zone_drawing || 'bl-si-zone-drawing');
 
     drawState = {
       startX: e.clientX,
@@ -541,7 +541,7 @@ const Picker = (() => {
       return;
     }
 
-    const isScreen = currentMode === PM.STICKY_SCREEN;
+    const isScreen = currentMode === PM.sticky_screen;
 
     // Coordinate system depends on anchor:
     //   STICKY_PAGE   → document coords (add scroll offset), clamped to doc bounds.
@@ -606,7 +606,7 @@ const Picker = (() => {
       if (_highlightedZone === target) return;
       _clearZoneHighlight();
       _highlightedZone = target;
-      target.classList.add((CLS.ZONE_HIGHLIGHT || 'bl-si-zone-highlight'));
+      target.classList.add((CLS.zone_highlight || 'bl-si-zone-highlight'));
 
       // Show name label
       const name = target.dataset.blSiZoneName || target.dataset.blSiZone;
@@ -619,7 +619,7 @@ const Picker = (() => {
   function _showZoneLabel(zoneEl, text) {
     _hideZoneLabel();
     _zoneLabelEl = document.createElement('div');
-    _zoneLabelEl.className = (CLS.ZONE_LABEL || 'bl-si-zone-label');
+    _zoneLabelEl.className = (CLS.zone_label || 'bl-si-zone-label');
     _zoneLabelEl.textContent = text;
     zoneEl.appendChild(_zoneLabelEl);
   }
@@ -633,7 +633,7 @@ const Picker = (() => {
 
   function _clearZoneHighlight() {
     if (_highlightedZone) {
-      _highlightedZone.classList.remove((CLS.ZONE_HIGHLIGHT || 'bl-si-zone-highlight'));
+      _highlightedZone.classList.remove((CLS.zone_highlight || 'bl-si-zone-highlight'));
       _hideZoneLabel();
       _highlightedZone = null;
     }
@@ -675,10 +675,10 @@ const Picker = (() => {
     }
 
     if (hoveredElement && hoveredElement !== target) {
-      hoveredElement.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
+      hoveredElement.classList.remove((CLS.hover_highlight || 'bl-si-hover-highlight'));
     }
     hoveredElement = target;
-    hoveredElement.classList.add((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
+    hoveredElement.classList.add((CLS.hover_highlight || 'bl-si-hover-highlight'));
   }
 
   function onMouseOut(e) {
@@ -695,7 +695,7 @@ const Picker = (() => {
     // Dynamic mode
     const target = resolveTarget(e.target);
     if (target) {
-      target.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
+      target.classList.remove((CLS.hover_highlight || 'bl-si-hover-highlight'));
     }
     if (hoveredElement === target) {
       hoveredElement = null;
@@ -788,20 +788,20 @@ const Picker = (() => {
     // Touch devices fall back to dynamic mode — sticky requires mouse sketch.
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     if (isTouch) {
-      currentMode = PM.DYNAMIC;
+      currentMode = PM.dynamic;
     } else {
       const requested = settings && settings.pickerMode;
-      if (requested === PM.DYNAMIC || requested === PM.STICKY_PAGE || requested === PM.STICKY_SCREEN) {
+      if (requested === PM.dynamic || requested === PM.sticky_page || requested === PM.sticky_screen) {
         currentMode = requested;
       } else if (requested === 'sticky') {
         // Legacy value persisted from pre-v2; treat as page-anchored.
-        currentMode = PM.STICKY_PAGE;
+        currentMode = PM.sticky_page;
       } else {
-        currentMode = PM.STICKY_PAGE;
+        currentMode = PM.sticky_page;
       }
     }
 
-    document.documentElement.classList.add((CLS.PICKER_ACTIVE || 'bl-si-picker-active'));
+    document.documentElement.classList.add((CLS.picker_active || 'bl-si-picker-active'));
     buildToolbar();
 
     // Capture-phase listeners for all modes
@@ -831,12 +831,12 @@ const Picker = (() => {
 
     const highlighted = document.querySelectorAll('.bl-si-hover-highlight');
     for (const el of highlighted) {
-      el.classList.remove((CLS.HOVER_HIGHLIGHT || 'bl-si-hover-highlight'));
+      el.classList.remove((CLS.hover_highlight || 'bl-si-hover-highlight'));
     }
     hoveredElement = null;
     selectedElements.clear();
 
-    document.documentElement.classList.remove((CLS.PICKER_ACTIVE || 'bl-si-picker-active'));
+    document.documentElement.classList.remove((CLS.picker_active || 'bl-si-picker-active'));
     removeToolbar();
 
     if (typeof activeCallbacks.onDeactivate === 'function') {

@@ -5,7 +5,7 @@ See `../CLAUDE.md` for project-level rules. This file covers test-specific patte
 ## Quick Reference
 
 ```bash
-npm run test:unit        # run all 6 unit test files (221 tests)
+npm run test:unit        # run all unit test files (638 tests)
 npm test                 # + coverage report (~91% line coverage on src/)
 ```
 
@@ -50,6 +50,7 @@ The `buildStubSource()` inline stub in each test file defines the exact API cont
 | `global.window = global` | IIFEs assign `window.BlurrySite*`; without this alias jsdom context loses the globals |
 | `require('../src/constants.js')` | Loads message types + DEFAULTS before any source module |
 | `global.chrome = { runtime, storage, tabs, commands, contextMenus, action }` | All `jest.fn()` — lets unit tests assert message calls without a real browser |
+| `chrome.storage.onChanged.addListener` | `jest.fn()` with default implementation that captures listeners into `_onChangedListeners`. Call `global._fireStorageChanged(changes, area?)` to dispatch to all captured listeners. `logger.test.js` overrides with `mockImplementation`; `jest.clearAllMocks()` resets call counts only — implementation persists per test file. |
 | `HTMLCanvasElement.prototype.getContext = jest.fn(() => fakeCtx)` | jsdom returns `null` from `getContext()`; `ctx.clearRect()` throws if not mocked |
 | `global.requestAnimationFrame = jest.fn()` returning handle, **no callback execution** | Video blur loops call RAF recursively; auto-executing causes OOM |
 | `global.cancelAnimationFrame = jest.fn()` | Tests assert RAF is cancelled on video `removeBlur` |

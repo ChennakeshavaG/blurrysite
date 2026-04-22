@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 184 120" width="184" height="120">
+<defs>
+<style>
+  .bg  { fill: #0d0f1c }
+  .chr { fill: #171a28 }
+  .blk { fill: #1c1f30 }
+  .dim { fill: #252840 }
+  @media (prefers-color-scheme: light) {
+    .bg  { fill: #f0f4f8 }
+    .chr { fill: #e2e8f0 }
+    .blk { fill: #ffffff }
+    .dim { fill: #cdd5e0 }
+  }
+
+  /* Phase 1: rest at top-right
+     Phase 2: approach element (6%→18%)
+     Phase 3: on element, hover (18%→40%)
+     Phase 4: exit linearly after click (40%→54%)
+     Phase 5: parked away, blur visible (54%→80%)
+     Phase 6: fade + reset (80%→100%) */
+  .cur { animation: cur 7s ease-in-out infinite }
+  @keyframes cur {
+    0%,6%  { transform: translate(148px,26px); opacity:1 }
+    18%    { transform: translate(44px,60px);  opacity:1 }
+    40%    { transform: translate(44px,60px);  opacity:1; animation-timing-function: linear }
+    54%    { transform: translate(130px,98px); opacity:1 }
+    80%    { transform: translate(130px,98px); opacity:1 }
+    86%    { transform: translate(130px,98px); opacity:0 }
+    99%    { transform: translate(148px,26px); opacity:0 }
+    100%   { transform: translate(148px,26px); opacity:1 }
+  }
+
+  /* hover ring: fades in after cursor lands, holds, snaps off at click */
+  .hl {
+    fill: none; stroke: #f5c518; stroke-width: 1.8;
+    animation: hl 7s ease-in-out infinite;
+  }
+  @keyframes hl {
+    0%,18%  { opacity: 0 }
+    24%     { opacity: 1 }
+    32%     { opacity: 1 }
+    34%     { opacity: 0 }
+    100%    { opacity: 0 }
+  }
+
+  /* amber blur overlay: starts at click, persists after cursor leaves */
+  .bov {
+    fill: #f5c518; fill-opacity: 0.17;
+    animation: bov 7s ease-in-out infinite;
+  }
+  @keyframes bov {
+    0%,32%  { opacity: 0 }
+    44%     { opacity: 1 }
+    80%     { opacity: 1 }
+    88%     { opacity: 0 }
+    100%    { opacity: 0 }
+  }
+
+  /* normal text: fades out on click */
+  .tn { animation: tn 7s ease-in-out infinite }
+  @keyframes tn {
+    0%,32%  { opacity: 1 }
+    44%     { opacity: 0 }
+    88%     { opacity: 0 }
+    96%     { opacity: 1 }
+    100%    { opacity: 1 }
+  }
+
+  /* blurred text: fades in on click, persists, fades out at end */
+  .tb { fill: #a08428; animation: tb 7s ease-in-out infinite }
+  @media (prefers-color-scheme: light) { .tb { fill: #c4a020 } }
+  @keyframes tb {
+    0%,32%  { opacity: 0 }
+    44%     { opacity: 1 }
+    80%     { opacity: 1 }
+    88%     { opacity: 0 }
+    100%    { opacity: 0 }
+  }
+</style>
+<filter id="fb" x="-10%" y="-10%" width="120%" height="120%">
+  <feGaussianBlur stdDeviation="2.2"/>
+</filter>
+</defs>
+
+<rect width="184" height="120" class="bg"/>
+
+<!-- chrome bar -->
+<rect x="0" y="0" width="184" height="18" class="chr"/>
+<rect x="10" y="5" width="8" height="8" rx="4" fill="#FF5F56"/>
+<rect x="42" y="4" width="100" height="10" rx="5" class="blk"/>
+
+<!-- content rows above block -->
+<rect x="14" y="26" width="96" height="6" rx="3" class="dim"/>
+<rect x="116" y="26" width="54" height="6" rx="3" class="dim"/>
+<rect x="14" y="36" width="72" height="6" rx="3" class="dim"/>
+
+<!-- target block: x=14, y=46, w=80, h=32 → right=94, bottom=78 -->
+<rect x="14" y="46" width="80" height="32" rx="4" class="blk"/>
+
+<!-- normal text inside block -->
+<g class="tn">
+  <rect x="22" y="53" width="50" height="4" rx="2" class="dim"/>
+  <rect x="22" y="61" width="34" height="4" rx="2" class="dim"/>
+  <rect x="22" y="69" width="44" height="4" rx="2" class="dim"/>
+</g>
+
+<!-- blurred text: amber + gaussian blur -->
+<g class="tb" filter="url(#fb)">
+  <rect x="22" y="53" width="50" height="4" rx="2"/>
+  <rect x="22" y="61" width="34" height="4" rx="2"/>
+  <rect x="22" y="69" width="44" height="4" rx="2"/>
+</g>
+
+<!-- hover ring -->
+<rect class="hl" x="14" y="46" width="80" height="32" rx="4"/>
+
+<!-- blur overlay -->
+<rect class="bov" x="14" y="46" width="80" height="32" rx="4"/>
+
+<!-- click ripple: expands from cursor tip (44,60) at click moment -->
+<circle cx="44" cy="60" fill="none" stroke="#f5c518" stroke-width="1.2" r="0">
+  <animate attributeName="r"
+           values="0;0;0;17;17"
+           keyTimes="0;0.30;0.32;0.46;1"
+           dur="7s" repeatCount="indefinite"/>
+  <animate attributeName="stroke-opacity"
+           values="0;0;0.85;0;0"
+           keyTimes="0;0.30;0.33;0.46;1"
+           dur="7s" repeatCount="indefinite"/>
+</circle>
+
+<!-- press dot at cursor tip: brief flash on click -->
+<circle fill="#f5c518" r="0" cx="44" cy="60">
+  <animate attributeName="r"       values="0;0;3.5;3.5;0;0" keyTimes="0;0.31;0.34;0.37;0.42;1" dur="7s" repeatCount="indefinite"/>
+  <animate attributeName="opacity" values="0;0;0.9;0.9;0;0"  keyTimes="0;0.31;0.34;0.37;0.42;1" dur="7s" repeatCount="indefinite"/>
+</circle>
+
+<!-- content rows below block -->
+<rect x="14" y="86"  width="156" height="6" rx="3" class="dim"/>
+<rect x="14" y="96"  width="118" height="6" rx="3" class="dim"/>
+<rect x="14" y="106" width="86"  height="6" rx="3" class="dim"/>
+
+<!-- cursor: dark fill + white outline, readable on both themes -->
+<g class="cur">
+  <polygon points="0,0 0,12 3.5,9 6,14.5 7.6,13.7 5,8.5 10,8.5"
+           fill="#1e293b" stroke="white" stroke-width="1" stroke-linejoin="round"/>
+</g>
+</svg>

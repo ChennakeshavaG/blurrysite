@@ -15,13 +15,13 @@
 const BlurEngine = (() => {
   "use strict";
 
-  const SVG_FILTER_ID = blsi.IDS.SVG_FILTERS;
+  const SVG_FILTER_ID = blsi.ids.svg_filters;
   const STYLE_ID = "bl-si-blur-styles";
 
   // ── Category selector definitions ──────────────────────────────────────────
 
   const CATEGORY_SELECTORS = Object.freeze({
-    TEXT: Object.freeze({
+    text: Object.freeze({
       alwaysBlur: Object.freeze([
         "h1",
         "h2",
@@ -70,11 +70,11 @@ const BlurEngine = (() => {
         "rp",
       ]),
     }),
-    MEDIA: Object.freeze({
+    media: Object.freeze({
       alwaysBlur: Object.freeze(["img", "video", "audio", "canvas", "svg"]),
       textCheck: Object.freeze([]),
     }),
-    FORM: Object.freeze({
+    form: Object.freeze({
       alwaysBlur: Object.freeze([
         "input",
         "textarea",
@@ -105,11 +105,11 @@ const BlurEngine = (() => {
         "tab",
       ]),
     }),
-    TABLE: Object.freeze({
+    table: Object.freeze({
       alwaysBlur: Object.freeze(["caption"]),
       textCheck: Object.freeze(["td", "th"]),
     }),
-    STRUCTURE: Object.freeze({
+    structure: Object.freeze({
       // li/dt/dd moved to alwaysBlur so CSS injection covers ::marker pseudo-elements
       // unconditionally — JS text-gate on li was leaving ordinal markers visible.
       alwaysBlur: Object.freeze(["li", "dt", "dd"]),
@@ -127,14 +127,14 @@ const BlurEngine = (() => {
     }),
   });
 
-  const DEFAULT_CATS = blsi.DEFAULT_SETTINGS.BLUR_CATEGORIES;
+  const DEFAULT_CATS = blsi.DEFAULT_MODEL.settings.blur_categories;
 
   const CATEGORY_ORDER = Object.freeze([
-    "TEXT",
-    "MEDIA",
-    "STRUCTURE",
-    "FORM",
-    "TABLE",
+    "text",
+    "media",
+    "structure",
+    "form",
+    "table",
   ]);
 
   // ── cache ─────────────────────────────────────────────────────────
@@ -214,7 +214,7 @@ const BlurEngine = (() => {
    * so unblurring a parent leaks all siblings). These always require the
    * hasMeaningfulTextContent gate, even in thorough mode.
    */
-  const _structuralTags = new Set(CATEGORY_SELECTORS.STRUCTURE.textCheck);
+  const _structuralTags = new Set(CATEGORY_SELECTORS.structure.textCheck);
   // ── Private helpers ────────────────────────────────────────────────────────
 
   function hasMeaningfulTextContent(element) {
@@ -314,7 +314,7 @@ const BlurEngine = (() => {
 
     // Frosted glass: inject SVG filter into the same root so url(#id)
     // resolves correctly within that root's scope.
-    if (mode === blsi.BLUR_MODES.FROSTED) ensureSvgFilter(root);
+    if (mode === blsi.blur_modes.frosted) ensureSvgFilter(root);
 
     const cats = categories || DEFAULT_CATS;
     const { alwaysBlurSelector } = getSelectors(cats);
@@ -329,8 +329,8 @@ const BlurEngine = (() => {
     // silently stop working in gaussian mode.
     // For shadow roots, --bl-si-radius is inherited from :root, so the same
     // CSS var reference works without any extra propagation.
-    const isRedacted = mode === blsi.BLUR_MODES.REDACTED;
-    const isMasked   = mode === blsi.BLUR_MODES.MASKED;
+    const isRedacted = mode === blsi.blur_modes.redacted;
+    const isMasked   = mode === blsi.blur_modes.masked;
 
     let blurDecl;
     if (isRedacted) {
@@ -352,7 +352,7 @@ const BlurEngine = (() => {
         `user-select: none !important;`;
     } else {
       const filterValue =
-        mode === blsi.BLUR_MODES.FROSTED
+        mode === blsi.blur_modes.frosted
           ? "url(#bl-si-frosted-filter)"
           : "blur(var(--bl-si-radius, 10px))";
       // transition: filter is declared alongside the filter itself so hover/click
@@ -455,7 +455,7 @@ const BlurEngine = (() => {
   function stampElements(root, categories, thorough, mode) {
     const cats = categories || DEFAULT_CATS;
     _rebuildTextCheckSet(cats);
-    const isMasked = mode === blsi.BLUR_MODES.MASKED;
+    const isMasked = mode === blsi.blur_modes.masked;
 
     // Collect shadow roots piggybacked on the stamp pass — no extra traversal.
     const shadowRoots = [];
@@ -475,7 +475,7 @@ const BlurEngine = (() => {
       // via handleDocument recursion. Gated on STRUCTURE or TEXT active.
       if (tag.includes('-')) {
         if (!el.dataset.blSiBlur && !_isExtensionUI(el) &&
-            (cats.STRUCTURE !== false || cats.TEXT !== false) &&
+            (cats.structure !== false || cats.text !== false) &&
             (thorough || hasMeaningfulTextContent(el))) {
           el.dataset.blSiBlur = '1';
           if (isMasked) _stampMaskText(el);
@@ -534,13 +534,13 @@ const BlurEngine = (() => {
   }
 
   function _isExtensionUI(element) {
-    const toolbarId = blsi.IDS.PICKER_TOOLBAR;
+    const toolbarId = blsi.ids.picker_toolbar;
     return (
       element.id === toolbarId ||
       element.closest("#" + toolbarId) ||
-      element.classList.contains(blsi.CSS.TOAST) ||
-      element.closest("." + blsi.CSS.TOAST) ||
-      element.classList.contains(blsi.CSS.TOOLBAR) ||
+      element.classList.contains(blsi.css.toast) ||
+      element.closest("." + blsi.css.toast) ||
+      element.classList.contains(blsi.css.toolbar) ||
       element.dataset.blSiZone !== undefined
     );
   }
@@ -691,7 +691,7 @@ const BlurEngine = (() => {
     }
 
     const el = document.createElement("div");
-    el.className = blsi.CSS.ZONE_OVERLAY;
+    el.className = blsi.css.zone_overlay;
     el.dataset.blSiZone = zoneData.id;
     el.dataset.blSiZoneName = zoneData.name || "";
 
@@ -822,14 +822,15 @@ const BlurEngine = (() => {
 
     let x, y, w, h;
     if (anchor === "page") {
-      // Re-project from percentages if available (handles layout changes
-      // between the capture page and the current render).
       const curW = document.documentElement.scrollWidth || window.innerWidth;
-      const curH = document.documentElement.scrollHeight || window.innerHeight;
-      x = typeof item.xPct === "number" ? item.xPct * curW : item.x;
-      y = typeof item.yPct === "number" ? item.yPct * curH : item.y;
-      w = typeof item.widthPct === "number" ? item.widthPct * curW : item.width;
-      h = typeof item.heightPct === "number" ? item.heightPct * curH : item.height;
+      // Re-project X/width when viewport WIDTH has clearly changed (reflow).
+      // Never re-project Y/height — page height varies during load (lazy images,
+      // dynamic content) so curH at RESTORE time is unreliable; raw Y is exact.
+      const wChanged = item.scrollWidth && Math.abs(curW - item.scrollWidth) > Math.max(10, item.scrollWidth * 0.01);
+      x = (wChanged && typeof item.xPct === "number") ? item.xPct * curW : item.x;
+      y = item.y;
+      w = (wChanged && typeof item.widthPct === "number") ? item.widthPct * curW : item.width;
+      h = item.height;
     } else {
       // Screen-anchored: raw pixel coordinates in the viewport. No re-projection.
       x = item.x;
@@ -899,7 +900,7 @@ const BlurEngine = (() => {
 
     const obs = new MutationObserver((mutations) => {
       if (_pickerActive || !_isPageBlurred) return;
-      const thorough = _currentSettings ? !!_currentSettings.THOROUGH_BLUR : false;
+      const thorough = _currentSettings ? !!_currentSettings.thorough_blur : false;
       for (const mutation of mutations) {
         if (mutation.type !== 'childList') continue;
         for (const node of mutation.addedNodes) {
@@ -978,15 +979,15 @@ const BlurEngine = (() => {
    * _isPageBlurred is NOT set here — handleSite's responsibility.
    */
   async function handleMainDocument(settings) {
-    const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
+    const active = settings.enabled !== false && !!settings.blur_all_active;
     if (!active) {
       teardown(document);
       return [];
     }
 
-    const cats = settings.BLUR_CATEGORIES || DEFAULT_CATS;
-    const mode = settings.BLUR_MODE || null;
-    const thorough = !!settings.THOROUGH_BLUR;
+    const cats = settings.blur_categories || DEFAULT_CATS;
+    const mode = settings.blur_mode || null;
+    const thorough = !!settings.thorough_blur;
 
     injectRules(document, cats, mode);
     document.querySelectorAll('[data-bl-si-blur]').forEach(el => {
@@ -1002,15 +1003,15 @@ const BlurEngine = (() => {
    * _isPageBlurred is NOT set here — handleSite's responsibility.
    */
   async function handleShadowRoot(settings, shadowRoot) {
-    const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
+    const active = settings.enabled !== false && !!settings.blur_all_active;
     if (!active) {
       teardown(shadowRoot);
       return;
     }
 
-    const cats = settings.BLUR_CATEGORIES || DEFAULT_CATS;
-    const mode = settings.BLUR_MODE || null;
-    const thorough = !!settings.THOROUGH_BLUR;
+    const cats = settings.blur_categories || DEFAULT_CATS;
+    const mode = settings.blur_mode || null;
+    const thorough = !!settings.thorough_blur;
 
     injectRules(shadowRoot, cats, mode);
     shadowRoot.querySelectorAll('[data-bl-si-blur]').forEach(el => {
@@ -1030,7 +1031,7 @@ const BlurEngine = (() => {
    */
   function handleIframe(settings, iframeEl) {
     if (!iframeEl || _isExtensionUI(iframeEl)) return;
-    const active = settings.ENABLED !== false && !!settings.BLUR_ALL_ACTIVE;
+    const active = settings.enabled !== false && !!settings.blur_all_active;
 
     let isSameOrigin = false;
     try { isSameOrigin = !!iframeEl.contentDocument; } catch (_) {}
@@ -1099,7 +1100,7 @@ const BlurEngine = (() => {
       _currentSettings = settings;
 
       // ── Extension disabled — full teardown including items ──────────────────
-      if (settings.ENABLED === false) {
+      if (settings.enabled === false) {
         handleMainDocument(settings);
         _isPageBlurred = false;
         _reconcileItems([]);
@@ -1109,13 +1110,13 @@ const BlurEngine = (() => {
       }
 
       // ── Page-wide reconcile ─────────────────────────────────────────────────
-      // Skip DOM work when only CSS vars changed (BLUR_RADIUS in gaussian mode,
-      // HIGHLIGHT_COLOR). Those propagate instantly via custom properties and
+      // Skip DOM work when only CSS vars changed (blur_radius in gaussian mode,
+      // highlight_color). Those propagate instantly via custom properties and
       // don't require a nuke+rescan. Frosted mode is the exception — its radius
       // lives in an SVG attribute and needs a full filter rebuild.
-      const isActive = !!settings.BLUR_ALL_ACTIVE;
+      const isActive = !!settings.blur_all_active;
       const reconcileKey = isActive
-        ? `${settings.BLUR_MODE}|${JSON.stringify(settings.BLUR_CATEGORIES)}|${settings.THOROUGH_BLUR}|${settings.BLUR_MODE === blsi.BLUR_MODES.FROSTED ? settings.BLUR_RADIUS : ''}`
+        ? `${settings.blur_mode}|${JSON.stringify(settings.blur_categories)}|${settings.thorough_blur}|${settings.blur_mode === blsi.blur_modes.frosted ? settings.blur_radius : ''}`
         : 'inactive';
       const pageWideChanged = reconcileKey !== _lastReconcileKey;
       _lastReconcileKey = reconcileKey;
@@ -1131,7 +1132,7 @@ const BlurEngine = (() => {
       // ── Item reconcile ──────────────────────────────────────────────────────
       // Runs in both active and inactive paths: picker blurs + sticky zones
       // persist when blur-all is off.
-      const { added, removed } = _reconcileItems(settings.BLUR_ITEMS || []);
+      const { added, removed } = _reconcileItems(settings.blur_items || []);
 
       if (blsi.Logger && blsi.Logger.enabled) {
         blsi.Logger.scope('engine').flow('handleSite', {

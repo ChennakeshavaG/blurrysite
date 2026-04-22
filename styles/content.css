@@ -496,6 +496,11 @@
   transition: opacity var(--bl-si-transition-duration, 150ms) !important;
 }
 
+/* Screen-anchored zones must be fixed — overrides the absolute default above */
+.bl-si-zone-overlay[data-bl-si-zone-anchor="screen"] {
+  position: fixed !important;
+}
+
 /* In picker mode, zones become interactive (click to remove) */
 .bl-si-picker-active .bl-si-zone-overlay {
   pointer-events: auto !important;

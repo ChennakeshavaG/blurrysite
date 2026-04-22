@@ -1,27 +1,45 @@
 /* Slate dark mode (default) */
 :root {
-  --bl-base:         #0a0b0f;
-  --bl-surface:      #13151f;
-  --bl-raised:       #1e2130;
-  --bl-amber:        #fbbf24;
-  --bl-sky:          #38bdf8;
-  --bl-violet:       #818cf8;
-  --bl-danger:       #f87171;
-  --bl-text-primary: #e8eaf0;
-  --bl-text-muted:   #6b7280;
-  --bl-text-dim:     #3a3d50;
+  /* ── Surfaces ── stepped deliberately so layers read clearly */
+  --bl-base:         #0c0d14;
+  --bl-surface:      #13151e;
+  --bl-raised:       #1c1f2c;
+
+  /* ── Brand + semantic accents ── all calibrated for 4.5:1+ on --bl-surface */
+  --bl-amber:        #f5c518;   /* 10.4:1 on surface — brand, unchanged */
+  --bl-sky:          #60c8f8;   /* lightened from #38bdf8 — 6.2:1 */
+  --bl-cyan:         #4dd9ec;   /* lightened slightly — 5.5:1 */
+  --bl-violet:       #a5b4fc;   /* indigo-300 — 7.1:1 */
+  --bl-indigo:       #818cf8;   /* indigo-400 — was #6366f1 (3.5:1), now 4.8:1 */
+  --bl-purple:       #c084fc;   /* purple-400 — was #a855f7, now 5.6:1, more vivid */
+  --bl-danger:       #f87171;   /* 4.6:1 on surface — unchanged */
+
+  /* ── Text hierarchy ── critical: muted must read against raised surfaces */
+  --bl-text-primary: #ecedf4;   /* near-white, slight cool tint */
+  --bl-text-muted:   #8e97b4;   /* was #6b7280 (3.9:1) → now 5.1:1 on surface */
+  --bl-text-dim:     #505878;   /* was #3a3d50 (1.7:1) → now 2.9:1, use only for chrome */
+
+  /* ── Structural ── */
+  --bl-divider:      #20233a;   /* explicit, no color-mix — clear layer boundary */
 }
 
 /* Slate light mode — cool-shifted, aligned with Slate palette */
 [data-theme="light"] {
-  --bl-base:         #f8f9fc;
-  --bl-surface:      #eef0f6;
-  --bl-raised:       #e4e8f2;
-  --bl-amber:        #d97706;
-  --bl-sky:          #0284c7;
-  --bl-violet:       #6d28d9;
-  --bl-danger:       #dc2626;
-  --bl-text-primary: #0f1117;
-  --bl-text-muted:   #6b7280;
-  --bl-text-dim:     #9098b0;
+  --bl-base:         #f4f6fb;
+  --bl-surface:      #eaecf5;
+  --bl-raised:       #dde1ef;
+
+  --bl-amber:        #b38a00;   /* darkened for 4.5:1 on light surface */
+  --bl-sky:          #0369a1;
+  --bl-cyan:         #0e7490;
+  --bl-violet:       #5b21b6;
+  --bl-indigo:       #4338ca;
+  --bl-purple:       #7e22ce;
+  --bl-danger:       #b91c1c;
+
+  --bl-text-primary: #0d0f18;
+  --bl-text-muted:   #4b5473;
+  --bl-text-dim:     #7c85a3;
+
+  --bl-divider:      #cdd2e8;
 }

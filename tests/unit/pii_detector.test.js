@@ -81,7 +81,7 @@ function freshLoad() {
   }
 }
 
-const ALL_TYPES = { EMAIL: true, NUMERIC: true };
+const ALL_TYPES = { email: true, numeric: true };
 
 // USER IMPACT: auto-detect PII — email addresses and financial numbers hidden automatically without user having to manually pick elements
 describe('pii_detector.js', () => {
@@ -100,7 +100,7 @@ describe('pii_detector.js', () => {
 
   test('EMAIL — detects standard email', () => {
     document.body.innerHTML = '<p>Contact user@example.com for info.</p>';
-    const count = blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    const count = blsi.PiiDetector.scan(document.body, { email: true });
     expect(count).toBe(1);
     const span = document.querySelector('[data-bl-si-pii="email"]');
     expect(span).not.toBeNull();
@@ -109,24 +109,24 @@ describe('pii_detector.js', () => {
 
   test('EMAIL — detects email with plus tag', () => {
     document.body.innerHTML = '<p>Send to user+tag@mail.co.uk</p>';
-    const count = blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    const count = blsi.PiiDetector.scan(document.body, { email: true });
     expect(count).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="email"]').textContent).toBe('user+tag@mail.co.uk');
   });
 
   test('EMAIL — does not match bare @handle (no domain)', () => {
     document.body.innerHTML = '<p>Follow @username on social</p>';
-    expect(blsi.PiiDetector.scan(document.body, { EMAIL: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { email: true })).toBe(0);
   });
 
   test('EMAIL — does not match text without @', () => {
     document.body.innerHTML = '<p>No email here, just text</p>';
-    expect(blsi.PiiDetector.scan(document.body, { EMAIL: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { email: true })).toBe(0);
   });
 
   test('EMAIL — skips when EMAIL type disabled', () => {
     document.body.innerHTML = '<p>user@example.com</p>';
-    expect(blsi.PiiDetector.scan(document.body, { EMAIL: false })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { email: false })).toBe(0);
     expect(document.querySelector('[data-bl-si-pii]')).toBeNull();
   });
 
@@ -136,32 +136,32 @@ describe('pii_detector.js', () => {
   // REDUNDANT: "detects dollar amount" and the three currency tests below all verify the same currency-prefix sub-pattern; the symbol is the only variable
   test('NUMERIC — detects dollar amount', () => {
     document.body.innerHTML = '<p>Total: $1,234.56 due today.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBeGreaterThan(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThan(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).not.toBeNull();
   });
 
   // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects Euro symbol (€)', () => {
     document.body.innerHTML = '<p>Price: \u20AC500 per unit.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects British Pound (£)', () => {
     document.body.innerHTML = '<p>Cost: \u00A3250.00</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects Indian Rupee (₹)', () => {
     document.body.innerHTML = '<p>Salary: \u20B950,000 monthly.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   test('NUMERIC — currency prefix matches digits up to non-digit ($17k → $17)', () => {
     // K-suffix is not captured (simplified regex); $17 still blurs the amount.
     document.body.innerHTML = '<p>Budget: $17k for the project.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('$17');
   });
 
@@ -169,52 +169,52 @@ describe('pii_detector.js', () => {
 
   test('NUMERIC — detects USD currency code suffix', () => {
     document.body.innerHTML = '<p>Transfer 1000 USD to account.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBeGreaterThan(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThan(0);
   });
 
   test('NUMERIC — detects EUR currency code suffix', () => {
     document.body.innerHTML = '<p>Invoice amount: 50000 EUR</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBeGreaterThan(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThan(0);
   });
 
   // ── Pattern: NUMERIC — 4+ bare digits ─────────────────────────────────────
 
   test('NUMERIC — detects bare 5-digit number (17150)', () => {
     document.body.innerHTML = '<p>Account balance: 17150</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
     expect(count).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('17150');
   });
 
   test('NUMERIC — detects 4-digit number', () => {
     document.body.innerHTML = '<p>PIN: 4321</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   test('NUMERIC — detects 16-digit credit card (no separators)', () => {
     document.body.innerHTML = '<p>Card 4111111111111111 on file</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('4111111111111111');
   });
 
   test('NUMERIC — detects comma-separated large number (1,234,567)', () => {
     document.body.innerHTML = '<p>Revenue: 1,234,567</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBeGreaterThan(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThan(0);
   });
 
   test('NUMERIC — does NOT detect 3-digit number (below threshold)', () => {
     document.body.innerHTML = '<p>Only 123 items remain.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('NUMERIC — does NOT detect single/double digit numbers', () => {
     document.body.innerHTML = '<p>Step 1 of 99 complete.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('NUMERIC — skips when NUMERIC type disabled', () => {
     document.body.innerHTML = '<p>Balance: 17150</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: false })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: false })).toBe(0);
   });
 
   // ── Pattern: NUMERIC — phone-like grouped sequences ───────────────────────
@@ -223,7 +223,7 @@ describe('pii_detector.js', () => {
   // OPTIMIZE: four grouped-sequence tests differ only in separator and input text; collapse with test.each([separator, input, expectedText]) tuples
   test('NUMERIC — hyphen-separated phone (111-222-333) wraps as one span', () => {
     document.body.innerHTML = '<p>Call 111-222-333 now.</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
     expect(count).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('111-222-333');
   });
@@ -231,7 +231,7 @@ describe('pii_detector.js', () => {
   // REDUNDANT: same grouped-sequence assertion as hyphen test; only separator and group widths differ
   test('NUMERIC — mixed-width space-separated phone (111 2222 333) wraps as one span', () => {
     document.body.innerHTML = '<p>Mobile: 111 2222 333</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
     expect(count).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('111 2222 333');
   });
@@ -239,7 +239,7 @@ describe('pii_detector.js', () => {
   // REDUNDANT: same grouped-sequence assertion as hyphen test; space separator instead of hyphen
   test('NUMERIC — space-separated phone (111 222 333) wraps as one span', () => {
     document.body.innerHTML = '<p>Fax: 111 222 333</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
     expect(count).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('111 222 333');
   });
@@ -249,7 +249,7 @@ describe('pii_detector.js', () => {
     // Ordering: phone-like sub-pattern must fire before 4+ bare so the whole
     // card number becomes a single span, not four separate "1111" spans.
     document.body.innerHTML = '<p>Card: 4111 1111 1111 1111</p>';
-    const count = blsi.PiiDetector.scan(document.body, { NUMERIC: true });
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
     expect(count).toBe(1);
     const span = document.querySelector('[data-bl-si-pii="numeric"]');
     expect(span.textContent).toBe('4111 1111 1111 1111');
@@ -260,7 +260,7 @@ describe('pii_detector.js', () => {
     // "2024" alone still matches 4+ bare digits.
     document.body.innerHTML = '<p>Due: 12 2024</p>';
     const spans = document.querySelectorAll('[data-bl-si-pii="numeric"]');
-    blsi.PiiDetector.scan(document.body, { NUMERIC: true });
+    blsi.PiiDetector.scan(document.body, { numeric: true });
     // May match "2024" as bare 4+ but NOT "12 2024" as a phone-like group
     const texts = Array.from(document.querySelectorAll('[data-bl-si-pii="numeric"]')).map(s => s.textContent);
     expect(texts).not.toContain('12 2024');
@@ -269,14 +269,14 @@ describe('pii_detector.js', () => {
   test('NUMERIC — does NOT match digit groups separated by words', () => {
     // "room 12 door 23 window 34" — text between groups breaks the pattern
     document.body.innerHTML = '<p>room 12 door 23 window 34</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   // ── PII independence from blur-all ─────────────────────────────────────────
 
   test('PII span has NO data-bl-si-blur attribute (independent of blur-all)', () => {
     document.body.innerHTML = '<p>user@example.com</p>';
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
     const span = document.querySelector('[data-bl-si-pii]');
     expect(span).not.toBeNull();
     // PII blur driven by [data-bl-si-pii] CSS rule only — no blur-engine dependency
@@ -285,7 +285,7 @@ describe('pii_detector.js', () => {
 
   test('PII span persists after blur-engine sweep clears data-bl-si-blur elements', () => {
     document.body.innerHTML = '<p>user@example.com and <span data-bl-si-blur="1">other</span></p>';
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
 
     // Simulate blur-engine clearing non-PII blurred elements
     document.querySelectorAll('[data-bl-si-blur]').forEach(el => {
@@ -327,17 +327,17 @@ describe('pii_detector.js', () => {
 
   test('skips extension UI elements (toolbar)', () => {
     document.body.innerHTML = '<div id="bl-si-picker-toolbar"><p>user@example.com</p></div>';
-    expect(blsi.PiiDetector.scan(document.body, { EMAIL: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { email: true })).toBe(0);
   });
 
   test('skips extension toast elements', () => {
     document.body.innerHTML = '<div class="bl-si-toast"><p>user@example.com</p></div>';
-    expect(blsi.PiiDetector.scan(document.body, { EMAIL: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { email: true })).toBe(0);
   });
 
   test('skips already-wrapped PII spans (no double-wrap)', () => {
     document.body.innerHTML = '<p><span data-bl-si-pii="email">user@example.com</span></p>';
-    expect(blsi.PiiDetector.scan(document.body, { EMAIL: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { email: true })).toBe(0);
   });
 
   test('skips empty and whitespace-only text nodes', () => {
@@ -347,21 +347,21 @@ describe('pii_detector.js', () => {
 
   test('double scan does not re-wrap already wrapped nodes', () => {
     document.body.innerHTML = '<p>user@test.com</p>';
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
     expect(document.querySelectorAll('[data-bl-si-pii="email"]').length).toBe(1);
   });
 
   test('handles multiple matches in one text node', () => {
     document.body.innerHTML = '<p>Email a@b.com and c@d.com please</p>';
-    const count = blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    const count = blsi.PiiDetector.scan(document.body, { email: true });
     expect(count).toBe(2);
     expect(document.querySelectorAll('[data-bl-si-pii="email"]').length).toBe(2);
   });
 
   test('preserves surrounding text after wrapping', () => {
     document.body.innerHTML = '<p>Hello user@test.com World</p>';
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
     expect(document.querySelector('p').textContent).toBe('Hello user@test.com World');
   });
 
@@ -373,7 +373,7 @@ describe('pii_detector.js', () => {
 
   test('clear() removes all PII spans and restores text', () => {
     document.body.innerHTML = '<p>Send to user@test.com please</p>';
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
     expect(document.querySelector('[data-bl-si-pii]')).not.toBeNull();
 
     blsi.PiiDetector.clear(document.body);
@@ -383,7 +383,7 @@ describe('pii_detector.js', () => {
 
   test('clear() resets match count to 0', () => {
     document.body.innerHTML = '<p>user@test.com</p>';
-    blsi.PiiDetector.scan(document.body, { EMAIL: true });
+    blsi.PiiDetector.scan(document.body, { email: true });
     expect(blsi.PiiDetector.getMatchCount()).toBeGreaterThan(0);
     blsi.PiiDetector.clear(document.body);
     expect(blsi.PiiDetector.getMatchCount()).toBe(0);
@@ -410,13 +410,13 @@ describe('pii_detector.js', () => {
     const p1 = document.createElement('p');
     p1.textContent = 'a@b.com';
     document.body.appendChild(p1);
-    blsi.PiiDetector.scan(p1, { EMAIL: true });
+    blsi.PiiDetector.scan(p1, { email: true });
     expect(blsi.PiiDetector.getMatchCount()).toBe(1);
 
     const p2 = document.createElement('p');
     p2.textContent = 'c@d.com';
     document.body.appendChild(p2);
-    blsi.PiiDetector.scan(p2, { EMAIL: true });
+    blsi.PiiDetector.scan(p2, { email: true });
     expect(blsi.PiiDetector.getMatchCount()).toBe(2);
   });
 
@@ -430,20 +430,20 @@ describe('pii_detector.js', () => {
 
   test('all AUTO_DETECT defaults off — scan returns 0', () => {
     document.body.innerHTML = '<p>user@example.com and 17150 and $500</p>';
-    const defaultAutoDetect = { EMAIL: false, NUMERIC: false };
+    const defaultAutoDetect = { email: false, numeric: false };
     expect(blsi.PiiDetector.scan(document.body, defaultAutoDetect)).toBe(0);
     expect(document.querySelector('[data-bl-si-pii]')).toBeNull();
   });
 
   test('NUMERIC true — bare 5-digit number detected', () => {
     document.body.innerHTML = '<p>Account: 17150</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('17150');
   });
 
   test('NUMERIC false — no numeric spans created', () => {
     document.body.innerHTML = '<p>Account: 17150</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: false })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: false })).toBe(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
   });
 
@@ -452,50 +452,50 @@ describe('pii_detector.js', () => {
   test('isYear — 4-digit year in 1000–2099 is suppressed', () => {
     // 2024 is a common year, not PII — precise mode suppresses it
     document.body.innerHTML = '<p>Published in 2024.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
   });
 
   test('isYear — 5-digit number is NOT suppressed as a year', () => {
     document.body.innerHTML = '<p>Account: 20245</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('20245');
   });
 
   test('isYear — 4-digit number above 2099 is NOT suppressed', () => {
     // 9999 is out of the year range — kept as potential PII
     document.body.innerHTML = '<p>Error code: 9999</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   test('isYear — 4-digit number below 1000 is NOT suppressed as year', () => {
     // No 4-digit number < 1000 can match \b\d{4,}\b — this is a safety assertion
     document.body.innerHTML = '<p>Error code: 999</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   // ── falsePositivesCheck: isVersion ────────────────────────────────────────
 
   test('isVersion — number preceded by lowercase v is suppressed', () => {
     document.body.innerHTML = '<p>Running v17150 build.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).toBeNull();
   });
 
   test('isVersion — number preceded by uppercase V is suppressed', () => {
     document.body.innerHTML = '<p>V17150 release notes</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isVersion — number followed by .digit is suppressed', () => {
     document.body.innerHTML = '<p>Build 17150.3 deployed.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isVersion — bare number with no version context is NOT suppressed', () => {
     // "17150" with space before and space after — not a version
     document.body.innerHTML = '<p>Account 17150 overdue</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('17150');
   });
 
@@ -503,22 +503,22 @@ describe('pii_detector.js', () => {
 
   test('isPublicPrice — /month in window suppresses currency amount', () => {
     document.body.innerHTML = '<p>Only $9/month</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isPublicPrice — qty in window suppresses number', () => {
     document.body.innerHTML = '<p>qty: 5000 units</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isPublicPrice — /year in window suppresses number', () => {
     document.body.innerHTML = '<p>$94750/year salary package</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isPublicPrice — no price context: number is detected', () => {
     document.body.innerHTML = '<p>Account balance: 94750</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('94750');
   });
 
@@ -526,22 +526,22 @@ describe('pii_detector.js', () => {
 
   test('isCountNoise — "unread" in window suppresses number', () => {
     document.body.innerHTML = '<p>12345 unread messages</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isCountNoise — "followers" in window suppresses number', () => {
     document.body.innerHTML = '<p>10234 followers</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isCountNoise — "results" in window suppresses number', () => {
     document.body.innerHTML = '<p>Showing 12345 results</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(0);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isCountNoise — no count context: number is detected', () => {
     document.body.innerHTML = '<p>Invoice total: 12345</p>';
-    expect(blsi.PiiDetector.scan(document.body, { NUMERIC: true })).toBe(1);
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
   });
 

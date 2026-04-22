@@ -1,0 +1,164 @@
+/* popup_shortcuts.css — Shortcuts sub-page styles
+ *
+ * Reuses from popup.css (do not redefine here):
+ *   .bl-subpage, .bl-subpage__body, .bl-subpage__header, .bl-back-btn
+ */
+
+/* ── Action list ─────────────────────────────────────────────────────── */
+.bl-sc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Single action row ───────────────────────────────────────────────── */
+.bl-sc-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bl-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bl-sc-row:last-child {
+  border-bottom: none;
+}
+
+.bl-sc-row__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bl-sc-row__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bl-text-primary);
+  flex: 1;
+}
+
+.bl-sc-row__binding {
+  font-size: 11px;
+  color: var(--bl-text-muted);
+  font-family: monospace;
+  background: var(--bl-raised);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.bl-sc-row__binding--none {
+  font-style: italic;
+  color: var(--bl-text-dim);
+  background: none;
+  padding: 0;
+}
+
+/* ── Row action buttons ──────────────────────────────────────────────── */
+.bl-sc-change-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid var(--bl-raised);
+  border-radius: 5px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.bl-sc-change-btn:hover {
+  color: var(--bl-text-primary);
+  border-color: var(--bl-text-muted);
+}
+
+.bl-sc-reset-btn {
+  font-size: 10px;
+  background: none;
+  border: none;
+  color: var(--bl-text-dim);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.bl-sc-reset-btn:hover {
+  color: var(--bl-text-muted);
+}
+
+/* ── Capture mode container ──────────────────────────────────────────── */
+.bl-sc-capture {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bl-sc-capture__prompt {
+  font-size: 11px;
+  color: var(--bl-text-muted);
+}
+
+.bl-sc-capture__preview {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bl-amber);
+  font-family: monospace;
+  min-height: 22px;
+}
+
+.bl-sc-capture__preview--empty {
+  color: var(--bl-text-dim);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.bl-sc-capture__warning {
+  font-size: 10px;
+  color: var(--bl-danger);
+}
+
+.bl-sc-capture__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Capture action buttons ──────────────────────────────────────────── */
+.bl-sc-save-btn {
+  font-size: 11px;
+  padding: 4px 14px;
+  background: var(--bl-amber);
+  color: var(--bl-base);
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.9;
+  transition: opacity 0.15s;
+}
+
+.bl-sc-save-btn:hover {
+  opacity: 1;
+}
+
+.bl-sc-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bl-sc-cancel-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--bl-raised);
+  border-radius: 6px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.bl-sc-cancel-btn:hover {
+  color: var(--bl-text-primary);
+  border-color: var(--bl-text-muted);
+}

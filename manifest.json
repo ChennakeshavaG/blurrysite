@@ -10,9 +10,7 @@
   "host_permissions": ["<all_urls>"],
 
   "background": {
-    "scripts": ["background.js"],
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
 
   "content_scripts": [
@@ -26,7 +24,7 @@
         "src/shortcut_label.js",
         "src/url_matcher.js",
         "src/selector_utils.js",
-        "src/storage_manager.js",
+        "src/storage_model.js",
         "src/tab_privacy.js",
         "src/pii_detector.js",
         "src/blur_engine.js",

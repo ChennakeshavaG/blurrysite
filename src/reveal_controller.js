@@ -19,7 +19,7 @@ const BlurrySiteReveal = (() => {
   'use strict';
 
   const Engine = blsi.BlurEngine;
-  const RM = blsi.REVEAL_MODES;
+  const RM = blsi.reveal_modes;
 
   // Derived from Engine.CATEGORY_SELECTORS — single source of truth.
   // Joins every alwaysBlur tag across all categories into one CSS selector.
@@ -73,6 +73,27 @@ const BlurrySiteReveal = (() => {
         revealedAncestors.push(node);
       }
       node = node.parentElement;
+    }
+    // Cross shadow DOM boundaries: a host element with data-bl-si-blur still
+    // applies filter:blur() to its entire rendered subtree (including shadow
+    // root contents) even when inner elements have data-bl-si-reveal stamped.
+    // Walk up through each shadow host and its ancestors to clear outer blurs.
+    var root = el.getRootNode();
+    while (root instanceof ShadowRoot) {
+      var host = root.host;
+      if (_isVisuallyBlurred(host)) {
+        host.dataset.blSiReveal = '1';
+        revealedAncestors.push(host);
+      }
+      var hostParent = host.parentElement;
+      while (hostParent && hostParent !== document.documentElement) {
+        if (_isVisuallyBlurred(hostParent)) {
+          hostParent.dataset.blSiReveal = '1';
+          revealedAncestors.push(hostParent);
+        }
+        hostParent = hostParent.parentElement;
+      }
+      root = host.getRootNode();
     }
   }
 
@@ -219,7 +240,7 @@ const BlurrySiteReveal = (() => {
   // ── Event handlers ───────────────────────────────────────────────────────
 
   function onRevealClick(e) {
-    if (_getMode() !== RM.CLICK) return;
+    if (_getMode() !== RM.click) return;
     if (_getPickerActive()) return;
 
     // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
@@ -276,7 +297,7 @@ const BlurrySiteReveal = (() => {
   }
 
   function onRevealMouseOver(e) {
-    if (_getMode() !== RM.HOVER) return;
+    if (_getMode() !== RM.hover) return;
     // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
     // host when the mouseover originates inside a shadow root. composedPath()[0]
     // gives the actual element under the cursor (e.g. svg or path inside shadow).

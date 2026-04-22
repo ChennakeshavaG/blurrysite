@@ -1,12 +1,11 @@
-"use strict";
+'use strict';
 
 importScripts(
-  "src/constants.js",
-  "src/logger.js",
-  "src/action_registry.js"
+  'src/constants.js',
+  'src/logger.js',
+  'src/action_registry.js'
 );
 
-const MSG = self.blsi;
 const log = blsi.Logger.scope('bg');
 
 /**
@@ -15,34 +14,29 @@ const log = blsi.Logger.scope('bg');
  * Responsibilities:
  *  - Relay keyboard command events to the active tab's content script
  *  - Manage the right-click context menu entries
- *  - Re-apply persisted blur state whenever a tab finishes loading
- *  - Seed default settings on install
+ *  - Screenshot capture relay (captureVisibleTab requires background privileges)
  *
- * Storage I/O is handled directly by callers via storage_manager.js
- * (both content script and popup use chrome.storage.local directly).
+ * Storage I/O is handled by storage_model.js in content_script and popup
+ * contexts directly — no storage reads/writes here.
  */
 
-// ---------------------------------------------------------------------------
-// Context menu setup — created once on service-worker install/startup
-// ---------------------------------------------------------------------------
+// ── Context menu setup ─────────────────────────────────────────────────────
 function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: "bl-si-blur-element",
-      title: chrome.i18n.getMessage("ctxBlurElement") || "Blur this element",
-      contexts: ["all"],
+      id:       'bl-si-blur-element',
+      title:    chrome.i18n.getMessage('ctxBlurElement') || 'Blur this element',
+      contexts: ['all'],
     });
-
     chrome.contextMenus.create({
-      id: "bl-si-unblur-element",
-      title: chrome.i18n.getMessage("ctxUnblurElement") || "Unblur this element",
-      contexts: ["all"],
+      id:       'bl-si-unblur-element',
+      title:    chrome.i18n.getMessage('ctxUnblurElement') || 'Unblur this element',
+      contexts: ['all'],
     });
-
     chrome.contextMenus.create({
-      id: "bl-si-blur-selection",
-      title: chrome.i18n.getMessage("ctxBlurSelection") || "Blur selected text",
-      contexts: ["selection"],
+      id:       'bl-si-blur-selection',
+      title:    chrome.i18n.getMessage('ctxBlurSelection') || 'Blur selected text',
+      contexts: ['selection'],
     });
   });
 }
@@ -50,21 +44,8 @@ function createContextMenus() {
 chrome.runtime.onInstalled.addListener((details) => {
   log.flow('onInstalled', { reason: details && details.reason });
   createContextMenus();
-
-  // Clean up stale storage key from pre-refactor versions
-  chrome.storage.local.remove("blurred_selectors");
-
-  // Seed default settings to storage if not present. This ensures the popup
-  // shows correct toggle states on first load (instead of all-unchecked).
-  chrome.storage.local.get("settings", (result) => {
-    if (!result.settings) {
-      chrome.storage.local.set({ settings: MSG.buildDefaultSettings() });
-    } else {
-      // Validate existing settings — repair any broken/missing values
-      const validated = MSG.validateSettings(result.settings);
-      chrome.storage.local.set({ settings: validated });
-    }
-  });
+  // Clean up stale storage keys from pre-refactor versions
+  chrome.storage.local.remove(['blurred_selectors', 'settings', 'rules', 'blurred_items', 'blur_all_hosts']);
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -72,32 +53,23 @@ chrome.runtime.onStartup.addListener(() => {
   createContextMenus();
 });
 
-// ---------------------------------------------------------------------------
-// Context menu click handler
-// ---------------------------------------------------------------------------
+// ── Context menu click handler ─────────────────────────────────────────────
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) return;
   log.flow('contextMenu', { menuItemId: info.menuItemId, tabId: tab.id });
 
-  if (info.menuItemId === "bl-si-blur-element") {
-    chrome.tabs.sendMessage(tab.id, { type: MSG.CONTEXT_BLUR }).catch(() => {});
-  } else if (info.menuItemId === "bl-si-unblur-element") {
-    chrome.tabs
-      .sendMessage(tab.id, { type: MSG.CONTEXT_UNBLUR })
-      .catch(() => {});
-  } else if (info.menuItemId === "bl-si-blur-selection") {
-    chrome.tabs
-      .sendMessage(tab.id, { type: MSG.BLUR_SELECTION })
-      .catch(() => {});
+  if (info.menuItemId === 'bl-si-blur-element') {
+    chrome.tabs.sendMessage(tab.id, { type: blsi.command.context_blur }).catch(() => {});
+  } else if (info.menuItemId === 'bl-si-unblur-element') {
+    chrome.tabs.sendMessage(tab.id, { type: blsi.command.context_unblur }).catch(() => {});
+  } else if (info.menuItemId === 'bl-si-blur-selection') {
+    chrome.tabs.sendMessage(tab.id, { type: blsi.command.blur_selection }).catch(() => {});
   }
 });
 
-// ---------------------------------------------------------------------------
-// Commands API relay — forward keyboard commands to the active tab
-// ---------------------------------------------------------------------------
-// Map chrome.commands ids → action messageType, derived from the registry.
-// Adding a new action with a chromeCommand field automatically wires up the
-// relay without touching this file.
+// ── Commands API relay — forward keyboard commands to the active tab ────────
+// Map chrome.commands names → action messageType, derived from the registry.
+// Adding a new action with a chromeCommand field automatically wires the relay.
 const COMMAND_TO_MESSAGE = (() => {
   const out = {};
   for (const action of blsi.Actions.list()) {
@@ -107,22 +79,17 @@ const COMMAND_TO_MESSAGE = (() => {
 })();
 
 chrome.commands.onCommand.addListener(async (command) => {
-  let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
-
   const type = COMMAND_TO_MESSAGE[command];
   if (!type) return;
-
   log.flow('command.relay', { command, type, tabId: tab.id });
   chrome.tabs.sendMessage(tab.id, { type }).catch(() => {});
 });
 
-
-// ---------------------------------------------------------------------------
-// Screenshot capture handler
-// ---------------------------------------------------------------------------
+// ── Screenshot capture relay ───────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'CAPTURE_VIEWPORT') {
+  if (message && message.type === blsi.command.capture_viewport) {
     chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
       if (chrome.runtime.lastError) {
         sendResponse({ error: chrome.runtime.lastError.message });
@@ -133,7 +100,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async sendResponse
   }
 });
-
-// Note: tab navigation does not need a RESTORE message — the content script
-// is re-injected on each page load and restores blur state from storage in
-// its own init() via Store.initCache() + applyInitialBlurState().

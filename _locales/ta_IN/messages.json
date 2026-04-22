@@ -14,7 +14,6 @@
   "ctxBlurSelection": {
     "message": "தேர்ந்தெடுத்த உரையை மங்கச்செய்"
   },
-
   "pickerPrefixLabel": {
     "message": "",
     "description": "Empty in Tamil — the chip label is self-contained."
@@ -66,5 +65,635 @@
   },
   "pickerAreaTooSmall": {
     "message": "பகுதி மிகச் சிறியது (குறைந்தது 10px)"
+  },
+  "popup_title": {
+    "message": "ப்ளர்ரி சைட்"
+  },
+  "toggle_on": {
+    "message": "இயக்கு"
+  },
+  "toggle_off": {
+    "message": "நிறுத்து"
+  },
+  "btn_blur_all": {
+    "message": "அனைத்தையும் மங்கச்செய்"
+  },
+  "btn_clear_all": {
+    "message": "அனைத்தையும் அழி"
+  },
+  "btn_modify": {
+    "message": "மாற்று →"
+  },
+  "btn_picker": {
+    "message": "தேர்ந்து மங்கச்செய்"
+  },
+  "section_general": {
+    "message": "பொது"
+  },
+  "section_advanced": {
+    "message": "மேம்பட்டது"
+  },
+  "section_experimental": {
+    "message": "சோதனை"
+  },
+  "section_blurred_elements": {
+    "message": "இந்தப் பக்கத்தில் மங்கியவை"
+  },
+  "blur_empty": {
+    "message": "இந்தப் பக்கத்தில் இன்னும் எதுவும் மங்கவில்லை."
+  },
+  "setting_language": {
+    "message": "காட்சி மொழி"
+  },
+  "setting_language_hint": {
+    "message": "இந்த பாப்அப்பின் மொழியைத் தேர்ந்தெடுக்கவும். ஆட்டோ உங்கள் உலாவியைப் பின்பற்றும்."
+  },
+  "lang_auto": {
+    "message": "ஆட்டோ (உலாவி இயல்புநிலை)"
+  },
+  "lang_en": {
+    "message": "English (ஆங்கிலம்)"
+  },
+  "lang_hi_IN": {
+    "message": "हिन्दी (இந்தி — இந்தியா)"
+  },
+  "lang_ta_IN": {
+    "message": "தமிழ் (இந்தியா)"
+  },
+  "section_shortcuts_title": {
+    "message": "விசைப்பலகை குறுக்குவழிகள்"
+  },
+  "section_pii_title": {
+    "message": "PII தானாக கண்டறிதல்"
+  },
+  "section_settings_title": {
+    "message": "அமைப்புகள்"
+  },
+  "section_rules_title": {
+    "message": "தள விதிகள்"
+  },
+  "setting_blur_radius": {
+    "message": "மங்கல் வலிமை"
+  },
+  "setting_blur_radius_hint": {
+    "message": "அதிகம் = படிக்கக் கடினம். 10+ OCR-ஐ மறைக்கும், 15+ AI-ஐ மறைக்கும்."
+  },
+  "setting_reveal_mode": {
+    "message": "மங்கியதை எட்டிப் பார்"
+  },
+  "setting_reveal_mode_hint": {
+    "message": "மங்கலை அகற்றாமல் சிறிது நேரம் பார்ப்பதற்கான வழி."
+  },
+  "setting_transition": {
+    "message": "மென்மையான அசைவூட்டங்கள்"
+  },
+  "setting_transition_hint": {
+    "message": "மங்கலை திடீரென மாற்றாமல் மென்மையாக மாற்றுக."
+  },
+  "setting_highlight_color": {
+    "message": "தேர்வு வெளிப்படை நிறம்"
+  },
+  "setting_highlight_color_hint": {
+    "message": "தேர்வு பயன்முறையில் கூறுக்கு மீது சுட்டியை நகர்த்தும்போது சிறப்பிக்கும் நிறம்."
+  },
+  "setting_blur_mode": {
+    "message": "மங்கல் தோற்றம்"
+  },
+  "setting_blur_mode_hint": {
+    "message": "தரநிலை ஒரு எளிய மங்கல். ஃப்ராஸ்டெட் உரையை AI மற்றும் திரைப்பிடிப்பு கருவிகள் படிக்க முடியாதவாறு மறைக்கும், ஆனால் கொஞ்சம் அதிக ஆற்றலைப் பயன்படுத்தும்."
+  },
+  "setting_thorough_blur": {
+    "message": "தீவிர மங்கல்"
+  },
+  "setting_thorough_hint": {
+    "message": "வெற்று கொள்கலன்களையும் மங்கச்செய். அதிகம் பிடிக்கும், ஆனால் தளவமைப்பை மறைக்கலாம்."
+  },
+  "setting_tab_privacy": {
+    "message": "டேப் தலைப்பு & ஐகானை மறை"
+  },
+  "setting_tab_privacy_hint": {
+    "message": "திரைப் பகிர்வுக்கு டேப் தலைப்பு மற்றும் ஃபேவிகானை பொது இடக்குறிப்பாக மாற்றுக."
+  },
+  "setting_auto_blur_tab": {
+    "message": "டேப் மாறும்போது மங்கச்செய்"
+  },
+  "setting_auto_blur_tab_hint": {
+    "message": "வேறு டேப்புக்கு மாறும்போது பக்கத்தை தானாக மங்கச்செய்."
+  },
+  "setting_auto_blur_idle": {
+    "message": "செயலற்ற நிலையில் மங்கச்செய்"
+  },
+  "setting_auto_blur_idle_hint": {
+    "message": "செயலின்மை காலத்திற்குப் பிறகு பக்கத்தை தானாக மங்கச்செய்."
+  },
+  "setting_idle_timeout": {
+    "message": "செயலின்மை நேரம்"
+  },
+  "setting_idle_timeout_hint": {
+    "message": "தானியங்கி மங்கல் தூண்டப்படுவதற்கு முன் செயலின்மை வினாடிகள்."
+  },
+  "setting_blur_timer": {
+    "message": "மங்கல் நேரமானி"
+  },
+  "setting_blur_timer_hint": {
+    "message": "இத்தனை நிமிடங்களுக்குப் பிறகு மங்கலை தானாக நீக்கு. 0 = நிறுத்து."
+  },
+  "reveal_click": {
+    "message": "க்ளிக் செய்து எட்டிப் பார்"
+  },
+  "reveal_hover": {
+    "message": "மீது நகர்த்தி எட்டிப் பார்"
+  },
+  "reveal_none": {
+    "message": "நிறுத்து — ஒருபோதும் காட்டாதே"
+  },
+  "blur_mode_gaussian": {
+    "message": "தரநிலை"
+  },
+  "blur_mode_frosted": {
+    "message": "ஃப்ராஸ்டெட் (AI-தடை)"
+  },
+  "blur_mode_redacted": {
+    "message": "மறைக்கப்பட்டது (திட தொகுதி)"
+  },
+  "blur_mode_masked": {
+    "message": "மாஸ்க் (நட்சத்திரங்கள்)"
+  },
+  "setting_redaction_color": {
+    "message": "மறைப்பு நிறம்"
+  },
+  "setting_redaction_color_hint": {
+    "message": "மறைக்கப்பட்ட பயன்முறை தொகுதிகளுக்கான நிறம். கருப்பு மிகவும் பாதுகாப்பானது."
+  },
+  "group_appearance": {
+    "message": "தோற்றம்"
+  },
+  "group_behavior": {
+    "message": "நடத்தை"
+  },
+  "group_categories": {
+    "message": "எதை மங்கச்செய்ய"
+  },
+  "group_autodetect": {
+    "message": "உணர்திறன் தரவு தானியங்கி கண்டறிதல்"
+  },
+  "group_shortcuts": {
+    "message": "விசைப்பலகை குறுக்குவழிகள்"
+  },
+  "group_advanced": {
+    "message": "மேம்பட்டது"
+  },
+  "detect_pii": {
+    "message": "உணர்திறன் தரவு (PII)"
+  },
+  "detect_pii_hint": {
+    "message": "மின்னஞ்சல்கள், தொலைபேசி எண்கள், SSN, கிரெடிட் கார்டுகள் மற்றும் நிதி புள்ளிவிவரங்களை தானாக மங்கச்செய்."
+  },
+  "cat_text": {
+    "message": "உரை"
+  },
+  "cat_text_hint": {
+    "message": "தலைப்புகள், பத்திகள், இணைப்புகள் மற்றும் உள்வரி உரை."
+  },
+  "cat_media": {
+    "message": "படங்கள் & வீடியோ"
+  },
+  "cat_media_hint": {
+    "message": "புகைப்படங்கள், வீடியோக்கள், கேன்வாஸ்கள் மற்றும் SVG-க்கள்."
+  },
+  "cat_form": {
+    "message": "உள்ளீடுகள் & படிவங்கள்"
+  },
+  "cat_form_hint": {
+    "message": "உரை பெட்டிகள், பொத்தான்கள் மற்றும் கீழ்விழும் பட்டியல்கள்."
+  },
+  "cat_table": {
+    "message": "அட்டவணைகள்"
+  },
+  "cat_table_hint": {
+    "message": "அட்டவணை கலங்கள் மற்றும் தலைப்புகள்."
+  },
+  "cat_structure": {
+    "message": "கொள்கலன்கள்"
+  },
+  "cat_structure_hint": {
+    "message": "பிரிவுகள், கட்டுரைகள் மற்றும் உரையை வைத்திருக்கும் ரேப்பர்கள்."
+  },
+  "shortcut_toggle_blur_all": {
+    "message": "அனைத்தையும் மங்கச்செய்"
+  },
+  "shortcut_toggle_blur_all_hint": {
+    "message": "இந்தப் பக்கத்தில் ஆதரிக்கப்படும் ஒவ்வொரு கூறையும் மங்கச்செய்."
+  },
+  "shortcut_toggle_picker": {
+    "message": "ஒரு கூறைத் தேர்ந்தெடு"
+  },
+  "shortcut_toggle_picker_hint": {
+    "message": "ஒரு கூறு அல்லது பகுதியை மங்கச்செய்ய பிக்கரைத் திறக்கவும்."
+  },
+  "shortcut_clear_all": {
+    "message": "பக்கத்தை அழி"
+  },
+  "shortcut_clear_all_hint": {
+    "message": "இந்தப் பக்கத்தில் ஒவ்வொரு மங்கலையும் அகற்று."
+  },
+  "shortcut_screenshot": {
+    "message": "திரைப்பிடிப்பு எடு"
+  },
+  "shortcut_screenshot_hint": {
+    "message": "அனைத்து மங்கல்களுடன் தெரியும் பக்கத்தைப் பிடித்து PNG ஆக பதிவிறக்கு."
+  },
+  "shortcut_customize": {
+    "message": "மாற்று"
+  },
+  "shortcut_modal_title": {
+    "message": "குறுக்குவழியை மாற்று"
+  },
+  "shortcut_modal_prompt": {
+    "message": "ஒரு மாற்றியை (Ctrl/Alt/Shift/Cmd) அழுத்திப் பிடிக்கவும், பின்னர் விரும்பிய விசையை அழுத்தவும்."
+  },
+  "shortcut_modal_placeholder": {
+    "message": "விசை சேர்க்கையை அழுத்தவும்…"
+  },
+  "shortcut_modal_no_modifier": {
+    "message": "முதலில் ஒரு மாற்றியை அழுத்திப் பிடிக்கவும், பின்னர் விசையை அழுத்தவும்."
+  },
+  "shortcut_modal_ctrl_alt": {
+    "message": "Ctrl + Alt மட்டும் ஐரோப்பிய விசைப்பலகைகளுடன் முரண்படும். Shift சேர்க்கவும்."
+  },
+  "shortcut_reset": {
+    "message": "இயல்புநிலைக்கு மீட்டமை"
+  },
+  "shortcut_saved": {
+    "message": "குறுக்குவழி சேமிக்கப்பட்டது"
+  },
+  "shortcut_reset_done": {
+    "message": "குறுக்குவழி மீட்டமைக்கப்பட்டது"
+  },
+  "rule_add": {
+    "message": "+ தள விதியைச் சேர்"
+  },
+  "rule_edit": {
+    "message": "தள விதியைத் திருத்து"
+  },
+  "rule_add_title": {
+    "message": "தள விதியைச் சேர்"
+  },
+  "rule_name": {
+    "message": "பெயர்"
+  },
+  "rule_name_placeholder": {
+    "message": "எ.கா. வங்கி தளங்கள்"
+  },
+  "rule_pattern": {
+    "message": "URL வடிவம்"
+  },
+  "rule_pattern_placeholder": {
+    "message": "*.bank.com/*"
+  },
+  "rule_pattern_type": {
+    "message": "பொருத்த வகை"
+  },
+  "rule_pattern_wildcard": {
+    "message": "எளிய (வைல்ட்கார்டு)"
+  },
+  "rule_pattern_regex": {
+    "message": "மேம்பட்ட (regex)"
+  },
+  "rule_overrides": {
+    "message": "பொருந்தும் URL-களுக்கு இந்த அமைப்புகள் இயல்புநிலையை மீறும்."
+  },
+  "rule_category_overrides": {
+    "message": "வகை மீறல்கள்"
+  },
+  "rule_global_default": {
+    "message": "இயல்புநிலையைப் பயன்படுத்து"
+  },
+  "rule_override_on": {
+    "message": "இயக்கு"
+  },
+  "rule_override_off": {
+    "message": "நிறுத்து"
+  },
+  "rule_pattern_required": {
+    "message": "தயவுசெய்து ஒரு URL வடிவத்தை உள்ளிடவும்."
+  },
+  "rule_pattern_too_long": {
+    "message": "வடிவம் மிக நீளமானது (அதிகபட்சம் 500 எழுத்துக்கள்)."
+  },
+  "rule_name_too_long": {
+    "message": "பெயர் மிக நீளமானது (அதிகபட்சம் 100 எழுத்துக்கள்)."
+  },
+  "rule_saved": {
+    "message": "விதி சேமிக்கப்பட்டது"
+  },
+  "rule_deleted": {
+    "message": "விதி அகற்றப்பட்டது"
+  },
+  "rule_no_rules": {
+    "message": "இன்னும் தள விதிகள் இல்லை. குறிப்பிட்ட தளங்களில் மங்கல் எவ்வாறு செயல்படுகிறது என்பதை விதிகள் மாற்றுகின்றன."
+  },
+  "rule_hint": {
+    "message": "குறிப்பிட்ட தளங்களில் அமைப்புகளை மாற்றவும். முதலில் பொருந்தும் விதி வெல்லும்."
+  },
+  "rule_untitled": {
+    "message": "தலைப்பற்ற விதி"
+  },
+  "rule_edit_btn": {
+    "message": "திருத்து"
+  },
+  "rule_delete_btn": {
+    "message": "அகற்று"
+  },
+  "item_type_dynamic": {
+    "message": "கூறு"
+  },
+  "item_type_sticky": {
+    "message": "மண்டலம்"
+  },
+  "item_remove_aria": {
+    "message": "அகற்று"
+  },
+  "item_remove_title": {
+    "message": "இதை அழி"
+  },
+  "toast_enabled": {
+    "message": "ப்ளர்ரி சைட் இயக்கப்பட்டது"
+  },
+  "toast_disabled": {
+    "message": "ப்ளர்ரி சைட் நிறுத்தப்பட்டது"
+  },
+  "toast_blur_all": {
+    "message": "இந்தப் பக்கத்தில் அனைத்தும் மங்கியுள்ளன"
+  },
+  "toast_cleared": {
+    "message": "பக்கம் அழிக்கப்பட்டது"
+  },
+  "toast_all_sites_cleared": {
+    "message": "ஒவ்வொரு தளமும் அழிக்கப்பட்டது"
+  },
+  "toast_blur_removed": {
+    "message": "மங்கல் அகற்றப்பட்டது"
+  },
+  "toast_settings_saved": {
+    "message": "அமைப்புகள் சேமிக்கப்பட்டன"
+  },
+  "toast_failed_save_settings": {
+    "message": "அமைப்புகளைச் சேமிக்க முடியவில்லை"
+  },
+  "toast_failed_toggle_blur": {
+    "message": "மங்கலை மாற்ற முடியவில்லை"
+  },
+  "toast_failed_clear_host": {
+    "message": "இந்தப் பக்கத்தை அழிக்க முடியவில்லை"
+  },
+  "toast_failed_remove_item": {
+    "message": "அந்த மங்கலை அகற்ற முடியவில்லை"
+  },
+  "toast_failed_clear_all": {
+    "message": "எல்லா தளங்களையும் அழிக்க முடியவில்லை"
+  },
+  "toast_failed_save_rule": {
+    "message": "விதியைச் சேமிக்க முடியவில்லை"
+  },
+  "toast_failed_delete_rule": {
+    "message": "விதியை அகற்ற முடியவில்லை"
+  },
+  "toast_flow_logs_on": {
+    "message": "செயல்பாட்டு பதிவு: இயக்கம்"
+  },
+  "toast_flow_logs_off": {
+    "message": "செயல்பாட்டு பதிவு: நிறுத்தம்"
+  },
+  "confirm_clear_all": {
+    "message": "இது நீங்கள் பயன்படுத்திய ஒவ்வொரு தளத்திலிருந்தும் ஒவ்வொரு மங்கலையும் அகற்றும். தொடர வேண்டுமா?"
+  },
+  "footer_clear_all": {
+    "message": "ஒவ்வொரு தளமும் அழி"
+  },
+  "theme_toggle": {
+    "message": "ஒளி / இருள் தீம் மாற்று"
+  },
+  "help_overlay_title": {
+    "message": "விசைப்பலகை குறுக்குவழிகள்"
+  },
+  "modal_cancel": {
+    "message": "ரத்து"
+  },
+  "modal_save": {
+    "message": "சேமி"
+  },
+  "modal_close": {
+    "message": "மூடு"
+  },
+  "tt_master_toggle": {
+    "message": "ப்ளர்ரி சைட்-ஐ எல்லா தளங்களிலும் இயக்கு அல்லது நிறுத்து"
+  },
+  "tt_theme": {
+    "message": "ஒளி அல்லது இருளுக்கு மாற்று"
+  },
+  "tt_blur_all": {
+    "message": "இந்தப் பக்கத்தில் எல்லாவற்றையும் மங்கச்செய்"
+  },
+  "tt_clear_all": {
+    "message": "இந்தப் பக்கத்தின் மங்கலை நீக்கு"
+  },
+  "tt_picker": {
+    "message": "எதையும் மங்கச்செய்ய கிளிக் செய்யவும். அல்லது பகுதி மோடுக்கு மாறி ஒரு முழு பகுதியை மங்கச்செய்ய பெட்டியை இழுக்கவும்"
+  },
+  "tt_help": {
+    "message": "விசைப்பலகை குறுக்குவழிகளைப் பார்"
+  },
+  "tt_debug": {
+    "message": "நீட்டிப்பு என்ன செய்கிறது என்று பார் — சிக்கலைத் தீர்க்க உதவும்"
+  },
+  "tt_clear_all_sites": {
+    "message": "ஒவ்வொரு தளத்திலும் ஒவ்வொரு மங்கலையும் நீக்கு"
+  },
+  "tt_add_rule": {
+    "message": "ஒரு குறிப்பிட்ட தளத்திற்கு வேறு அமைப்புகளை உருவாக்கு"
+  },
+  "tt_customize_shortcut": {
+    "message": "வேறு ஒரு விசைப்பலகை குறுக்குவழியைத் தேர்ந்தெடு"
+  },
+  "tt_remove_blur_item": {
+    "message": "இதைத் தெளிவாக்கு"
+  },
+  "tt_rule_edit": {
+    "message": "இந்த விதியின் அமைப்புகளை மாற்று"
+  },
+  "tt_rule_delete": {
+    "message": "இந்த விதியை நீக்கு"
+  },
+  "off_state_message": {
+    "message": "Blurry Site is off"
+  },
+  "off_state_hint": {
+    "message": "All blur is paused on every site"
+  },
+  "power_turn_on": {
+    "message": "Turn On"
+  },
+  "htb_chip_gaussian": {
+    "message": "Gaussian"
+  },
+  "htb_chip_frosted": {
+    "message": "Frosted"
+  },
+  "htb_chip_redacted": {
+    "message": "Redacted"
+  },
+  "htb_chip_masked": {
+    "message": "Masked"
+  },
+  "htb_chip_color": {
+    "message": "Color"
+  },
+  "htb_label_mode": {
+    "message": "Mode"
+  },
+  "htb_label_covers": {
+    "message": "Covers"
+  },
+  "htb_label_strength": {
+    "message": "Strength"
+  },
+  "htb_label_reveal": {
+    "message": "Reveal"
+  },
+  "htb_label_color": {
+    "message": "Color"
+  },
+  "htb_strength_subtle": {
+    "message": "Subtle"
+  },
+  "htb_strength_moderate": {
+    "message": "Moderate"
+  },
+  "htb_strength_strong": {
+    "message": "Strong"
+  },
+  "htb_pick_blur_note": {
+    "message": "Redacted & Masked available in Blur All mode."
+  },
+  "pii_chip_gaussian": {
+    "message": "Gaussian"
+  },
+  "pii_chip_frosted": {
+    "message": "Frosted"
+  },
+  "pii_chip_redacted": {
+    "message": "Redacted"
+  },
+  "pii_chip_asterisked": {
+    "message": "Asterisked"
+  },
+  "automate_timer": {
+    "message": "Timer"
+  },
+  "automate_idle": {
+    "message": "Idle"
+  },
+  "automate_tab_switch": {
+    "message": "Tab Switch"
+  },
+  "automate_off": {
+    "message": "Off"
+  },
+  "automate_on": {
+    "message": "On"
+  },
+  "automate_unit_sec": {
+    "message": "sec"
+  },
+  "automate_unit_min": {
+    "message": "min"
+  },
+  "automate_unit_hr": {
+    "message": "hr"
+  },
+  "mode_blur_all_active_desc": {
+    "message": "All matching categories are blurred on this page."
+  },
+  "mode_blur_all_off_hint": {
+    "message": "Off — page is visible."
+  },
+  "mode_pick_blur_empty": {
+    "message": "No elements picked yet. Open the picker to start."
+  },
+  "mode_open_picker": {
+    "message": "Open Picker"
+  },
+  "mode_blur_all_cats": {
+    "message": "categories"
+  },
+  "htb_opacity": {
+    "message": "Opacity"
+  },
+  "mode_switch_confirm": {
+    "message": "பயன்முறை மாற்றினால் $COUNT$ சேமித்த மங்கல் நீக்கப்படும். தொடரவா?",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "mode_switch_btn": {
+    "message": "மாற்று"
+  },
+  "mode_nothing_blurred": {
+    "message": "இந்தப் பக்கத்தில் எதுவும் மங்கலாக்கப்படவில்லை"
+  },
+  "mode_pick_add_hint": {
+    "message": "பக்கத்திலிருந்து மேலும் சேர்க்கவும்"
+  },
+  "mode_pick_toolbar_hint": {
+    "message": "கருவிப்பட்டியிலிருந்து பிக்கர் பயன்முறையை மாற்றவும்"
+  },
+  "mode_badge_dynamic": {
+    "message": "உறுப்பு"
+  },
+  "mode_badge_sticky_page": {
+    "message": "பக்கத்தில் பகுதி"
+  },
+  "mode_badge_sticky_screen": {
+    "message": "திரையில் பகுதி"
+  },
+  "mode_pick_item_count": {
+    "message": "$COUNT$ உருப்படிகள்",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "tooltip_mode_dynamic": {
+    "message": "எந்த உறுப்பையும் மங்கலாக்க தட்டவும்"
+  },
+  "tooltip_mode_sticky_page": {
+    "message": "பக்கத்தில் நிலைத்த மங்கல் பகுதி வரையவும்"
+  },
+  "tooltip_mode_sticky_screen": {
+    "message": "திரையில் நிலைத்த மங்கல் பகுதி வரையவும்"
+  },
+  "automate_timer_start": {
+    "message": "Start"
+  },
+  "automate_timer_stop": {
+    "message": "Stop"
+  },
+  "automate_timer_remaining": {
+    "message": "⏱ $TIME$ remaining",
+    "placeholders": {
+      "time": { "content": "$1", "example": "4:32" }
+    }
+  },
+  "automate_timer_triggered": {
+    "message": "Triggered"
+  },
+  "automate_timer_min_error": {
+    "message": "Minimum is 30 s"
+  },
+  "automate_idle_max_warn": {
+    "message": "Max is 50 min (Chrome API limit)"
+  },
+  "automate_footer": {
+    "message": "When triggered → applies current blur mode settings"
   }
 }

@@ -33,6 +33,15 @@ require('../src/shortcut_label.js');
 
 // ─── Chrome Extension API mock ────────────────────────────────────────────────
 
+// Listener array for chrome.storage.onChanged — populated by addListener() calls
+// from source modules (storage_model.js, logger.js, etc.) at IIFE load time.
+// Tests trigger listeners via global._fireStorageChanged(changes, area).
+const _onChangedListeners = [];
+global._fireStorageChanged = function(changes, area) {
+  if (area === undefined) area = 'local';
+  _onChangedListeners.forEach(function(fn) { fn(changes, area); });
+};
+
 global.chrome = {
   i18n: {
     getMessage: jest.fn((key) => key),
@@ -57,7 +66,10 @@ global.chrome = {
       set: jest.fn(),
     },
     onChanged: {
-      addListener: jest.fn(),
+      // jest.fn() so logger.test.js can call .mockImplementation()/.mockReset().
+      // Default implementation captures listeners for _fireStorageChanged().
+      // jest.clearAllMocks() resets call counts only — implementation persists.
+      addListener: jest.fn((fn) => { _onChangedListeners.push(fn); }),
       removeListener: jest.fn(),
     },
   },

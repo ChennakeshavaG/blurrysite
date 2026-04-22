@@ -8,20 +8,12 @@
 (() => {
   'use strict';
 
-  const MSG = blsi;
-  const UrlMatcher = blsi.UrlMatcher;
   const Reveal = blsi.Reveal;
 
-  // ─── State ──────────────────────────────────────────────────────────────────
+  // ── State ──────────────────────────────────────────────────────────────────
 
-  /** @type {object} Global settings from storage (no URL rule overrides). */
-  let globalSettings = MSG.buildDefaultSettings();
-
-  /** @type {object} Resolved settings (global + URL rule overrides for current URL). */
-  let settings = MSG.buildDefaultSettings();
-
-  /** @type {Array} URL rules loaded from storage */
-  let rules = [];
+  /** @type {object} Resolved settings for the current URL (snake_case keys). */
+  let settings = blsi.build_default_model().settings;
 
   /** Whether the element picker is currently active */
   let isPickerActive = false;
@@ -59,10 +51,10 @@
     ? location.hostname
     : (() => { try { return new URL(document.referrer).hostname; } catch (_) { return ''; } })();
 
-  // ─── Module aliases (synchronous — loaded before this script by manifest) ──
+  // ── Module aliases (synchronous — loaded before this script by manifest) ──
 
   const Engine    = blsi.BlurEngine;
-  const Store     = blsi.Storage;
+  const Store     = blsi.Model;
   const Selector  = blsi.SelectorUtils;
   const Picker    = blsi.Picker;
   const Shortcuts = blsi.Shortcuts;
@@ -70,19 +62,24 @@
   // ── Logger alias ──────────────────────────────────────────────────────────
   const log = blsi.Logger.scope('content');
 
-  /**
-   * Reads blur state + items from storage and calls Engine.handleSite() with the
-   * resolved settings. Storage is the single source of truth; handleSite is pure.
-   */
-  async function _syncFromStorage() {
-    const [isActive, items] = await Promise.all([
-      Store.getBlurState(_topHostname),  // iframes follow top-level page blur-all state
-      Store.getBlurItems(hostname),
-    ]);
-    await Engine.handleSite({ ...settings, BLUR_ALL_ACTIVE: isActive, BLUR_ITEMS: items });
+  // ── Unit conversion helper ────────────────────────────────────────────────
+  function _to_seconds(value, unit) {
+    if (unit === 'hr') return value * 3600;
+    if (unit === 'min') return value * 60;
+    return value; // sec
   }
 
-  // ─── Picker callbacks ─────────────────────────────────────────────────────────
+  /**
+   * Reads the resolved settings from Model.resolve() and calls
+   * Engine.handleSite() with the resolved snapshot. Model is the single
+   * source of truth; handleSite is pure.
+   */
+  async function _sync() {
+    const resolved = Store.resolve(_topHostname, location.href);
+    await Engine.handleSite(resolved);
+  }
+
+  // ── Picker callbacks ──────────────────────────────────────────────────────
 
   function _generateZoneId() {
     return 's_' + Math.random().toString(36).slice(2, 10);
@@ -95,16 +92,16 @@
       const name = Engine.allocateDynamicName();
       const item = { type: 'dynamic', name, selector };
       log.flow('picker.blur', { name, selector });
-      await Store.saveBlurItem(hostname, item);
-      await _syncFromStorage();
+      await Store.save_blur_item(hostname, item);
+      await _sync();
     },
 
     async onUnblur(el) {
       const selector = Selector.getSelector(el);
       if (!selector) return;
       log.flow('picker.unblur', { selector });
-      await Store.removeBlurItem(hostname, selector);
-      await _syncFromStorage();
+      await Store.remove_blur_item(hostname, selector);
+      await _sync();
     },
 
     async onStickyBlur(zoneRect) {
@@ -113,8 +110,10 @@
       const scrollW = zoneRect.scrollWidth;
       const scrollH = zoneRect.scrollHeight;
 
+      const anchor = zoneRect.anchor === 'screen' ? 'screen' : 'page';
       const item = {
         type: 'sticky', name: name, id: id,
+        anchor: anchor,
         x: zoneRect.x, y: zoneRect.y,
         width: zoneRect.width, height: zoneRect.height,
         xPct: scrollW ? zoneRect.x / scrollW : 0,
@@ -122,27 +121,25 @@
         widthPct: scrollW ? zoneRect.width / scrollW : 0,
         heightPct: scrollH ? zoneRect.height / scrollH : 0,
         scrollWidth: scrollW, scrollHeight: scrollH,
-        path: location.pathname,
+        path: anchor === 'page' ? location.pathname : undefined,
       };
 
-      log.flow('picker.stickyBlur', { name, id, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height } });
-      await Store.saveBlurItem(hostname, item);
-      await _syncFromStorage();
+      log.flow('picker.stickyBlur', { name, id, anchor, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height }, scrollW, scrollH });
+      await Store.save_blur_item(hostname, item);
+      await _sync();
       Shortcuts.showToast(name);
     },
 
     async onStickyUnblur(zoneId) {
       log.flow('picker.stickyUnblur', { zoneId });
-      await Store.removeBlurItem(hostname, zoneId);
-      await _syncFromStorage();
+      await Store.remove_blur_item(hostname, zoneId);
+      await _sync();
     },
 
     onModeChange(mode) {
       log.flow('picker.modeChange', { mode });
-      // Save only the picker mode change to globalSettings (not resolved settings,
-      // which would leak URL-rule overrides into global storage).
-      globalSettings.PICKER_MODE = mode;
-      Store.saveSettings(globalSettings);
+      // Save only the picker mode change into the pick_and_blur feature section.
+      Store.patch_section('pick_and_blur', { settings: { picker_mode: mode } });
     },
 
     onDeactivate() {
@@ -151,26 +148,26 @@
     },
   };
 
-  // ─── Keyboard shortcut action map ────────────────────────────────────────────
-  // Each entry is keyed by an action id from blsi.Actions. The shortcut handler
-  // fires the function for the matching action, and this dispatch table re-enters
-  // handleMessage so every trigger (JS shortcut, manifest command, popup relay)
-  // converges on the same message-handling code path.
+  // ── Keyboard shortcut action map ──────────────────────────────────────────
+  // Each entry is keyed by an action id from blsi.Actions (kebab-case).
+  // The shortcut handler fires the function for the matching action, and this
+  // dispatch table re-enters handleMessage so every trigger (JS shortcut,
+  // manifest command, popup relay) converges on the same message-handling path.
 
   const shortcutActionMap = {
-    TOGGLE_BLUR_ALL() {
-      handleMessage({ type: MSG.TOGGLE_BLUR_ALL }, null, () => {});
+    'toggle-blur-all'() {
+      handleMessage({ type: blsi.command.toggle_blur_all }, null, () => {});
     },
-    TOGGLE_PICKER() {
-      handleMessage({ type: MSG.TOGGLE_PICKER }, null, () => {});
+    'toggle-picker'() {
+      handleMessage({ type: blsi.command.toggle_picker }, null, () => {});
     },
-    async CLEAR_ALL() {
+    async 'clear-all'() {
       log.flow('trigger.clearAll', { source: 'shortcut', hostname });
-      await Store.clearHost(hostname);
-      await Store.saveBlurState(hostname, false);
-      await _syncFromStorage();
+      await Store.clear_host(hostname);
+      await Store.save_blur_state(hostname, false);
+      await _sync();
     },
-    async SCREENSHOT() {
+    async screenshot() {
       try {
         const dataUrl = await blsi.Screenshot.captureViewport();
         blsi.Screenshot.download(dataUrl);
@@ -186,7 +183,7 @@
     },
   };
 
-  // ─── Message handler ──────────────────────────────────────────────────────────
+  // ── Message handler ────────────────────────────────────────────────────────
 
   // Dedup trigger messages between the JS shortcut matcher and chrome.commands.
   //
@@ -199,14 +196,6 @@
   // Both paths enter handleMessage. We stamp globalThis.__blsiShortcutFire
   // [actionId] with performance.now() on the FIRST entry for a given type,
   // and dedup subsequent entries within a 500ms window.
-  //
-  // Path (A) enters first (synchronous), stamps, handles the action. Path (B)
-  // arrives microseconds-to-milliseconds later, sees the fresh stamp, drops.
-  //
-  // The popup button and context-menu paths also enter handleMessage, stamp,
-  // and handle — no competing second path, no dedup triggered.
-  //
-  // The mapping from messageType back to actionId comes from the action registry.
   const RELAY_DEDUP_MS = 500;
   const MESSAGE_TO_ACTION_ID = (() => {
     const out = {};
@@ -227,9 +216,7 @@
       return false;
     }
 
-    // Fire-token dedup for trigger messages. Check-then-stamp: a fresh stamp
-    // means a prior handleMessage call (same tick/ms) already handled this
-    // action — drop this one as a duplicate relay.
+    // Fire-token dedup for trigger messages.
     const actionId = MESSAGE_TO_ACTION_ID[type];
     if (actionId) {
       const fireTokens = globalThis.__blsiShortcutFire || (globalThis.__blsiShortcutFire = {});
@@ -243,36 +230,37 @@
       fireTokens[actionId] = nowTs;
     }
 
-    if (settings.ENABLED === false && type !== MSG.GET_STATUS) {
+    if (settings.enabled === false && type !== blsi.popup.get_status) {
       if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
       return false;
     }
 
     switch (type) {
-      // ── Toggle blur-all mode ──────────────────────────────────────────────
-      // Write storage first, then sync DOM from storage.
-      case MSG.TOGGLE_BLUR_ALL: {
+      // ── Toggle blur-all mode ────────────────────────────────────────────
+      case blsi.command.toggle_blur_all: {
         const newState = !Engine.isPageBlurred;
         log.flow('trigger.toggleBlurAll', { nextState: newState, hostname });
         (async () => {
-          await Store.saveBlurState(hostname, newState);
-          await _syncFromStorage();
+          await Store.save_blur_state(hostname, newState);
+          await _sync();
           if (sendResponse) sendResponse({ isPageBlurred: newState });
         })();
         return true;
       }
 
-      // ── Toggle element picker ─────────────────────────────────────────────
-      case MSG.TOGGLE_PICKER: {
-        log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: settings.PICKER_MODE });
+      // ── Toggle element picker ───────────────────────────────────────────
+      case blsi.command.toggle_picker: {
+        const resolved = Store.resolve(hostname, location.href);
+        const pickerMode = message.picker_mode || resolved.picker_mode;
+        log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: pickerMode });
         if (isPickerActive) {
           Picker.deactivate();
           setPickerActive(false);
         } else {
           Picker.activate({
-            blurRadius: settings.BLUR_RADIUS,
-            highlightColor: settings.HIGHLIGHT_COLOR,
-            pickerMode: settings.PICKER_MODE,
+            blurRadius: resolved.blur_radius,
+            highlightColor: resolved.highlight_color,
+            pickerMode: pickerMode,
           }, pickerCallbacks);
           setPickerActive(true);
         }
@@ -280,27 +268,27 @@
         break;
       }
 
-      // ── Status query ──────────────────────────────────────────────────────
-      case MSG.GET_STATUS: {
+      // ── Status query ────────────────────────────────────────────────────
+      case blsi.popup.get_status: {
         const blurredCount = document.querySelectorAll('[data-bl-si-blur]').length;
         if (sendResponse) sendResponse({ isPageBlurred: Engine.isPageBlurred, isPickerActive, blurredCount });
         break;
       }
 
-      // ── Clear all blur on this page (Alt+Shift+U keyboard relay) ──────────
-      case MSG.CLEAR_ALL_BLUR: {
+      // ── Clear all blur on this page (keyboard relay) ────────────────────
+      case blsi.command.clear_all_blur: {
         log.flow('trigger.clearAll', { source: 'message', hostname });
         (async () => {
-          await Store.clearHost(hostname);
-          await Store.saveBlurState(hostname, false);
-          await _syncFromStorage();
+          await Store.clear_host(hostname);
+          await Store.save_blur_state(hostname, false);
+          await _sync();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
       }
 
-      // ── Context menu: blur the right-clicked element ─────────────────────
-      case MSG.CONTEXT_BLUR: {
+      // ── Context menu: blur the right-clicked element ────────────────────
+      case blsi.command.context_blur: {
         const target = lastContextMenuTarget;
         lastContextMenuTarget = null;
         if (!target) {
@@ -316,15 +304,15 @@
         const item = { type: 'dynamic', name, selector: sel };
         log.flow('trigger.contextBlur', { name, selector: sel });
         (async () => {
-          await Store.saveBlurItem(hostname, item);
-          await _syncFromStorage();
+          await Store.save_blur_item(hostname, item);
+          await _sync();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
       }
 
-      // ── Context menu: unblur the right-clicked element ────────────────────
-      case MSG.CONTEXT_UNBLUR: {
+      // ── Context menu: unblur the right-clicked element ──────────────────
+      case blsi.command.context_unblur: {
         const target = lastContextMenuTarget;
         lastContextMenuTarget = null;
         if (!target) {
@@ -349,14 +337,14 @@
         }
         log.flow('trigger.contextUnblur', { selector: sel });
         (async () => {
-          await Store.removeBlurItem(hostname, sel);
-          await _syncFromStorage();
+          await Store.remove_blur_item(hostname, sel);
+          await _sync();
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
       }
 
-      case MSG.BLUR_SELECTION: {
+      case blsi.command.blur_selection: {
         log.flow('trigger.blurSelection');
         const result = blsi.SelectionBlur.blurSelection();
         if (sendResponse) sendResponse({ ok: !!result });
@@ -370,36 +358,36 @@
     return false;
   }
 
-  // ─── Apply CSS custom properties ─────────────────────────────────────────────
+  // ── Apply CSS custom properties ───────────────────────────────────────────
 
-  function applySettingsToDom() {
-    document.documentElement.style.setProperty('--bl-si-radius', `${settings.BLUR_RADIUS}px`);
-    document.documentElement.style.setProperty('--bl-si-highlight-color', settings.HIGHLIGHT_COLOR);
-    document.documentElement.style.setProperty('--bl-si-transition-duration', `${settings.TRANSITION_DURATION}ms`);
-    document.documentElement.style.setProperty('--bl-si-redaction-color', settings.REDACTION_COLOR);
+  function applySettingsToDom(resolved) {
+    document.documentElement.style.setProperty('--bl-si-radius', `${resolved.blur_radius}px`);
+    document.documentElement.style.setProperty('--bl-si-highlight-color', resolved.highlight_color);
+    document.documentElement.style.setProperty('--bl-si-transition-duration', `${resolved.transition_duration}ms`);
+    document.documentElement.style.setProperty('--bl-si-redaction-color', resolved.redaction_color);
   }
 
-  // ─── Idempotent state application ─────────────────────────────────────────────
+  // ── Idempotent state application ───────────────────────────────────────────
   // Thin coordinator — applies resolved settings to CSS vars, shortcuts, picker,
-  // reveal, then awaits _syncFromStorage() to push storage state to DOM. Idempotent.
+  // reveal, then awaits _sync() to push storage state to DOM. Idempotent.
   // Async — all callers must `await` so onChange events don't overlap.
 
-  async function applyState(newSettings, prev) {
+  async function applyState(resolved, prev) {
     const old = prev || settings;
     const changedKeys = [];
-    for (const k of Object.keys(newSettings)) {
-      if (JSON.stringify(old[k]) !== JSON.stringify(newSettings[k])) changedKeys.push(k);
+    for (const k of Object.keys(resolved)) {
+      if (JSON.stringify(old[k]) !== JSON.stringify(resolved[k])) changedKeys.push(k);
     }
     if (changedKeys.length) log.flow('settings.apply', { changed: changedKeys });
-    settings = newSettings;
+    settings = resolved;
 
     // CSS custom properties (cheap, idempotent)
-    applySettingsToDom();
+    applySettingsToDom(resolved);
 
     // Shortcuts — main frame only (iframes don't capture keyboard)
     if (IS_MAIN_FRAME) {
-      if (settings.ENABLED) {
-        Shortcuts.init(settings.SHORTCUTS, shortcutActionMap);
+      if (resolved.enabled) {
+        Shortcuts.init(resolved.shortcuts, shortcutActionMap);
       } else {
         Shortcuts.destroy();
       }
@@ -407,20 +395,20 @@
 
     // Picker settings (if active)
     if (isPickerActive) {
-      if (!settings.ENABLED) {
+      if (!resolved.enabled) {
         Picker.deactivate();
         setPickerActive(false);
       } else {
         Picker.setSettings({
-          blurRadius: settings.BLUR_RADIUS,
-          highlightColor: settings.HIGHLIGHT_COLOR,
+          blurRadius: resolved.blur_radius,
+          highlightColor: resolved.highlight_color,
         });
       }
     }
 
     // Tab privacy — main frame only (tab title is a tab-level concern)
     if (IS_MAIN_FRAME) {
-      if (settings.TAB_PRIVACY && settings.ENABLED) {
+      if (resolved.tab_privacy && resolved.enabled) {
         blsi.TabPrivacy.enable();
       } else {
         blsi.TabPrivacy.disable();
@@ -428,53 +416,55 @@
     }
 
     // Clear stale reveal state on mode change / disable
-    if (old.REVEAL_MODE !== settings.REVEAL_MODE || !settings.ENABLED) {
+    if (old.reveal_mode !== resolved.reveal_mode || !resolved.enabled) {
       Reveal.clearAll();
     }
 
-    // Delegate blur reconciliation to _syncFromStorage() — reads storage, calls handleSite.
-    await _syncFromStorage();
+    // Delegate blur reconciliation to _sync() — reads resolved model, calls handleSite.
+    await _sync();
 
-    // Auto-blur + blur timer — main frame only (tab-level concerns; storage writes
-    // use hostname which is the top page's hostname — iframes follow via onChange)
+    // Auto-blur + blur timer — main frame only (tab-level concerns)
     if (IS_MAIN_FRAME) {
-      if ((settings.AUTO_BLUR_IDLE || settings.AUTO_BLUR_TAB_SWITCH) && settings.ENABLED) {
+      const idle = resolved.automate_idle || {};
+      const tab_switch = resolved.automate_tab_switch || {};
+      const timer = resolved.automate_timer || {};
+
+      if ((idle.enabled || tab_switch.enabled) && resolved.enabled) {
         blsi.AutoBlur.init({
-          idleTimeout: settings.IDLE_TIMEOUT_SECONDS,
-          tabSwitch: settings.AUTO_BLUR_TAB_SWITCH,
-          idle: settings.AUTO_BLUR_IDLE,
+          idleTimeout: _to_seconds(idle.value || 5, idle.unit || 'min'),
+          tabSwitch: !!tab_switch.enabled,
+          idle: !!idle.enabled,
           onIdle: async () => {
-            await Store.saveBlurState(hostname, true);
-            await _syncFromStorage();
+            await Store.save_blur_state(hostname, true);
+            await _sync();
           },
           onActive: async () => {
-            await Store.saveBlurState(hostname, false);
-            await _syncFromStorage();
+            await Store.save_blur_state(hostname, false);
+            await _sync();
           },
         });
       } else {
         blsi.AutoBlur.destroy();
       }
 
-      if (settings.BLUR_TIMER_MINUTES > 0 && settings.ENABLED) {
+      if (timer.enabled && timer.value > 0 && resolved.enabled) {
         if (!blsi.BlurTimer.isActive()) {
-          blsi.BlurTimer.start(settings.BLUR_TIMER_MINUTES, async () => {
-            await Store.saveBlurState(hostname, false);
-            await _syncFromStorage();
+          const timerMinutes = _to_seconds(timer.value, timer.unit || 'min') / 60;
+          blsi.BlurTimer.start(timerMinutes, async () => {
+            await Store.save_blur_state(hostname, false);
+            await _sync();
           });
         }
-      } else if (settings.BLUR_TIMER_MINUTES === 0) {
+      } else if (!timer.enabled || timer.value === 0) {
         blsi.BlurTimer.stop();
       }
     }
 
     // PII auto-detection — scan after blur reconciliation so PII spans don't
     // conflict with the blur engine's text-check stamping.
-    const anyDetect = settings.AUTO_DETECT && (
-      settings.AUTO_DETECT.EMAIL || Boolean(settings.AUTO_DETECT.NUMERIC)
-    );
-    if (anyDetect && settings.ENABLED) {
-      blsi.PiiDetector.scan(document.body, settings.AUTO_DETECT);
+    const anyDetect = resolved.pii_email || resolved.pii_numeric;
+    if (anyDetect && resolved.enabled) {
+      blsi.PiiDetector.scan(document.body, { email: resolved.pii_email, numeric: resolved.pii_numeric });
       blsi.PiiDetector.observeMutations(document.body);
     } else {
       blsi.PiiDetector.stopObserving();
@@ -482,48 +472,38 @@
     }
   }
 
-  // ─── Initialisation ───────────────────────────────────────────────────────────
+  // ── Initialisation ─────────────────────────────────────────────────────────
 
   async function init() {
     log.flow('init.start', { href: location.href, hostname });
 
     // 1. Populate storage cache (single read of all tracked keys).
     try {
-      await Store.initCache();
+      await Store.init_cache();
     } catch (_e) { /* fall through with empty cache */ }
 
-    // 2. Load settings and URL rules (now hits cache, no I/O).
-    try {
-      const [loaded, loadedRules] = await Promise.all([
-        Store.getSettings(),
-        Store.getRules(),
-      ]);
-      if (loadedRules) rules = loadedRules;
-      if (loaded) globalSettings = loaded;
-      // Resolve: URL rule overrides > global settings > defaults
-      settings = UrlMatcher.resolveSettings(location.href, globalSettings, rules);
-    } catch (_e) {
-      // Storage read failed — use defaults.
-    }
+    // 2. Resolve settings for the current URL from cached model.
+    const resolved = Store.resolve(_topHostname, location.href);
+    settings = resolved;
 
     // 2b. Initialize the content-script i18n helper — main frame only because
     //     the picker toolbar (the only consumer) is main-frame only.
     if (IS_MAIN_FRAME && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
-      try { await blsi.ContentI18n.init(globalSettings.LANGUAGE); }
+      try { await blsi.ContentI18n.init(resolved.language); }
       catch (_e) { /* picker falls back to English literals */ }
     }
 
-    // 3. Apply CSS custom properties from settings.
-    applySettingsToDom();
+    // 3. Apply CSS custom properties from resolved settings.
+    applySettingsToDom(resolved);
 
     // 4. Register message listener from background / popup.
     chrome.runtime.onMessage.addListener(handleMessage);
 
-    // 5. Register reveal handlers regardless of ENABLED — they early-return if
+    // 5. Register reveal handlers regardless of enabled — they early-return if
     //    the extension is disabled, but enabling later via storage change must
     //    not require re-registering.
     Reveal.init({
-      getMode: () => settings.REVEAL_MODE,
+      getMode: () => settings.reveal_mode,
       isPickerActive: () => isPickerActive,
     });
 
@@ -537,53 +517,43 @@
 
     // 7. If the extension is disabled, subscribe to changes (so re-enable works)
     //    but skip shortcuts + blur restore.
-    if (settings.ENABLED === false) {
-      Store.onChange(handleStorageChange);
+    if (resolved.enabled === false) {
+      Store.on_change(handleStorageChange);
       return;
     }
 
     // 8–9. Apply all stored settings — single authoritative call that covers
     //      blur restore, PII scan, AutoBlur, BlurTimer, shortcuts, and CSS vars.
-    //      applyState(settings, null): old = prev ?? settings → changedKeys = []
-    //      → logging skipped, every block runs unconditionally. _syncFromStorage() is
-    //      called inside, so no separate reconcile step is needed.
     Engine.resetCounters();
-    await applyState(settings, null);
+    await applyState(resolved, null);
 
     // 10. Subscribe AFTER initial restore so we don't race with cross-tab events
     //     during the cold-start window.
-    Store.onChange(handleStorageChange);
+    Store.on_change(handleStorageChange);
 
     // 11a. Iframes: listen for topHostname updates from the main frame.
-    //      Sets _topHostname when document.referrer was blocked (cross-origin,
-    //      strict referrer policy), then re-syncs blur-all state from storage.
     if (!IS_MAIN_FRAME) {
       window.addEventListener('message', (event) => {
         if (event.source !== window.parent) return;
         if (!event.data || event.data.type !== 'BLSI_SETTINGS_CHANGED') return;
         _topHostname = event.data.topHostname || _topHostname;
-        _syncFromStorage();
+        _sync();
       });
     }
 
-    // 11b. Main frame: broadcast topHostname to all child iframes so they can
-    //      correctly resolve blur-all state even with strict referrer policies.
+    // 11b. Main frame: broadcast topHostname to all child iframes.
     if (IS_MAIN_FRAME) {
       _broadcastToFrames();
     }
 
     log.flow('init.done', {
-      enabled: settings.ENABLED,
-      revealMode: settings.REVEAL_MODE,
-      pickerMode: settings.PICKER_MODE,
-      ruleCount: rules.length,
+      enabled: resolved.enabled,
+      revealMode: resolved.reveal_mode,
+      pickerMode: resolved.picker_mode,
     });
   }
 
-  // ─── iframe postMessage broadcast ────────────────────────────────────────────
-  // Notifies all direct child iframes that settings may have changed, passing
-  // topHostname so cross-origin iframes can resolve blur-all state correctly
-  // even when document.referrer is blocked by a strict referrer policy.
+  // ── iframe postMessage broadcast ──────────────────────────────────────────
 
   function _broadcastToFrames() {
     for (let i = 0; i < window.frames.length; i++) {
@@ -595,64 +565,35 @@
     }
   }
 
-  // ─── Storage change subscriber ────────────────────────────────────────────────
-  // Routes changes: settings/rules go through applyState for URL-rule resolution;
-  // items/blur-all delegate directly to _syncFromStorage(). Async — always await.
+  // ── Storage change subscriber ──────────────────────────────────────────────
+  // Any real (non-echo) change to the model = full re-resolve + applyState.
+  // The model already contains the truth; we just re-read it.
 
-  async function handleStorageChange(key, newValue) {
+  async function handleStorageChange(newModel, _oldModel) {
     if (!Engine) return;
-    switch (key) {
-      case 'settings':
-        await onSettingsChanged(newValue);
-        break;
-      case 'rules':
-        await onRulesChanged(newValue);
-        break;
-      case 'blurred_items':
-      case 'blur_all_hosts':
-        await _syncFromStorage();
-        break;
+
+    const resolved = Store.resolve(_topHostname, location.href);
+    const prev = { ...settings };
+
+    // Detect language change for i18n re-init.
+    if (IS_MAIN_FRAME && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
+      const newLang = newModel && newModel.settings && newModel.settings.language;
+      if (newLang && newLang !== settings.language) {
+        try { await blsi.ContentI18n.init(newLang); }
+        catch (_e) { /* keep stale strings */ }
+        if (Picker && typeof Picker.rebuildToolbar === 'function' && Picker.isActive) {
+          try { Picker.rebuildToolbar(); } catch (_e) {}
+        }
+      }
     }
+
+    await applyState(resolved, prev);
+
     // Notify child iframes so they re-sync with the updated storage state.
     if (IS_MAIN_FRAME) _broadcastToFrames();
   }
 
-  async function onSettingsChanged(newRawSettings) {
-    log.flow('storage.settingsChanged');
-    const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
-    // Merge incoming raw settings over defaults, then validate. Replaces
-    // globalSettings entirely so removed/renamed keys don't accumulate.
-    const merged = MSG.deepMerge(MSG.DEFAULT_SETTINGS, newRawSettings || {});
-    const nextGlobal = MSG.validateSettings(merged);
-    const langChanged = nextGlobal.LANGUAGE !== globalSettings.LANGUAGE;
-    globalSettings = nextGlobal;
-
-    // Re-init the content-script i18n helper if LANGUAGE flipped, then
-    // rebuild the picker toolbar in place if it's active so the new
-    // locale shows up without the user having to close + reopen.
-    if (langChanged && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
-      try { await blsi.ContentI18n.init(globalSettings.LANGUAGE); }
-      catch (_e) { /* keep stale strings, picker degrades to English literals */ }
-      if (Picker && typeof Picker.rebuildToolbar === 'function' && Picker.isActive) {
-        try { Picker.rebuildToolbar(); } catch (_e) {}
-      }
-    }
-
-    const resolved = UrlMatcher.resolveSettings(location.href, globalSettings, rules);
-    await applyState(resolved, prev);
-  }
-
-  async function onRulesChanged(newRules) {
-    log.flow('storage.rulesChanged', { count: Array.isArray(newRules) ? newRules.length : 0 });
-    const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
-    rules = Array.isArray(newRules) ? newRules : [];
-    const resolved = UrlMatcher.resolveSettings(location.href, globalSettings, rules);
-    await applyState(resolved, prev);
-  }
-
-  // ─── SPA URL change detection ──────────────────────────────────────────────────
-  // When the URL changes without a full navigation (SPA), re-resolve settings
-  // from URL rules so per-site overrides take effect.
+  // ── SPA URL change detection ────────────────────────────────────────────────
 
   let lastUrl = location.href;
 
@@ -664,23 +605,19 @@
     lastUrl = currentUrl;
 
     try {
-      const prev = { ...settings, BLUR_CATEGORIES: { ...settings.BLUR_CATEGORIES } };
-      const resolved = UrlMatcher.resolveSettings(currentUrl, globalSettings, rules);
+      const prev = { ...settings };
+      const resolved = Store.resolve(hostname, currentUrl);
       await applyState(resolved, prev);
     } catch (err) {
       console.warn('[BlurrySite] URL change handler error:', err.message, err.stack);
     }
   }
 
-  // SPA URL change detection — main frame only. Iframe-internal navigation is
-  // a Phase 2 concern; for now iframes keep the settings resolved at load time.
+  // SPA URL change detection — main frame only.
   if (IS_MAIN_FRAME) {
     window.addEventListener('popstate', onUrlChange);
     window.addEventListener('hashchange', onUrlChange);
 
-    // Wrap history.pushState/replaceState for SPA frameworks (YouTube, React Router, etc.)
-    // that navigate without firing popstate. Use try-catch so a bug in our
-    // handler never breaks the page's own navigation.
     const _origPushState = history.pushState;
     const _origReplaceState = history.replaceState;
     history.pushState = function() {
@@ -695,7 +632,7 @@
     };
   }
 
-  // ─── DOM-ready guard ──────────────────────────────────────────────────────────
+  // ── DOM-ready guard ────────────────────────────────────────────────────────
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });

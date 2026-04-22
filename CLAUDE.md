@@ -23,26 +23,26 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_SETTINGS` (no SHORTCUTS — built lazily), `REVEAL_DFS_MAX_DEPTH`, `MODIFIER_CODES`, `isValid()`, `categoryOf()`, `buildDefaultSettings()`, `validateSettings()`, `isValidShortcutEntry()`, `deepMerge()`. Enums: `REVEAL_MODES`, `BLUR_MODES`, `PICKER_MODES`, `ACTIVE_MODES`, `PICK_BLUR_MODES`, `PII_MODES`, `TIMER_UNITS`, `IDLE_UNITS`, `PATTERN_TYPES`, `SUPPORTED_LANGUAGES`, `CSS`, `IDS` |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_MODEL` (no shortcuts — built lazily), `reveal_dfs_max_depth`, `modifier_codes`, `is_valid()`, `category_of()`, `build_default_model()`, `validate_model()`, `isValidShortcutEntry()`, `deep_merge()`. Enums: `reveal_modes`, `blur_modes`, `picker_modes`, `pick_blur_modes`, `pii_modes`, `timer_units`, `idle_units`, `pattern_types`, `SUPPORTED_LANGUAGES`, `css`, `ids` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; everything else gated. `scope(name)` returns a tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
-| `src/storage_manager.js` | `blsi.Storage` | `saveBlurItem`, `removeBlurItem`, `getBlurItems`, `clearHost`, `clearAll`, `getSettings`, `saveSettings`, `getRules`, `saveRules`, `getBlurState`, `saveBlurState` |
+| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `get_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage` directly (no background relay) |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
 | `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all |
 | `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
 | `src/blur_timer.js` | `blsi.BlurTimer` | `start(minutes, onExpire)`, `stop()`, `getRemaining()`, `isActive()` — countdown timer that fires `onExpire` when elapsed |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
-| `src/shortcut_handler.js` | `blsi.Shortcuts` | `init(shortcuts, callbacks)` — accepts the new `{ ACTION_ID: { binding: [{code, mods}] } }` shape. `destroy`, `showToast`, `_setPickerActive`, `_getFireToken` (for content_script dedup). Reads mods from event booleans (side-agnostic). Reads label from `blsi.Actions.get(id).label` for toast. |
-| `src/selection_blur.js` | `blsi.SelectionBlur` | `init()`, `destroy()`, `blurSelection(range)`, `clearAll()`, `getSelectionBlurs()`, `removeSelectionBlur(id)` — text-selection driven blur via `[data-bl-si-blur]` spans |
+| `src/shortcut_handler.js` | `blsi.Shortcuts` | `init(shortcuts, callbacks)` — accepts `{ 'action-id': { binding: [{code, mods}] } }` shape (kebab-case action ids). `destroy`, `showToast`, `_setPickerActive`, `_getFireToken` (for content_script dedup). Reads mods from event booleans (side-agnostic). Reads label from `blsi.Actions.get(id).label` for toast. |
+| `src/selection_blur.js` | `blsi.SelectionBlur` | `init()`, `destroy()`, `blurSelection()`, `clearAll()`, `getSelectionBlurs()`, `removeSelectionBlur(id)` — text-selection driven blur via `[data-bl-si-blur]` spans. `blurSelection()` takes no args; reads `document.getSelection()` internally. |
 | `src/screenshot.js` | `blsi.Screenshot` | `captureViewport()`, `download(dataUrl, filename)`, `copyToClipboard(dataUrl)`, `startCrop()`, `cancelCrop()` — viewport capture with blur preserved |
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_manager → tab_privacy → pii_detector → blur_engine → blur_timer → auto_blur → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii_detector → blur_engine → blur_timer → auto_blur → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -50,19 +50,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 Any mismatch between sender message type and background.js handler silently drops the message.
 
-### storage_manager.js → background.js
-
-| Action | Type string |
-|---|---|
-| Fetch blur items for host | `GET_BLUR_ITEMS` |
-| Save a blur item | `SAVE_BLUR_ITEM` |
-| Remove a blur item | `REMOVE_BLUR_ITEM` |
-| Clear all blur items for host | `CLEAR_HOST` |
-| Clear all blur items everywhere | `CLEAR_ALL` |
-| Fetch settings (merged with defaults) | `GET_SETTINGS` |
-| Persist settings (partial merge) | `SAVE_SETTINGS` |
-| Fetch URL rules array | `GET_RULES` |
-| Persist URL rules array | `SAVE_RULES` |
+> **Note:** `storage_model.js` (`blsi.Model`) accesses `chrome.storage` directly — there is no background relay for storage operations. The old `GET_BLUR_ITEMS`, `SAVE_BLUR_ITEM`, `REMOVE_BLUR_ITEM`, `CLEAR_HOST`, `CLEAR_ALL`, `GET_SETTINGS`, `SAVE_SETTINGS`, `GET_RULES`, `SAVE_RULES` message types no longer exist.
 
 ### background.js → content_script.js (command relay + restore)
 
@@ -87,106 +75,115 @@ Any mismatch between sender message type and background.js handler silently drop
 
 ## Critical: Settings Shape
 
-Settings use UPPER_SNAKE_CASE keys everywhere. There is no two-shape duality — the same shape is used in storage, background, content script, and popup.
+Settings use **snake_case** keys everywhere. There is no two-shape duality — the same shape is used in storage, background, content script, and popup. Settings are stored as part of a feature-grouped model under the single `blsi_model` storage key, accessed via `blsi.Model`.
 
-**`settings.SHORTCUTS`** — per-action shortcut definitions (v2 shape):
+**Top-level model shape:**
 ```js
-settings.SHORTCUTS = {
-  TOGGLE_BLUR_ALL: { binding: [{ code: 'KeyB', mods: ['Alt', 'Shift'] }] },
-  TOGGLE_PICKER:   { binding: [{ code: 'KeyP', mods: ['Alt', 'Shift'] }] },
-  CLEAR_ALL:       { binding: [{ code: 'KeyU', mods: ['Alt', 'Shift'] }] },
+{
+  settings,          // global settings (snake_case keys)
+  blur_all:          { status, settings },
+  pick_and_blur:     { status, settings },
+  auto_detect_pii:   { status, settings },
+  automate:          { status, settings },
+  shortcuts,         // per-action shortcut definitions
+  site_rules,        // array of URL-rule entries
 }
 ```
 
-- Keys are action ids from `blsi.Actions` (not message-type strings).
+**`shortcuts`** — per-action shortcut definitions (v2 shape):
+```js
+shortcuts = {
+  'toggle-blur-all': { binding: [{ code: 'KeyB', mods: ['Alt', 'Shift'] }] },
+  'toggle-picker':   { binding: [{ code: 'KeyP', mods: ['Alt', 'Shift'] }] },
+  'clear-all':       { binding: [{ code: 'KeyU', mods: ['Alt', 'Shift'] }] },
+  'screenshot':      { binding: [{ code: 'KeyS', mods: ['Alt', 'Shift'] }] },
+}
+```
+
+- Keys are action ids from `blsi.Actions` — **kebab-case** (e.g. `'toggle-blur-all'`), matching the `id` field in `action_registry.js`. Not message-type strings, not snake_case.
 - `binding` is an array of chords. Phase 1 always has `length === 1`; phase 2 will add multi-chord sequences like `[{code: 'KeyG'}, {code: 'KeyI'}]` for Gmail-style `g i`.
 - `code` is `KeyboardEvent.code` (physical key, layout-independent).
 - `mods` is a sorted subset of `{"Alt","Control","Meta","Shift"}`. Left/right is folded away — `AltLeft` and `AltRight` both map to `"Alt"`.
-- `DEFAULT_SETTINGS.SHORTCUTS` is NOT in `constants.js` — defaults come from `blsi.Actions.defaultBindings()` and are merged in by `buildDefaultSettings()`.
+- Default shortcuts are NOT in `constants.js` — they come from `blsi.Actions.defaultBindings()` and are merged in by `blsi.build_default_model()`.
 
-`content_script.js` passes `settings.SHORTCUTS` directly to `Shortcuts.init()` — no flattening needed.
+`content_script.js` passes `shortcuts` directly to `Shortcuts.init()` — no flattening needed.
 
-**`REVEAL_MODE`** — controls how blurred elements can be temporarily revealed: `'hover'` | `'click'` | `'none'`.
+**`reveal_mode`** — controls how blurred elements can be temporarily revealed: `'hover'` | `'click'` | `'none'`.
 
-**`THOROUGH_BLUR`** — boolean; when true, applies deeper blur processing for more thorough coverage.
+**`thorough_blur`** — boolean; when true, applies deeper blur processing for more thorough coverage.
 
-**`PICKER_MODE`** — controls the picker strategy:
+**`picker_mode`** — controls the picker strategy:
 - `'sticky-page'` (default) — sketch a box anchored to the document. Scrolls with the page content. Stored with `anchor: 'page'`.
 - `'sticky-screen'` — sketch a box anchored to the viewport. Stays fixed on screen during scroll. Stored with `anchor: 'screen'`. Best for screen-sharing / streaming.
 - `'dynamic'` — tap an element to blur it (selector-based, follows the element).
 
-Legacy `'sticky'` is migrated to `'sticky-page'` in `validateSettings`. Sticky zones stored without an `anchor` field default to `'page'` at restore time.
+Legacy `'sticky'` is migrated to `'sticky-page'` in `blsi.validate_model()`. Sticky zones stored without an `anchor` field default to `'page'` at restore time.
 
-**All default values live in `src/constants.js` → `BlurrySite.DEFAULTS`.** Do not hardcode defaults anywhere else.
+**All default values live in `src/constants.js` → `blsi.DEFAULT_MODEL`.** Do not hardcode defaults anywhere else.
 
-### Settings Shape: blurCategories
+### Settings Shape: blur_categories
 
-Unlike shortcuts, `blurCategories` has the **same shape everywhere** -- no flattening needed.
-
-**In `chrome.storage.local` / background / `blsi.Storage.getSettings()` / content_script.js / popup.js:**
+**In `chrome.storage.local` (via `blsi.Model`) / background / content_script.js / popup.js:**
 ```js
-settings.BLUR_CATEGORIES = {
-  TEXT: true,        // headings, paragraphs, spans, etc.
-  MEDIA: true,       // img, video, audio, canvas, svg, picture, figure
-  FORM: false,       // input, textarea, select, button, label, fieldset
-  TABLE: true,       // table, thead, tbody, tr, td, th
-  STRUCTURE: true    // div, section, article, nav, aside, header, footer, main, li
+settings.blur_categories = {
+  text:      true,   // headings, paragraphs, spans, etc.
+  media:     true,   // img, video, audio, canvas, svg, picture, figure
+  form:      false,  // input, textarea, select, button, label, fieldset
+  table:     true,   // table, thead, tbody, tr, td, th
+  structure: true,   // div, section, article, nav, aside, header, footer, main, li
 }
 ```
 
-Default values live in `src/constants.js` → `BlurrySite.DEFAULTS.BLUR_CATEGORIES`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
+Default values live in `src/constants.js` → `blsi.DEFAULT_MODEL`. The per-category element lists are defined in `src/blur_engine.js` → `CATEGORY_SELECTORS`.
 
-Note: the section heading says "blurCategories" but the key is now `BLUR_CATEGORIES` (UPPER_SNAKE_CASE), consistent with the rest of the settings shape.
-
-### Settings Shape: AUTO_DETECT
+### Settings Shape: auto_detect
 
 Controls automatic PII detection. Same shape everywhere — no flattening needed.
 
-**In `chrome.storage.local` / background / `blsi.Storage.getSettings()` / content_script.js / popup.js:**
+**In `chrome.storage.local` (via `blsi.Model`) / background / content_script.js / popup.js:**
 ```js
-settings.AUTO_DETECT = {
-  EMAIL:   false,   // boolean — email addresses (local@domain.tld)
-  NUMERIC: false,   // boolean — financial numbers, phone-like groups, currency amounts
+auto_detect_pii.settings = {
+  email:   false,   // boolean — email addresses (local@domain.tld)
+  numeric: false,   // boolean — financial numbers, phone-like groups, currency amounts
 }
 ```
 
-- `EMAIL` is a boolean. Default `false`.
-- `NUMERIC` is a boolean. Default `false`.
+- `email` is a boolean. Default `false`.
+- `numeric` is a boolean. Default `false`.
 
-Default values live in `src/constants.js` → `DEFAULTS.AUTO_DETECT`.
+Default values live in `src/constants.js` → `blsi.DEFAULT_MODEL`.
 
-The master toggle's `expandKeys` sets both `EMAIL` and `NUMERIC` to `true`/`false` atomically.
+The master toggle's `expandKeys` sets both `email` and `numeric` to `true`/`false` atomically.
 
 PII blur is **independent of blur-all**. PII spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`. The `[data-bl-si-pii]:not([data-bl-si-reveal])` CSS rule in `content.css` drives their blur. Enabling PII detection means those spans stay blurred whether or not blur-all is on.
 
-### Settings Shape: Popup redesign keys
+### Settings Shape: pick_and_blur and automate keys
 
-New keys added for the popup redesign. Same shape everywhere — no flattening needed.
+**`pick_blur_enabled`** — whether Pick & Blur mode is independently enabled: `true` (default) | `false`. Both Blur All and Pick & Blur can be on simultaneously; no "active mode" concept. Persisted to storage.
 
-**`ACTIVE_MODE`** — which top-level mode is active: `'blur-all'` (default) | `'pick-blur'`. Switching modes is destructive: stored blur items for the deactivated mode are deleted from storage. Use `blsi.ACTIVE_MODES` enum.
+**`pick_blur_type`** — blur type for Pick & Blur mode: `'gaussian'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'masked'` — those are PII-only types. Use `blsi.pick_blur_modes` enum.
 
-**`PICK_BLUR_TYPE`** — blur type for Pick & Blur mode: `'gaussian'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'masked'` — those are PII-only types. Use `blsi.PICK_BLUR_MODES` enum.
-
-**`PICK_BLUR_COLOR`** — color for Pick & Blur `'color'` type:
+**`pick_blur_color`** — color for Pick & Blur `'color'` type:
 ```js
-settings.PICK_BLUR_COLOR = { HEX: '#000000', OPACITY: 1.0 }
-// HEX: 6-char hex string (validated: must match /^#[0-9a-fA-F]{6}$/)
-// OPACITY: number 0–1 inclusive
+pick_and_blur.settings.pick_blur_color = { hex: '#000000', opacity: 1.0 }
+// hex: 6-char hex string (validated: must match /^#[0-9a-fA-F]{6}$/)
+// opacity: number 0–1 inclusive
 ```
 
-**`PII_MODE`** — blur type for auto-detect PII rendering: `'gaussian'` (default) | `'frosted'` | `'redacted'` | `'asterisked'`. Use `blsi.PII_MODES` enum.
+**`pii_mode`** — blur type for auto-detect PII rendering: `'gaussian'` (default) | `'frosted'` | `'redacted'` | `'asterisked'`. Use `blsi.pii_modes` enum.
 
-**`AUTOMATE`** — automation trigger settings:
+**`automate`** — automation trigger settings (feature-grouped under `automate.settings`):
 ```js
-settings.AUTOMATE = {
-  TIMER:      { VALUE: 0, UNIT: 'min', ENABLED: false },  // VALUE 0–99; UNIT from TIMER_UNITS
-  IDLE:       { VALUE: 5, UNIT: 'min', ENABLED: false },  // VALUE 1–99; UNIT from IDLE_UNITS (no 'hr')
-  TAB_SWITCH: { ENABLED: false },
+automate.settings = {
+  timer:      { value: 0, unit: 'min', enabled: false, started_at: null },  // value 0–99; unit from timer_units; started_at: ms timestamp or null
+  idle:       { value: 5, unit: 'min', enabled: false },                    // value 1–99; unit from idle_units (no 'hr')
+  tab_switch: { enabled: false },
 }
 ```
-- `TIMER.UNIT` accepts `blsi.TIMER_UNITS` (`'sec'` | `'min'` | `'hr'`). `VALUE: 0` means disabled.
-- `IDLE.UNIT` accepts `blsi.IDLE_UNITS` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `VALUE` min is 1.
-- `TAB_SWITCH.ENABLED` is boolean only.
+- `timer.unit` accepts `blsi.timer_units` (`'sec'` | `'min'` | `'hr'`). `value: 0` means disabled. Practical minimum 30 s — UI validates and rejects < 30 s.
+- `timer.started_at` — ms timestamp (`Date.now()`) set when the user clicks Start in the Automate subpage, `null` when stopped or not yet started. Popup uses this to compute the live countdown. Content script ignores it (uses `enabled` only).
+- `idle.unit` accepts `blsi.idle_units` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `value` min is 1. UI warns when value exceeds 3000 s.
+- `tab_switch.enabled` is boolean only.
 
 ---
 
@@ -233,7 +230,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 595 unit tests, fast
+npm run test:unit          # 638 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -281,6 +278,7 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | Added/removed a `chrome.runtime.sendMessage` type | `src/constants.js` (source of truth), `CLAUDE.md` Message Protocol tables, `docs/HLD.md §6` protocol table |
 | Changed a default value (blur radius, chord keys, etc.) | `src/constants.js` DEFAULTS — all other files reference it |
 | Changed settings shape (new keys, renamed keys) | `CLAUDE.md` Settings Shape section, `docs/LLD.md` |
+| Added/removed/renamed a `blsi.Model` method or storage key | `CLAUDE.md` Module Globals table (`src/storage_model.js` row), `src/CLAUDE.md` storage_model.js rules, `docs/LLD.md` contract |
 | Added a new source file under `src/` | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` load order, `manifest.json` content_scripts |
 | Added/modified/removed a unit test | `docs/TEST_VALIDATION.md` — add entry with test name, assertion, and manual replication steps |
 | Added a new test file | `docs/TEST_VALIDATION.md` new section, `tests/CLAUDE.md` if test patterns differ |

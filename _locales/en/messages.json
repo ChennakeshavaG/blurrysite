@@ -14,7 +14,6 @@
   "ctxBlurSelection": {
     "message": "Blur selected text"
   },
-
   "pickerPrefixLabel": {
     "message": "Blur An:",
     "description": "Static prefix label that reads as one sentence with the chip mode label. May be empty in locales where the sentence-fragment grammar doesn't carry."
@@ -66,5 +65,635 @@
   },
   "pickerAreaTooSmall": {
     "message": "Area too small (min 10px)"
+  },
+  "popup_title": {
+    "message": "Blurry Site"
+  },
+  "toggle_on": {
+    "message": "On"
+  },
+  "toggle_off": {
+    "message": "Off"
+  },
+  "btn_blur_all": {
+    "message": "Blur All"
+  },
+  "btn_clear_all": {
+    "message": "Clear All"
+  },
+  "btn_modify": {
+    "message": "Modify →"
+  },
+  "btn_picker": {
+    "message": "Pick & Blur"
+  },
+  "section_general": {
+    "message": "General"
+  },
+  "section_advanced": {
+    "message": "Advanced"
+  },
+  "section_experimental": {
+    "message": "Experimental"
+  },
+  "section_blurred_elements": {
+    "message": "Blurred on this page"
+  },
+  "blur_empty": {
+    "message": "Nothing is blurred on this page yet."
+  },
+  "setting_language": {
+    "message": "Display Language"
+  },
+  "setting_language_hint": {
+    "message": "Choose the language for this popup. Auto follows your browser."
+  },
+  "lang_auto": {
+    "message": "Auto (browser default)"
+  },
+  "lang_en": {
+    "message": "English"
+  },
+  "lang_hi_IN": {
+    "message": "हिन्दी (Hindi — India)"
+  },
+  "lang_ta_IN": {
+    "message": "தமிழ் (Tamil — India)"
+  },
+  "section_shortcuts_title": {
+    "message": "Keyboard Shortcuts"
+  },
+  "section_pii_title": {
+    "message": "Auto-Detect PII"
+  },
+  "section_settings_title": {
+    "message": "Settings"
+  },
+  "section_rules_title": {
+    "message": "Site Rules"
+  },
+  "setting_blur_radius": {
+    "message": "Blur Strength"
+  },
+  "setting_blur_radius_hint": {
+    "message": "Higher = harder to read. 10+ hides from OCR, 15+ hides from AI."
+  },
+  "setting_reveal_mode": {
+    "message": "Peek at Blurred Content"
+  },
+  "setting_reveal_mode_hint": {
+    "message": "How to briefly look at something without unblurring it."
+  },
+  "setting_transition": {
+    "message": "Smooth Animations"
+  },
+  "setting_transition_hint": {
+    "message": "Fade blurs in and out instead of snapping."
+  },
+  "setting_highlight_color": {
+    "message": "Picker Outline Color"
+  },
+  "setting_highlight_color_hint": {
+    "message": "Color of the highlight when you hover over an element in Picker mode."
+  },
+  "setting_blur_mode": {
+    "message": "Blur Look"
+  },
+  "setting_blur_mode_hint": {
+    "message": "Standard is a simple blur. Frosted scrambles text so AI and screenshot tools can't read it, but uses a little more power."
+  },
+  "setting_thorough_blur": {
+    "message": "Aggressive Blur"
+  },
+  "setting_thorough_hint": {
+    "message": "Also blur empty containers. Catches more, but may hide layouts."
+  },
+  "setting_tab_privacy": {
+    "message": "Hide Tab Title & Icon"
+  },
+  "setting_tab_privacy_hint": {
+    "message": "Replace the browser tab title and favicon with a generic placeholder. Great for screen sharing."
+  },
+  "setting_auto_blur_tab": {
+    "message": "Blur on Tab Switch"
+  },
+  "setting_auto_blur_tab_hint": {
+    "message": "Automatically blur the page when you switch to another tab."
+  },
+  "setting_auto_blur_idle": {
+    "message": "Blur When Idle"
+  },
+  "setting_auto_blur_idle_hint": {
+    "message": "Automatically blur the page after a period of inactivity."
+  },
+  "setting_idle_timeout": {
+    "message": "Idle Timeout"
+  },
+  "setting_idle_timeout_hint": {
+    "message": "Seconds of inactivity before auto-blur triggers."
+  },
+  "setting_blur_timer": {
+    "message": "Blur Timer"
+  },
+  "setting_blur_timer_hint": {
+    "message": "Auto-clear blur after this many minutes. 0 = off."
+  },
+  "reveal_click": {
+    "message": "Click to peek"
+  },
+  "reveal_hover": {
+    "message": "Hover to peek"
+  },
+  "reveal_none": {
+    "message": "Off — never reveal"
+  },
+  "blur_mode_gaussian": {
+    "message": "Standard"
+  },
+  "blur_mode_frosted": {
+    "message": "Frosted (AI-proof)"
+  },
+  "blur_mode_redacted": {
+    "message": "Redacted (solid block)"
+  },
+  "blur_mode_masked": {
+    "message": "Masked (asterisks)"
+  },
+  "setting_redaction_color": {
+    "message": "Redaction Color"
+  },
+  "setting_redaction_color_hint": {
+    "message": "Color used for redacted mode blocks. Black is the most secure."
+  },
+  "group_appearance": {
+    "message": "Look"
+  },
+  "group_behavior": {
+    "message": "Behavior"
+  },
+  "group_categories": {
+    "message": "What to Blur"
+  },
+  "group_autodetect": {
+    "message": "Auto-Detect Sensitive Data"
+  },
+  "group_shortcuts": {
+    "message": "Keyboard Shortcuts"
+  },
+  "group_advanced": {
+    "message": "Advanced"
+  },
+  "detect_pii": {
+    "message": "Sensitive Data (PII)"
+  },
+  "detect_pii_hint": {
+    "message": "Automatically blur emails, phone numbers, SSNs, credit cards, and financial figures."
+  },
+  "cat_text": {
+    "message": "Text"
+  },
+  "cat_text_hint": {
+    "message": "Headings, paragraphs, links, and inline text."
+  },
+  "cat_media": {
+    "message": "Images & Video"
+  },
+  "cat_media_hint": {
+    "message": "Photos, videos, canvases, and SVGs."
+  },
+  "cat_form": {
+    "message": "Inputs & Forms"
+  },
+  "cat_form_hint": {
+    "message": "Text boxes, buttons, and dropdowns."
+  },
+  "cat_table": {
+    "message": "Tables"
+  },
+  "cat_table_hint": {
+    "message": "Table cells and captions."
+  },
+  "cat_structure": {
+    "message": "Containers"
+  },
+  "cat_structure_hint": {
+    "message": "Sections, articles, and wrappers that hold text."
+  },
+  "shortcut_toggle_blur_all": {
+    "message": "Blur Everything"
+  },
+  "shortcut_toggle_blur_all_hint": {
+    "message": "Blur every supported element on the current page."
+  },
+  "shortcut_toggle_picker": {
+    "message": "Pick an Element"
+  },
+  "shortcut_toggle_picker_hint": {
+    "message": "Open the picker to blur a single element or draw a zone."
+  },
+  "shortcut_clear_all": {
+    "message": "Clear the Page"
+  },
+  "shortcut_clear_all_hint": {
+    "message": "Remove every blur on the current page."
+  },
+  "shortcut_screenshot": {
+    "message": "Take Screenshot"
+  },
+  "shortcut_screenshot_hint": {
+    "message": "Capture the visible page with all blurs applied and download as PNG."
+  },
+  "shortcut_customize": {
+    "message": "Change"
+  },
+  "shortcut_modal_title": {
+    "message": "Change Shortcut"
+  },
+  "shortcut_modal_prompt": {
+    "message": "Hold a modifier (Ctrl/Alt/Shift/Cmd), then press the key you want."
+  },
+  "shortcut_modal_placeholder": {
+    "message": "Press a key combo…"
+  },
+  "shortcut_modal_no_modifier": {
+    "message": "Hold a modifier first, then press the key."
+  },
+  "shortcut_modal_ctrl_alt": {
+    "message": "Ctrl + Alt by itself clashes with European keyboards. Try adding Shift."
+  },
+  "shortcut_reset": {
+    "message": "Reset to default"
+  },
+  "shortcut_saved": {
+    "message": "Shortcut saved"
+  },
+  "shortcut_reset_done": {
+    "message": "Shortcut reset"
+  },
+  "rule_add": {
+    "message": "+ Add Site Rule"
+  },
+  "rule_edit": {
+    "message": "Edit Site Rule"
+  },
+  "rule_add_title": {
+    "message": "Add Site Rule"
+  },
+  "rule_name": {
+    "message": "Name"
+  },
+  "rule_name_placeholder": {
+    "message": "e.g. Banking sites"
+  },
+  "rule_pattern": {
+    "message": "Matches URL"
+  },
+  "rule_pattern_placeholder": {
+    "message": "*.bank.com/*"
+  },
+  "rule_pattern_type": {
+    "message": "Match type"
+  },
+  "rule_pattern_wildcard": {
+    "message": "Simple (wildcards)"
+  },
+  "rule_pattern_regex": {
+    "message": "Advanced (regex)"
+  },
+  "rule_overrides": {
+    "message": "These settings override the defaults for matching URLs."
+  },
+  "rule_category_overrides": {
+    "message": "Category overrides"
+  },
+  "rule_global_default": {
+    "message": "Use default"
+  },
+  "rule_override_on": {
+    "message": "On"
+  },
+  "rule_override_off": {
+    "message": "Off"
+  },
+  "rule_pattern_required": {
+    "message": "Please enter a URL pattern."
+  },
+  "rule_pattern_too_long": {
+    "message": "Pattern is too long (max 500 characters)."
+  },
+  "rule_name_too_long": {
+    "message": "Name is too long (max 100 characters)."
+  },
+  "rule_saved": {
+    "message": "Rule saved"
+  },
+  "rule_deleted": {
+    "message": "Rule removed"
+  },
+  "rule_no_rules": {
+    "message": "No site rules yet. Rules let you change how blurring works on specific sites."
+  },
+  "rule_hint": {
+    "message": "Change settings on specific sites. First matching rule wins."
+  },
+  "rule_untitled": {
+    "message": "Untitled rule"
+  },
+  "rule_edit_btn": {
+    "message": "Edit"
+  },
+  "rule_delete_btn": {
+    "message": "Remove"
+  },
+  "item_type_dynamic": {
+    "message": "Element"
+  },
+  "item_type_sticky": {
+    "message": "Zone"
+  },
+  "item_remove_aria": {
+    "message": "Remove"
+  },
+  "item_remove_title": {
+    "message": "Unblur this"
+  },
+  "toast_enabled": {
+    "message": "Blurry Site turned on"
+  },
+  "toast_disabled": {
+    "message": "Blurry Site turned off"
+  },
+  "toast_blur_all": {
+    "message": "Everything on this page is blurred"
+  },
+  "toast_cleared": {
+    "message": "Page cleared"
+  },
+  "toast_all_sites_cleared": {
+    "message": "Every site cleared"
+  },
+  "toast_blur_removed": {
+    "message": "Unblurred"
+  },
+  "toast_settings_saved": {
+    "message": "Settings saved"
+  },
+  "toast_failed_save_settings": {
+    "message": "Couldn't save settings"
+  },
+  "toast_failed_toggle_blur": {
+    "message": "Couldn't toggle blur"
+  },
+  "toast_failed_clear_host": {
+    "message": "Couldn't clear this page"
+  },
+  "toast_failed_remove_item": {
+    "message": "Couldn't remove that blur"
+  },
+  "toast_failed_clear_all": {
+    "message": "Couldn't clear all sites"
+  },
+  "toast_failed_save_rule": {
+    "message": "Couldn't save rule"
+  },
+  "toast_failed_delete_rule": {
+    "message": "Couldn't remove rule"
+  },
+  "toast_flow_logs_on": {
+    "message": "Activity log: on"
+  },
+  "toast_flow_logs_off": {
+    "message": "Activity log: off"
+  },
+  "confirm_clear_all": {
+    "message": "This removes every blur on every site you've ever blurred. Continue?"
+  },
+  "footer_clear_all": {
+    "message": "Clear every site"
+  },
+  "theme_toggle": {
+    "message": "Switch light / dark theme"
+  },
+  "help_overlay_title": {
+    "message": "Keyboard shortcuts"
+  },
+  "modal_cancel": {
+    "message": "Cancel"
+  },
+  "modal_save": {
+    "message": "Save"
+  },
+  "modal_close": {
+    "message": "Close"
+  },
+  "tt_master_toggle": {
+    "message": "Turn Blurry Site on or off for every site"
+  },
+  "tt_theme": {
+    "message": "Switch to light or dark"
+  },
+  "tt_blur_all": {
+    "message": "Blur everything on this page"
+  },
+  "tt_clear_all": {
+    "message": "Clear the blur on this page"
+  },
+  "tt_picker": {
+    "message": "Click any item to blur it. Or switch to area mode and drag a box to blur a whole region"
+  },
+  "tt_help": {
+    "message": "See the keyboard shortcuts"
+  },
+  "tt_debug": {
+    "message": "See what the extension is doing — helps fix problems"
+  },
+  "tt_clear_all_sites": {
+    "message": "Clear every blur on every site"
+  },
+  "tt_add_rule": {
+    "message": "Make different settings for a specific site"
+  },
+  "tt_customize_shortcut": {
+    "message": "Pick a different keyboard shortcut"
+  },
+  "tt_remove_blur_item": {
+    "message": "Unblur this"
+  },
+  "tt_rule_edit": {
+    "message": "Change this rule's settings"
+  },
+  "tt_rule_delete": {
+    "message": "Delete this rule"
+  },
+  "off_state_message": {
+    "message": "Blurry Site is off"
+  },
+  "off_state_hint": {
+    "message": "All blur is paused on every site"
+  },
+  "power_turn_on": {
+    "message": "Turn On"
+  },
+  "htb_chip_gaussian": {
+    "message": "Gaussian"
+  },
+  "htb_chip_frosted": {
+    "message": "Frosted"
+  },
+  "htb_chip_redacted": {
+    "message": "Redacted"
+  },
+  "htb_chip_masked": {
+    "message": "Masked"
+  },
+  "htb_chip_color": {
+    "message": "Color"
+  },
+  "htb_label_mode": {
+    "message": "Mode"
+  },
+  "htb_label_covers": {
+    "message": "Covers"
+  },
+  "htb_label_strength": {
+    "message": "Strength"
+  },
+  "htb_label_reveal": {
+    "message": "Reveal"
+  },
+  "htb_label_color": {
+    "message": "Color"
+  },
+  "htb_strength_subtle": {
+    "message": "Subtle"
+  },
+  "htb_strength_moderate": {
+    "message": "Moderate"
+  },
+  "htb_strength_strong": {
+    "message": "Strong"
+  },
+  "htb_pick_blur_note": {
+    "message": "Redacted & Masked available in Blur All mode."
+  },
+  "pii_chip_gaussian": {
+    "message": "Gaussian"
+  },
+  "pii_chip_frosted": {
+    "message": "Frosted"
+  },
+  "pii_chip_redacted": {
+    "message": "Redacted"
+  },
+  "pii_chip_asterisked": {
+    "message": "Asterisked"
+  },
+  "automate_timer": {
+    "message": "Timer"
+  },
+  "automate_idle": {
+    "message": "Idle"
+  },
+  "automate_tab_switch": {
+    "message": "Tab Switch"
+  },
+  "automate_off": {
+    "message": "Off"
+  },
+  "automate_on": {
+    "message": "On"
+  },
+  "automate_unit_sec": {
+    "message": "sec"
+  },
+  "automate_unit_min": {
+    "message": "min"
+  },
+  "automate_unit_hr": {
+    "message": "hr"
+  },
+  "mode_blur_all_active_desc": {
+    "message": "All matching categories are blurred on this page."
+  },
+  "mode_blur_all_off_hint": {
+    "message": "Off — page is visible."
+  },
+  "mode_pick_blur_empty": {
+    "message": "No elements picked yet. Open the picker to start."
+  },
+  "mode_open_picker": {
+    "message": "Open Picker"
+  },
+  "mode_blur_all_cats": {
+    "message": "categories"
+  },
+  "htb_opacity": {
+    "message": "Opacity"
+  },
+  "mode_switch_confirm": {
+    "message": "Switching modes removes $COUNT$ saved blur(s). Switch anyway?",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "mode_switch_btn": {
+    "message": "Switch"
+  },
+  "mode_nothing_blurred": {
+    "message": "Nothing blurred on this page"
+  },
+  "mode_pick_add_hint": {
+    "message": "Add more from page"
+  },
+  "mode_pick_toolbar_hint": {
+    "message": "Change picker mode from the toolbar"
+  },
+  "mode_badge_dynamic": {
+    "message": "Element"
+  },
+  "mode_badge_sticky_page": {
+    "message": "Area on page"
+  },
+  "mode_badge_sticky_screen": {
+    "message": "Area on screen"
+  },
+  "mode_pick_item_count": {
+    "message": "$COUNT$ items",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "tooltip_mode_dynamic": {
+    "message": "Tap any element to blur it"
+  },
+  "tooltip_mode_sticky_page": {
+    "message": "Draw a blur region anchored to the page"
+  },
+  "tooltip_mode_sticky_screen": {
+    "message": "Draw a blur region fixed to your screen"
+  },
+  "automate_timer_start": {
+    "message": "Start"
+  },
+  "automate_timer_stop": {
+    "message": "Stop"
+  },
+  "automate_timer_remaining": {
+    "message": "⏱ $TIME$ remaining",
+    "placeholders": {
+      "time": { "content": "$1", "example": "4:32" }
+    }
+  },
+  "automate_timer_triggered": {
+    "message": "Triggered"
+  },
+  "automate_timer_min_error": {
+    "message": "Minimum is 30 s"
+  },
+  "automate_idle_max_warn": {
+    "message": "Max is 50 min (Chrome API limit)"
+  },
+  "automate_footer": {
+    "message": "When triggered → applies current blur mode settings"
   }
 }
