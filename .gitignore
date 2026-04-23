@@ -17,3 +17,6 @@ dist/
 
 # Brainstorming session files
 .superpowers/
+
+# Playwright MCP artifacts
+.playwright-mcp/
