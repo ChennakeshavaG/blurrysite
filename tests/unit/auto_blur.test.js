@@ -101,7 +101,7 @@ describe('auto_blur.js', () => {
     expect(blsi.AutoBlur.isIdle()).toBe(false);
   });
 
-  // USER IMPACT: user alt-tabs during screen share — page blurs instantly on tab switch
+  // USER IMPACT: user alt-tabs during screen share — page blurs after tab is hidden for >150ms
   // REDUNDANT: complementary to "tab becoming visible triggers onActive"; both use identical Object.defineProperty setup; could merge into one test asserting both states
   // OPTIMIZE: extract setHiddenState(value) helper to avoid repeating Object.defineProperty(document,'hidden',...) in both visibility tests
   test('tab switch triggers onIdle when hidden', () => {
@@ -111,6 +111,8 @@ describe('auto_blur.js', () => {
     // Simulate tab becoming hidden
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
+    // onIdle fires after the 150ms debounce (not immediately)
+    jest.advanceTimersByTime(150);
     expect(onIdle).toHaveBeenCalledTimes(1);
 
     // Restore
@@ -124,10 +126,28 @@ describe('auto_blur.js', () => {
 
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
+    // Let the 150ms debounce fire so _isIdle becomes true
+    jest.advanceTimersByTime(150);
 
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
     expect(onActive).toHaveBeenCalledTimes(1);
+  });
+
+  // USER IMPACT: user drags a tab to create a new window — blur must NOT change (brief hide→show is not a tab switch)
+  test('brief hide-then-show (tab drag to new window) does not trigger callbacks', () => {
+    const onIdle = jest.fn();
+    const onActive = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive });
+
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    // Visible fires before the 150ms debounce elapses (simulates window drag ~10ms)
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    jest.advanceTimersByTime(200); // flush any pending timers
+    expect(onIdle).not.toHaveBeenCalled();
+    expect(onActive).not.toHaveBeenCalled();
   });
 
   // USER IMPACT: user disables auto-blur in settings — timer and listeners removed cleanly, no stale callbacks fire

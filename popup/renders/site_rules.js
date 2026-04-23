@@ -1,9 +1,7 @@
 const BlurrySitePopupRenderSiteRules = (() => {
   'use strict';
 
-  function _t(key) {
-    return chrome.i18n.getMessage(key) || key;
-  }
+  var _t = BlurrySitePopupShared.t;
 
   // ── Rule row ──────────────────────────────────────────────────────────────
 

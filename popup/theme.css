@@ -17,10 +17,19 @@
   /* ── Text hierarchy ── critical: muted must read against raised surfaces */
   --bl-text-primary: #ecedf4;   /* near-white, slight cool tint */
   --bl-text-muted:   #8e97b4;   /* was #6b7280 (3.9:1) → now 5.1:1 on surface */
-  --bl-text-dim:     #505878;   /* was #3a3d50 (1.7:1) → now 2.9:1, use only for chrome */
+  --bl-text-dim:     #636b96;   /* raised: was #505878 (2.5:1) → now 3.6:1 on raised, 4.1:1 on surface */
 
   /* ── Structural ── */
   --bl-divider:      #20233a;   /* explicit, no color-mix — clear layer boundary */
+
+  /* ── Type scale ── */
+  --bl-text-2xs: 9px;    /* ultra-small caps: option row labels */
+  --bl-text-xs:  10px;   /* small caps, errors, range labels */
+  --bl-text-sm:  11px;   /* descriptions, helper text, buttons, status */
+  --bl-text-base: 12px;  /* body text, form labels, chips, summaries */
+  --bl-text-md:  13px;   /* feature labels, nav, sub-page titles */
+  --bl-text-lg:  14px;   /* body base */
+  --bl-text-xl:  15px;   /* display: brand, slider values, hero */
 }
 
 /* Slate light mode — cool-shifted, aligned with Slate palette */

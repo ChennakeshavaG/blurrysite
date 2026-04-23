@@ -1,14 +1,14 @@
 /* ── Site Rules sub-page styles ─────────────────────────────────────── */
 
 .bl-rules-hint {
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
   margin-bottom: 12px;
   line-height: 1.4;
 }
 
 .bl-rules-empty {
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   color: var(--bl-text-muted);
   text-align: center;
   padding: 20px 0;
@@ -39,7 +39,7 @@
 }
 
 .bl-rule-row__name {
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   font-weight: 600;
   color: var(--bl-text-primary);
   white-space: nowrap;
@@ -48,7 +48,7 @@
 }
 
 .bl-rule-row__pattern {
-  font-size: 10px;
+  font-size: var(--bl-text-xs);
   color: var(--bl-text-muted);
   font-family: monospace;
   white-space: nowrap;
@@ -57,7 +57,7 @@
 }
 
 .bl-rule-edit-btn {
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   background: none;
   border: 1px solid var(--bl-raised);
   border-radius: 5px;
@@ -74,7 +74,7 @@
 }
 
 .bl-rule-delete-btn {
-  font-size: 14px;
+  font-size: var(--bl-text-lg);
   background: none;
   border: none;
   color: var(--bl-text-dim);
@@ -91,7 +91,7 @@
 
 .bl-rule-add-btn {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   background: none;
   border: 1px dashed var(--bl-raised);
   border-radius: 7px;
@@ -119,7 +119,7 @@
 }
 
 .bl-rule-form__label {
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
   display: block;
   margin-bottom: 3px;
@@ -131,7 +131,7 @@
   border: 1px solid var(--bl-raised);
   border-radius: 6px;
   color: var(--bl-text-primary);
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   padding: 6px 10px;
   outline: none;
   transition: border-color 0.15s;
@@ -143,7 +143,7 @@
 }
 
 .bl-rule-form__error {
-  font-size: 10px;
+  font-size: var(--bl-text-xs);
   color: var(--bl-danger);
   margin-top: 3px;
 }
@@ -158,7 +158,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
   cursor: pointer;
   accent-color: var(--bl-amber);
@@ -171,7 +171,7 @@
 }
 
 .bl-rule-save-btn {
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   padding: 5px 16px;
   background: var(--bl-amber);
   color: var(--bl-base);
@@ -182,7 +182,7 @@
 }
 
 .bl-rule-cancel-btn {
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   padding: 5px 12px;
   background: none;
   border: 1px solid var(--bl-raised);

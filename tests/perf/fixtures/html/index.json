@@ -1,0 +1,61 @@
+{
+  "serveBase": "http://127.0.0.1",
+  "pages": [
+    {
+      "id": "text-heavy",
+      "file": "page-text-heavy.html",
+      "description": "TEXT + TABLE category stress — 2000p, 800 spans, 100 code/pre, 100×15 financial table",
+      "targeted_feature": "blur_engine.stampElements",
+      "key_elements": { "p": 2000, "h123": 290, "span": 800, "td": 1500 }
+    },
+    {
+      "id": "pii-rich",
+      "file": "page-pii-rich.html",
+      "description": "PII detector scan — 3400 isolated spans (1500 email, 500 phone, 500 currency, 500 numeric, 400 suppressed) + 600 inline-prose paragraphs",
+      "targeted_feature": "pii_detector.scan",
+      "key_elements": { "isolated_spans": 3400, "inline_paragraphs": 600 }
+    },
+    {
+      "id": "comprehensive",
+      "file": "page-comprehensive.html",
+      "description": "All 5 blur categories simultaneously — account dashboard. TEXT:400, MEDIA:70, FORM:130, TABLE:320 cells, STRUCTURE:50",
+      "targeted_feature": "blur_engine.handleDocument",
+      "key_elements": { "text": 400, "media": 70, "form": 130, "table_cells": 320, "structure": 50 }
+    },
+    {
+      "id": "reveal",
+      "file": "page-reveal.html",
+      "description": "Reveal controller latency — 100 flat targets, 20 nested cascade groups, 50 inline-span paragraphs. Blur applied via extension storage.",
+      "targeted_feature": "reveal_controller",
+      "key_elements": { "flat_targets": 100, "nested_groups": 20, "inline_spans": 50 }
+    },
+    {
+      "id": "picker",
+      "file": "page-picker.html",
+      "description": "Picker activation + zone drawing — dashboard layout with fixed nav, sticky sidebar, fixed right panel, scrollable main (≥3500px)",
+      "targeted_feature": "picker",
+      "key_elements": { "target_scroll_height_px": 3500 }
+    },
+    {
+      "id": "spa",
+      "file": "page-spa.html",
+      "description": "SPA navigation — 5 routes (text/forms/table/media/mixed), MutationObserver reconcile per pushState. Table route: 100×50 (5000 cells).",
+      "targeted_feature": "blur_engine.observeRoot",
+      "key_elements": { "routes": 5, "table_cells": 5000 }
+    },
+    {
+      "id": "forms",
+      "file": "page-forms.html",
+      "description": "FORM category + ARIA role selectors — 80 native inputs, 30 selects, 10 textareas, 20 buttons, 75 ARIA-role elements",
+      "targeted_feature": "blur_engine.stampElements (ARIA roles)",
+      "key_elements": { "native_inputs": 80, "selects": 30, "aria_elements": 75 }
+    },
+    {
+      "id": "media",
+      "file": "page-media.html",
+      "description": "MEDIA category stress — 150 img (3 size classes), 30 video (canvas.captureStream autoplay), 15 canvas, 15 svg, 15 picture, 10 audio, 20 figure",
+      "targeted_feature": "blur_engine.stampElements (media)",
+      "key_elements": { "img": 150, "video": 30, "canvas": 15, "svg": 15, "picture": 15, "audio": 10, "figure": 20 }
+    }
+  ]
+}

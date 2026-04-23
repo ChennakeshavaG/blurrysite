@@ -1,0 +1,383 @@
+<!-- BlurrySite Perf Fixture: page-spa | MutationObserver reconcile per SPA route change -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPA — BlurrySite Perf Fixture</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; margin: 0; background: #fff; color: #1a1a1a; }
+    #spa-nav { background: #1a1a2e; padding: 12px 20px; display: flex; gap: 16px; position: sticky; top: 0; z-index: 100; }
+    #spa-nav a { color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; transition: background 0.15s; }
+    #spa-nav a:hover { background: #2d2d5e; }
+    #spa-nav a.active { background: #4f46e5; }
+    #app { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.8em; margin-bottom: 20px; color: #111; }
+    h2 { font-size: 1.2em; margin: 16px 0 8px; color: #333; }
+    h3 { font-size: 1em; margin: 10px 0 6px; color: #555; }
+    p { margin: 6px 0; line-height: 1.6; color: #444; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.75em; }
+    td, th { border: 1px solid #e0e0e0; padding: 4px 6px; white-space: nowrap; }
+    th { background: #f5f7fa; position: sticky; top: 48px; }
+    tr:nth-child(even) td { background: #fafafa; }
+    input, select, textarea { border: 1px solid #ccc; padding: 6px; border-radius: 3px; margin: 4px; font-family: inherit; font-size: 0.9em; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid #4f46e5; border-color: #4f46e5; }
+    button { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9em; margin: 4px; }
+    button:hover { background: #3730a3; }
+    .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .form-section { margin-bottom: 24px; }
+    .form-section h2 { border-bottom: 1px solid #e0e0e0; padding-bottom: 6px; }
+    .img-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .img-grid img { width: 100%; height: auto; display: block; border-radius: 4px; }
+    .img-caption { font-size: 0.75em; color: #888; margin-top: 4px; text-align: center; }
+    .mixed-section { margin-bottom: 32px; }
+    #perf-meta { display: none; }
+  </style>
+</head>
+<body>
+
+<nav id="spa-nav">
+  <a href="#text" data-route="text">Text</a>
+  <a href="#forms" data-route="forms">Forms</a>
+  <a href="#table" data-route="table">Table</a>
+  <a href="#media" data-route="media">Media</a>
+  <a href="#mixed" data-route="mixed">Mixed</a>
+</nav>
+
+<main id="app"></main>
+
+<div id="perf-meta" data-fixture="spa" data-routes="5" data-table-cells="5000"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  // Shared lorem ipsum word bank for realistic text content
+  // ---------------------------------------------------------------------------
+  var WORDS = [
+    'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit',
+    'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore',
+    'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis', 'nostrud',
+    'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea', 'commodo',
+    'consequat', 'duis', 'aute', 'irure', 'reprehenderit', 'voluptate', 'velit',
+    'esse', 'cillum', 'fugiat', 'nulla', 'pariatur', 'excepteur', 'sint', 'occaecat',
+    'cupidatat', 'non', 'proident', 'sunt', 'culpa', 'qui', 'officia', 'deserunt',
+    'mollit', 'anim', 'id', 'est', 'laborum', 'perspiciatis', 'unde', 'omnis',
+    'iste', 'natus', 'error', 'voluptatem', 'accusantium', 'doloremque', 'laudantium',
+    'totam', 'rem', 'aperiam', 'eaque', 'ipsa', 'quae', 'ab', 'illo', 'inventore',
+    'veritatis', 'quasi', 'architecto', 'beatae', 'vitae', 'dicta', 'explicabo'
+  ];
+
+  function sentence(wordCount) {
+    var out = [];
+    for (var i = 0; i < wordCount; i++) {
+      out.push(WORDS[(i * 7 + out.length * 3) % WORDS.length]);
+    }
+    var s = out.join(' ');
+    return s.charAt(0).toUpperCase() + s.slice(1) + '.';
+  }
+
+  function paragraph(sentenceCount) {
+    var out = [];
+    for (var i = 0; i < sentenceCount; i++) {
+      out.push(sentence(8 + (i % 7)));
+    }
+    return out.join(' ');
+  }
+
+  // ---------------------------------------------------------------------------
+  // SVG data URI generator for media route images
+  // ---------------------------------------------------------------------------
+  var SVG_COLORS = [
+    '%234f46e5', '%23e5464f', '%2346e54f', '%23e5c446', '%23464fe5',
+    '%23e546c4', '%2346e5c4', '%23c4e546', '%23e59646', '%2346c4e5'
+  ];
+
+  var SVG_LABELS = [
+    'img', 'photo', 'media', 'asset', 'img', 'file',
+    'img', 'photo', 'media', 'asset'
+  ];
+
+  function svgDataUri(width, height, colorIdx, label) {
+    var color = SVG_COLORS[colorIdx % SVG_COLORS.length];
+    var lbl = label || SVG_LABELS[colorIdx % SVG_LABELS.length];
+    var textY = Math.round(height / 2);
+    var fontSize = Math.max(10, Math.min(14, Math.floor(width / 8)));
+    return (
+      'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22' +
+      ' width%3D%22' + width + '%22 height%3D%22' + height + '%22%3E' +
+      '%3Crect width%3D%22100%25%22 height%3D%22100%25%22 fill%3D%22' + color + '%22%2F%3E' +
+      '%3Ctext x%3D%2250%25%22 y%3D%22' + textY + '%22 dominant-baseline%3D%22middle%22' +
+      ' text-anchor%3D%22middle%22 fill%3D%22%23fff%22 font-size%3D%22' + fontSize + '%22' +
+      ' font-family%3D%22sans-serif%22%3E' + lbl + ' ' + width + 'x' + height + '%3C%2Ftext%3E' +
+      '%3C%2Fsvg%3E'
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Route builders
+  // ---------------------------------------------------------------------------
+
+  function buildTextRoute() {
+    var html = '<h1>Text Route</h1>';
+
+    // 20 h2 sections, each with h3 subsections and paragraphs
+    for (var i = 0; i < 20; i++) {
+      html += '<h2>Section ' + (i + 1) + ': ' + sentence(4) + '</h2>';
+
+      // Distribute 50 h3 across 20 sections: ~2-3 per section
+      var h3Count = (i < 10) ? 3 : 2;
+      for (var j = 0; j < h3Count; j++) {
+        html += '<h3>Subsection ' + (i + 1) + '.' + (j + 1) + ' — ' + sentence(3) + '</h3>';
+      }
+
+      // Distribute 500 p across 20 sections: 25 per section
+      for (var k = 0; k < 25; k++) {
+        html += '<p>' + paragraph(3) + '</p>';
+      }
+    }
+
+    return html;
+  }
+
+  function buildFormsRoute() {
+    var html = '<h1>Forms Route</h1>';
+
+    // 100 inputs: 25 text, 25 email, 25 password, 25 number
+    html += '<div class="form-section"><h2>Text Inputs (25)</h2><div class="form-grid">';
+    for (var i = 0; i < 25; i++) {
+      html += '<input type="text" name="text_' + i + '" placeholder="Text field ' + (i + 1) + '">';
+    }
+    html += '</div></div>';
+
+    html += '<div class="form-section"><h2>Email Inputs (25)</h2><div class="form-grid">';
+    for (var i = 0; i < 25; i++) {
+      html += '<input type="email" name="email_' + i + '" placeholder="email' + (i + 1) + '@example.com">';
+    }
+    html += '</div></div>';
+
+    html += '<div class="form-section"><h2>Password Inputs (25)</h2><div class="form-grid">';
+    for (var i = 0; i < 25; i++) {
+      html += '<input type="password" name="pass_' + i + '" placeholder="Password ' + (i + 1) + '">';
+    }
+    html += '</div></div>';
+
+    html += '<div class="form-section"><h2>Number Inputs (25)</h2><div class="form-grid">';
+    for (var i = 0; i < 25; i++) {
+      html += '<input type="number" name="num_' + i + '" placeholder="' + (i * 10) + '" min="0" max="9999">';
+    }
+    html += '</div></div>';
+
+    // 40 selects with 6 options each
+    html += '<div class="form-section"><h2>Selects (40 × 6 options)</h2><div class="form-grid">';
+    for (var i = 0; i < 40; i++) {
+      html += '<select name="sel_' + i + '">';
+      for (var j = 0; j < 6; j++) {
+        html += '<option value="opt_' + j + '">Option ' + (j + 1) + ' of select ' + (i + 1) + '</option>';
+      }
+      html += '</select>';
+    }
+    html += '</div></div>';
+
+    // 10 textareas
+    html += '<div class="form-section"><h2>Textareas (10)</h2><div class="form-grid">';
+    for (var i = 0; i < 10; i++) {
+      html += '<textarea name="ta_' + i + '" rows="3" placeholder="Textarea ' + (i + 1) + ': ' + sentence(6) + '"></textarea>';
+    }
+    html += '</div></div>';
+
+    // 20 buttons
+    html += '<div class="form-section"><h2>Buttons (20)</h2>';
+    for (var i = 0; i < 20; i++) {
+      html += '<button type="button">Button ' + (i + 1) + '</button>';
+    }
+    html += '</div>';
+
+    return html;
+  }
+
+  function buildTableRoute() {
+    var COLS = 50;
+    var ROWS = 100;
+
+    var html = '<h1>Table Route</h1>';
+    html += '<p>100 rows &times; 50 columns = 5,000 cells</p>';
+    html += '<div style="overflow-x:auto"><table><thead><tr>';
+
+    for (var c = 0; c < COLS; c++) {
+      html += '<th>Col ' + (c + 1) + '</th>';
+    }
+    html += '</tr></thead><tbody>';
+
+    for (var r = 0; r < ROWS; r++) {
+      html += '<tr>';
+      for (var c = 0; c < COLS; c++) {
+        html += '<td>' + (r * COLS + c + 1).toLocaleString() + '</td>';
+      }
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function buildMediaRoute() {
+    // 60 images split into 3 size buckets: 20×50px, 20×150px, 20×300px
+    var SIZES = [
+      { w: 80,  h: 50,  label: 'sm' },
+      { w: 150, h: 150, label: 'md' },
+      { w: 300, h: 200, label: 'lg' }
+    ];
+
+    var html = '<h1>Media Route</h1>';
+
+    for (var s = 0; s < SIZES.length; s++) {
+      var sz = SIZES[s];
+      html += '<h2>' + sz.label.toUpperCase() + ' Images (' + sz.w + '&times;' + sz.h + 'px, 20 items)</h2>';
+      html += '<div class="img-grid">';
+      for (var i = 0; i < 20; i++) {
+        var idx = s * 20 + i;
+        var src = svgDataUri(sz.w, sz.h, idx % SVG_COLORS.length, sz.label);
+        html += '<div>';
+        html += '<img src="' + src + '" alt="Perf fixture image ' + (idx + 1) + '" width="' + sz.w + '" height="' + sz.h + '">';
+        html += '<div class="img-caption">' + sz.label + '-' + (i + 1) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  function buildMixedRoute() {
+    var html = '<h1>Mixed Route</h1>';
+
+    // 80 paragraphs under 20 h2 headings (4 per section)
+    html += '<div class="mixed-section">';
+    for (var i = 0; i < 20; i++) {
+      html += '<h2>Section ' + (i + 1) + '</h2>';
+      for (var j = 0; j < 4; j++) {
+        html += '<p>' + paragraph(2) + '</p>';
+      }
+    }
+    html += '</div>';
+
+    // 20 inputs
+    html += '<div class="mixed-section"><h2>Inputs (20)</h2><div class="form-grid">';
+    for (var i = 0; i < 20; i++) {
+      html += '<input type="text" name="mx_inp_' + i + '" placeholder="Input ' + (i + 1) + '">';
+    }
+    html += '</div></div>';
+
+    // 10 selects with 4 options each
+    html += '<div class="mixed-section"><h2>Selects (10)</h2><div class="form-grid">';
+    for (var i = 0; i < 10; i++) {
+      html += '<select name="mx_sel_' + i + '">';
+      for (var j = 0; j < 4; j++) {
+        html += '<option value="' + j + '">Option ' + (j + 1) + '</option>';
+      }
+      html += '</select>';
+    }
+    html += '</div></div>';
+
+    // 20 images (mixed sizes)
+    html += '<div class="mixed-section"><h2>Images (20)</h2><div class="img-grid">';
+    var MX_SIZES = [{ w: 80, h: 50 }, { w: 150, h: 100 }, { w: 120, h: 80 }];
+    for (var i = 0; i < 20; i++) {
+      var sz = MX_SIZES[i % MX_SIZES.length];
+      var src = svgDataUri(sz.w, sz.h, i % SVG_COLORS.length, 'mix');
+      html += '<img src="' + src + '" alt="Mixed fixture img ' + (i + 1) + '" width="' + sz.w + '" height="' + sz.h + '">';
+    }
+    html += '</div></div>';
+
+    // 10 rows × 10 cols table
+    html += '<div class="mixed-section"><h2>Table (10&times;10)</h2>';
+    html += '<table><thead><tr>';
+    for (var c = 0; c < 10; c++) {
+      html += '<th>C' + (c + 1) + '</th>';
+    }
+    html += '</tr></thead><tbody>';
+    for (var r = 0; r < 10; r++) {
+      html += '<tr>';
+      for (var c = 0; c < 10; c++) {
+        html += '<td>' + (r * 10 + c + 1) + '</td>';
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+
+    return html;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Route registry
+  // ---------------------------------------------------------------------------
+  var ROUTE_BUILDERS = {
+    text:  buildTextRoute,
+    forms: buildFormsRoute,
+    table: buildTableRoute,
+    media: buildMediaRoute,
+    mixed: buildMixedRoute
+  };
+
+  // Expose route list on window as required by the perf harness spec
+  window.ROUTES = ['text', 'forms', 'table', 'media', 'mixed'];
+
+  // ---------------------------------------------------------------------------
+  // navigateTo
+  // ---------------------------------------------------------------------------
+  window.navigateTo = function navigateTo(routeId) {
+    if (!ROUTE_BUILDERS[routeId]) {
+      console.warn('[page-spa] Unknown route: ' + routeId);
+      return;
+    }
+
+    var app = document.getElementById('app');
+
+    // 1. Replace #app innerHTML with the route's content
+    app.innerHTML = ROUTE_BUILDERS[routeId]();
+
+    // 2. Push state
+    history.pushState({ route: routeId }, '', '#' + routeId);
+
+    // 3. Fire popstate so the extension content_script picks up the navigation
+    window.dispatchEvent(new PopStateEvent('popstate', { state: { route: routeId } }));
+
+    // 4. Update active nav link styling
+    var links = document.querySelectorAll('#spa-nav a[data-route]');
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      if (link.getAttribute('data-route') === routeId) {
+        link.classList.add('active');
+      } else {
+        link.classList.remove('active');
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Nav click handler
+  // ---------------------------------------------------------------------------
+  document.getElementById('spa-nav').addEventListener('click', function (event) {
+    var link = event.target.closest('a[data-route]');
+    if (!link) return;
+    event.preventDefault();
+    window.navigateTo(link.getAttribute('data-route'));
+  });
+
+  // ---------------------------------------------------------------------------
+  // Initial load — default to the text route
+  // ---------------------------------------------------------------------------
+  (function init() {
+    // Honour hash if present and valid, otherwise default to text
+    var hash = location.hash.replace(/^#/, '');
+    var initial = ROUTE_BUILDERS[hash] ? hash : 'text';
+    window.navigateTo(initial);
+  }());
+
+}());
+</script>
+
+</body>
+</html>

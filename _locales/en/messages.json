@@ -192,12 +192,6 @@
   "setting_idle_timeout_hint": {
     "message": "Seconds of inactivity before auto-blur triggers."
   },
-  "setting_blur_timer": {
-    "message": "Blur Timer"
-  },
-  "setting_blur_timer_hint": {
-    "message": "Auto-clear blur after this many minutes. 0 = off."
-  },
   "reveal_click": {
     "message": "Click to peek"
   },
@@ -588,9 +582,6 @@
   "pii_chip_asterisked": {
     "message": "Asterisked"
   },
-  "automate_timer": {
-    "message": "Timer"
-  },
   "automate_idle": {
     "message": "Idle"
   },
@@ -633,7 +624,10 @@
   "mode_switch_confirm": {
     "message": "Switching modes removes $COUNT$ saved blur(s). Switch anyway?",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "mode_switch_btn": {
@@ -660,7 +654,10 @@
   "mode_pick_item_count": {
     "message": "$COUNT$ items",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "tooltip_mode_dynamic": {
@@ -671,24 +668,6 @@
   },
   "tooltip_mode_sticky_screen": {
     "message": "Draw a blur region fixed to your screen"
-  },
-  "automate_timer_start": {
-    "message": "Start"
-  },
-  "automate_timer_stop": {
-    "message": "Stop"
-  },
-  "automate_timer_remaining": {
-    "message": "⏱ $TIME$ remaining",
-    "placeholders": {
-      "time": { "content": "$1", "example": "4:32" }
-    }
-  },
-  "automate_timer_triggered": {
-    "message": "Triggered"
-  },
-  "automate_timer_min_error": {
-    "message": "Minimum is 30 s"
   },
   "automate_idle_max_warn": {
     "message": "Max is 50 min (Chrome API limit)"

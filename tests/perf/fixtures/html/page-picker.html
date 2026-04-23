@@ -1,0 +1,552 @@
+<!-- BlurrySite Perf Fixture: page-picker | picker activation + zone drawing -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlurrySite Perf Fixture — Picker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; }
+    .topnav { position: fixed; top: 0; left: 0; right: 0; height: 60px; background: #1a1a2e; color: white; display: flex; align-items: center; padding: 0 20px; z-index: 1000; gap: 20px; }
+    .topnav .logo { font-weight: 700; font-size: 1.1em; letter-spacing: 0.04em; color: #a5b4fc; flex-shrink: 0; }
+    .topnav nav { display: flex; gap: 16px; flex: 1; }
+    .topnav nav a { color: #c7d2fe; text-decoration: none; font-size: 0.88em; padding: 4px 8px; border-radius: 4px; }
+    .topnav nav a:hover { background: rgba(255,255,255,0.1); }
+    .topnav .search { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .topnav .search input { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.85em; width: 200px; outline: none; }
+    .topnav .search input::placeholder { color: rgba(255,255,255,0.5); }
+    .topnav .user-badge { width: 34px; height: 34px; border-radius: 50%; background: #4f46e5; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85em; flex-shrink: 0; }
+    .layout { display: flex; margin-top: 60px; }
+    .sidebar { position: sticky; top: 60px; width: 220px; height: calc(100vh - 60px); background: #16213e; color: white; padding: 20px; flex-shrink: 0; overflow-y: auto; }
+    .sidebar .nav-section { margin-bottom: 24px; }
+    .sidebar .nav-section-title { font-size: 0.7em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin-bottom: 8px; }
+    .sidebar .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 0.88em; color: #c7d2fe; margin-bottom: 2px; }
+    .sidebar .nav-item:hover { background: rgba(255,255,255,0.08); }
+    .sidebar .nav-item.active { background: #4f46e5; color: white; }
+    .sidebar .nav-item .icon { width: 16px; text-align: center; flex-shrink: 0; }
+    .main { flex: 1; padding: 24px; min-width: 0; margin-right: 280px; }
+    .right-panel { position: fixed; right: 0; top: 60px; width: 280px; height: calc(100vh - 60px); background: white; border-left: 1px solid #e0e0e0; padding: 16px; overflow-y: auto; z-index: 100; }
+    .right-panel h3 { font-size: 0.92em; margin: 0 0 12px; color: #374151; font-weight: 600; }
+    .right-panel .activity-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f3f4f6; font-size: 0.82em; }
+    .right-panel .activity-dot { width: 8px; height: 8px; border-radius: 50%; background: #4f46e5; flex-shrink: 0; margin-top: 4px; }
+    .right-panel .activity-text { color: #374151; line-height: 1.4; }
+    .right-panel .activity-time { color: #9ca3af; font-size: 0.8em; margin-top: 2px; }
+    .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: white; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .stat-value { font-size: 2em; font-weight: bold; color: #4f46e5; }
+    .stat-label { font-size: 0.82em; color: #6b7280; margin-top: 4px; }
+    .stat-delta { font-size: 0.78em; margin-top: 6px; }
+    .stat-delta.up { color: #10b981; }
+    .stat-delta.down { color: #ef4444; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #e0e0e0; padding: 8px 12px; text-align: left; font-size: 0.85em; }
+    th { background: #f5f7fa; font-weight: 600; color: #374151; }
+    tr:nth-child(even) { background: #fafafa; }
+    input, select { border: 1px solid #ccc; padding: 6px 10px; border-radius: 4px; width: 100%; font-size: 0.88em; }
+    input:focus, select:focus { outline: 2px solid #4f46e5; outline-offset: 1px; border-color: transparent; }
+    .user-row { display: flex; align-items: center; gap: 12px; padding: 8px; border-bottom: 1px solid #f0f0f0; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: #4f46e5; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0; font-size: 0.85em; }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 0.88em; font-weight: 600; color: #111827; }
+    .user-email { font-size: 0.78em; color: #6b7280; }
+    .user-role { font-size: 0.75em; padding: 2px 8px; border-radius: 10px; background: #e0e7ff; color: #4f46e5; font-weight: 500; flex-shrink: 0; }
+    .img-gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .img-gallery img { width: 100%; height: auto; border-radius: 4px; display: block; }
+    .chart-placeholder { height: 200px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; margin-bottom: 16px; font-size: 0.9em; letter-spacing: 0.03em; }
+    section { margin-bottom: 32px; }
+    h2 { font-size: 1.3em; margin-bottom: 16px; color: #1a1a2e; }
+    h2 .badge { font-size: 0.6em; background: #e0e7ff; color: #4f46e5; padding: 2px 8px; border-radius: 10px; font-weight: 600; vertical-align: middle; margin-left: 8px; }
+    fieldset { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    legend { font-size: 0.88em; font-weight: 600; color: #374151; padding: 0 8px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8em; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .article-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .article-card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .article-card img { width: 100%; height: 140px; object-fit: cover; display: block; }
+    .article-card .article-body { padding: 14px; }
+    .article-card h3 { font-size: 0.95em; margin: 0 0 8px; color: #111827; }
+    .article-card p { font-size: 0.82em; color: #6b7280; margin: 0; line-height: 1.5; }
+    .article-card .article-meta { font-size: 0.75em; color: #9ca3af; margin-top: 10px; }
+    .long-text p { font-size: 0.88em; line-height: 1.7; color: #374151; margin-bottom: 12px; }
+    .footer-content { background: white; border-radius: 8px; padding: 32px; margin-bottom: 16px; }
+    .footer-content p { font-size: 0.85em; color: #6b7280; line-height: 1.6; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+<div id="perf-meta" data-fixture="picker" data-target-scroll-height="3500"></div>
+
+<!-- Fixed Top Nav -->
+<header class="topnav">
+  <span class="logo">Acme Dashboard</span>
+  <nav>
+    <a href="#">Overview</a>
+    <a href="#">Analytics</a>
+    <a href="#">Users</a>
+    <a href="#">Settings</a>
+    <a href="#">Reports</a>
+    <a href="#">Integrations</a>
+  </nav>
+  <div class="search">
+    <input type="text" placeholder="Search anything…">
+    <div class="user-badge">AK</div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sticky Left Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="nav-section">
+      <div class="nav-section-title">Main</div>
+      <div class="nav-item active"><span class="icon">⬛</span> Dashboard</div>
+      <div class="nav-item"><span class="icon">📊</span> Analytics</div>
+      <div class="nav-item"><span class="icon">📋</span> Reports</div>
+      <div class="nav-item"><span class="icon">📁</span> Projects</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Management</div>
+      <div class="nav-item"><span class="icon">👤</span> Users</div>
+      <div class="nav-item"><span class="icon">🔒</span> Roles</div>
+      <div class="nav-item"><span class="icon">🏢</span> Teams</div>
+      <div class="nav-item"><span class="icon">📝</span> Audit Log</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Configuration</div>
+      <div class="nav-item"><span class="icon">⚙️</span> Settings</div>
+      <div class="nav-item"><span class="icon">🔑</span> API Keys</div>
+      <div class="nav-item"><span class="icon">🔔</span> Notifications</div>
+      <div class="nav-item"><span class="icon">🌐</span> Integrations</div>
+      <div class="nav-item"><span class="icon">📦</span> Billing</div>
+      <div class="nav-item"><span class="icon">💬</span> Support</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Developer</div>
+      <div class="nav-item"><span class="icon">📡</span> Webhooks</div>
+      <div class="nav-item"><span class="icon">🔧</span> Debug Tools</div>
+      <div class="nav-item"><span class="icon">📜</span> Changelog</div>
+    </div>
+  </aside>
+
+  <!-- Scrollable Main Content -->
+  <main class="main" id="main-content">
+
+    <!-- Section 1: Dashboard Overview -->
+    <section id="section-overview">
+      <h2>Dashboard Overview <span class="badge">Live</span></h2>
+      <div class="stat-grid" id="stat-grid"></div>
+    </section>
+
+    <!-- Section 2: Recent Activity Table -->
+    <section id="section-table-1">
+      <h2>Recent Activity</h2>
+      <div class="card">
+        <table id="activity-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Resource</th>
+              <th>Status</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="activity-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 3: Content Articles -->
+    <section id="section-articles">
+      <h2>Content Articles</h2>
+      <div class="article-grid" id="article-grid"></div>
+    </section>
+
+    <!-- Section 4: Analytics / Chart Placeholders -->
+    <section id="section-analytics">
+      <h2>Analytics</h2>
+      <div id="chart-section"></div>
+    </section>
+
+    <!-- Section 5: User List -->
+    <section id="section-users">
+      <h2>User Directory <span class="badge">40 users</span></h2>
+      <div class="card" id="user-list"></div>
+    </section>
+
+    <!-- Section 6: Settings Form -->
+    <section id="section-settings">
+      <h2>Settings</h2>
+      <div id="settings-form-section"></div>
+    </section>
+
+    <!-- Section 7: Media Gallery -->
+    <section id="section-gallery">
+      <h2>Media Gallery</h2>
+      <div class="card">
+        <div class="img-gallery" id="img-gallery"></div>
+      </div>
+    </section>
+
+    <!-- Section 8: Long Text -->
+    <section id="section-longtext">
+      <h2>Documentation</h2>
+      <div class="card long-text" id="long-text-section"></div>
+    </section>
+
+    <!-- Section 9: Second Large Data Table -->
+    <section id="section-table-2">
+      <h2>Detailed Records</h2>
+      <div class="card">
+        <table id="records-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Value</th>
+              <th>Region</th>
+              <th>Owner</th>
+              <th>Modified</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="records-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 10: Footer Content -->
+    <section id="section-footer">
+      <h2>Additional Information</h2>
+      <div class="footer-content" id="footer-content"></div>
+    </section>
+
+  </main>
+
+  <!-- Fixed Right Panel -->
+  <aside class="right-panel" id="right-panel">
+    <h3>Activity Feed</h3>
+    <div id="activity-feed"></div>
+  </aside>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // --- helpers ---
+  var COLORS = ['#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316'];
+  var USERS  = ['Alice Johnson','Bob Martinez','Carol White','Dave Kim','Eva Patel','Frank Lee','Grace Liu','Hank Torres','Iris Chen','Jake Brown'];
+  var ROLES  = ['Admin','Editor','Viewer','Manager','Developer','Analyst'];
+  var STATUSES  = ['Active','Pending','Archived','Draft','Published','Error'];
+  var ACTIONS   = ['Created','Updated','Deleted','Exported','Imported','Reviewed','Approved','Rejected','Shared','Cloned'];
+  var RESOURCES = ['Project Alpha','Report Q2','User Record','API Token','Webhook Config','Data Export','Dashboard View','Role Policy','Audit Entry','Billing Plan'];
+  var CATS      = ['Infrastructure','Security','Finance','HR','Marketing','Engineering','Legal','Operations','Product','Design'];
+  var REGIONS   = ['US-East','US-West','EU-Central','EU-West','APAC','LATAM','MENA','AFRICA'];
+  var LOREM_WORDS = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure dolor reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa officia deserunt mollit anim id est laborum'.split(' ');
+
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function rnum(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function lorem(n) {
+    var words = [];
+    for (var i = 0; i < n; i++) words.push(pick(LOREM_WORDS));
+    var s = words.join(' ');
+    return s.charAt(0).toUpperCase() + s.slice(1) + '.';
+  }
+  function date(daysAgo) {
+    var d = new Date(Date.now() - daysAgo * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // SVG data URI factory
+  function svgUri(width, height, fill, label, textFill) {
+    textFill = textFill || 'white';
+    var encoded = encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">' +
+      '<rect width="' + width + '" height="' + height + '" fill="' + fill + '"/>' +
+      '<text x="50%" y="50%" fill="' + textFill + '" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="13">' + label + '</text>' +
+      '</svg>'
+    );
+    return 'data:image/svg+xml,' + encoded;
+  }
+
+  // --- Section 1: Stat cards ---
+  var statData = [
+    { value: '18,423', label: 'Total Users',      delta: '+3.2%', dir: 'up' },
+    { value: '4,891',  label: 'Active Sessions',  delta: '+12.7%', dir: 'up' },
+    { value: '$92,410',label: 'Monthly Revenue',  delta: '+8.1%', dir: 'up' },
+    { value: '99.94%', label: 'Uptime',           delta: '-0.02%', dir: 'down' },
+    { value: '1,204',  label: 'Open Issues',      delta: '-5.4%', dir: 'down' },
+    { value: '347',    label: 'Deployments',      delta: '+22%', dir: 'up' },
+  ];
+  var statGrid = document.getElementById('stat-grid');
+  statData.forEach(function (s) {
+    var div = document.createElement('div');
+    div.className = 'stat-card';
+    div.innerHTML =
+      '<div class="stat-value">' + s.value + '</div>' +
+      '<div class="stat-label">' + s.label + '</div>' +
+      '<div class="stat-delta ' + s.dir + '">' + s.delta + ' vs last month</div>';
+    statGrid.appendChild(div);
+  });
+
+  // --- Section 2: Activity table (30 rows) ---
+  var tbody1 = document.getElementById('activity-table-body');
+  for (var i = 0; i < 30; i++) {
+    var tr = document.createElement('tr');
+    var status = pick(STATUSES);
+    var statusColor = status === 'Active' || status === 'Published' || status === 'Approved' ? '#10b981'
+                    : status === 'Error' || status === 'Rejected' ? '#ef4444'
+                    : '#f59e0b';
+    tr.innerHTML =
+      '<td>#' + (10000 + i) + '</td>' +
+      '<td>' + pick(USERS) + '</td>' +
+      '<td>' + pick(ACTIONS) + '</td>' +
+      '<td>' + pick(RESOURCES) + '</td>' +
+      '<td><span style="color:' + statusColor + ';font-weight:600">' + status + '</span></td>' +
+      '<td>' + date(rnum(0, 30)) + ' ' + rnum(0, 23) + ':' + String(rnum(0, 59)).padStart(2, '0') + '</td>';
+    tbody1.appendChild(tr);
+  }
+
+  // --- Section 3: Articles (10 cards) ---
+  var articleGrid = document.getElementById('article-grid');
+  var articleColors = ['#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316'];
+  for (var i = 0; i < 10; i++) {
+    var div = document.createElement('div');
+    div.className = 'article-card';
+    var imgSrc = svgUri(600, 280, articleColors[i % articleColors.length], 'Article ' + (i + 1));
+    div.innerHTML =
+      '<img src="' + imgSrc + '" alt="Article ' + (i + 1) + '">' +
+      '<div class="article-body">' +
+        '<h3>' + lorem(6) + '</h3>' +
+        '<p>' + lorem(20) + '</p>' +
+        '<div class="article-meta">By ' + pick(USERS) + ' &bull; ' + date(rnum(1, 60)) + ' &bull; ' + rnum(2, 12) + ' min read</div>' +
+      '</div>';
+    articleGrid.appendChild(div);
+  }
+
+  // --- Section 4: Chart placeholders (5) ---
+  var chartSection = document.getElementById('chart-section');
+  var chartColors = [
+    ['#4f46e5','#7c3aed'],
+    ['#0ea5e9','#0284c7'],
+    ['#10b981','#059669'],
+    ['#f59e0b','#d97706'],
+    ['#ef4444','#dc2626'],
+  ];
+  var chartLabels = ['Revenue Over Time', 'User Growth (30d)', 'API Request Volume', 'Error Rate Trend', 'Deployment Frequency'];
+  for (var i = 0; i < 5; i++) {
+    var div = document.createElement('div');
+    div.className = 'chart-placeholder';
+    var c1 = chartColors[i][0], c2 = chartColors[i][1];
+    div.style.background = 'linear-gradient(135deg, ' + c1 + ' 0%, ' + c2 + ' 100%)';
+    div.textContent = chartLabels[i] + ' — Chart Placeholder';
+    chartSection.appendChild(div);
+  }
+
+  // --- Section 5: User list (40 rows) ---
+  var userList = document.getElementById('user-list');
+  var avatarColors = ['#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+  var firstNames = ['Alice','Bob','Carol','Dave','Eva','Frank','Grace','Hank','Iris','Jake','Karen','Leo','Mia','Noah','Olivia','Paul','Quinn','Rosa','Sam','Tara','Uma','Vince','Wendy','Xander','Yara','Zoe','Aaron','Bella','Carl','Diana'];
+  var lastNames  = ['Johnson','Martinez','White','Kim','Patel','Lee','Liu','Torres','Chen','Brown','Davis','Garcia','Wilson','Moore','Taylor','Anderson','Jackson','Harris','Clark','Lewis','Walker','Hall','Young','Allen','King','Wright','Scott','Green','Baker','Adams'];
+  for (var i = 0; i < 40; i++) {
+    var fn = firstNames[i % firstNames.length];
+    var ln = lastNames[(i * 3 + 7) % lastNames.length];
+    var initials = fn[0] + ln[0];
+    var avatarColor = avatarColors[i % avatarColors.length];
+    var email = fn.toLowerCase() + '.' + ln.toLowerCase() + '@example.com';
+    var role = pick(ROLES);
+    var div = document.createElement('div');
+    div.className = 'user-row';
+    div.innerHTML =
+      '<div class="avatar" style="background:' + avatarColor + '">' + initials + '</div>' +
+      '<div class="user-info">' +
+        '<div class="user-name">' + fn + ' ' + ln + '</div>' +
+        '<div class="user-email">' + email + '</div>' +
+      '</div>' +
+      '<span class="user-role">' + role + '</span>';
+    userList.appendChild(div);
+  }
+
+  // --- Section 6: Settings form (20 inputs in fieldsets) ---
+  var settingsSection = document.getElementById('settings-form-section');
+  var fieldsets = [
+    {
+      legend: 'General',
+      fields: [
+        { label: 'Organization Name', type: 'text', value: 'Acme Corp' },
+        { label: 'Default Timezone', type: 'select', options: ['UTC','America/New_York','Europe/London','Asia/Tokyo'] },
+        { label: 'Primary Email', type: 'text', value: 'admin@acme.com' },
+        { label: 'Support URL', type: 'text', value: 'https://support.acme.com' },
+      ]
+    },
+    {
+      legend: 'Security',
+      fields: [
+        { label: 'Session Timeout (min)', type: 'text', value: '30' },
+        { label: 'Max Login Attempts', type: 'text', value: '5' },
+        { label: 'MFA Provider', type: 'select', options: ['None','TOTP','SMS','Email'] },
+        { label: 'Password Policy', type: 'select', options: ['Standard','Strict','Custom'] },
+      ]
+    },
+    {
+      legend: 'Notifications',
+      fields: [
+        { label: 'Alert Email', type: 'text', value: 'alerts@acme.com' },
+        { label: 'Slack Webhook', type: 'text', value: 'https://hooks.slack.com/…' },
+        { label: 'PagerDuty Key', type: 'text', value: '••••••••••••' },
+        { label: 'Escalation Policy', type: 'select', options: ['None','Tier-1','Tier-2','All'] },
+      ]
+    },
+    {
+      legend: 'API & Integrations',
+      fields: [
+        { label: 'API Rate Limit (req/min)', type: 'text', value: '1000' },
+        { label: 'Webhook Retry Count', type: 'text', value: '3' },
+        { label: 'OAuth Redirect URI', type: 'text', value: 'https://app.acme.com/auth/cb' },
+        { label: 'CORS Origins', type: 'text', value: 'https://app.acme.com' },
+      ]
+    },
+    {
+      legend: 'Billing',
+      fields: [
+        { label: 'Billing Email', type: 'text', value: 'billing@acme.com' },
+        { label: 'Plan', type: 'select', options: ['Free','Pro','Enterprise'] },
+        { label: 'Invoice Currency', type: 'select', options: ['USD','EUR','GBP','JPY'] },
+        { label: 'Tax ID', type: 'text', value: 'US-123456789' },
+      ]
+    }
+  ];
+  fieldsets.forEach(function (fs) {
+    var fsEl = document.createElement('fieldset');
+    fsEl.innerHTML = '<legend>' + fs.legend + '</legend>';
+    var formRow;
+    fs.fields.forEach(function (f, fi) {
+      if (fi % 2 === 0) {
+        formRow = document.createElement('div');
+        formRow.className = 'form-row';
+        fsEl.appendChild(formRow);
+      }
+      var group = document.createElement('div');
+      group.className = 'form-group';
+      var label = document.createElement('label');
+      label.textContent = f.label;
+      group.appendChild(label);
+      var input;
+      if (f.type === 'select') {
+        input = document.createElement('select');
+        (f.options || []).forEach(function (opt) {
+          var o = document.createElement('option');
+          o.textContent = opt;
+          input.appendChild(o);
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = f.type;
+        input.value = f.value || '';
+      }
+      group.appendChild(input);
+      formRow.appendChild(group);
+    });
+    settingsSection.appendChild(fsEl);
+  });
+
+  // --- Section 7: Media gallery (20 images) ---
+  var imgGallery = document.getElementById('img-gallery');
+  var galColors = ['#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#1d4ed8','#15803d','#b91c1c','#7c3aed','#0891b2','#ca8a04','#9d174d','#065f46','#1e3a5f','#4a044e'];
+  for (var i = 0; i < 20; i++) {
+    var img = document.createElement('img');
+    img.src = svgUri(300, 200, galColors[i], 'Photo ' + (i + 1));
+    img.alt = 'Gallery image ' + (i + 1);
+    img.loading = 'lazy';
+    imgGallery.appendChild(img);
+  }
+
+  // --- Section 8: Long text (100 paragraphs) ---
+  var longTextSection = document.getElementById('long-text-section');
+  for (var i = 0; i < 100; i++) {
+    var p = document.createElement('p');
+    p.textContent = lorem(rnum(18, 35));
+    longTextSection.appendChild(p);
+  }
+
+  // --- Section 9: Records table (50 rows × 8 cols) ---
+  var tbody2 = document.getElementById('records-table-body');
+  for (var i = 0; i < 50; i++) {
+    var tr = document.createElement('tr');
+    var status = pick(STATUSES);
+    var statusColor = status === 'Active' || status === 'Published' || status === 'Approved' ? '#10b981'
+                    : status === 'Error' || status === 'Rejected' ? '#ef4444'
+                    : '#f59e0b';
+    tr.innerHTML =
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + lorem(3) + '</td>' +
+      '<td>' + pick(CATS) + '</td>' +
+      '<td>$' + (rnum(100, 99999)).toLocaleString() + '</td>' +
+      '<td>' + pick(REGIONS) + '</td>' +
+      '<td>' + pick(USERS) + '</td>' +
+      '<td>' + date(rnum(0, 90)) + '</td>' +
+      '<td><span style="color:' + statusColor + ';font-weight:600">' + status + '</span></td>';
+    tbody2.appendChild(tr);
+  }
+
+  // --- Section 10: Footer content ---
+  var footerContent = document.getElementById('footer-content');
+  for (var i = 0; i < 20; i++) {
+    var p = document.createElement('p');
+    p.textContent = lorem(rnum(20, 40));
+    footerContent.appendChild(p);
+  }
+
+  // --- Right panel: Activity feed (20 items) ---
+  var feed = document.getElementById('activity-feed');
+  for (var i = 0; i < 20; i++) {
+    var item = document.createElement('div');
+    item.className = 'activity-item';
+    var mins = rnum(1, 240);
+    var timeLabel = mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ago';
+    item.innerHTML =
+      '<div class="activity-dot" style="background:' + pick(COLORS) + '"></div>' +
+      '<div>' +
+        '<div class="activity-text">' + pick(USERS) + ' ' + pick(ACTIONS).toLowerCase() + ' ' + pick(RESOURCES) + '</div>' +
+        '<div class="activity-time">' + timeLabel + '</div>' +
+      '</div>';
+    feed.appendChild(item);
+  }
+
+  // --- Scroll height guard ---
+  // Force minimum 3500px total scroll height by appending extra paragraphs if needed
+  function ensureScrollHeight() {
+    var target = 3500;
+    var current = document.body.scrollHeight;
+    if (current < target) {
+      var extra = document.createElement('div');
+      extra.style.cssText = 'padding: 24px; background: white; border-radius: 8px; margin: 0 24px 24px 24px;';
+      extra.id = 'extra-content';
+      var needed = Math.ceil((target - current) / 24) + 20; // rough estimate
+      for (var i = 0; i < needed; i++) {
+        var p = document.createElement('p');
+        p.style.cssText = 'font-size:0.88em;line-height:1.7;color:#6b7280;margin-bottom:12px;';
+        p.textContent = lorem(rnum(20, 35));
+        extra.appendChild(p);
+      }
+      document.getElementById('main-content').appendChild(extra);
+    }
+  }
+
+  // Run after layout is complete
+  if (document.readyState === 'complete') {
+    ensureScrollHeight();
+  } else {
+    window.addEventListener('load', ensureScrollHeight);
+  }
+
+}());
+</script>
+</body>
+</html>

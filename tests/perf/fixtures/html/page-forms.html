@@ -1,0 +1,1188 @@
+<!-- BlurrySite Perf Fixture: page-forms | FORM category + ARIA role selectors -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlurrySite Perf Fixture — Forms (FORM category)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 900px; margin: 0 auto; padding: 24px; color: #333; background: #f9fafb; }
+    .settings-section { background: white; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .settings-section h2 { font-size: 1.1em; margin-bottom: 16px; color: #111; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
+    .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 200px; }
+    label { font-size: 0.85em; font-weight: 500; color: #555; }
+    input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea { border: 1px solid #d1d5db; padding: 8px 12px; border-radius: 6px; font-size: 0.9em; width: 100%; box-sizing: border-box; }
+    input[type="checkbox"], input[type="radio"] { margin-right: 6px; }
+    fieldset { border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+    legend { font-weight: 600; padding: 0 8px; font-size: 0.9em; }
+    button { padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.9em; }
+    button[type="submit"] { background: #4f46e5; color: white; }
+    button[type="reset"] { background: #f3f4f6; color: #333; }
+    button:not([type]) { background: #e5e7eb; color: #333; }
+    /* ARIA elements */
+    [role="button"] { display: inline-flex; align-items: center; padding: 8px 16px; background: #f0f0f0; border-radius: 6px; cursor: pointer; border: 1px solid #ccc; margin: 4px; user-select: none; }
+    [role="checkbox"] { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; margin: 4px; }
+    [role="combobox"] { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px; background: white; cursor: pointer; min-width: 160px; display: inline-block; margin: 4px; }
+    [role="listbox"] { border: 1px solid #d1d5db; border-radius: 6px; background: white; min-width: 160px; display: inline-block; vertical-align: top; margin: 4px; }
+    [role="option"] { padding: 6px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 0.85em; }
+    [role="textbox"] { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px; min-height: 60px; background: white; width: 300px; display: inline-block; margin: 4px; }
+    .checkbox-row { display: flex; align-items: center; margin-bottom: 8px; }
+    .radio-row { display: flex; align-items: center; margin-bottom: 8px; }
+    .button-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .aria-group { margin-bottom: 20px; }
+    .aria-group h3 { font-size: 0.9em; font-weight: 600; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+  </style>
+</head>
+<body>
+
+<div id="perf-meta" data-fixture="forms" data-native-inputs="80" data-selects="30" data-aria-elements="68"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 1 — Account Settings
+     text inputs ×8, email inputs ×8
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="account-settings">
+  <h2>Account Settings</h2>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="full-name">Full Name</label>
+      <input type="text" id="full-name" value="John Doe">
+    </div>
+    <div class="form-group">
+      <label for="display-name">Display Name</label>
+      <input type="text" id="display-name" value="johndoe">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="company">Company</label>
+      <input type="text" id="company" value="ACME Corp">
+    </div>
+    <div class="form-group">
+      <label for="job-title">Job Title</label>
+      <input type="text" id="job-title" value="Software Engineer">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="department">Department</label>
+      <input type="text" id="department" value="Engineering">
+    </div>
+    <div class="form-group">
+      <label for="location">Location</label>
+      <input type="text" id="location" value="San Francisco, CA">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="phone">Phone</label>
+      <input type="text" id="phone" value="+1 (555) 234-5678">
+    </div>
+    <div class="form-group">
+      <label for="website">Website</label>
+      <input type="text" id="website" value="https://johndoe.dev">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="email-primary">Primary Email</label>
+      <input type="email" id="email-primary" value="john@example.com">
+    </div>
+    <div class="form-group">
+      <label for="email-secondary">Secondary Email</label>
+      <input type="email" id="email-secondary" value="john.doe@work.com">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="email-recovery">Recovery Email</label>
+      <input type="email" id="email-recovery" value="recovery@gmail.com">
+    </div>
+    <div class="form-group">
+      <label for="email-billing">Billing Email</label>
+      <input type="email" id="email-billing" value="billing@acmecorp.com">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="email-alerts">Alerts Email</label>
+      <input type="email" id="email-alerts" value="alerts@acmecorp.com">
+    </div>
+    <div class="form-group">
+      <label for="email-support">Support Email</label>
+      <input type="email" id="email-support" value="admin@company.org">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="email-7">Team Lead Email</label>
+      <input type="email" id="email-7" value="lead@team.io">
+    </div>
+    <div class="form-group">
+      <label for="email-8">Ops Email</label>
+      <input type="email" id="email-8" value="ops@company.org">
+    </div>
+  </div>
+
+  <fieldset>
+    <legend>Profile Bio</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="bio">Bio</label>
+        <textarea id="bio" rows="3">Software engineer with 8 years of experience.
+Specializing in distributed systems and cloud infrastructure.
+Open source contributor and occasional blogger.</textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="notes">Internal Notes</label>
+        <textarea id="notes" rows="3">Onboarded 2021-03.
+Team: Platform Engineering.
+Manager: Jane Smith.</textarea>
+      </div>
+    </div>
+  </fieldset>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 2 — Security Settings
+     password inputs ×8, checkboxes ×4 (2FA), radios ×4 (session timeout)
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="security-settings">
+  <h2>Security Settings</h2>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="current-password">Current Password</label>
+      <input type="password" id="current-password" value="••••••••">
+    </div>
+    <div class="form-group">
+      <label for="new-password">New Password</label>
+      <input type="password" id="new-password" value="••••••••">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="confirm-password">Confirm New Password</label>
+      <input type="password" id="confirm-password" value="••••••••">
+    </div>
+    <div class="form-group">
+      <label for="api-key">API Secret Key</label>
+      <input type="password" id="api-key" value="••••••••">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="token-1">Auth Token (Read)</label>
+      <input type="password" id="token-1" value="••••••••">
+    </div>
+    <div class="form-group">
+      <label for="token-2">Auth Token (Write)</label>
+      <input type="password" id="token-2" value="••••••••">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="token-3">Webhook Secret</label>
+      <input type="password" id="token-3" value="••••••••">
+    </div>
+    <div class="form-group">
+      <label for="token-4">Signing Key</label>
+      <input type="password" id="token-4" value="••••••••">
+    </div>
+  </div>
+
+  <fieldset>
+    <legend>Two-Factor Authentication</legend>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="2fa-sms" checked> SMS Authentication</label>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="2fa-totp" checked> Authenticator App (TOTP)</label>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="2fa-backup"> Backup Codes</label>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="2fa-hardware"> Hardware Security Key</label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Session Timeout</legend>
+    <div class="radio-row">
+      <label><input type="radio" name="session-timeout" value="15"> 15 minutes</label>
+    </div>
+    <div class="radio-row">
+      <label><input type="radio" name="session-timeout" value="30" checked> 30 minutes</label>
+    </div>
+    <div class="radio-row">
+      <label><input type="radio" name="session-timeout" value="60"> 1 hour</label>
+    </div>
+    <div class="radio-row">
+      <label><input type="radio" name="session-timeout" value="never"> Never</label>
+    </div>
+  </fieldset>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 3 — Notification Preferences
+     checkboxes ×4 in fieldset, textareas ×3
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="notification-settings">
+  <h2>Notification Preferences</h2>
+
+  <fieldset>
+    <legend>Email Notifications</legend>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="notif-security" checked> Security alerts</label>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="notif-billing" checked> Billing &amp; invoices</label>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="notif-product"> Product updates</label>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="notif-newsletter"> Newsletter</label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Notification Messages</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="notif-message-1">Security alert template</label>
+        <textarea id="notif-message-1" rows="3">Please notify me about security incidents immediately.
+Preferred contact: email
+Escalation: phone if no response within 1 hour</textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="notif-message-2">Billing alert template</label>
+        <textarea id="notif-message-2" rows="3">Send billing summaries on the 1st of each month.
+Include: invoice PDF, usage breakdown.
+CC: finance@acmecorp.com</textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="notif-message-3">Digest preferences</label>
+        <textarea id="notif-message-3" rows="3">Weekly digest every Monday at 8 AM PST.
+Include activity summary and pending actions.
+Skip weeks with no activity.</textarea>
+      </div>
+    </div>
+  </fieldset>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 4 — Display Settings
+     radios ×3 (theme), selects ×10, text inputs ×4, email inputs ×3
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="display-settings">
+  <h2>Display Settings</h2>
+
+  <fieldset>
+    <legend>Theme</legend>
+    <div class="radio-row">
+      <label><input type="radio" name="theme" value="light" checked> Light</label>
+    </div>
+    <div class="radio-row">
+      <label><input type="radio" name="theme" value="dark"> Dark</label>
+    </div>
+    <div class="radio-row">
+      <label><input type="radio" name="theme" value="system"> System default</label>
+    </div>
+  </fieldset>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-language">Language</label>
+      <select id="sel-language">
+        <option>English (US)</option>
+        <option>English (UK)</option>
+        <option>Français</option>
+        <option>Deutsch</option>
+        <option>Español</option>
+        <option>日本語</option>
+        <option>中文 (简体)</option>
+        <option>한국어</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-timezone">Timezone</label>
+      <select id="sel-timezone">
+        <option>America/Los_Angeles (UTC-8)</option>
+        <option>America/Denver (UTC-7)</option>
+        <option>America/Chicago (UTC-6)</option>
+        <option selected>America/New_York (UTC-5)</option>
+        <option>Europe/London (UTC+0)</option>
+        <option>Europe/Paris (UTC+1)</option>
+        <option>Asia/Tokyo (UTC+9)</option>
+        <option>Australia/Sydney (UTC+11)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-date-format">Date Format</label>
+      <select id="sel-date-format">
+        <option>MM/DD/YYYY</option>
+        <option selected>DD/MM/YYYY</option>
+        <option>YYYY-MM-DD</option>
+        <option>D MMM YYYY</option>
+        <option>MMMM D, YYYY</option>
+        <option>DD.MM.YYYY</option>
+        <option>D/M/YY</option>
+        <option>MMM D, YYYY</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-time-format">Time Format</label>
+      <select id="sel-time-format">
+        <option selected>12-hour (AM/PM)</option>
+        <option>24-hour</option>
+        <option>12-hour (no AM/PM)</option>
+        <option>ISO 8601</option>
+        <option>Unix timestamp</option>
+        <option>Relative (e.g. "2 hours ago")</option>
+        <option>Custom</option>
+        <option>Locale default</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-currency">Currency</label>
+      <select id="sel-currency">
+        <option selected>USD — US Dollar</option>
+        <option>EUR — Euro</option>
+        <option>GBP — British Pound</option>
+        <option>JPY — Japanese Yen</option>
+        <option>CAD — Canadian Dollar</option>
+        <option>AUD — Australian Dollar</option>
+        <option>INR — Indian Rupee</option>
+        <option>CNY — Chinese Yuan</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-number-format">Number Format</label>
+      <select id="sel-number-format">
+        <option selected>1,234.56 (US)</option>
+        <option>1.234,56 (EU)</option>
+        <option>1 234,56 (FR)</option>
+        <option>1'234.56 (CH)</option>
+        <option>12,34.56 (IN)</option>
+        <option>1234.56 (no separator)</option>
+        <option>Locale default</option>
+        <option>Custom</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-density">UI Density</label>
+      <select id="sel-density">
+        <option>Compact</option>
+        <option selected>Default</option>
+        <option>Comfortable</option>
+        <option>Spacious</option>
+        <option>Accessible (extra large)</option>
+        <option>Custom</option>
+        <option>Legacy</option>
+        <option>Touch-optimized</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-font-size">Font Size</label>
+      <select id="sel-font-size">
+        <option>12px</option>
+        <option>13px</option>
+        <option selected>14px</option>
+        <option>15px</option>
+        <option>16px</option>
+        <option>18px</option>
+        <option>20px</option>
+        <option>Accessibility (24px)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="text-accent-1">Accent color hex</label>
+      <input type="text" id="text-accent-1" value="#4f46e5">
+    </div>
+    <div class="form-group">
+      <label for="text-accent-2">Secondary color hex</label>
+      <input type="text" id="text-accent-2" value="#10b981">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="email-display-1">Report delivery email</label>
+      <input type="email" id="email-display-1" value="reports@acmecorp.com">
+    </div>
+    <div class="form-group">
+      <label for="email-display-2">Digest delivery email</label>
+      <input type="email" id="email-display-2" value="weekly@acmecorp.com">
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 5 — Advanced Settings
+     number inputs ×15, selects ×10, passwords ×4, text inputs ×4,
+     email ×2, textareas ×2
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="advanced-settings">
+  <h2>Advanced Settings</h2>
+
+  <fieldset>
+    <legend>Rate Limits &amp; Quotas</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-rate-limit">API rate limit (req/min)</label>
+        <input type="number" id="num-rate-limit" value="1000">
+      </div>
+      <div class="form-group">
+        <label for="num-burst-limit">Burst limit (req/s)</label>
+        <input type="number" id="num-burst-limit" value="42">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-quota-daily">Daily quota (requests)</label>
+        <input type="number" id="num-quota-daily" value="50000">
+      </div>
+      <div class="form-group">
+        <label for="num-quota-monthly">Monthly quota (requests)</label>
+        <input type="number" id="num-quota-monthly" value="1000000">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-max-retries">Max retries</label>
+        <input type="number" id="num-max-retries" value="3">
+      </div>
+      <div class="form-group">
+        <label for="num-timeout">Request timeout (ms)</label>
+        <input type="number" id="num-timeout" value="5000">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Storage &amp; Cache</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-cache-ttl">Cache TTL (seconds)</label>
+        <input type="number" id="num-cache-ttl" value="300">
+      </div>
+      <div class="form-group">
+        <label for="num-cache-size">Cache size (MB)</label>
+        <input type="number" id="num-cache-size" value="512">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-max-upload">Max upload size (MB)</label>
+        <input type="number" id="num-max-upload" value="100">
+      </div>
+      <div class="form-group">
+        <label for="num-retention">Log retention (days)</label>
+        <input type="number" id="num-retention" value="365">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Concurrency &amp; Workers</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-workers">Worker threads</label>
+        <input type="number" id="num-workers" value="8">
+      </div>
+      <div class="form-group">
+        <label for="num-queue-depth">Queue depth</label>
+        <input type="number" id="num-queue-depth" value="200">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-conn-pool">Connection pool size</label>
+        <input type="number" id="num-conn-pool" value="50">
+      </div>
+      <div class="form-group">
+        <label for="num-idle-timeout">Idle connection timeout (s)</label>
+        <input type="number" id="num-idle-timeout" value="30">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="num-keep-alive">Keep-alive interval (ms)</label>
+        <input type="number" id="num-keep-alive" value="15000">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Integration Endpoints</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="text-adv-1">Webhook URL</label>
+        <input type="text" id="text-adv-1" value="https://hooks.company.io/events">
+      </div>
+      <div class="form-group">
+        <label for="text-adv-2">API base URL</label>
+        <input type="text" id="text-adv-2" value="https://api.acmecorp.com/v2">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="token-adv-1">OAuth client ID</label>
+        <input type="password" id="token-adv-1" value="••••••••">
+      </div>
+      <div class="form-group">
+        <label for="token-adv-2">OAuth client secret</label>
+        <input type="password" id="token-adv-2" value="••••••••">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="token-adv-3">S3 access key ID</label>
+        <input type="password" id="token-adv-3" value="••••••••">
+      </div>
+      <div class="form-group">
+        <label for="token-adv-4">S3 secret access key</label>
+        <input type="password" id="token-adv-4" value="••••••••">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="email-adv-1">DevOps alert email</label>
+        <input type="email" id="email-adv-1" value="devops@acmecorp.com">
+      </div>
+      <div class="form-group">
+        <label for="email-adv-2">Sysadmin email</label>
+        <input type="email" id="email-adv-2" value="sysadmin@acmecorp.com">
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- selects 11–20 -->
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-log-level">Log Level</label>
+      <select id="sel-log-level">
+        <option>TRACE</option>
+        <option>DEBUG</option>
+        <option selected>INFO</option>
+        <option>WARN</option>
+        <option>ERROR</option>
+        <option>FATAL</option>
+        <option>OFF</option>
+        <option>VERBOSE</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-env">Environment</label>
+      <select id="sel-env">
+        <option>Development</option>
+        <option>Staging</option>
+        <option selected>Production</option>
+        <option>Canary</option>
+        <option>Preview</option>
+        <option>DR</option>
+        <option>QA</option>
+        <option>Load Test</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-region">Primary Region</label>
+      <select id="sel-region">
+        <option>us-east-1</option>
+        <option selected>us-west-2</option>
+        <option>eu-west-1</option>
+        <option>ap-southeast-1</option>
+        <option>ap-northeast-1</option>
+        <option>sa-east-1</option>
+        <option>eu-central-1</option>
+        <option>ca-central-1</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-failover-region">Failover Region</label>
+      <select id="sel-failover-region">
+        <option>us-east-1</option>
+        <option>us-west-2</option>
+        <option selected>eu-west-1</option>
+        <option>ap-southeast-1</option>
+        <option>ap-northeast-1</option>
+        <option>sa-east-1</option>
+        <option>eu-central-1</option>
+        <option>ca-central-1</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-storage-class">Storage Class</label>
+      <select id="sel-storage-class">
+        <option selected>Standard</option>
+        <option>Intelligent-Tiering</option>
+        <option>Standard-IA</option>
+        <option>One Zone-IA</option>
+        <option>Glacier Instant</option>
+        <option>Glacier Flexible</option>
+        <option>Glacier Deep Archive</option>
+        <option>Reduced Redundancy</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-encryption">Encryption</label>
+      <select id="sel-encryption">
+        <option>None</option>
+        <option>AES-128</option>
+        <option selected>AES-256</option>
+        <option>RSA-2048</option>
+        <option>RSA-4096</option>
+        <option>ChaCha20-Poly1305</option>
+        <option>TLS 1.3</option>
+        <option>Envelope (KMS)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-billing-plan">Billing Plan</label>
+      <select id="sel-billing-plan">
+        <option>Free</option>
+        <option>Starter ($9/mo)</option>
+        <option selected>Pro ($49/mo)</option>
+        <option>Business ($149/mo)</option>
+        <option>Enterprise (custom)</option>
+        <option>Pay-as-you-go</option>
+        <option>Annual (20% off)</option>
+        <option>Partner</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-support-tier">Support Tier</label>
+      <select id="sel-support-tier">
+        <option>Community</option>
+        <option>Email only</option>
+        <option selected>Standard (email + chat)</option>
+        <option>Priority (24h SLA)</option>
+        <option>Premium (4h SLA)</option>
+        <option>Enterprise (dedicated CSM)</option>
+        <option>Platinum (1h SLA)</option>
+        <option>White-glove</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-audit-log">Audit Log Retention</label>
+      <select id="sel-audit-log">
+        <option>30 days</option>
+        <option>90 days</option>
+        <option selected>1 year</option>
+        <option>2 years</option>
+        <option>5 years</option>
+        <option>7 years (compliance)</option>
+        <option>10 years</option>
+        <option>Indefinite</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-sso-provider">SSO Provider</label>
+      <select id="sel-sso-provider">
+        <option>None</option>
+        <option>Okta</option>
+        <option selected>Azure AD</option>
+        <option>Google Workspace</option>
+        <option>OneLogin</option>
+        <option>Ping Identity</option>
+        <option>JumpCloud</option>
+        <option>LDAP</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- selects 21–30 — more display/reporting options -->
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-report-format">Report Format</label>
+      <select id="sel-report-format">
+        <option selected>PDF</option>
+        <option>CSV</option>
+        <option>Excel (.xlsx)</option>
+        <option>JSON</option>
+        <option>XML</option>
+        <option>HTML</option>
+        <option>Markdown</option>
+        <option>Parquet</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-report-freq">Report Frequency</label>
+      <select id="sel-report-freq">
+        <option>Daily</option>
+        <option selected>Weekly</option>
+        <option>Monthly</option>
+        <option>Quarterly</option>
+        <option>Annually</option>
+        <option>On demand</option>
+        <option>Hourly (premium)</option>
+        <option>Real-time (enterprise)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-ip-policy">IP Allowlist Policy</label>
+      <select id="sel-ip-policy">
+        <option>Disabled</option>
+        <option selected>Warn only</option>
+        <option>Enforce (block others)</option>
+        <option>Log &amp; alert</option>
+        <option>CAPTCHA challenge</option>
+        <option>Rate-limit unknowns</option>
+        <option>Zero-trust (all require verify)</option>
+        <option>Custom</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-mfa-policy">MFA Policy</label>
+      <select id="sel-mfa-policy">
+        <option>Optional</option>
+        <option selected>Required for admins</option>
+        <option>Required for all</option>
+        <option>Required on new device</option>
+        <option>Required after 30 days</option>
+        <option>Adaptive (risk-based)</option>
+        <option>Hardware key only</option>
+        <option>Disabled (legacy)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="sel-cdn-provider">CDN Provider</label>
+      <select id="sel-cdn-provider">
+        <option selected>Cloudflare</option>
+        <option>AWS CloudFront</option>
+        <option>Fastly</option>
+        <option>Akamai</option>
+        <option>Azure CDN</option>
+        <option>Google Cloud CDN</option>
+        <option>Bunny.net</option>
+        <option>None (origin only)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sel-waf">WAF Mode</label>
+      <select id="sel-waf">
+        <option>Off</option>
+        <option selected>Monitor</option>
+        <option>Block (OWASP Top 10)</option>
+        <option>Block (strict)</option>
+        <option>Custom ruleset</option>
+        <option>Legacy mode</option>
+        <option>ML-assisted</option>
+        <option>Challenge mode</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="text-adv-3">Custom domain</label>
+      <input type="text" id="text-adv-3" value="app.acmecorp.com">
+    </div>
+    <div class="form-group">
+      <label for="text-adv-4">Allowed IP ranges (CIDR)</label>
+      <input type="text" id="text-adv-4" value="10.0.0.0/8, 192.168.1.0/24">
+    </div>
+  </div>
+
+  <fieldset>
+    <legend>Advanced Notes</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="textarea-adv-1">Deployment notes</label>
+        <textarea id="textarea-adv-1" rows="3">Deploy via CI/CD pipeline on merge to main.
+Rolling update strategy; canary at 5%.
+Rollback: automated on error rate &gt; 1%.</textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="textarea-adv-2">Compliance notes</label>
+        <textarea id="textarea-adv-2" rows="3">SOC 2 Type II certified (audit: 2024-Q4).
+GDPR DPA signed with all sub-processors.
+HIPAA BAA on file with AWS and Datadog.</textarea>
+      </div>
+    </div>
+  </fieldset>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 6 — Custom Components (ARIA-role elements)
+     div[role="button"] ×10, div[role="checkbox"] ×8,
+     div[role="combobox"] ×8, div[role="listbox"] ×7 each with
+     5 div[role="option"] children (35 total), div[role="textbox"] ×7
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="custom-components">
+  <h2>Custom Components <span style="font-weight:400;font-size:0.85em;color:#888;">(React-style Custom Controls)</span></h2>
+
+  <div class="aria-group">
+    <h3>Custom Buttons (div[role="button"])</h3>
+    <div role="button" tabindex="0" aria-label="Save Draft">Save Draft</div>
+    <div role="button" tabindex="0" aria-label="Mark Complete">Mark Complete</div>
+    <div role="button" tabindex="0" aria-label="Enable Notifications">Enable Notifications</div>
+    <div role="button" tabindex="0" aria-label="Archive Project">Archive Project</div>
+    <div role="button" tabindex="0" aria-label="Invite Team Member">Invite Team Member</div>
+    <div role="button" tabindex="0" aria-label="Export Data">Export Data</div>
+    <div role="button" tabindex="0" aria-label="Sync Now">Sync Now</div>
+    <div role="button" tabindex="0" aria-label="Generate Report">Generate Report</div>
+    <div role="button" tabindex="0" aria-label="Request Access">Request Access</div>
+    <div role="button" tabindex="0" aria-label="Revoke Token">Revoke Token</div>
+  </div>
+
+  <div class="aria-group">
+    <h3>Custom Checkboxes (div[role="checkbox"])</h3>
+    <div role="checkbox" tabindex="0" aria-checked="true">
+      <span style="margin-right:6px;">☑</span> Auto-save drafts
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="false">
+      <span style="margin-right:6px;">☐</span> Enable dark mode
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="true">
+      <span style="margin-right:6px;">☑</span> Receive product announcements
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="false">
+      <span style="margin-right:6px;">☐</span> Show onboarding tooltips
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="true">
+      <span style="margin-right:6px;">☑</span> Compress images on upload
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="false">
+      <span style="margin-right:6px;">☐</span> Enable experimental features
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="true">
+      <span style="margin-right:6px;">☑</span> Analytics opt-in
+    </div>
+    <div role="checkbox" tabindex="0" aria-checked="false">
+      <span style="margin-right:6px;">☐</span> Share usage data
+    </div>
+  </div>
+
+  <div class="aria-group">
+    <h3>Custom Comboboxes (div[role="combobox"])</h3>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select primary role">
+      Senior Engineer ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select team">
+      Platform Team ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select permissions level">
+      Read &amp; Write ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select notification channel">
+      Email ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select escalation tier">
+      Tier 2 ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select data center">
+      US-West-2 ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select backup frequency">
+      Daily ▾
+    </div>
+    <div role="combobox" tabindex="0" aria-expanded="false" aria-label="Select priority level">
+      High ▾
+    </div>
+  </div>
+
+  <div class="aria-group">
+    <h3>Custom Listboxes (div[role="listbox"] with div[role="option"])</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+
+      <div role="listbox" aria-label="Select user role">
+        <div role="option" aria-selected="false">Viewer</div>
+        <div role="option" aria-selected="true">Editor</div>
+        <div role="option" aria-selected="false">Commenter</div>
+        <div role="option" aria-selected="false">Admin</div>
+        <div role="option" aria-selected="false">Owner</div>
+      </div>
+
+      <div role="listbox" aria-label="Select notification type">
+        <div role="option" aria-selected="true">Email</div>
+        <div role="option" aria-selected="false">SMS</div>
+        <div role="option" aria-selected="true">Push</div>
+        <div role="option" aria-selected="false">Slack</div>
+        <div role="option" aria-selected="false">Webhook</div>
+      </div>
+
+      <div role="listbox" aria-label="Select export format">
+        <div role="option" aria-selected="true">PDF</div>
+        <div role="option" aria-selected="false">CSV</div>
+        <div role="option" aria-selected="false">Excel</div>
+        <div role="option" aria-selected="false">JSON</div>
+        <div role="option" aria-selected="false">XML</div>
+      </div>
+
+      <div role="listbox" aria-label="Select log level">
+        <div role="option" aria-selected="false">TRACE</div>
+        <div role="option" aria-selected="false">DEBUG</div>
+        <div role="option" aria-selected="true">INFO</div>
+        <div role="option" aria-selected="false">WARN</div>
+        <div role="option" aria-selected="false">ERROR</div>
+      </div>
+
+      <div role="listbox" aria-label="Select theme">
+        <div role="option" aria-selected="true">Light</div>
+        <div role="option" aria-selected="false">Dark</div>
+        <div role="option" aria-selected="false">System</div>
+        <div role="option" aria-selected="false">High Contrast</div>
+        <div role="option" aria-selected="false">Custom</div>
+      </div>
+
+      <div role="listbox" aria-label="Select timezone region">
+        <div role="option" aria-selected="false">Americas</div>
+        <div role="option" aria-selected="true">Europe</div>
+        <div role="option" aria-selected="false">Asia</div>
+        <div role="option" aria-selected="false">Pacific</div>
+        <div role="option" aria-selected="false">Africa</div>
+      </div>
+
+      <div role="listbox" aria-label="Select priority">
+        <div role="option" aria-selected="false">Critical</div>
+        <div role="option" aria-selected="false">High</div>
+        <div role="option" aria-selected="true">Medium</div>
+        <div role="option" aria-selected="false">Low</div>
+        <div role="option" aria-selected="false">Minimal</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="aria-group">
+    <h3>Custom Textboxes (div[role="textbox" contenteditable])</h3>
+    <div role="textbox" contenteditable="true" aria-label="Custom filter expression" aria-multiline="false">status:active AND team:platform</div>
+    <div role="textbox" contenteditable="true" aria-label="Search query" aria-multiline="false">project:dashboard assignee:johndoe</div>
+    <div role="textbox" contenteditable="true" aria-label="Mention collaborators" aria-multiline="false">@jane.smith @carlos.ruiz please review</div>
+    <div role="textbox" contenteditable="true" aria-label="Quick note" aria-multiline="true">Follow up with the DevOps team about the latency spike.
+Check if the cache flush resolved the issue.</div>
+    <div role="textbox" contenteditable="true" aria-label="Custom JIRA JQL" aria-multiline="false">project = ENG AND priority = High AND sprint in openSprints()</div>
+    <div role="textbox" contenteditable="true" aria-label="SQL snippet" aria-multiline="true">SELECT user_id, COUNT(*) as events
+FROM audit_log
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY user_id</div>
+    <div role="textbox" contenteditable="true" aria-label="Internal memo" aria-multiline="true">Reminder: rotate API keys by end of quarter.
+Owner: DevOps
+Deadline: 2024-12-31</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION 7 — Action Buttons
+     submit ×8, reset ×4, generic ×8
+     ═══════════════════════════════════════════════════════════ -->
+<section class="settings-section" id="action-buttons">
+  <h2>Action Buttons</h2>
+
+  <fieldset>
+    <legend>Submit Actions</legend>
+    <div class="button-row">
+      <button type="submit">Save Changes</button>
+      <button type="submit">Update Profile</button>
+      <button type="submit">Apply Settings</button>
+      <button type="submit">Submit Request</button>
+    </div>
+    <div class="button-row">
+      <button type="submit">Confirm Action</button>
+      <button type="submit">Deploy Now</button>
+      <button type="submit">Publish</button>
+      <button type="submit">Send Invitation</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Reset Actions</legend>
+    <div class="button-row">
+      <button type="reset">Reset to Defaults</button>
+      <button type="reset">Clear Form</button>
+      <button type="reset">Discard Changes</button>
+      <button type="reset">Restore Last Saved</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Generic Actions</legend>
+    <div class="button-row">
+      <button>Preview</button>
+      <button>Duplicate</button>
+      <button>Export</button>
+      <button>Import</button>
+    </div>
+    <div class="button-row">
+      <button>Archive</button>
+      <button>Share</button>
+      <button>Download</button>
+      <button>Refresh</button>
+    </div>
+  </fieldset>
+</section>
+
+<script>
+// JS-generated elements to hit exact spec counts.
+// All construction happens synchronously at parse time so the DOM is stable
+// for stampElements() benchmarks.
+//
+// True static HTML counts (excl. JS template string literals):
+//   text=14, email=12, password=12, number=15, select=24, textarea=7
+// Target counts: text=20, email=15, password=15, number=15, select=30, textarea=10
+// JS generates:  text+6,  email+3,  password+3,  number+0, select+6, textarea+3
+
+(function generateRemainingElements() {
+  // ── text inputs: 14 true static → need 6 more to hit 20 ──
+  var textSection = document.getElementById('account-settings');
+  var extraTextFieldset = document.createElement('fieldset');
+  extraTextFieldset.innerHTML = '<legend>Additional Profile Fields</legend>';
+  var textValues = [
+    ['LinkedIn', 'linkedin.com/in/johndoe'],
+    ['GitHub', 'github.com/johndoe'],
+    ['Employee ID', 'EMP-20210315'],
+    ['Cost Center', 'CC-0042'],
+    ['Preferred Name', 'Alex'],
+    ['Middle Name', 'Alexander'],
+  ];
+  textValues.forEach(function(pair, i) {
+    var row = document.createElement('div');
+    row.className = 'form-row';
+    row.innerHTML =
+      '<div class="form-group">' +
+        '<label for="gen-text-' + i + '">' + pair[0] + '</label>' +
+        '<input type="text" id="gen-text-' + i + '" value="' + pair[1] + '">' +
+      '</div>';
+    extraTextFieldset.appendChild(row);
+  });
+  textSection.appendChild(extraTextFieldset);
+
+  // ── email inputs: 12 true static → need 3 more to hit 15 ──
+  var emailFieldset = document.createElement('fieldset');
+  emailFieldset.innerHTML = '<legend>Additional Contact Emails</legend>';
+  var emailValues = [
+    ['Partnerships', 'partners@acmecorp.com'],
+    ['Investor Relations', 'ir@acmecorp.com'],
+    ['PR Contact', 'pr@acmecorp.com'],
+  ];
+  emailValues.forEach(function(pair, i) {
+    var row = document.createElement('div');
+    row.className = 'form-row';
+    row.innerHTML =
+      '<div class="form-group">' +
+        '<label for="gen-email-' + i + '">' + pair[0] + '</label>' +
+        '<input type="email" id="gen-email-' + i + '" value="' + pair[1] + '">' +
+      '</div>';
+    emailFieldset.appendChild(row);
+  });
+  textSection.appendChild(emailFieldset);
+
+  // ── password inputs: 12 true static → need 3 more to hit 15 ──
+  var secSection = document.getElementById('security-settings');
+  var extraPwFieldset = document.createElement('fieldset');
+  extraPwFieldset.innerHTML = '<legend>Additional Credentials</legend>';
+  var pwLabels = ['Database password', 'Redis auth token', 'Vault root token'];
+  pwLabels.forEach(function(label, i) {
+    var row = document.createElement('div');
+    row.className = 'form-row';
+    row.innerHTML =
+      '<div class="form-group">' +
+        '<label for="gen-pw-' + i + '">' + label + '</label>' +
+        '<input type="password" id="gen-pw-' + i + '" value="••••••••">' +
+      '</div>';
+    extraPwFieldset.appendChild(row);
+  });
+  secSection.appendChild(extraPwFieldset);
+
+  // ── selects: 24 static → need 6 more to hit 30 ──
+  var advSection = document.getElementById('advanced-settings');
+  var extraSelFieldset = document.createElement('fieldset');
+  extraSelFieldset.innerHTML = '<legend>Additional Configuration Selects</legend>';
+  var selDefs = [
+    ['Monitoring tool',      ['Datadog', 'New Relic', 'Dynatrace', 'Prometheus', 'Grafana', 'AppDynamics', 'Elastic APM', 'Honeycomb']],
+    ['Incident management',  ['PagerDuty', 'OpsGenie', 'VictorOps', 'xMatters', 'Jira Ops', 'Statuspage', 'Squadcast', 'Rootly']],
+    ['CI/CD platform',       ['GitHub Actions', 'GitLab CI', 'CircleCI', 'Jenkins', 'Buildkite', 'Travis CI', 'TeamCity', 'Drone']],
+    ['Container registry',   ['Docker Hub', 'ECR', 'GCR', 'ACR', 'Quay.io', 'Harbor', 'GitHub GHCR', 'Artifactory']],
+    ['Secret manager',       ['HashiCorp Vault', 'AWS Secrets Manager', 'GCP Secret Manager', 'Azure Key Vault', 'Doppler', '1Password Secrets', 'CyberArk', 'Infisical']],
+    ['Message broker',       ['Kafka', 'RabbitMQ', 'AWS SQS', 'GCP Pub/Sub', 'Azure Service Bus', 'ActiveMQ', 'NATS', 'Redis Streams']],
+  ];
+  selDefs.forEach(function(def, si) {
+    var row = document.createElement('div');
+    row.className = 'form-row';
+    var options = def[1].map(function(opt) { return '<option>' + opt + '</option>'; }).join('');
+    row.innerHTML =
+      '<div class="form-group">' +
+        '<label for="gen-sel-' + si + '">' + def[0] + '</label>' +
+        '<select id="gen-sel-' + si + '">' + options + '</select>' +
+      '</div>';
+    extraSelFieldset.appendChild(row);
+  });
+  advSection.appendChild(extraSelFieldset);
+
+  // ── textarea: 7 true static → need 3 more to hit 10 ──
+  var extraTaFieldset = document.createElement('fieldset');
+  extraTaFieldset.innerHTML = '<legend>Additional Notes</legend>';
+  var taValues = [
+    ['Incident runbook', 'Step 1: Check dashboard for alerts.\nStep 2: Page on-call via PagerDuty.\nStep 3: Open incident channel in Slack.\nStep 4: Begin postmortem within 24 h.'],
+    ['Architecture notes', 'Microservices on K8s (EKS).\nService mesh: Istio.\nObservability: Datadog + Jaeger traces.\nAll inter-service calls use mTLS.'],
+    ['On-call notes', 'Primary: @alice (Mon–Wed)\nSecondary: @bob (Thu–Sun)\nEscalation: @cto after 15 min no ack.\nBridge: +1-800-555-0199.'],
+  ];
+  taValues.forEach(function(pair, i) {
+    var row = document.createElement('div');
+    row.className = 'form-row';
+    row.innerHTML =
+      '<div class="form-group">' +
+        '<label for="gen-ta-' + i + '">' + pair[0] + '</label>' +
+        '<textarea id="gen-ta-' + i + '" rows="4">' + pair[1] + '</textarea>' +
+      '</div>';
+    extraTaFieldset.appendChild(row);
+  });
+  advSection.appendChild(extraTaFieldset);
+})();
+</script>
+
+</body>
+</html>

@@ -11,28 +11,18 @@
 const BlurrySitePopupRenderHtb = (() => {
   'use strict';
 
-  function _t(key) {
-    return chrome.i18n.getMessage(key) || key;
-  }
+  var _t           = BlurrySitePopupShared.t;
+  var _makeToggle  = BlurrySitePopupShared.makeToggle;
+  var _updateFill  = BlurrySitePopupShared.updateFill;
+  var _makeDivider = BlurrySitePopupShared.makeDivider;
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
-
-  function _updateFill(input) {
-    var pct = ((+input.value - +input.min) / (+input.max - +input.min) * 100).toFixed(1);
-    input.style.setProperty('--bl-slider-pct', pct + '%');
-  }
 
   function _makeLabel(text) {
     var el = document.createElement('div');
     el.className = 'bl-htb-group__label';
     el.textContent = text;
     return el;
-  }
-
-  function _makeDivider() {
-    var hr = document.createElement('hr');
-    hr.className = 'bl-divider';
-    return hr;
   }
 
   // ── Section builders ─────────────────────────────────────────────────────────
@@ -97,22 +87,30 @@ const BlurrySitePopupRenderHtb = (() => {
    * sections when the active type changes (without a full re-render).
    */
   function _updateVisibility(activeType, isBlurAll, refs) {
-    var hideStrength = (activeType === 'redacted' || activeType === 'masked' || activeType === 'color');
-    var hideReveal   = (activeType === 'color');
-    var hideCats     = !isBlurAll;
-    var showColor    = (!isBlurAll && activeType === 'color');
+    var hideStrength       = (activeType === 'redacted' || activeType === 'masked' || activeType === 'color');
+    var hideReveal         = (activeType === 'color');
+    var hideCats           = !isBlurAll;
+    var showColor          = (!isBlurAll && activeType === 'color');
+    var showRedactionColor = (isBlurAll && activeType === 'redacted');
 
-    if (refs.catsDivider)  { refs.catsDivider.hidden  = hideCats; }
-    if (refs.catsGroup)    { refs.catsGroup.hidden     = hideCats; }
-    if (refs.strengthDiv)  { refs.strengthDiv.hidden   = hideStrength; }
-    if (refs.revealDiv)    { refs.revealDiv.hidden      = hideReveal; }
-    if (refs.colorDiv)     { refs.colorDiv.hidden       = !showColor; }
+    if (refs.catsDivider)        { refs.catsDivider.hidden        = hideCats; }
+    if (refs.catsGroup)          { refs.catsGroup.hidden           = hideCats; }
+    if (refs.strengthDiv)        { refs.strengthDiv.hidden         = hideStrength; }
+    if (refs.revealDiv)          { refs.revealDiv.hidden            = hideReveal; }
+    if (refs.colorDiv)           { refs.colorDiv.hidden             = !showColor; }
+    if (refs.redactionColorDiv)  { refs.redactionColorDiv.hidden    = !showRedactionColor; }
+
+    if (refs.catsGroup) {
+      var mediaItem = refs.catsGroup.querySelector('[data-bl-cat-key="media"]');
+      if (mediaItem) mediaItem.hidden = (activeType === 'masked');
+    }
   }
 
   /**
    * Categories grid — Blur All mode only.
+   * activeType hides the media item when mode is masked (not applicable).
    */
-  function _buildCategories(settings, onSave) {
+  function _buildCategories(settings, onSave, activeType) {
     var group = document.createElement('div');
     group.className = 'bl-htb-group';
     group.appendChild(_makeLabel(_t('group_categories')));
@@ -132,19 +130,22 @@ const BlurrySitePopupRenderHtb = (() => {
       (function (def) {
         var label = document.createElement('label');
         label.className = 'bl-cat-item';
+        label.dataset.blCatKey = def.key;
 
         var cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = !!(settings.blur_categories && settings.blur_categories[def.key]);
         cb.addEventListener('change', function () {
+          // Read live DOM state from every checkbox in the grid so sequential
+          // changes don't overwrite each other via a stale settings closure.
           var merged = {};
-          var cats = settings.blur_categories || {};
-          for (var k in cats) {
-            if (Object.prototype.hasOwnProperty.call(cats, k)) {
-              merged[k] = cats[k];
-            }
+          var items = grid.querySelectorAll('input[type="checkbox"]');
+          for (var j = 0; j < catDefs.length; j++) {
+            merged[catDefs[j].key] = items[j] ? items[j].checked : false;
           }
-          merged[def.key] = cb.checked;
+          // At least one category must remain selected.
+          var anyOn = Object.keys(merged).some(function (k) { return merged[k]; });
+          if (!anyOn) { cb.checked = true; return; }
           onSave({ blur_categories: merged });
         });
 
@@ -153,6 +154,9 @@ const BlurrySitePopupRenderHtb = (() => {
 
         label.appendChild(cb);
         label.appendChild(span);
+
+        if (def.key === 'media') label.hidden = (activeType === 'masked');
+
         grid.appendChild(label);
       })(catDefs[i]);
     }
@@ -176,7 +180,7 @@ const BlurrySitePopupRenderHtb = (() => {
     slider.type  = 'range';
     slider.className = 'bl-slider';
     slider.min   = '2';
-    slider.max   = '20';
+    slider.max   = '32';
     slider.step  = '1';
     slider.value = String(settings.blur_radius || 6);
 
@@ -198,19 +202,14 @@ const BlurrySitePopupRenderHtb = (() => {
     wrap.appendChild(valEl);
     group.appendChild(wrap);
 
-    // Subtle / Moderate / Strong labels
-    var labelsRow = document.createElement('div');
-    labelsRow.className = 'bl-slider-labels';
-    var lSubtle = document.createElement('span');
-    lSubtle.textContent = _t('htb_strength_subtle');
-    var lMod = document.createElement('span');
-    lMod.textContent = _t('htb_strength_moderate');
-    var lStrong = document.createElement('span');
-    lStrong.textContent = _t('htb_strength_strong');
-    labelsRow.appendChild(lSubtle);
-    labelsRow.appendChild(lMod);
-    labelsRow.appendChild(lStrong);
-    group.appendChild(labelsRow);
+    var ticksRow = document.createElement('div');
+    ticksRow.className = 'bl-slider-ticks';
+    for (var j = 0; j < 3; j++) {
+      var tick = document.createElement('span');
+      tick.className = 'bl-slider-tick';
+      ticksRow.appendChild(tick);
+    }
+    group.appendChild(ticksRow);
 
     return group;
   }
@@ -276,24 +275,13 @@ const BlurrySitePopupRenderHtb = (() => {
     labelText.textContent = _t('setting_thorough_blur');
     labelWrap.appendChild(labelText);
 
-    var toggleLabel = document.createElement('label');
-    toggleLabel.className = 'bl-toggle';
-
-    var toggleInput = document.createElement('input');
-    toggleInput.type = 'checkbox';
-    toggleInput.checked = !!settings.thorough_blur;
-    toggleInput.addEventListener('change', function () {
-      onSave({ thorough_blur: toggleInput.checked });
+    var tog = _makeToggle('bl-htb-thorough-toggle', !!settings.thorough_blur, _t('setting_thorough_blur'));
+    tog.input.addEventListener('change', function () {
+      onSave({ thorough_blur: tog.input.checked });
     });
 
-    var track = document.createElement('span');
-    track.className = 'bl-toggle__track';
-
-    toggleLabel.appendChild(toggleInput);
-    toggleLabel.appendChild(track);
-
     row.appendChild(labelWrap);
-    row.appendChild(toggleLabel);
+    row.appendChild(tog.label);
     group.appendChild(row);
 
     var hint = document.createElement('p');
@@ -326,10 +314,8 @@ const BlurrySitePopupRenderHtb = (() => {
     colorInput.className = 'bl-color-input';
     colorInput.value = colorCurrent;
     colorInput.addEventListener('input', function () {
-      var opVal = (settings.pick_blur_color && typeof settings.pick_blur_color.opacity === 'number')
-        ? settings.pick_blur_color.opacity
-        : 1.0;
-      onSave({ pick_blur_color: { hex: colorInput.value, opacity: opVal } });
+      // Read opacity from the live slider to avoid stale closure overwriting user's change.
+      onSave({ pick_blur_color: { hex: colorInput.value, opacity: +opSlider.value / 100 } });
     });
 
     var colorLabel = document.createElement('span');
@@ -379,6 +365,36 @@ const BlurrySitePopupRenderHtb = (() => {
     return group;
   }
 
+  /**
+   * Redaction color picker — Blur All + Redacted mode only.
+   * No opacity slider: redaction is always opaque.
+   */
+  function _buildRedactionColorPicker(settings, onSave) {
+    var group = document.createElement('div');
+    group.className = 'bl-htb-group';
+    group.appendChild(_makeLabel(_t('htb_label_color')));
+
+    var colorRow = document.createElement('div');
+    colorRow.className = 'bl-color-row';
+
+    var colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'bl-color-input';
+    colorInput.value = settings.redaction_color || '#000000';
+    colorInput.addEventListener('input', function () {
+      onSave({ redaction_color: colorInput.value });
+    });
+
+    var colorLabel = document.createElement('span');
+    colorLabel.className = 'bl-form-row__label';
+    colorLabel.textContent = _t('setting_redaction_color');
+
+    colorRow.appendChild(colorInput);
+    colorRow.appendChild(colorLabel);
+    group.appendChild(colorRow);
+    return group;
+  }
+
   // ── Public API ───────────────────────────────────────────────────────────────
 
   /**
@@ -397,10 +413,11 @@ const BlurrySitePopupRenderHtb = (() => {
     if (isBlurAll === undefined) isBlurAll = true;
     var activeType = isBlurAll ? (settings.blur_mode || 'gaussian') : (settings.pick_blur_type || 'gaussian');
 
-    var hideCats     = !isBlurAll;
-    var hideStrength = (activeType === 'redacted' || activeType === 'masked' || activeType === 'color');
-    var hideReveal   = (activeType === 'color');
-    var showColor    = (!isBlurAll && activeType === 'color');
+    var hideCats           = !isBlurAll;
+    var hideStrength       = (activeType === 'redacted' || activeType === 'masked' || activeType === 'color');
+    var hideReveal         = (activeType === 'color');
+    var showColor          = (!isBlurAll && activeType === 'color');
+    var showRedactionColor = (isBlurAll && activeType === 'redacted');
 
     // Collect references for dynamic show/hide after chip clicks
     var sectionRefs = {};
@@ -413,14 +430,25 @@ const BlurrySitePopupRenderHtb = (() => {
     containerEl.appendChild(revealDiv);
     sectionRefs.revealDiv = revealDiv;
 
-    // ── 2. Thorough blur (always visible) ──────────────────────────────────────
-    containerEl.appendChild(_makeDivider());
-    containerEl.appendChild(_buildThoroughBlur(settings, onSave));
-
-    // ── 3. Type chips (Blur Look) ──────────────────────────────────────────────
+    // ── 2. Type chips (Blur Look) ──────────────────────────────────────────────
     containerEl.appendChild(_makeDivider());
     var typeGroup = _buildTypeChips(settings, isBlurAll, activeType, onSave, sectionRefs);
     containerEl.appendChild(typeGroup);
+
+    // ── 3. Strength / Redaction color (mutually exclusive, same slot) ──────────
+    var strengthDiv = document.createElement('div');
+    strengthDiv.appendChild(_makeDivider());
+    strengthDiv.appendChild(_buildStrength(settings, onSave));
+    strengthDiv.hidden = hideStrength;
+    containerEl.appendChild(strengthDiv);
+    sectionRefs.strengthDiv = strengthDiv;
+
+    var redactionColorDiv = document.createElement('div');
+    redactionColorDiv.appendChild(_makeDivider());
+    redactionColorDiv.appendChild(_buildRedactionColorPicker(settings, onSave));
+    redactionColorDiv.hidden = !showRedactionColor;
+    containerEl.appendChild(redactionColorDiv);
+    sectionRefs.redactionColorDiv = redactionColorDiv;
 
     // ── 4. Categories (Blur All only) ──────────────────────────────────────────
     var catsDivider = _makeDivider();
@@ -428,27 +456,19 @@ const BlurrySitePopupRenderHtb = (() => {
     containerEl.appendChild(catsDivider);
     sectionRefs.catsDivider = catsDivider;
 
-    var catsGroup = _buildCategories(settings, onSave);
+    var catsGroup = _buildCategories(settings, onSave, activeType);
     catsGroup.hidden = hideCats;
     containerEl.appendChild(catsGroup);
     sectionRefs.catsGroup = catsGroup;
 
-    // ── 5. Strength slider ─────────────────────────────────────────────────────
-    var strengthDiv = document.createElement('div');
-    var strengthDivider = _makeDivider();
-    var strengthGroup = _buildStrength(settings, onSave);
-    strengthDiv.appendChild(strengthDivider);
-    strengthDiv.appendChild(strengthGroup);
-    strengthDiv.hidden = hideStrength;
-    containerEl.appendChild(strengthDiv);
-    sectionRefs.strengthDiv = strengthDiv;
+    // ── 5. Thorough blur (always visible) ──────────────────────────────────────
+    containerEl.appendChild(_makeDivider());
+    containerEl.appendChild(_buildThoroughBlur(settings, onSave));
 
     // ── 6. Color picker (Pick & Blur + Color type only) ────────────────────────
     var colorDiv = document.createElement('div');
-    var colorDivider = _makeDivider();
-    var colorGroup = _buildColorPicker(settings, onSave);
-    colorDiv.appendChild(colorDivider);
-    colorDiv.appendChild(colorGroup);
+    colorDiv.appendChild(_makeDivider());
+    colorDiv.appendChild(_buildColorPicker(settings, onSave));
     colorDiv.hidden = !showColor;
     containerEl.appendChild(colorDiv);
     sectionRefs.colorDiv = colorDiv;

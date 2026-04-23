@@ -60,6 +60,9 @@ function buildStubSource() {
       clear_all:              jest.fn(),
       get_rules:              jest.fn(() => Promise.resolve([])),
       save_rules:             jest.fn(),
+      save_automate_blur:     jest.fn(),
+      patch_automate_blur:    jest.fn(),
+      clear_automate_blur:    jest.fn(),
       _reset_cache:           jest.fn(),
     };
   })();`;
@@ -725,6 +728,7 @@ describe('resolve', () => {
 
   test('blur_items returns items for the exact hostname', async () => {
     const stored = blsi.build_default_model();
+    stored.pick_and_blur.status = true;
     mockGet(stored);
     await blsi.Model.init_cache();
 
@@ -734,6 +738,20 @@ describe('resolve', () => {
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.blur_items).toHaveLength(1);
     expect(resolved.blur_items[0].selector).toBe('#foo');
+  });
+
+  test('blur_items is empty when pick_and_blur.status is false', async () => {
+    const stored = blsi.build_default_model();
+    stored.pick_and_blur.status = false;
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    const item = { type: 'dynamic', selector: '#foo', name: 'Foo' };
+    await blsi.Model.save_blur_item('example.com', item);
+
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    expect(resolved.blur_items).toHaveLength(0);
+    expect(resolved.pick_blur_enabled).toBe(false);
   });
 
   test('wildcard site_rule settings override global (first match wins)', async () => {
@@ -915,5 +933,91 @@ describe('on_change', () => {
     _fireStorageChanged({ some_other_key: { newValue: 'x' } });
 
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+// ── automate_blur CRUD ────────────────────────────────────────────────────────
+
+describe('automate_blur', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('save_automate_blur sets a trigger for a hostname', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    const m = blsi.Model.get();
+    expect(m.automate_blur['example.com'].idle).toBe(true);
+    expect(m.automate_blur['example.com'].tab_switch).toBe(false);
+    expect(m.automate_blur['example.com'].screen_share).toBe(false);
+  });
+
+  test('save_automate_blur rejects unknown trigger', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'bad_trigger', true);
+    const m = blsi.Model.get();
+    expect(m.automate_blur['example.com']).toBeUndefined();
+  });
+
+  test('save_automate_blur rejects invalid hostname', async () => {
+    const before = JSON.stringify(blsi.Model.get().automate_blur);
+    await blsi.Model.save_automate_blur('__proto__', 'idle', true);
+    expect(JSON.stringify(blsi.Model.get().automate_blur)).toBe(before);
+  });
+
+  test('patch_automate_blur updates multiple triggers atomically', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    await blsi.Model.patch_automate_blur('example.com', { idle: false, screen_share: true });
+    const entry = blsi.Model.get().automate_blur['example.com'];
+    expect(entry.idle).toBe(false);
+    expect(entry.screen_share).toBe(true);
+    expect(entry.tab_switch).toBe(false);
+  });
+
+  test('clear_automate_blur removes the hostname entry', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    await blsi.Model.clear_automate_blur('example.com');
+    expect(blsi.Model.get().automate_blur['example.com']).toBeUndefined();
+  });
+
+  test('resolve includes automate_blur_active and automate_blur_triggers', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    expect(resolved.automate_blur_active).toBe(true);
+    expect(resolved.automate_blur_triggers.idle).toBe(true);
+    expect(resolved.automate_blur_triggers.tab_switch).toBe(false);
+    expect(resolved.automate_blur_triggers.screen_share).toBe(false);
+  });
+
+  test('resolve: blur_all_active is true when only automate fires (manual = false)', async () => {
+    await blsi.Model.save_blur_state('example.com', false);
+    await blsi.Model.save_automate_blur('example.com', 'screen_share', true);
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    expect(resolved.blur_all_active).toBe(true);
+  });
+
+  test('resolve: manual blur preserved after automate cleared', async () => {
+    await blsi.Model.save_blur_state('example.com', true);
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    await blsi.Model.patch_automate_blur('example.com', { idle: false });
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    expect(resolved.blur_all_active).toBe(true); // manual blur survives
+  });
+
+  test('clear_host also clears automate_blur for that hostname', async () => {
+    await blsi.Model.save_blur_state('example.com', true);
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    await blsi.Model.clear_host('example.com');
+    const m = blsi.Model.get();
+    expect(m.automate_blur['example.com']).toBeUndefined();
+  });
+
+  test('clear_all resets automate_blur to empty', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    await blsi.Model.save_automate_blur('other.com', 'tab_switch', true);
+    await blsi.Model.clear_all();
+    expect(blsi.Model.get().automate_blur).toEqual({});
   });
 });

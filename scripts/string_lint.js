@@ -72,6 +72,10 @@ const ALLOW_LIST = [
   // literals. The linter cannot distinguish a key from a literal string.
   { file: 'popup/popup.js', contains: "showToast('toast_" },
 
+  // screen_share.js injects a JS code string into the page's MAIN world.
+  // The textContent assignment holds executable code, not user-visible text.
+  { file: 'src/screen_share.js', contains: 's.textContent' },
+
   // New popup scaffold (Plan 1) — aria-label and title attrs are English
   // stubs. These will gain data-i18n attributes in Plan 2 when the i18n
   // system is wired into the new popup.

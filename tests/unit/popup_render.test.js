@@ -31,7 +31,6 @@ function makeSettings(overrides) {
     blur_categories: { text: true, media: true, form: false, table: true, structure: true },
     pii_email: false, pii_numeric: false,
     pick_blur_color: { hex: '#000000', opacity: 1.0 },
-    automate_timer:      { value: 0, unit: 'min', enabled: false },
     automate_idle:       { value: 5, unit: 'min', enabled: false },
     automate_tab_switch: { enabled: false },
   };
@@ -45,6 +44,7 @@ function setupDom() {
     <section id="bl-pii">
       <input type="checkbox" id="bl-pii-master">
       <div id="bl-pii-chips"></div>
+      <div id="bl-pii-color-row"></div>
     </section>
     <div id="bl-automate-summary"></div>
     <div id="bl-mode-blur-all" class="bl-mode-block"></div>
@@ -181,22 +181,8 @@ describe('renderAutomateSection', () => {
     expect(document.querySelectorAll('#bl-automate-summary .bl-summary-row')).toHaveLength(3);
   });
 
-  test('TIMER disabled shows Off value', () => {
-    BlurrySitePopupRender.renderAutomateSection(makeSettings({
-      automate_timer:      { value: 0, unit: 'min', enabled: false },
-      automate_idle:       { value: 5, unit: 'min', enabled: false },
-      automate_tab_switch: { enabled: false },
-    }));
-    const rows = document.querySelectorAll('#bl-automate-summary .bl-summary-row');
-    const timerRow = [...rows].find(
-      r => r.querySelector('.bl-summary-row__label').textContent === 'automate_timer'
-    );
-    expect(timerRow.querySelector('.bl-summary-row__value').textContent).toBe('automate_off');
-  });
-
   test('IDLE enabled with value=5 unit=min shows value and unit key', () => {
     BlurrySitePopupRender.renderAutomateSection(makeSettings({
-      automate_timer:      { value: 0, unit: 'min', enabled: false },
       automate_idle:       { value: 5, unit: 'min', enabled: true },
       automate_tab_switch: { enabled: false },
     }));
@@ -209,7 +195,6 @@ describe('renderAutomateSection', () => {
 
   test('TAB_SWITCH enabled shows On value', () => {
     BlurrySitePopupRender.renderAutomateSection(makeSettings({
-      automate_timer:      { value: 0, unit: 'min', enabled: false },
       automate_idle:       { value: 5, unit: 'min', enabled: false },
       automate_tab_switch: { enabled: true },
     }));
@@ -224,102 +209,70 @@ describe('renderAutomateSection', () => {
 // ── renderModesSection ───────────────────────────────────────────────────────
 
 describe('renderModesSection', () => {
-  // ── accordion expansion ───────────────────────────────────────────────────
+  // ── mode classes ──────────────────────────────────────────────────────────
 
-  test('expandedMode=blur-all: #bl-mode-blur-all has --expanded class', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    const el = document.getElementById('bl-mode-blur-all');
-    expect(el.classList.contains('bl-mode-block--expanded')).toBe(true);
-    expect(el.classList.contains('bl-mode-block--collapsed')).toBe(false);
+  test('blur-all block has bl-mode-block--blur-all class', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
+    expect(document.getElementById('bl-mode-blur-all').classList.contains('bl-mode-block--blur-all')).toBe(true);
   });
 
-  test('expandedMode=blur-all: #bl-mode-pick-blur has --collapsed class', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    const el = document.getElementById('bl-mode-pick-blur');
-    expect(el.classList.contains('bl-mode-block--collapsed')).toBe(true);
-    expect(el.classList.contains('bl-mode-block--expanded')).toBe(false);
-  });
-
-  test('expandedMode=pick-blur: #bl-mode-pick-blur has --expanded class', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
-    const el = document.getElementById('bl-mode-pick-blur');
-    expect(el.classList.contains('bl-mode-block--expanded')).toBe(true);
-    expect(el.classList.contains('bl-mode-block--collapsed')).toBe(false);
-  });
-
-  test('expandedMode=pick-blur: #bl-mode-blur-all has --collapsed class', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
-    const el = document.getElementById('bl-mode-blur-all');
-    expect(el.classList.contains('bl-mode-block--collapsed')).toBe(true);
-    expect(el.classList.contains('bl-mode-block--expanded')).toBe(false);
+  test('pick-blur block has bl-mode-block--pick-blur class', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
+    expect(document.getElementById('bl-mode-pick-blur').classList.contains('bl-mode-block--pick-blur')).toBe(true);
   });
 
   // ── dot color ─────────────────────────────────────────────────────────────
 
-  test('blur-all expanded: dot has is-on when isPageBlurred=true', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true, 'blur-all');
+  test('blur-all: dot has is-on when isPageBlurred=true', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
     const dot = document.querySelector('#bl-mode-blur-all .bl-mode-block__dot');
     expect(dot).toBeTruthy();
     expect(dot.classList.contains('is-on')).toBe(true);
   });
 
-  test('blur-all expanded: dot lacks is-on when isPageBlurred=false', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
+  test('blur-all: dot lacks is-on when isPageBlurred=false', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const dot = document.querySelector('#bl-mode-blur-all .bl-mode-block__dot');
     expect(dot).toBeTruthy();
     expect(dot.classList.contains('is-on')).toBe(false);
     expect(dot.classList.contains('is-off')).toBe(true);
   });
 
-  test('blur-all collapsed: dot present with is-on when isPageBlurred=true', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true, 'pick-blur');
-    const dot = document.querySelector('#bl-mode-blur-all .bl-mode-block__dot');
-    expect(dot).toBeTruthy();
-    expect(dot.classList.contains('is-on')).toBe(true);
-  });
-
-  test('blur-all collapsed: dot has is-off when isPageBlurred=false', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
-    const dot = document.querySelector('#bl-mode-blur-all .bl-mode-block__dot');
-    expect(dot.classList.contains('is-on')).toBe(false);
-    expect(dot.classList.contains('is-off')).toBe(true);
-  });
-
-  test('pick-blur expanded: dot is-on when pick_blur_enabled=true (regardless of items)', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false, 'pick-blur');
+  test('pick-blur: dot is-on when pick_blur_enabled=true (regardless of items)', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
     const dot = document.querySelector('#bl-mode-pick-blur .bl-mode-block__dot');
     expect(dot.classList.contains('is-on')).toBe(true);
   });
 
-  test('pick-blur expanded: dot is-off when pick_blur_enabled=false', () => {
+  test('pick-blur: dot is-off when pick_blur_enabled=false', () => {
     const items = [{ type: 'dynamic', selector: '#x', name: 'x' }];
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), items, false, 'pick-blur');
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), items, false);
     const dot = document.querySelector('#bl-mode-pick-blur .bl-mode-block__dot');
     expect(dot.classList.contains('is-on')).toBe(false);
     expect(dot.classList.contains('is-off')).toBe(true);
   });
 
-  // ── blur-all expanded: toggle + read-only table ───────────────────────────
+  // ── blur-all: toggle + read-only table ───────────────────────────────────
 
-  test('blur-all expanded: contains bl-blur-all-toggle checkbox', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
+  test('blur-all: contains bl-blur-all-toggle checkbox', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const toggle = document.getElementById('bl-blur-all-toggle');
     expect(toggle).toBeTruthy();
     expect(toggle.type).toBe('checkbox');
   });
 
   test('bl-blur-all-toggle is checked when isPageBlurred=true', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true, 'blur-all');
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
     expect(document.getElementById('bl-blur-all-toggle').checked).toBe(true);
   });
 
   test('bl-blur-all-toggle is unchecked when isPageBlurred=false', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     expect(document.getElementById('bl-blur-all-toggle').checked).toBe(false);
   });
 
-  test('blur-all expanded: header has title and toggle, no inline subtitle', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
+  test('blur-all: header has title and toggle, no inline subtitle', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const header = document.querySelector('#bl-mode-blur-all .bl-mode-block__header');
     expect(header).toBeTruthy();
     expect(header.querySelector('.bl-mode-block__title')).toBeTruthy();
@@ -327,178 +280,205 @@ describe('renderModesSection', () => {
     expect(header.querySelector('.bl-mode-block__subtitle')).toBeFalsy();
   });
 
-  test('blur-all expanded: read-only table has Mode, Covers, Reveal opt-rows', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    const labels = [...document.querySelectorAll('#bl-mode-blur-all .bl-opt-row__label')].map(e => e.textContent);
+  test('blur-all: block has bl-mode-block--off when isPageBlurred=false', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
+    expect(document.getElementById('bl-mode-blur-all').classList.contains('bl-mode-block--off')).toBe(true);
+  });
+
+  test('blur-all: block lacks bl-mode-block--off when isPageBlurred=true', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
+    expect(document.getElementById('bl-mode-blur-all').classList.contains('bl-mode-block--off')).toBe(false);
+  });
+
+  test('blur-all: shows mode_blur_all_off_hint and no summary table when off', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
+    const hint = document.querySelector('#bl-mode-blur-all .bl-pick-count');
+    expect(hint).toBeTruthy();
+    expect(hint.textContent).toBe('mode_blur_all_off_hint');
+    expect(document.querySelectorAll('#bl-mode-blur-all .bl-summary-row')).toHaveLength(0);
+  });
+
+  test('blur-all: info table has Mode, Covers, Strength, Reveal summary rows', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
+    const labels = [...document.querySelectorAll('#bl-mode-blur-all .bl-summary-row__label')].map(e => e.textContent);
     expect(labels).toContain('htb_label_mode');
     expect(labels).toContain('htb_label_covers');
+    expect(labels).toContain('htb_label_strength');
     expect(labels).toContain('htb_label_reveal');
   });
 
-  test('blur-all expanded: no inline chips (read-only table only)', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    // No [data-type] buttons in blur-all expanded
+  test('blur-all: no inline chips (read-only table only)', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const typeChips = document.querySelectorAll('#bl-mode-blur-all [data-type]');
     expect(typeChips).toHaveLength(0);
   });
 
-  // ── blur-all collapsed: compact summary ───────────────────────────────────
+  // ── pick-blur: toggle + read-only info ───────────────────────────────────
 
-  test('blur-all collapsed: shows .bl-mode-compact summary', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
-    const compact = document.querySelector('#bl-mode-blur-all .bl-mode-compact');
-    expect(compact).toBeTruthy();
-  });
-
-  test('blur-all collapsed: no toggle present', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
-    expect(document.querySelector('#bl-mode-blur-all .bl-toggle')).toBeFalsy();
-  });
-
-  // ── pick-blur expanded: toggle + read-only info ───────────────────────────
-
-  test('pick-blur expanded: contains bl-pick-blur-toggle checkbox', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
+  test('pick-blur: contains bl-pick-blur-toggle checkbox', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const toggle = document.getElementById('bl-pick-blur-toggle');
     expect(toggle).toBeTruthy();
     expect(toggle.type).toBe('checkbox');
   });
 
   test('bl-pick-blur-toggle is checked when pick_blur_enabled=true', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false, 'pick-blur');
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
     expect(document.getElementById('bl-pick-blur-toggle').checked).toBe(true);
   });
 
   test('bl-pick-blur-toggle is unchecked when pick_blur_enabled=false', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false, 'pick-blur');
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false);
     expect(document.getElementById('bl-pick-blur-toggle').checked).toBe(false);
   });
 
-  test('pick-blur expanded empty: shows mode_pick_blur_empty text', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
+  test('pick-blur ON empty: shows mode_pick_on_empty text', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
     expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count')).toBeTruthy();
-    expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count').textContent).toBe('mode_pick_blur_empty');
+    expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count').textContent).toBe('mode_pick_on_empty');
   });
 
-  test('pick-blur expanded with items: shows item count in .bl-pick-count', () => {
+  test('pick-blur with items: shows item list and Mode/Strength summary rows', () => {
     const items = [
       { type: 'dynamic', selector: '#a', name: 'a' },
       { type: 'dynamic', selector: '#b', name: 'b' },
     ];
-    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false, 'pick-blur');
-    const countEl = document.querySelector('#bl-mode-pick-blur .bl-pick-count');
-    expect(countEl).toBeTruthy();
-    // count > 0 means it called getMessage with count
-    expect(countEl.textContent).not.toBe('mode_pick_blur_empty');
+    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false);
+    const labels = [...document.querySelectorAll('#bl-mode-pick-blur .bl-summary-row__label')].map(e => e.textContent);
+    expect(labels).not.toContain('htb_label_items');
+    expect(labels).toContain('htb_label_mode');
+    expect(labels).toContain('htb_label_strength');
+    expect(document.querySelectorAll('#bl-mode-pick-blur .bl-item-row')).toHaveLength(2);
+    expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count')).toBeFalsy();
   });
 
-  test('pick-blur expanded: shows 3 picker mode buttons [data-picker-mode]', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
+  test('pick-blur: shows 3 picker mode buttons [data-picker-mode]', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     expect(document.querySelectorAll('#bl-mode-pick-blur [data-picker-mode]')).toHaveLength(3);
   });
 
-  test('pick-blur expanded enabled: picker mode buttons are not disabled', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false, 'pick-blur');
+  test('pick-blur enabled: picker mode buttons are not disabled', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
     const btns = document.querySelectorAll('#bl-mode-pick-blur [data-picker-mode]');
     expect([...btns].every(b => !b.disabled)).toBe(true);
   });
 
-  test('pick-blur expanded disabled: picker mode buttons are disabled', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false, 'pick-blur');
+  test('pick-blur disabled: picker mode buttons are still enabled', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false);
     const btns = document.querySelectorAll('#bl-mode-pick-blur [data-picker-mode]');
-    expect([...btns].every(b => b.disabled)).toBe(true);
+    expect([...btns].every(b => !b.disabled)).toBe(true);
   });
 
-  test('pick-blur expanded disabled: Modify button is disabled', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false, 'pick-blur');
-    const btn = document.querySelector('#bl-mode-pick-blur [data-action="htb-modify"]');
-    expect(btn.disabled).toBe(true);
+  test('pick-blur disabled: no Modify button when off', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false);
+    expect(document.querySelector('#bl-mode-pick-blur [data-action="htb-modify"]')).toBeFalsy();
   });
 
-  test('pick-blur expanded enabled: Modify button is not disabled', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false, 'pick-blur');
+  test('pick-blur enabled: Modify button is not disabled', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
     const btn = document.querySelector('#bl-mode-pick-blur [data-action="htb-modify"]');
     expect(btn.disabled).toBe(false);
   });
 
-  test('pick-blur expanded: no inline item list (.bl-item-row) in mode block', () => {
+  test('pick-blur: active picker mode chip has bl-chip--active class', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ picker_mode: 'sticky-screen' }), [], false);
+    const btns = document.querySelectorAll('#bl-mode-pick-blur [data-picker-mode]');
+    const active = [...btns].filter(b => b.classList.contains('bl-chip--active'));
+    expect(active).toHaveLength(1);
+    expect(active[0].dataset.pickerMode).toBe('sticky-screen');
+  });
+
+  test('pick-blur ON: shows open-picker button', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
+    expect(document.querySelector('#bl-mode-pick-blur [data-action="open-picker"]')).toBeTruthy();
+  });
+
+  test('pick-blur OFF: no open-picker button', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false);
+    expect(document.querySelector('#bl-mode-pick-blur [data-action="open-picker"]')).toBeFalsy();
+  });
+
+  test('pick-blur OFF empty: shows mode_pick_off_hint text', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false);
+    expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count').textContent).toBe('mode_pick_off_hint');
+  });
+
+  test('pick-blur OFF with items: shows mode_pick_off_paused text', () => {
     const items = [{ type: 'dynamic', selector: '#x', name: 'x' }];
-    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false, 'pick-blur');
-    expect(document.querySelectorAll('#bl-mode-pick-blur .bl-item-row')).toHaveLength(0);
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), items, false);
+    // getMessage returns key in test env, so count falls back to '1 items · paused'
+    const text = document.querySelector('#bl-mode-pick-blur .bl-pick-count').textContent;
+    expect(text).toContain('paused');
   });
 
-  // ── pick-blur collapsed ───────────────────────────────────────────────────
-
-  test('pick-blur collapsed: shows .bl-mode-compact with item count', () => {
+  test('pick-blur: inline item list (.bl-item-row) shown in mode block when enabled with items', () => {
     const items = [{ type: 'dynamic', selector: '#x', name: 'x' }];
-    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false, 'blur-all');
-    const compact = document.querySelector('#bl-mode-pick-blur .bl-mode-compact');
-    expect(compact).toBeTruthy();
-    // Not empty text
-    expect(compact.textContent).not.toBe('');
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), items, false);
+    const rows = document.querySelectorAll('#bl-mode-pick-blur .bl-item-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.bl-item-selector').textContent).toBe('x');
+    expect(rows[0].querySelector('[data-item-id]').dataset.itemId).toBe('#x');
   });
 
-  test('pick-blur collapsed with no items: shows mode_pick_blur_empty', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    const compact = document.querySelector('#bl-mode-pick-blur .bl-mode-compact');
-    expect(compact.textContent).toBe('mode_pick_blur_empty');
+  test('pick-blur: block has bl-mode-block--off when pick_blur_enabled=false', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: false }), [], false);
+    expect(document.getElementById('bl-mode-pick-blur').classList.contains('bl-mode-block--off')).toBe(true);
   });
 
-  test('pick-blur collapsed: no toggle present', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    expect(document.querySelector('#bl-mode-pick-blur .bl-toggle')).toBeFalsy();
+  test('pick-blur: block lacks bl-mode-block--off when pick_blur_enabled=true', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
+    expect(document.getElementById('bl-mode-pick-blur').classList.contains('bl-mode-block--off')).toBe(false);
   });
 
   // ── mode actions: Clear All + Modify ─────────────────────────────────────
 
-  test('blur-all expanded: has data-action="htb-modify" button with data-mode="blur-all"', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
+  test('blur-all: has data-action="htb-modify" button with data-mode="blur-all"', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
     const btn = document.querySelector('#bl-mode-blur-all [data-action="htb-modify"]');
     expect(btn).toBeTruthy();
     expect(btn.dataset.mode).toBe('blur-all');
   });
 
-  test('pick-blur expanded: has data-action="htb-modify" button with data-mode="pick-blur"', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
+  test('pick-blur: has data-action="htb-modify" button with data-mode="pick-blur"', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const btn = document.querySelector('#bl-mode-pick-blur [data-action="htb-modify"]');
     expect(btn).toBeTruthy();
     expect(btn.dataset.mode).toBe('pick-blur');
   });
 
-  test('blur-all expanded: no Clear All button', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true, 'blur-all');
+  test('blur-all: no Clear All button', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
     expect(document.querySelector('#bl-mode-blur-all [data-action="clear-all"]')).toBeFalsy();
   });
 
-  test('pick-blur expanded: Clear All disabled when no items', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'pick-blur');
+  test('pick-blur: Clear All disabled when no items', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
     const btn = document.querySelector('#bl-mode-pick-blur [data-action="clear-all"]');
     expect(btn).toBeTruthy();
     expect(btn.disabled).toBe(true);
   });
 
-  test('pick-blur expanded: Clear All enabled when has items', () => {
+  test('pick-blur: Clear All enabled when has items', () => {
     const items = [{ type: 'dynamic', selector: '#x', name: 'x' }];
-    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false, 'pick-blur');
+    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false);
     const btn = document.querySelector('#bl-mode-pick-blur [data-action="clear-all"]');
     expect(btn.disabled).toBe(false);
   });
 
   test('pick-blur Clear All has data-mode="pick-blur"', () => {
     const items = [{ type: 'dynamic', selector: '#x', name: 'x' }];
-    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false, 'pick-blur');
+    BlurrySitePopupRender.renderModesSection(makeSettings(), items, false);
     const btn = document.querySelector('#bl-mode-pick-blur [data-action="clear-all"]');
     expect(btn.dataset.mode).toBe('pick-blur');
   });
 
-  test('blur-all expanded: Modify button disabled when !isPageBlurred', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false, 'blur-all');
-    const btn = document.querySelector('#bl-mode-blur-all [data-action="htb-modify"]');
-    expect(btn.disabled).toBe(true);
+  test('blur-all: no Modify button when off', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], false);
+    expect(document.querySelector('#bl-mode-blur-all [data-action="htb-modify"]')).toBeFalsy();
   });
 
-  test('blur-all expanded: Modify button enabled when isPageBlurred', () => {
-    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true, 'blur-all');
+  test('blur-all: Modify button enabled when isPageBlurred', () => {
+    BlurrySitePopupRender.renderModesSection(makeSettings(), [], true);
     const btn = document.querySelector('#bl-mode-blur-all [data-action="htb-modify"]');
     expect(btn.disabled).toBe(false);
   });
@@ -509,9 +489,9 @@ describe('renderModesSection', () => {
     expect(() => BlurrySitePopupRender.renderAll(makeSettings())).not.toThrow();
   });
 
-  test('renderAll passes expandedMode to renderModesSection', () => {
-    BlurrySitePopupRender.renderAll(makeSettings(), [], false, 'pick-blur');
-    const el = document.getElementById('bl-mode-pick-blur');
-    expect(el.classList.contains('bl-mode-block--expanded')).toBe(true);
+  test('renderAll: both blocks render with correct mode classes', () => {
+    BlurrySitePopupRender.renderAll(makeSettings(), [], false);
+    expect(document.getElementById('bl-mode-blur-all').classList.contains('bl-mode-block--blur-all')).toBe(true);
+    expect(document.getElementById('bl-mode-pick-blur').classList.contains('bl-mode-block--pick-blur')).toBe(true);
   });
 });

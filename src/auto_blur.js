@@ -18,6 +18,10 @@ const BlurrySiteAutoBlur = (() => {
   let _onVisChange = null;
   let _onActivity = null;
 
+  // Debounce timer for visibilitychange — prevents a tab drag-to-new-window
+  // (hide→show within ~10ms) from being misread as a genuine tab switch.
+  let _hiddenTimer = null;
+
   function _resetIdleTimer() {
     if (_idleTimer !== null) clearTimeout(_idleTimer);
     if (!_opts || !_opts.idle) return;
@@ -25,7 +29,7 @@ const BlurrySiteAutoBlur = (() => {
     _idleTimer = setTimeout(() => {
       if (!_isIdle) {
         _isIdle = true;
-        if (_opts && _opts.onIdle) _opts.onIdle();
+        if (_opts && _opts.onIdle) _opts.onIdle({ reason: 'idle' });
       }
     }, (_opts.idleTimeout || 300) * 1000);
   }
@@ -41,11 +45,24 @@ const BlurrySiteAutoBlur = (() => {
   function _handleVisChange() {
     if (!_opts || !_opts.tabSwitch) return;
     if (document.hidden) {
-      if (!_isIdle) {
-        _isIdle = true;
-        if (_opts.onIdle) _opts.onIdle();
-      }
+      // Delay the idle callback 150ms — if the tab becomes visible again before
+      // the timer fires it was a drag-to-new-window, not a real tab switch.
+      if (_hiddenTimer !== null) clearTimeout(_hiddenTimer);
+      _hiddenTimer = setTimeout(() => {
+        _hiddenTimer = null;
+        if (!_isIdle && document.hidden) {
+          _isIdle = true;
+          if (_opts.onIdle) _opts.onIdle({ reason: 'tab_switch' });
+        }
+      }, 150);
     } else {
+      if (_hiddenTimer !== null) {
+        // Tab became visible before the 150ms elapsed → window drag, skip callbacks.
+        clearTimeout(_hiddenTimer);
+        _hiddenTimer = null;
+        _resetIdleTimer();
+        return;
+      }
       if (_isIdle) {
         _isIdle = false;
         if (_opts.onActive) _opts.onActive();
@@ -91,6 +108,11 @@ const BlurrySiteAutoBlur = (() => {
     if (_idleTimer !== null) {
       clearTimeout(_idleTimer);
       _idleTimer = null;
+    }
+
+    if (_hiddenTimer !== null) {
+      clearTimeout(_hiddenTimer);
+      _hiddenTimer = null;
     }
 
     if (_onVisChange) {

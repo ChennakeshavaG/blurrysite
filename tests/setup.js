@@ -48,6 +48,7 @@ global.chrome = {
   },
   runtime: {
     sendMessage: jest.fn(),
+    getURL: jest.fn((path) => path),
     onMessage: {
       addListener: jest.fn(),
       removeListener: jest.fn(),
@@ -96,6 +97,11 @@ global.chrome = {
     setBadgeBackgroundColor: jest.fn(),
   },
 };
+
+// ─── BlurrySitePopupShared stub ───────────────────────────────────────────────
+// Render files (keyboard.js, howtoblur.js, etc.) alias helpers from this global
+// at IIFE load time. Provide the real implementation so tests exercise actual code.
+require('../popup/renders/shared.js');
 
 // ─── HTMLCanvasElement.getContext stub ────────────────────────────────────────
 

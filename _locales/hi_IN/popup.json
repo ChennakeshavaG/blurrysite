@@ -1,21 +1,17 @@
 {
   "_meta": "Machine-drafted Hindi translation. Replace with human review before shipping to users.",
-
   "popup_title": "ब्लरी साइट",
   "toggle_on": "चालू",
   "toggle_off": "बंद",
-
   "btn_blur_all": "सब धुंधला",
   "btn_clear_all": "सब साफ़",
   "btn_modify": "बदलें →",
   "btn_picker": "चुनें और धुंधला",
-
   "section_general": "सामान्य",
   "section_advanced": "उन्नत",
   "section_experimental": "प्रयोगात्मक",
   "section_blurred_elements": "इस पेज पर धुंधले",
   "blur_empty": "इस पेज पर अभी कुछ भी धुंधला नहीं है।",
-
   "setting_language": "प्रदर्शन भाषा",
   "setting_language_hint": "इस पॉपअप की भाषा चुनें। ऑटो आपके ब्राउज़र का अनुसरण करता है।",
   "lang_auto": "ऑटो (ब्राउज़र डिफ़ॉल्ट)",
@@ -26,7 +22,6 @@
   "section_pii_title": "PII स्वतः-पहचान",
   "section_settings_title": "सेटिंग्स",
   "section_rules_title": "साइट नियम",
-
   "setting_blur_radius": "धुंधलापन की तीव्रता",
   "setting_blur_radius_hint": "अधिक = पढ़ना कठिन। 10+ OCR से छुपाता है, 15+ AI से छुपाता है।",
   "setting_reveal_mode": "धुंधले को झलक दिखाएँ",
@@ -35,7 +30,6 @@
   "setting_transition_hint": "धुंधले को झटके से नहीं, फीकर तरीके से दिखाएँ।",
   "setting_highlight_color": "पिकर हाइलाइट रंग",
   "setting_highlight_color_hint": "पिकर मोड में किसी तत्व पर माउस ले जाने पर हाइलाइट का रंग।",
-
   "setting_blur_mode": "धुंधलापन शैली",
   "setting_blur_mode_hint": "मानक एक साधारण धुंधलापन है। फ्रॉस्टेड टेक्स्ट को इस तरह छुपाता है कि AI और स्क्रीनशॉट टूल पढ़ न सकें, लेकिन थोड़ी अधिक ऊर्जा लेता है।",
   "setting_thorough_blur": "तेज़ धुंधलापन",
@@ -48,30 +42,23 @@
   "setting_auto_blur_idle_hint": "निष्क्रियता की अवधि के बाद पेज स्वचालित रूप से धुंधला करें।",
   "setting_idle_timeout": "निष्क्रियता टाइमआउट",
   "setting_idle_timeout_hint": "ऑटो-धुंधलापन शुरू होने से पहले निष्क्रियता के सेकंड।",
-  "setting_blur_timer": "धुंधलापन टाइमर",
-  "setting_blur_timer_hint": "इतने मिनट बाद धुंधलापन ऑटो-क्लियर करें। 0 = बंद।",
-
   "reveal_click": "क्लिक से झलक",
   "reveal_hover": "होवर से झलक",
   "reveal_none": "बंद — कभी न दिखाएँ",
-
   "blur_mode_gaussian": "मानक",
   "blur_mode_frosted": "फ्रॉस्टेड (AI-प्रूफ)",
   "blur_mode_redacted": "रेडैक्टेड (ठोस ब्लॉक)",
   "blur_mode_masked": "मास्क्ड (तारे)",
   "setting_redaction_color": "रेडैक्शन रंग",
   "setting_redaction_color_hint": "रेडैक्टेड मोड ब्लॉक के लिए रंग। काला सबसे सुरक्षित है।",
-
   "group_appearance": "रूप",
   "group_behavior": "व्यवहार",
   "group_categories": "क्या धुंधला करें",
   "group_autodetect": "संवेदनशील डेटा ऑटो-पहचान",
   "group_shortcuts": "कीबोर्ड शॉर्टकट",
   "group_advanced": "उन्नत",
-
   "detect_pii": "संवेदनशील डेटा (PII)",
   "detect_pii_hint": "ईमेल, फ़ोन नंबर, SSN, क्रेडिट कार्ड और वित्तीय आँकड़े स्वचालित रूप से धुंधले करें।",
-
   "cat_text": "टेक्स्ट",
   "cat_text_hint": "शीर्षक, अनुच्छेद, लिंक और इनलाइन टेक्स्ट।",
   "cat_media": "तस्वीरें और वीडियो",
@@ -82,7 +69,6 @@
   "cat_table_hint": "टेबल सेल और कैप्शन।",
   "cat_structure": "कंटेनर",
   "cat_structure_hint": "सेक्शन, लेख, और टेक्स्ट रखने वाले रैपर।",
-
   "shortcut_toggle_blur_all": "सब कुछ धुंधला करें",
   "shortcut_toggle_blur_all_hint": "इस पेज पर हर समर्थित तत्व को धुंधला करें।",
   "shortcut_toggle_picker": "तत्व चुनें",
@@ -100,7 +86,6 @@
   "shortcut_reset": "डिफ़ॉल्ट पर रीसेट",
   "shortcut_saved": "शॉर्टकट सहेजा गया",
   "shortcut_reset_done": "शॉर्टकट रीसेट हुआ",
-
   "rule_add": "+ साइट नियम जोड़ें",
   "rule_edit": "साइट नियम संपादित करें",
   "rule_add_title": "साइट नियम जोड़ें",
@@ -126,11 +111,9 @@
   "rule_untitled": "बिना शीर्षक का नियम",
   "rule_edit_btn": "संपादित",
   "rule_delete_btn": "हटाएँ",
-
   "item_type_dynamic": "तत्व",
   "item_type_sticky": "ज़ोन",
   "item_remove_title": "इसे साफ़ करें",
-
   "toast_enabled": "ब्लरी साइट चालू",
   "toast_disabled": "ब्लरी साइट बंद",
   "toast_blur_all": "इस पेज पर सब कुछ धुंधला है",
@@ -147,17 +130,13 @@
   "toast_failed_delete_rule": "नियम हटाया नहीं जा सका",
   "toast_flow_logs_on": "गतिविधि लॉग: चालू",
   "toast_flow_logs_off": "गतिविधि लॉग: बंद",
-
   "confirm_clear_all": "यह आपकी हर साइट से हर धुंधलापन हटा देगा। जारी रखें?",
-
   "footer_clear_all": "हर साइट साफ़ करें",
-
   "theme_toggle": "लाइट / डार्क थीम बदलें",
   "help_overlay_title": "कीबोर्ड शॉर्टकट",
   "modal_cancel": "रद्द",
   "modal_save": "सहेजें",
   "modal_close": "बंद करें",
-
   "tt_master_toggle": "ब्लरी साइट को हर साइट पर चालू या बंद करें",
   "tt_theme": "लाइट या डार्क पर स्विच करें",
   "tt_blur_all": "इस पेज पर सब कुछ धुंधला करें",
@@ -171,11 +150,9 @@
   "tt_remove_blur_item": "इसे साफ़ करें",
   "tt_rule_edit": "इस नियम की सेटिंग्स बदलें",
   "tt_rule_delete": "इस नियम को मिटाएँ",
-
   "off_state_message": "Blurry Site is off",
   "off_state_hint": "All blur is paused on every site",
   "power_turn_on": "Turn On",
-
   "htb_chip_gaussian": "Gaussian",
   "htb_chip_frosted": "Frosted",
   "htb_chip_redacted": "Redacted",
@@ -190,13 +167,10 @@
   "htb_strength_moderate": "Moderate",
   "htb_strength_strong": "Strong",
   "htb_pick_blur_note": "Redacted & Masked available in Blur All mode.",
-
   "pii_chip_gaussian": "Gaussian",
   "pii_chip_frosted": "Frosted",
   "pii_chip_redacted": "Redacted",
   "pii_chip_asterisked": "Asterisked",
-
-  "automate_timer": "Timer",
   "automate_idle": "Idle",
   "automate_tab_switch": "Tab Switch",
   "automate_off": "Off",
@@ -204,12 +178,10 @@
   "automate_unit_sec": "sec",
   "automate_unit_min": "min",
   "automate_unit_hr": "hr",
-
   "mode_blur_all_active_desc": "All matching categories are blurred on this page.",
   "mode_blur_all_off_hint": "Off — page is visible.",
   "mode_pick_blur_empty": "No elements picked yet. Open the picker to start.",
   "mode_open_picker": "Open Picker",
   "mode_blur_all_cats": "categories",
-
   "htb_opacity": "Opacity"
 }

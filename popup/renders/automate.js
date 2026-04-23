@@ -1,11 +1,11 @@
 const BlurrySitePopupRenderAutomate = (() => {
   'use strict';
 
-  function _t(key) {
-    return chrome.i18n.getMessage(key) || key;
-  }
+  var _t                = BlurrySitePopupShared.t;
+  var _makeToggleInput  = BlurrySitePopupShared.makeToggle;
+  var _updateSliderFill = BlurrySitePopupShared.updateFill;
 
-  // ── Unit conversion helpers ─────────────────────────────────────────────────
+  // ── Time conversion helpers ────────────────────────────────────────────────
 
   function _toSecs(value, unit) {
     if (unit === 'hr')  return value * 3600;
@@ -13,33 +13,58 @@ const BlurrySitePopupRenderAutomate = (() => {
     return value;
   }
 
-  // ── DOM helpers ─────────────────────────────────────────────────────────────
-
-  function _makeToggle(id, checked) {
-    var label = document.createElement('label');
-    label.className = 'bl-toggle';
-    var input = document.createElement('input');
-    input.type = 'checkbox';
-    input.id = id;
-    input.checked = checked;
-    var track = document.createElement('span');
-    track.className = 'bl-toggle__track';
-    label.appendChild(input);
-    label.appendChild(track);
-    return { label: label, input: input };
+  function _secsToLabel(secs) {
+    secs = Math.round(secs);
+    if (secs < 60) return secs + ' sec';
+    var m = Math.round(secs / 60);
+    if (m < 60) return m + ' min';
+    var h = Math.floor(secs / 3600);
+    var rem = Math.round((secs % 3600) / 60);
+    if (rem === 0) return h + ' hr';
+    return h + ' hr ' + rem + ' min';
   }
 
-  function _makeToggleRow(labelText, toggleId, checked, tooltip) {
-    var row = document.createElement('div');
-    row.className = 'bl-form-row';
-    if (tooltip) row.title = tooltip;
+  function _secsToValueUnit(secs, hasHr) {
+    secs = Math.round(secs);
+    if (secs < 60) return { value: Math.max(1, secs), unit: 'sec' };
+    var mins = Math.round(secs / 60);
+    if (!hasHr || mins <= 99) return { value: Math.min(99, Math.max(1, mins)), unit: 'min' };
+    return { value: Math.min(99, Math.max(1, Math.round(secs / 3600))), unit: 'hr' };
+  }
+
+  // ── DOM helpers ─────────────────────────────────────────────────────────────
+
+  function _svgIcon(elements) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', '15');
+    svg.setAttribute('height', '15');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', 'bl-auto-block__icon');
+    elements.forEach(function(el) {
+      var elem = document.createElementNS(ns, el.tag);
+      Object.keys(el.attrs).forEach(function(k) { elem.setAttribute(k, el.attrs[k]); });
+      svg.appendChild(elem);
+    });
+    return svg;
+  }
+
+  function _makeBlockHeader(iconEl, labelText, toggleOrNull) {
+    var header = document.createElement('div');
+    header.className = 'bl-auto-block__header';
+    header.appendChild(iconEl);
     var labelEl = document.createElement('span');
-    labelEl.className = 'bl-form-row__label';
+    labelEl.className = 'bl-auto-block__label';
     labelEl.textContent = labelText;
-    var tog = _makeToggle(toggleId, checked);
-    row.appendChild(labelEl);
-    row.appendChild(tog.label);
-    return { row: row, input: tog.input };
+    header.appendChild(labelEl);
+    if (toggleOrNull) header.appendChild(toggleOrNull.label);
+    return header;
   }
 
   function _makeDesc(text) {
@@ -49,58 +74,95 @@ const BlurrySitePopupRenderAutomate = (() => {
     return p;
   }
 
-  /**
-   * Build a number input + unit select row.
-   * units: array of unit strings, e.g. ['sec','min','hr']
-   * Returns { wrap, numInput, unitSel }
-   */
-  function _makeNumberUnit(idPrefix, value, unit, units) {
-    var wrap = document.createElement('div');
-    wrap.className = 'bl-auto-input-row';
+  function _makeSliderSection(idPrefix, valueSecs, minSecs, maxSecs, modifier, minLabel, maxLabel) {
+    var section = document.createElement('div');
+    section.className = 'bl-auto-slider-section';
 
-    var numInput = document.createElement('input');
-    numInput.type = 'number';
-    numInput.id = idPrefix + '-num';
-    numInput.className = 'bl-auto-num';
-    numInput.min = 1;
-    numInput.max = 99;
-    numInput.value = value > 0 ? value : 1;
+    var valEl = document.createElement('span');
+    valEl.className = 'bl-auto-slider-val bl-auto-slider-val--' + modifier;
+    valEl.textContent = _secsToLabel(valueSecs);
+    section.appendChild(valEl);
 
-    var unitSel = document.createElement('select');
-    unitSel.id = idPrefix + '-unit';
-    unitSel.className = 'bl-auto-unit';
-    for (var i = 0; i < units.length; i++) {
-      var opt = document.createElement('option');
-      opt.value = units[i];
-      opt.textContent = _t('automate_unit_' + units[i]);
-      if (units[i] === unit) opt.selected = true;
-      unitSel.appendChild(opt);
-    }
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'bl-auto-slider bl-auto-slider--' + modifier;
+    slider.id = idPrefix + '-slider';
+    slider.min = String(minSecs);
+    slider.max = String(maxSecs);
+    slider.value = String(Math.max(minSecs, Math.min(maxSecs, valueSecs)));
+    section.appendChild(slider);
 
-    wrap.appendChild(numInput);
-    wrap.appendChild(unitSel);
-    return { wrap: wrap, numInput: numInput, unitSel: unitSel };
+    var rangeLabels = document.createElement('div');
+    rangeLabels.className = 'bl-auto-range-labels';
+    var minSpan = document.createElement('span');
+    minSpan.textContent = minLabel;
+    var maxSpan = document.createElement('span');
+    maxSpan.textContent = maxLabel;
+    rangeLabels.appendChild(minSpan);
+    rangeLabels.appendChild(maxSpan);
+    section.appendChild(rangeLabels);
+
+    _updateSliderFill(slider, minSecs, maxSecs);
+
+    slider.addEventListener('input', function () {
+      valEl.textContent = _secsToLabel(Number(slider.value));
+      _updateSliderFill(slider, minSecs, maxSecs);
+    });
+
+    return { section: section, slider: slider };
   }
 
   // ── Block builders ──────────────────────────────────────────────────────────
+
+  function _buildScreenShareBlock(settings, onSave) {
+    var block = document.createElement('div');
+    block.className = 'bl-auto-block';
+
+    var ss = settings.automate_screen_share || { enabled: false };
+    var tog = _makeToggleInput('bl-auto-screen-share-toggle', ss.enabled, _t('automate_screen_share'));
+
+    block.appendChild(_makeBlockHeader(
+      _svgIcon([
+        { tag: 'rect', attrs: { x: '2', y: '3', width: '20', height: '14', rx: '2' } },
+        { tag: 'path', attrs: { d: 'M8 21h8M12 17v4' } },
+        { tag: 'path', attrs: { d: 'M10 8l2 2 4-4' } },
+      ]),
+      _t('automate_screen_share'),
+      tog
+    ));
+    block.appendChild(_makeDesc(_t('automate_screen_share_desc')));
+
+    if (!ss.enabled) {
+      block.classList.add('bl-auto-block--inactive');
+    }
+
+    tog.input.addEventListener('change', function () {
+      block.classList.toggle('bl-auto-block--inactive', !tog.input.checked);
+      onSave({ automate_screen_share: { enabled: tog.input.checked } });
+    });
+
+    return block;
+  }
 
   function _buildTabSwitchBlock(settings, onSave) {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
     var tabSwitch = settings.automate_tab_switch || { enabled: false };
-    var hint = _t('setting_auto_blur_tab_hint');
-    var togRow = _makeToggleRow(
-      _t('setting_auto_blur_tab'),
-      'bl-auto-tab-switch-toggle',
-      tabSwitch.enabled,
-      hint
-    );
-    block.appendChild(togRow.row);
-    block.appendChild(_makeDesc(hint));
+    var tog = _makeToggleInput('bl-auto-tab-switch-toggle', tabSwitch.enabled, _t('setting_auto_blur_tab'));
 
-    togRow.input.addEventListener('change', function () {
-      onSave({ automate_tab_switch: { enabled: togRow.input.checked } });
+    block.appendChild(_makeBlockHeader(
+      _svgIcon([
+        { tag: 'path', attrs: { d: 'M16 3l4 4-4 4M4 7h16' } },
+        { tag: 'path', attrs: { d: 'M8 21l-4-4 4-4M20 17H4' } },
+      ]),
+      _t('setting_auto_blur_tab'),
+      tog
+    ));
+    block.appendChild(_makeDesc(_t('setting_auto_blur_tab_hint')));
+
+    tog.input.addEventListener('change', function () {
+      onSave({ automate_tab_switch: { enabled: tog.input.checked } });
     });
 
     return block;
@@ -110,153 +172,41 @@ const BlurrySitePopupRenderAutomate = (() => {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var title = document.createElement('div');
-    title.className = 'bl-auto-block__title';
-    title.textContent = _t('automate_idle');
-    block.appendChild(title);
-
     var idle = settings.automate_idle || { value: 5, unit: 'min', enabled: false };
-    var idleHint = _t('setting_auto_blur_idle_hint');
-    var togRow = _makeToggleRow(
-      _t('setting_auto_blur_idle'),
-      'bl-auto-idle-toggle',
-      idle.enabled,
-      idleHint
-    );
-    block.appendChild(togRow.row);
-    block.appendChild(_makeDesc(idleHint));
+    var initialSecs = Math.max(15, Math.min(3600, _toSecs(idle.value, idle.unit)));
+    var tog = _makeToggleInput('bl-auto-idle-toggle', idle.enabled, _t('automate_idle'));
 
-    var nu = _makeNumberUnit(
-      'bl-auto-idle',
-      idle.value,
-      idle.unit,
-      ['sec', 'min']
-    );
-    block.appendChild(nu.wrap);
+    // Hourglass icon
+    block.appendChild(_makeBlockHeader(
+      _svgIcon([
+        { tag: 'path', attrs: { d: 'M5 2h14M5 22h14' } },
+        { tag: 'path', attrs: { d: 'M17 2v4.17C17 8.22 15.84 10 14 10l-2 2-2-2C8.16 10 7 8.22 7 6.17V2' } },
+        { tag: 'path', attrs: { d: 'M7 22v-4.17C7 15.78 8.16 14 10 14l2 2 2-2c1.84 0 3 1.78 3 3.83V22' } },
+      ]),
+      _t('automate_idle'),
+      tog
+    ));
+    block.appendChild(_makeDesc(_t('setting_auto_blur_idle_hint')));
 
-    // Warning shown when value exceeds Chrome API max (3000 s)
-    var warnEl = document.createElement('p');
-    warnEl.className = 'bl-auto-warn';
-    warnEl.textContent = _t('automate_idle_max_warn');
-    warnEl.hidden = true;
-    block.appendChild(warnEl);
+    var sliderEl = _makeSliderSection('bl-auto-idle', initialSecs, 15, 3600, 'idle', '15 s', '60 min');
+    block.appendChild(sliderEl.section);
 
-    function _checkIdleLimit() {
-      var secs = _toSecs(Number(nu.numInput.value) || 1, nu.unitSel.value);
-      warnEl.hidden = secs <= 3000;
-    }
-    _checkIdleLimit();
-
-    function _saveIdle() {
-      var val = Math.max(1, Math.min(99, Number(nu.numInput.value) || 1));
-      nu.numInput.value = val;
-      onSave({
-        automate_idle: {
-          value:   val,
-          unit:    nu.unitSel.value,
-          enabled: togRow.input.checked,
-        },
-      });
+    if (!idle.enabled) {
+      block.classList.add('bl-auto-block--inactive');
+      sliderEl.slider.disabled = true;
     }
 
-    togRow.input.addEventListener('change', _saveIdle);
-    nu.numInput.addEventListener('change', function () { _checkIdleLimit(); _saveIdle(); });
-    nu.unitSel.addEventListener('change', function () { _checkIdleLimit(); _saveIdle(); });
+    tog.input.addEventListener('change', function () {
+      var active = tog.input.checked;
+      block.classList.toggle('bl-auto-block--inactive', !active);
+      sliderEl.slider.disabled = !active;
+      var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
+      onSave({ automate_idle: { value: vu.value, unit: vu.unit, enabled: active } });
+    });
 
-    return block;
-  }
-
-  function _buildTimerBlock(settings, onSave) {
-    var block = document.createElement('div');
-    block.className = 'bl-auto-block';
-
-    var title = document.createElement('div');
-    title.className = 'bl-auto-block__title';
-    title.textContent = _t('automate_timer');
-    block.appendChild(title);
-
-    // Description
-    block.appendChild(_makeDesc(_t('setting_blur_timer_hint')));
-
-    var timer = settings.automate_timer || { value: 0, unit: 'min', enabled: false, started_at: null };
-
-    // Number + unit row, plus Start/Stop button
-    var nu = _makeNumberUnit(
-      'bl-auto-timer',
-      timer.value,
-      timer.unit,
-      ['sec', 'min', 'hr']
-    );
-
-    var isRunning = !!(timer.enabled && timer.started_at);
-
-    var startStopBtn = document.createElement('button');
-    startStopBtn.className = isRunning
-      ? 'bl-btn-primary bl-auto-start-stop bl-auto-start-stop--stop'
-      : 'bl-btn-primary bl-auto-start-stop';
-    startStopBtn.textContent = isRunning ? _t('automate_timer_stop') : _t('automate_timer_start');
-
-    nu.wrap.appendChild(startStopBtn);
-    block.appendChild(nu.wrap);
-
-    // Validation error
-    var errEl = document.createElement('p');
-    errEl.className = 'bl-auto-error';
-    errEl.textContent = _t('automate_timer_min_error');
-    errEl.hidden = true;
-    block.appendChild(errEl);
-
-    // Disable inputs while running
-    if (isRunning) {
-      nu.numInput.disabled = true;
-      nu.unitSel.disabled  = true;
-    }
-
-    function _validate() {
-      var secs = _toSecs(Number(nu.numInput.value) || 1, nu.unitSel.value);
-      var ok = secs >= 30;
-      errEl.hidden = ok;
-      startStopBtn.disabled = !ok;
-      return ok;
-    }
-
-    nu.numInput.addEventListener('input', _validate);
-    nu.unitSel.addEventListener('change', _validate);
-
-    startStopBtn.addEventListener('click', function () {
-      if (isRunning) {
-        // Stop
-        isRunning = false;
-        startStopBtn.textContent = _t('automate_timer_start');
-        startStopBtn.className = 'bl-btn-primary bl-auto-start-stop';
-        nu.numInput.disabled = false;
-        nu.unitSel.disabled  = false;
-        onSave({
-          automate_timer: {
-            value:      Number(nu.numInput.value) || 1,
-            unit:       nu.unitSel.value,
-            enabled:    false,
-            started_at: null,
-          },
-        });
-      } else {
-        // Start — validate first
-        if (!_validate()) return;
-        isRunning = true;
-        startStopBtn.textContent = _t('automate_timer_stop');
-        startStopBtn.className = 'bl-btn-primary bl-auto-start-stop bl-auto-start-stop--stop';
-        nu.numInput.disabled = true;
-        nu.unitSel.disabled  = true;
-        errEl.hidden = true;
-        onSave({
-          automate_timer: {
-            value:      Number(nu.numInput.value) || 1,
-            unit:       nu.unitSel.value,
-            enabled:    true,
-            started_at: Date.now(),
-          },
-        });
-      }
+    sliderEl.slider.addEventListener('change', function () {
+      var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
+      onSave({ automate_idle: { value: vu.value, unit: vu.unit, enabled: tog.input.checked } });
     });
 
     return block;
@@ -264,29 +214,11 @@ const BlurrySitePopupRenderAutomate = (() => {
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  /**
-   * Render the Automate sub-page body.
-   * @param {HTMLElement} containerEl  - the .bl-subpage__body div
-   * @param {Object}      settings     - full settings object (read-only)
-   * @param {Function}    onSave       - called with a partial settings patch
-   */
   function renderBody(containerEl, settings, onSave) {
     containerEl.innerHTML = '';
-
+    containerEl.appendChild(_buildScreenShareBlock(settings, onSave));
     containerEl.appendChild(_buildTabSwitchBlock(settings, onSave));
-
-    var div1 = document.createElement('hr');
-    div1.className = 'bl-divider';
-    containerEl.appendChild(div1);
-
     containerEl.appendChild(_buildIdleBlock(settings, onSave));
-
-    var div2 = document.createElement('hr');
-    div2.className = 'bl-divider';
-    containerEl.appendChild(div2);
-
-    containerEl.appendChild(_buildTimerBlock(settings, onSave));
-
     var footer = document.createElement('p');
     footer.className = 'bl-section__hint';
     footer.textContent = _t('automate_footer');

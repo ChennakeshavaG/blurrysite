@@ -110,27 +110,30 @@ describe('BlurrySite constants', () => {
 
     test('pick_and_blur defaults', () => {
       const pab = PB.DEFAULT_MODEL.pick_and_blur;
-      expect(pab.status).toBe(true);
-      expect(pab.settings.picker_mode).toBe('sticky-page');
+      expect(pab.status).toBe(false);
+      expect(pab.settings.picker_mode).toBeNull();
       expect(pab.settings.blur_type).toBe('gaussian');
     });
 
     test('auto_detect_pii defaults', () => {
       const pii = PB.DEFAULT_MODEL.auto_detect_pii;
-      expect(pii.status).toBe(false);
-      expect(pii.settings.email).toBe(false);
-      expect(pii.settings.numeric).toBe(false);
+      expect(pii.status).toBe(true);
+      expect(pii.settings.email).toBe(true);
+      expect(pii.settings.numeric).toBe(true);
       expect(pii.settings.pii_mode).toBe('gaussian');
     });
 
     test('automate defaults', () => {
       const a = PB.DEFAULT_MODEL.automate;
-      expect(a.settings.timer.enabled).toBe(false);
-      expect(a.settings.timer.value).toBe(0);
-      expect(a.settings.timer.unit).toBe('min');
       expect(a.settings.idle.value).toBe(5);
       expect(a.settings.idle.unit).toBe('min');
       expect(a.settings.tab_switch.enabled).toBe(false);
+    });
+
+    test('automate_blur default is empty object', () => {
+      expect(PB.DEFAULT_MODEL.automate_blur).toBeDefined();
+      expect(typeof PB.DEFAULT_MODEL.automate_blur).toBe('object');
+      expect(Object.keys(PB.DEFAULT_MODEL.automate_blur)).toHaveLength(0);
     });
 
     test('is frozen', () => {
@@ -288,7 +291,6 @@ describe('BlurrySite constants', () => {
     ['picker_modes',    () => PB.picker_modes],
     ['pick_blur_modes', () => PB.pick_blur_modes],
     ['pii_modes',       () => PB.pii_modes],
-    ['timer_units',     () => PB.timer_units],
     ['idle_units',      () => PB.idle_units],
     ['pattern_types',   () => PB.pattern_types],
   ])('%s enum is frozen', (_name, getEnum) => {
@@ -356,10 +358,10 @@ describe('BlurrySite constants', () => {
       expect(PB.validate_model(m).settings.blur_radius).toBe(2);
     });
 
-    test('blur_radius accepts max boundary (30)', () => {
+    test('blur_radius accepts max boundary (32)', () => {
       const m = PB.build_default_model();
-      m.settings.blur_radius = 30;
-      expect(PB.validate_model(m).settings.blur_radius).toBe(30);
+      m.settings.blur_radius = 32;
+      expect(PB.validate_model(m).settings.blur_radius).toBe(32);
     });
 
     test('blur_radius rejects below min (1)', () => {
@@ -368,9 +370,9 @@ describe('BlurrySite constants', () => {
       expect(PB.validate_model(m).settings.blur_radius).toBe(PB.DEFAULT_MODEL.settings.blur_radius);
     });
 
-    test('blur_radius rejects above max (31)', () => {
+    test('blur_radius rejects above max (33)', () => {
       const m = PB.build_default_model();
-      m.settings.blur_radius = 31;
+      m.settings.blur_radius = 33;
       expect(PB.validate_model(m).settings.blur_radius).toBe(PB.DEFAULT_MODEL.settings.blur_radius);
     });
 
@@ -387,7 +389,9 @@ describe('BlurrySite constants', () => {
       m.pick_and_blur.settings.picker_mode = 'sticky-page';
       expect(PB.validate_model(m).pick_and_blur.settings.picker_mode).toBe('sticky-page');
       m.pick_and_blur.settings.picker_mode = 'invalid';
-      expect(PB.validate_model(m).pick_and_blur.settings.picker_mode).toBe('sticky-page');
+      expect(PB.validate_model(m).pick_and_blur.settings.picker_mode).toBeNull();
+      m.pick_and_blur.settings.picker_mode = null;
+      expect(PB.validate_model(m).pick_and_blur.settings.picker_mode).toBeNull();
     });
 
     test('pii_mode validates against enum', () => {
@@ -396,18 +400,6 @@ describe('BlurrySite constants', () => {
       expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('redacted');
       m.auto_detect_pii.settings.pii_mode = 'bogus';
       expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('gaussian');
-    });
-
-    test('automate.timer: value 0 is valid (timer off)', () => {
-      const m = PB.build_default_model();
-      m.automate.settings.timer = { value: 0, unit: 'min', enabled: false, started_at: null };
-      expect(PB.validate_model(m).automate.settings.timer.value).toBe(0);
-    });
-
-    test('automate.timer: value > 99 falls back to 0', () => {
-      const m = PB.build_default_model();
-      m.automate.settings.timer = { value: 100, unit: 'min', enabled: false, started_at: null };
-      expect(PB.validate_model(m).automate.settings.timer.value).toBe(0);
     });
 
     test('automate.idle: hr unit rejected — falls back to min', () => {
@@ -420,6 +412,41 @@ describe('BlurrySite constants', () => {
       const m = PB.build_default_model();
       m.automate.settings.idle = { value: 0, unit: 'min', enabled: false };
       expect(PB.validate_model(m).automate.settings.idle.value).toBe(5);
+    });
+
+    test('automate_blur: valid entry passes through', () => {
+      const m = PB.build_default_model();
+      m.automate_blur = { 'example.com': { idle: true, tab_switch: false, screen_share: true } };
+      const result = PB.validate_model(m);
+      expect(result.automate_blur['example.com'].idle).toBe(true);
+      expect(result.automate_blur['example.com'].tab_switch).toBe(false);
+      expect(result.automate_blur['example.com'].screen_share).toBe(true);
+    });
+
+    test('automate_blur: missing fields default to false', () => {
+      const m = PB.build_default_model();
+      m.automate_blur = { 'example.com': {} };
+      const result = PB.validate_model(m);
+      expect(result.automate_blur['example.com'].idle).toBe(false);
+      expect(result.automate_blur['example.com'].tab_switch).toBe(false);
+      expect(result.automate_blur['example.com'].screen_share).toBe(false);
+    });
+
+    test('automate_blur: prototype pollution keys are dropped', () => {
+      const m = PB.build_default_model();
+      m.automate_blur = { '__proto__': { idle: true }, 'ok.com': { idle: true } };
+      const result = PB.validate_model(m);
+      // __proto__ is filtered out — only ok.com should remain as own key
+      expect(Object.keys(result.automate_blur)).toHaveLength(1);
+      expect(Object.keys(result.automate_blur)[0]).toBe('ok.com');
+      expect(result.automate_blur['ok.com'].idle).toBe(true);
+    });
+
+    test('automate_blur: non-object input defaults to empty', () => {
+      const m = PB.build_default_model();
+      m.automate_blur = 'invalid';
+      const result = PB.validate_model(m);
+      expect(result.automate_blur).toEqual({});
     });
 
     test('shortcuts: rejects empty binding array', () => {

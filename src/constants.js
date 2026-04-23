@@ -28,14 +28,18 @@ const Constants = (() => {
 
   /** Background → content script (command relay, context menu) */
   const command = Object.freeze({
-    toggle_blur_all:  'TOGGLE_BLUR_ALL',
-    toggle_picker:    'TOGGLE_PICKER',
-    clear_all_blur:   'CLEAR_ALL_BLUR',
-    restore:          'RESTORE',
-    context_blur:     'CONTEXT_BLUR',
-    context_unblur:   'CONTEXT_UNBLUR',
-    blur_selection:   'BLUR_SELECTION',
-    capture_viewport: 'CAPTURE_VIEWPORT',
+    toggle_blur_all:       'TOGGLE_BLUR_ALL',
+    toggle_picker:         'TOGGLE_PICKER',
+    clear_all_blur:        'CLEAR_ALL_BLUR',
+    restore:               'RESTORE',
+    context_blur:          'CONTEXT_BLUR',
+    context_unblur:        'CONTEXT_UNBLUR',
+    blur_selection:        'BLUR_SELECTION',
+    capture_viewport:      'CAPTURE_VIEWPORT',
+    screen_share_started:  'SCREEN_SHARE_STARTED',  // content → background
+    screen_share_ended:    'SCREEN_SHARE_ENDED',    // content → background
+    screen_share_blur:     'SCREEN_SHARE_BLUR',     // background → content (other tabs)
+    screen_share_unblur:   'SCREEN_SHARE_UNBLUR',   // background → content (all tabs)
   });
 
   /** Popup → content script */
@@ -96,9 +100,6 @@ const Constants = (() => {
     redacted:   'redacted',
     asterisked: 'asterisked',
   });
-
-  // timer_units — supports hr (no Chrome API constraint on setTimeout).
-  const timer_units = Object.freeze({ sec: 'sec', min: 'min', hr: 'hr' });
 
   // idle_units — hr excluded: Chrome idle API hard cap ~3000 s (50 min).
   const idle_units = Object.freeze({ sec: 'sec', min: 'min' });
@@ -190,34 +191,40 @@ const Constants = (() => {
     }),
 
     pick_and_blur: Object.freeze({
-      status: true,
+      status: false,
       settings: Object.freeze({
-        picker_mode: 'sticky-page',
+        picker_mode: null,
         blur_type:   'gaussian',
         blur_color:  Object.freeze({ hex: '#000000', opacity: 1.0 }),
       }),
     }),
 
     auto_detect_pii: Object.freeze({
-      status: false,
+      status: true,
       settings: Object.freeze({
-        email:    false,
-        numeric:  false,
-        pii_mode: 'gaussian',
+        email:              true,
+        numeric:            true,
+        pii_mode:           'gaussian',
+        pii_redaction_color: '#000000',
       }),
     }),
 
     automate: Object.freeze({
       status: false,
       settings: Object.freeze({
-        timer:      Object.freeze({ value: 0, unit: 'min', enabled: false, started_at: null }),
-        idle:       Object.freeze({ value: 5, unit: 'min', enabled: false }),
-        tab_switch: Object.freeze({ enabled: false }),
+        screen_share: Object.freeze({ enabled: false }),
+        idle:         Object.freeze({ value: 5, unit: 'min', enabled: false }),
+        tab_switch:   Object.freeze({ enabled: false }),
       }),
     }),
 
     site_rules: Object.freeze([]),
     // shortcuts: built lazily — not frozen here
+
+    // Per-hostname automate trigger state. Separate from blur_all so automate
+    // triggers never clobber the user's manual blur preference.
+    // Shape: { [hostname]: { idle: bool, tab_switch: bool, screen_share: bool } }
+    automate_blur: Object.freeze({}),
   });
 
   // ── Deep merge ─────────────────────────────────────────────────────────────
@@ -302,7 +309,7 @@ const Constants = (() => {
       const s = (model.settings && typeof model.settings === 'object') ? model.settings : {};
 
       r.settings = {
-        blur_radius: (typeof s.blur_radius === 'number' && s.blur_radius >= 2 && s.blur_radius <= 30)
+        blur_radius: (typeof s.blur_radius === 'number' && s.blur_radius >= 2 && s.blur_radius <= 32)
           ? s.blur_radius : d.settings.blur_radius,
 
         transition_duration: (typeof s.transition_duration === 'number' && s.transition_duration >= 0 && s.transition_duration <= 2000)
@@ -360,8 +367,9 @@ const Constants = (() => {
       r.pick_and_blur = {
         status: (typeof pb.status === 'boolean') ? pb.status : d.pick_and_blur.status,
         settings: {
-          picker_mode: Object.values(picker_modes).includes(raw_picker)
-            ? raw_picker : d.pick_and_blur.settings.picker_mode,
+          picker_mode: (raw_picker === null || raw_picker === undefined)
+            ? null
+            : (Object.values(picker_modes).includes(raw_picker) ? raw_picker : null),
           blur_type: Object.values(pick_blur_modes).includes(pb_s.blur_type)
             ? pb_s.blur_type : d.pick_and_blur.settings.blur_type,
           blur_color: {
@@ -385,6 +393,8 @@ const Constants = (() => {
           numeric:  (typeof ap_s.numeric === 'boolean') ? ap_s.numeric : d.auto_detect_pii.settings.numeric,
           pii_mode: Object.values(pii_modes).includes(ap_s.pii_mode)
             ? ap_s.pii_mode : d.auto_detect_pii.settings.pii_mode,
+          pii_redaction_color: (typeof ap_s.pii_redaction_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(ap_s.pii_redaction_color))
+            ? ap_s.pii_redaction_color : d.auto_detect_pii.settings.pii_redaction_color,
         },
       };
     }
@@ -393,20 +403,14 @@ const Constants = (() => {
     {
       const am   = (model.automate && typeof model.automate === 'object') ? model.automate : {};
       const am_s = (am.settings && typeof am.settings === 'object') ? am.settings : {};
-      const tm   = (am_s.timer && typeof am_s.timer === 'object') ? am_s.timer : {};
+      const ss   = (am_s.screen_share && typeof am_s.screen_share === 'object') ? am_s.screen_share : {};
       const id   = (am_s.idle  && typeof am_s.idle  === 'object') ? am_s.idle  : {};
       const ts   = (am_s.tab_switch && typeof am_s.tab_switch === 'object') ? am_s.tab_switch : {};
       r.automate = {
         status: (typeof am.status === 'boolean') ? am.status : d.automate.status,
         settings: {
-          timer: {
-            value: (typeof tm.value === 'number' && tm.value >= 0 && tm.value <= 99)
-              ? tm.value : d.automate.settings.timer.value,
-            unit: Object.values(timer_units).includes(tm.unit)
-              ? tm.unit : d.automate.settings.timer.unit,
-            enabled: (typeof tm.enabled === 'boolean') ? tm.enabled : d.automate.settings.timer.enabled,
-            started_at: (typeof tm.started_at === 'number' || tm.started_at === null)
-              ? tm.started_at : d.automate.settings.timer.started_at,
+          screen_share: {
+            enabled: (typeof ss.enabled === 'boolean') ? ss.enabled : d.automate.settings.screen_share.enabled,
           },
           idle: {
             value: (typeof id.value === 'number' && id.value >= 1 && id.value <= 99)
@@ -474,6 +478,23 @@ const Constants = (() => {
         }));
     }
 
+    // ── automate_blur ──────────────────────────────────────────────────────
+    {
+      const ab_in = (model.automate_blur && typeof model.automate_blur === 'object'
+        && !Array.isArray(model.automate_blur)) ? model.automate_blur : {};
+      const ab_out = Object.create(null);
+      for (const host of Object.keys(ab_in)) {
+        if (!host || host === '__proto__' || host === 'constructor') continue;
+        const e = (ab_in[host] && typeof ab_in[host] === 'object') ? ab_in[host] : {};
+        ab_out[host] = {
+          idle:         typeof e.idle         === 'boolean' ? e.idle         : false,
+          tab_switch:   typeof e.tab_switch   === 'boolean' ? e.tab_switch   : false,
+          screen_share: typeof e.screen_share === 'boolean' ? e.screen_share : false,
+        };
+      }
+      r.automate_blur = ab_out;
+    }
+
     return r;
   }
 
@@ -490,7 +511,6 @@ const Constants = (() => {
     picker_modes,
     pick_blur_modes,
     pii_modes,
-    timer_units,
     idle_units,
     pattern_types,
     supported_languages,

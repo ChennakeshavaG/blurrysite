@@ -5,7 +5,7 @@ See `../CLAUDE.md` for project-level rules. This file covers test-specific patte
 ## Quick Reference
 
 ```bash
-npm run test:unit        # run all unit test files (638 tests)
+npm run test:unit        # run all unit test files (656 tests)
 npm test                 # + coverage report (~91% line coverage on src/)
 ```
 

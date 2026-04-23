@@ -11,10 +11,10 @@
 }
 
 .bl-htb-group__label {
-  font-size: 10px;
+  font-size: var(--bl-text-xs);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   color: var(--bl-text-dim);
   margin-bottom: 8px;
 }
@@ -31,9 +31,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   color: var(--bl-text-primary);
   cursor: pointer;
+}
+
+.bl-cat-item[hidden] {
+  display: none;
 }
 
 .bl-cat-item input[type="checkbox"] {
@@ -86,19 +90,25 @@
 }
 
 .bl-slider-val {
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   font-weight: 600;
   color: var(--bl-amber);
   min-width: 36px;
   text-align: right;
 }
 
-.bl-slider-labels {
+.bl-slider-ticks {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
-  color: var(--bl-text-dim);
-  margin-top: 2px;
+  margin-top: 3px;
+  padding: 0 calc(36px + 10px) 0 0; /* right: val-width + gap, so ticks span only the track */
+}
+
+.bl-slider-tick {
+  width: 1px;
+  height: 5px;
+  background: var(--bl-text-dim);
+  border-radius: 1px;
 }
 
 /* ── Toggle row ──────────────────────────────────────────────────────── */
@@ -110,7 +120,7 @@
 }
 
 .bl-form-row__label {
-  font-size: 12px;
+  font-size: var(--bl-text-base);
   color: var(--bl-text-primary);
 }
 
@@ -127,7 +137,7 @@
   flex: 1;
   padding: 6px 4px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   cursor: pointer;
   background: none;
   border: none;

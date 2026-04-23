@@ -1,0 +1,339 @@
+<!-- BlurrySite Perf Fixture: page-reveal | reveal_controller latency -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reveal Controller Stress Test — BlurrySite Perf Fixture</title>
+  <style>
+    body { font-family: Georgia, serif; max-width: 900px; margin: 0 auto; padding: 20px; color: #333; }
+    .notice { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 16px; margin-bottom: 24px; font-family: sans-serif; }
+    .reveal-target { padding: 12px; margin: 8px 0; background: #f9f9f9; border-left: 3px solid #ddd; min-height: 60px; line-height: 1.6; }
+    .nested-group { border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; margin-bottom: 12px; }
+    .inline-sensitive { background: #fff0f0; padding: 0 2px; }
+    section { margin-bottom: 40px; }
+    h2 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="notice">
+  <strong>Perf Fixture — Reveal Controller</strong><br>
+  Elements on this page are blurred via extension storage (blur-all state).<br>
+  Load this page with the BlurrySite extension active and blur-all enabled.
+  Elements will appear blurred. Hover or click to test reveal latency.
+</div>
+
+<h1>Reveal Controller Stress Test</h1>
+
+<div id="perf-meta" data-fixture="reveal" data-flat-targets="100" data-nested-groups="20" data-inline-spans="50"></div>
+
+<!-- ============================================================
+     Section 1: Flat Reveal Targets (100 elements)
+     ============================================================ -->
+<section id="flat-targets">
+  <h2>Flat Targets</h2>
+  <div id="flat-targets-container"></div>
+</section>
+
+<!-- ============================================================
+     Section 2: Nested Cascade Groups (20 groups, 3 levels deep)
+     ============================================================ -->
+<section id="nested-groups">
+  <h2>Nested Cascade Groups</h2>
+  <div id="nested-groups-container"></div>
+</section>
+
+<!-- ============================================================
+     Section 3: Inline Spans inside Blurred Paragraphs (50 elements)
+     ============================================================ -->
+<section id="inline-spans">
+  <h2>Inline Spans</h2>
+  <div id="inline-spans-container"></div>
+</section>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  // Content pools — realistic sensitive data for each domain
+  // ---------------------------------------------------------------------------
+
+  var medicalRecords = [
+    { name: 'John Doe',        dob: '1985-03-14', pid: 'PT-2024-00123', dx: 'Hypertension (I10), Type 2 Diabetes (E11.9)',   rx: 'Metformin 500 mg, Lisinopril 10 mg',  ins: 'BlueCross PPO #BCX-998-44712' },
+    { name: 'Mary Johnson',    dob: '1972-07-22', pid: 'PT-2024-00241', dx: 'Major Depressive Disorder (F32.1)',              rx: 'Sertraline 100 mg, Alprazolam 0.5 mg', ins: 'Aetna HMO #ATN-772-88031' },
+    { name: 'Robert Chen',     dob: '1990-11-05', pid: 'PT-2024-00389', dx: 'Generalized Anxiety Disorder (F41.1)',           rx: 'Escitalopram 20 mg',                   ins: 'UnitedHealth #UHC-441-20019' },
+    { name: 'Patricia Nguyen', dob: '1968-01-30', pid: 'PT-2024-00412', dx: 'Breast Cancer Stage II (C50.912)',               rx: 'Tamoxifen 20 mg, Anastrozole 1 mg',    ins: 'Cigna Choice #CGN-559-33871' },
+    { name: 'Michael Torres',  dob: '1955-08-19', pid: 'PT-2024-00531', dx: 'COPD (J44.9), Chronic Kidney Disease (N18.3)',   rx: 'Spiriva 18 mcg, Furosemide 40 mg',     ins: 'Medicare Advantage #MCR-221-76540' },
+    { name: 'Linda Park',      dob: '1983-04-12', pid: 'PT-2024-00677', dx: 'Hypothyroidism (E03.9)',                         rx: 'Levothyroxine 75 mcg',                 ins: 'Kaiser Permanente #KP-883-11209' },
+    { name: 'James Wilson',    dob: '1961-12-03', pid: 'PT-2024-00742', dx: 'Atrial Fibrillation (I48.91), HFrEF (I50.20)',  rx: 'Warfarin 5 mg, Carvedilol 6.25 mg',    ins: 'Humana Gold #HUM-664-09813' },
+    { name: 'Barbara Adams',   dob: '1979-09-27', pid: 'PT-2024-00819', dx: 'Lupus Erythematosus (M32.9)',                   rx: 'Hydroxychloroquine 200 mg',             ins: 'Anthem BCBS #ANT-337-55049' },
+    { name: 'David Martinez',  dob: '1947-06-15', pid: 'PT-2024-00904', dx: 'Parkinson Disease (G20), Dementia (G30.9)',     rx: 'Carbidopa-Levodopa 25-100 mg',         ins: 'Medicaid #MCD-112-80023' },
+    { name: 'Susan Thompson',  dob: '1993-02-28', pid: 'PT-2024-01003', dx: 'Crohn Disease (K50.90)',                        rx: 'Azathioprine 100 mg, Mesalamine 2.4 g',ins: 'Oscar Health #OSC-778-44382' },
+  ];
+
+  var financialRecords = [
+    { name: 'Alice Brennan',   acct: 'ACC-9981-3344', bal: '$127,450.00', lastTx: '2024-04-18', ssn: '481-55-2230', routing: '021000021', type: 'Checking',  manager: 'Branch Manager: Daniel R. Kim'      },
+    { name: 'Thomas Wright',   acct: 'ACC-4421-7789', bal: '$8,312.67',   lastTx: '2024-04-19', ssn: '339-74-8811', routing: '026009593', type: 'Savings',   manager: 'Branch Manager: Sarah L. Okonkwo'   },
+    { name: 'Catherine Lee',   acct: 'ACC-6672-0051', bal: '$305,892.40', lastTx: '2024-04-15', ssn: '512-88-1047', routing: '122105155', type: 'Investment', manager: 'Portfolio Manager: Wei Zhang'       },
+    { name: 'Brian Foster',    acct: 'ACC-1190-5567', bal: '$2,045.18',   lastTx: '2024-04-20', ssn: '274-61-9933', routing: '091000019', type: 'Checking',  manager: 'Branch Manager: Priya Sharma'       },
+    { name: 'Nancy Gutierrez', acct: 'ACC-7783-2210', bal: '$51,700.00',  lastTx: '2024-04-17', ssn: '608-34-5522', routing: '325070760', type: 'IRA',       manager: 'Retirement Advisor: Carlos Mendoza' },
+    { name: 'Kevin Chang',     acct: 'ACC-3345-6698', bal: '$19,880.55',  lastTx: '2024-04-16', ssn: '417-29-7764', routing: '011401533', type: 'Checking',  manager: 'Branch Manager: Lisa D. Freeman'    },
+    { name: 'Helen Kowalski',  acct: 'ACC-8829-4401', bal: '$74,233.90',  lastTx: '2024-04-14', ssn: '551-03-8819', routing: '267084131', type: 'Savings',   manager: 'Branch Manager: Omar Idris'         },
+    { name: 'Gary Patel',      acct: 'ACC-2256-1178', bal: '$430,001.00', lastTx: '2024-04-13', ssn: '398-47-2260', routing: '121042882', type: 'Trust',     manager: 'Trust Officer: Eleanor Bassett'     },
+    { name: 'Sandra Cox',      acct: 'ACC-5513-8832', bal: '$3,772.25',   lastTx: '2024-04-21', ssn: '744-81-0034', routing: '053207766', type: 'Checking',  manager: 'Branch Manager: James Osei'         },
+    { name: 'Larry Walsh',     acct: 'ACC-0097-3345', bal: '$12,599.00',  lastTx: '2024-04-12', ssn: '229-56-4471', routing: '063107513', type: 'CD',        manager: 'Fixed Income Advisor: Nina Tanaka'  },
+  ];
+
+  var hrRecords = [
+    { name: 'Jane Smith',      emp: 'EMP-10042', sal: '$95,000/yr',  dept: 'Engineering',    mgr: 'David Liu',      perf: 'Exceeds Expectations', hire: '2019-06-01', ssn: '321-54-9876' },
+    { name: 'Mark Robinson',   emp: 'EMP-10891', sal: '$78,500/yr',  dept: 'Product',        mgr: 'Anita Shah',     perf: 'Meets Expectations',   hire: '2021-02-14', ssn: '668-12-3340' },
+    { name: 'Karen Yamamoto',  emp: 'EMP-11237', sal: '$112,000/yr', dept: 'Legal',          mgr: 'Tom Briggs',     perf: 'Exceeds Expectations', hire: '2017-09-22', ssn: '774-09-5523' },
+    { name: 'Paul Henderson',  emp: 'EMP-11580', sal: '$65,000/yr',  dept: 'Customer Success', mgr: 'Rita Flores',  perf: 'Needs Improvement',    hire: '2022-11-07', ssn: '435-77-2281' },
+    { name: 'Angela Torres',   emp: 'EMP-12004', sal: '$88,000/yr',  dept: 'Data Science',   mgr: 'Yuki Tanaka',    perf: 'Exceeds Expectations', hire: '2020-04-15', ssn: '587-31-6644' },
+    { name: 'Steven Grant',    emp: 'EMP-12449', sal: '$145,000/yr', dept: 'Infrastructure', mgr: 'Chloe Beaumont', perf: 'Meets Expectations',   hire: '2016-08-30', ssn: '219-68-0012' },
+    { name: 'Michelle Dunn',   emp: 'EMP-12780', sal: '$72,000/yr',  dept: 'Marketing',      mgr: 'Isaac Brown',    perf: 'Meets Expectations',   hire: '2023-01-09', ssn: '862-44-7739' },
+    { name: 'Kenneth Reyes',   emp: 'EMP-13012', sal: '$99,500/yr',  dept: 'Security',       mgr: 'Fiona O\'Brien', perf: 'Exceeds Expectations', hire: '2018-05-20', ssn: '103-95-4418' },
+    { name: 'Dorothy Hicks',   emp: 'EMP-13301', sal: '$57,000/yr',  dept: 'Finance',        mgr: 'Alex Novak',     perf: 'Meets Expectations',   hire: '2022-07-18', ssn: '346-23-8807' },
+    { name: 'Edward Fleming',  emp: 'EMP-13667', sal: '$121,000/yr', dept: 'Architecture',   mgr: 'Mei-Lin Zhao',   perf: 'Exceeds Expectations', hire: '2015-03-02', ssn: '570-86-1193' },
+  ];
+
+  // Expand each pool to 100+ entries by cycling with index variation
+  function getMedical(i) {
+    var r = medicalRecords[i % medicalRecords.length];
+    var idx = i + 1;
+    return 'Patient ID: ' + r.pid.replace('00123', String(idx).padStart(5, '0')) +
+           ' | Name: ' + r.name +
+           ' | DOB: ' + r.dob +
+           ' | SSN: ' + (123 + i * 17 + '').slice(0, 3) + '-' + (45 + i).toString().padStart(2, '0') + '-' + (6789 + i * 3) +
+           ' | Dx: ' + r.dx +
+           ' | Rx: ' + r.rx +
+           ' | Insurance: ' + r.ins;
+  }
+
+  function getFinancial(i) {
+    var r = financialRecords[i % financialRecords.length];
+    var idx = i + 1;
+    var balBase = parseFloat(r.bal.replace(/[$,]/g, ''));
+    var bal = '$' + (balBase + idx * 137.50).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return 'Account: ' + r.acct.replace('3344', String(9000 + idx)) +
+           ' | Holder: ' + r.name +
+           ' | Type: ' + r.type +
+           ' | Balance: ' + bal +
+           ' | Last Transaction: 2024-04-' + String((idx % 28) + 1).padStart(2, '0') +
+           ' | Routing: ' + r.routing +
+           ' | ' + r.manager;
+  }
+
+  function getHR(i) {
+    var r = hrRecords[i % hrRecords.length];
+    var idx = i + 1;
+    return 'Employee: ' + r.name +
+           ' | ID: ' + r.emp.replace('10042', String(10000 + idx)) +
+           ' | Salary: ' + r.sal +
+           ' | Department: ' + r.dept +
+           ' | Manager: ' + r.mgr +
+           ' | Performance: ' + r.perf +
+           ' | Hire Date: ' + r.hire +
+           ' | SSN: ' + r.ssn;
+  }
+
+  // Round-robin across all three content types
+  function getContent(i) {
+    var kind = i % 3;
+    if (kind === 0) return getMedical(Math.floor(i / 3));
+    if (kind === 1) return getFinancial(Math.floor(i / 3));
+    return getHR(Math.floor(i / 3));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Section 1 — 100 flat <p class="reveal-target"> elements
+  // ---------------------------------------------------------------------------
+  var flatContainer = document.getElementById('flat-targets-container');
+  for (var fi = 0; fi < 100; fi++) {
+    var p = document.createElement('p');
+    p.className = 'reveal-target';
+    p.textContent = 'Record #' + (fi + 1) + ': ' + getContent(fi);
+    flatContainer.appendChild(p);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Section 2 — 20 nested groups: article > section > p.reveal-target (×2)
+  // ---------------------------------------------------------------------------
+  var nestedContainer = document.getElementById('nested-groups-container');
+  var nestedTitles = [
+    'Cardiology Dept — Inpatient Admissions',
+    'Oncology Unit — Active Treatment Plans',
+    'Wealth Management — High-Net-Worth Portfolio Review',
+    'Human Resources — Annual Compensation Audit',
+    'Psychiatry Unit — Confidential Case Files',
+    'Fixed Income Desk — Bond Position Statements',
+    'Payroll Division — Bonus Allocation Records',
+    'Nephrology Clinic — Dialysis Patient Registry',
+    'Private Banking — Offshore Account Disclosures',
+    'Talent Acquisition — Offer Letter Archive',
+    'Endocrinology — Hormone Panel Results',
+    'Equity Research — Insider Trading Disclosures',
+    'Employee Relations — Disciplinary Action Log',
+    'Neurology — MRI Scan Interpretation Notes',
+    'Corporate Treasury — FX Exposure Report',
+    'Benefits Administration — COBRA Enrollment',
+    'Gastroenterology — Colonoscopy Findings',
+    'Mergers & Acquisitions — Deal Valuation Memos',
+    'Succession Planning — Leadership Candidates',
+    'Infectious Disease — Contact Tracing Records',
+  ];
+  for (var ni = 0; ni < 20; ni++) {
+    var article = document.createElement('article');
+    article.className = 'nested-group';
+
+    var sectionLabel = document.createElement('strong');
+    sectionLabel.textContent = 'Group ' + (ni + 1) + ': ' + nestedTitles[ni];
+    article.appendChild(sectionLabel);
+
+    var inner = document.createElement('section');
+
+    var p1 = document.createElement('p');
+    p1.className = 'reveal-target';
+    p1.textContent = 'Primary Record — ' + getContent(100 + ni * 2);
+
+    var p2 = document.createElement('p');
+    p2.className = 'reveal-target';
+    p2.textContent = 'Secondary Record — ' + getContent(100 + ni * 2 + 1);
+
+    inner.appendChild(p1);
+    inner.appendChild(p2);
+    article.appendChild(inner);
+    nestedContainer.appendChild(article);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Section 3 — 50 <p class="reveal-target"> each with 2 <span.inline-sensitive>
+  // ---------------------------------------------------------------------------
+  var inlineContainer = document.getElementById('inline-spans-container');
+
+  var inlineTemplates = [
+    function (i) {
+      var emails = [
+        'alice@secretcorp.com', 'b.jones@privatefirm.net', 'c.wu@stealth-startup.io',
+        'david.r@confidential.org', 'emily.k@internaldocs.com', 'frank.o@classfied.biz',
+        'grace.h@nda-protected.net', 'henry.t@sensidata.co', 'irene.m@hidden-ops.com',
+        'jack.f@sealed-records.org',
+      ];
+      var accts = [
+        'ACC-2024-00891', 'ACC-2024-01142', 'ACC-2024-02307', 'ACC-2024-03885',
+        'ACC-2024-04291', 'ACC-2024-05033', 'ACC-2024-06714', 'ACC-2024-07002',
+        'ACC-2024-08199', 'ACC-2024-09641',
+      ];
+      return {
+        before: 'Contact ',
+        span1: emails[i % emails.length],
+        mid: ' regarding account ',
+        span2: accts[i % accts.length],
+        after: ' — handle per NDA clause 4.2.',
+      };
+    },
+    function (i) {
+      var phones = [
+        '+1 (415) 555-0182', '+1 (212) 555-0293', '+1 (650) 555-0347', '+1 (312) 555-0419',
+        '+1 (713) 555-0561', '+1 (202) 555-0634', '+1 (617) 555-0728', '+1 (404) 555-0815',
+        '+1 (503) 555-0921', '+1 (720) 555-0104',
+      ];
+      var ssns = [
+        '123-45-6789', '234-56-7890', '345-67-8901', '456-78-9012', '567-89-0123',
+        '678-90-1234', '789-01-2345', '890-12-3456', '901-23-4567', '012-34-5678',
+      ];
+      return {
+        before: 'Authorized contact: ',
+        span1: phones[i % phones.length],
+        mid: '. Tax ID / SSN: ',
+        span2: ssns[i % ssns.length],
+        after: '. Do not disclose to third parties.',
+      };
+    },
+    function (i) {
+      var cards = [
+        '4111-1111-1111-1111', '5500-0000-0000-0004', '3714-496353-98431', '6011-1111-1111-1117',
+        '3530-1113-3330-0000', '3566-0020-2036-0505', '5425-2334-3010-9903', '2223-0031-2200-3222',
+        '6304-1000-0000-0008', '6759-6498-2643-8453',
+      ];
+      var cvvs = ['737', '928', '412', '553', '201', '876', '043', '619', '384', '157'];
+      return {
+        before: 'Billing card on file: ',
+        span1: cards[i % cards.length],
+        mid: ' CVV ',
+        span2: cvvs[i % cvvs.length],
+        after: '. Exp ' + (String((i % 12) + 1).padStart(2, '0')) + '/2' + (26 + (i % 4)) + '. PCI-DSS restricted.',
+      };
+    },
+    function (i) {
+      var patients = [
+        'Marcus Bell (PT-2024-10041)', 'Olivia Cross (PT-2024-10188)', 'Nathan Drake (PT-2024-10334)',
+        'Penelope Evans (PT-2024-10512)', 'Quinn Farrow (PT-2024-10699)', 'Rachel Green (PT-2024-10841)',
+        'Samuel Hunt (PT-2024-11003)', 'Tanya Ingram (PT-2024-11178)', 'Ulric James (PT-2024-11302)', 'Vera Knox (PT-2024-11490)',
+      ];
+      var diagnoses = [
+        'Acute Myocardial Infarction (I21.9)', 'Stage III Lung Cancer (C34.12)', 'HIV/AIDS (B24)',
+        'Bipolar I Disorder (F31.10)', 'End-Stage Renal Disease (N18.6)', 'Alcoholic Liver Cirrhosis (K70.30)',
+        'Opioid Use Disorder (F11.20)', 'Metastatic Melanoma (C43.9)', 'Severe Preeclampsia (O14.10)', 'Septicemia (A41.9)',
+      ];
+      return {
+        before: 'Patient: ',
+        span1: patients[i % patients.length],
+        mid: ' — Primary Dx: ',
+        span2: diagnoses[i % diagnoses.length],
+        after: '. Physician review required before disclosure.',
+      };
+    },
+    function (i) {
+      var employees = [
+        'Aaron Mitchell (EMP-20011)', 'Bella Nash (EMP-20184)', 'Connor Owens (EMP-20327)',
+        'Diana Pruitt (EMP-20491)', 'Ethan Quinn (EMP-20608)', 'Fiona Reed (EMP-20775)',
+        'George Simmons (EMP-20913)', 'Hannah Todd (EMP-21044)', 'Ivan Underwood (EMP-21199)', 'Julia Vance (EMP-21302)',
+      ];
+      var salaries = [
+        '$87,500/yr', '$102,000/yr', '$74,000/yr', '$133,500/yr', '$68,000/yr',
+        '$115,000/yr', '$91,200/yr', '$148,750/yr', '$59,000/yr', '$124,400/yr',
+      ];
+      return {
+        before: 'Confidential HR File: ',
+        span1: employees[i % employees.length],
+        mid: ' — Compensation: ',
+        span2: salaries[i % salaries.length],
+        after: '. Performance review date: ' + String((i % 28) + 1).padStart(2, '0') + '-May-2024.',
+      };
+    },
+  ];
+
+  for (var ii = 0; ii < 50; ii++) {
+    var tmplFn = inlineTemplates[ii % inlineTemplates.length];
+    var tmpl = tmplFn(ii);
+
+    var ip = document.createElement('p');
+    ip.className = 'reveal-target';
+
+    ip.appendChild(document.createTextNode(tmpl.before));
+
+    var s1 = document.createElement('span');
+    s1.className = 'inline-sensitive';
+    s1.textContent = tmpl.span1;
+    ip.appendChild(s1);
+
+    ip.appendChild(document.createTextNode(tmpl.mid));
+
+    var s2 = document.createElement('span');
+    s2.className = 'inline-sensitive';
+    s2.textContent = tmpl.span2;
+    ip.appendChild(s2);
+
+    ip.appendChild(document.createTextNode(tmpl.after));
+
+    inlineContainer.appendChild(ip);
+  }
+
+})();
+</script>
+
+</body>
+</html>

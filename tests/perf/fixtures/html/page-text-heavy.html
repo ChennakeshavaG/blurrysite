@@ -1,0 +1,643 @@
+<!-- BlurrySite Perf Fixture: page-text-heavy | TEXT + TABLE categories -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Heavy — BlurrySite Perf Fixture</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 20px;
+      color: #222;
+      line-height: 1.7;
+    }
+    h1 { font-size: 2em; margin-top: 1.2em; margin-bottom: 0.4em; }
+    h2 { font-size: 1.5em; margin-top: 1.4em; margin-bottom: 0.4em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+    h3 { font-size: 1.15em; margin-top: 1.2em; margin-bottom: 0.3em; }
+    p  { margin: 0.6em 0; }
+    blockquote {
+      border-left: 4px solid #ccc;
+      padding-left: 1em;
+      margin: 1em 0 1em 0;
+      font-style: italic;
+      color: #555;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 12px;
+      overflow-x: auto;
+      font-size: 0.85em;
+      border: 1px solid #e0e0e0;
+      border-radius: 3px;
+    }
+    code {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 0.9em;
+      background: #f0f0f0;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+    }
+    figcaption {
+      font-size: 0.85em;
+      color: #666;
+      font-style: italic;
+      margin-top: 4px;
+    }
+    address {
+      font-style: normal;
+      font-size: 0.9em;
+      color: #555;
+      border-top: 1px solid #eee;
+      padding-top: 6px;
+      margin-top: 6px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.8em;
+      margin-top: 1em;
+    }
+    td, th {
+      border: 1px solid #ddd;
+      padding: 4px 8px;
+      text-align: right;
+    }
+    th {
+      background: #f0f0f0;
+      font-weight: bold;
+      text-align: center;
+    }
+    #perf-meta { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="perf-meta"
+  data-fixture="text-heavy"
+  data-p-count="2000"
+  data-span-count="800"
+  data-td-count="1500">
+</div>
+
+<div id="content-root">
+  <!-- JS-generated content will be injected here -->
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------ */
+  /* Data pools                                                           */
+  /* ------------------------------------------------------------------ */
+
+  var COMPANIES = [
+    'Meridian Capital','Vantage Group','Apex Holdings','Solaris Financial',
+    'Crestline Partners','Ironbridge Advisors','Summit Equity','Harborview Asset Management',
+    'Pinnacle Ventures','Clearwater Analytics','Bridgepoint Capital','Cascadia Growth Fund',
+    'Northstar Investments','Pacific Ridge Partners','Redwood Capital','Granite Peak Advisors',
+    'Silverstream Holdings','Cobalt Analytics','Oaktree Financial','Foxridge Capital'
+  ];
+
+  var TICKERS = [
+    'APXH','MRDP','VNTG','SLRS','CRST','IRNB','SMTE','HRVA',
+    'PNVT','CLWA','BRGP','CSCD','NRSI','PCFR','RDWD','GRNT',
+    'SLVS','CBLT','OKTR','FXRG'
+  ];
+
+  var ANALYSTS = [
+    'Dr. Helena Marsh, CFA','James Whitfield, Senior Analyst','Priya Nair, Equity Research',
+    'Carlos Ibañez, Fixed Income','Mei-Lin Zhong, Portfolio Strategy',
+    'Robert Ashford, Macro Research','Ananya Krishnamurthy, Sector Lead',
+    'Thomas Brennan, Credit Analysis','Sofia Andersen, Quantitative Strategy',
+    'David Okafor, Emerging Markets'
+  ];
+
+  var PARA_POOL = [
+    'The consolidated revenue for the trailing twelve months reached <SPAN>$<R>B</SPAN>, reflecting a year-over-year growth of <SPAN><R>%</SPAN> despite headwinds in the macroeconomic environment. Management attributes this outperformance to disciplined cost controls and strong demand in the enterprise segment.',
+    'Gross margins contracted by <SPAN><R> basis points</SPAN> compared to the prior quarter, driven primarily by elevated raw material costs and supply-chain normalization charges. The finance team expects margin recovery in <SPAN>Q<QT> <YR></SPAN> as input costs stabilize.',
+    'Operating cash flow of <SPAN>$<R>M</SPAN> exceeded consensus estimates by <SPAN><R>%</SPAN>. Capital expenditures remained within the guided range of <SPAN>$<R>M</SPAN> to <SPAN>$<R>M</SPAN>, underscoring management\'s commitment to disciplined allocation.',
+    'The net debt position stood at <SPAN>$<R>B</SPAN> at quarter-end, with a leverage ratio of <SPAN><R>x</SPAN> EBITDA. The company successfully refinanced its revolving credit facility at <SPAN>SOFR + <R>bps</SPAN>, reducing annual interest expense by approximately <SPAN>$<R>M</SPAN>.',
+    'Earnings per share of <SPAN>$<R></SPAN> beat the Street consensus of <SPAN>$<R></SPAN> by a margin of <SPAN><R>%</SPAN>. The board approved a quarterly dividend increase of <SPAN><R>%</SPAN>, bringing the annualized payout to <SPAN>$<R> per share</SPAN>.',
+    'The price-to-earnings multiple currently stands at <SPAN><R>x</SPAN> trailing earnings, which represents a <SPAN><R>% premium</SPAN> relative to the sector median. Analysts at <SPAN><CO></SPAN> maintain a <SPAN>Buy</SPAN> rating with a twelve-month price target of <SPAN>$<R></SPAN>.',
+    'Return on equity for the fiscal year reached <SPAN><R>%</SPAN>, marking the fifth consecutive year of improvement. The company\'s asset-light model and high recurring-revenue mix continue to drive superior capital efficiency relative to peers such as <SPAN><CO></SPAN> and <SPAN><CO></SPAN>.',
+    'Segment revenue from the institutional advisory division grew <SPAN><R>%</SPAN> year-over-year to <SPAN>$<R>M</SPAN>, representing <SPAN><R>%</SPAN> of total consolidated revenue. Management guided for continued double-digit growth in this segment through <SPAN>FY<YR></SPAN>.',
+    'The debt-to-equity ratio improved to <SPAN><R></SPAN> from <SPAN><R></SPAN> in the comparable prior period, reflecting both organic deleveraging and the successful divestiture of non-core assets valued at <SPAN>$<R>M</SPAN>.',
+    'Working capital efficiency, measured by the cash conversion cycle, improved by <SPAN><R> days</SPAN> to <SPAN><R> days</SPAN>, driven by better inventory management and accelerated receivables collection. Days payable outstanding expanded slightly to <SPAN><R> days</SPAN>.',
+    'The formula <code>WACC = E/(E+D) * Re + D/(E+D) * Rd * (1-T)</code> was applied using a risk-free rate of <SPAN><R>%</SPAN> and an equity risk premium of <SPAN><R>%</SPAN>. The resulting <code>WACC</code> of <SPAN><R>%</SPAN> was used to discount projected free cash flows over the five-year forecast horizon.',
+    'Sensitivity analysis around the terminal growth rate assumption indicates that a <SPAN><R> basis point</SPAN> change in the terminal rate yields a corresponding change of approximately <SPAN><R>%</SPAN> in the implied equity value. Investors should note that minor adjustments to discount-rate assumptions can materially affect valuation outcomes.',
+    'The enterprise value of <SPAN>$<R>B</SPAN> implies an EV/EBITDA multiple of <SPAN><R>x</SPAN> on a last-twelve-months basis. This compares favorably with the peer group average of <SPAN><R>x</SPAN>, suggesting the stock may be trading at a modest discount to intrinsic value.',
+    'Liquidity remains robust, with <SPAN>$<R>M</SPAN> in unrestricted cash and cash equivalents complemented by a fully undrawn revolving facility of <SPAN>$<R>M</SPAN>. The current ratio stands at <SPAN><R></SPAN>, well above the covenant threshold of <SPAN>1.25x</SPAN>.',
+    'Free cash flow conversion, defined as <code>FCF / Net Income</code>, reached <SPAN><R>%</SPAN> for the period. Management reiterated its long-term FCF conversion target of greater than <SPAN><R>%</SPAN>, supported by modest maintenance capex requirements and negative working-capital dynamics in the subscription business.',
+    'The weighted-average cost of debt declined to <SPAN><R>%</SPAN> following the refinancing completed in <SPAN><MON> <YR></SPAN>. Total interest expense for the period was <SPAN>$<R>M</SPAN>, down <SPAN><R>%</SPAN> year-over-year on a comparable basis.',
+    'Revenue from international markets represented <SPAN><R>%</SPAN> of the total mix, up from <SPAN><R>%</SPAN> in the prior year. The EMEA region posted the strongest growth at <SPAN><R>%</SPAN>, while APAC growth of <SPAN><R>%</SPAN> was partially offset by foreign-exchange headwinds equivalent to approximately <SPAN><R> cents per share</SPAN>.',
+    'The board authorized a share-repurchase program of up to <SPAN>$<R>M</SPAN> over the next <SPAN><R> months</SPAN>. Year-to-date buybacks totaled <SPAN>$<R>M</SPAN>, reducing the diluted share count by approximately <SPAN><R>%</SPAN>. The remaining authorization of <SPAN>$<R>M</SPAN> provides continued support for the share price.',
+    'Capex guidance for the coming fiscal year was set at <SPAN>$<R>M</SPAN> to <SPAN>$<R>M</SPAN>, representing approximately <SPAN><R>%</SPAN> of projected revenue. The majority of planned spending is earmarked for technology infrastructure upgrades and capacity expansion at the <SPAN><CO></SPAN> joint-venture facility.',
+    'Management maintained full-year revenue guidance in the range of <SPAN>$<R>B to $<R>B</SPAN>, with adjusted EBITDA margin expected to expand by <SPAN><R> to <R> basis points</SPAN>. The guidance assumes no material deterioration in credit markets and continued stability in the federal-funds rate environment.'
+  ];
+
+  var QUOTE_POOL = [
+    'The structural tailwinds underpinning this sector remain intact. We expect earnings to compound at mid-teens rates over the next three years, making the current valuation entry point particularly compelling for long-duration investors.',
+    'Margin expansion is the story here. Management has executed consistently on its cost-reduction roadmap, and we see further upside as operating leverage kicks in on incremental revenue growth above the breakeven threshold.',
+    'Credit quality has never been stronger. The balance sheet is fortress-like, and free cash flow generation gives management ample firepower to pursue both organic growth and value-accretive M&A without compromising the investment-grade rating.',
+    'We would be cautious on near-term valuation given the premium multiple relative to peers. However, the franchise value and recurring revenue streams justify a sustained re-rating over a multi-year horizon.',
+    'The interest-rate environment remains the single biggest exogenous risk to our base-case scenario. A 50-basis-point overshoot in the terminal rate would compress our price target by approximately 12%, all else being equal.',
+    'Capital allocation discipline is the hallmark of this management team. The consistent buyback activity at accretive prices, combined with a progressive dividend policy, reinforces our conviction in the total-return investment thesis.',
+    'Geographic diversification is underappreciated by the market. The international revenue mix provides a natural hedge against domestic cyclicality, and we expect APAC to be a meaningful contributor to incremental growth over the next five years.',
+    'The debt maturity profile is well-laddered, with no material maturities until fiscal year 2028. This insulates the company from refinancing risk in the current elevated-rate environment.',
+    'Working capital improvements are structural, not cyclical. The shift to subscription-based billing has fundamentally altered the cash conversion dynamics and should support a step-change higher in normalized free cash flow generation.',
+    'We view the announced divestiture as strategically sound. Pruning non-core assets sharpens the operating focus and releases capital that can be deployed into higher-return opportunities within the core franchise.'
+  ];
+
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var QUARTERS = ['1','2','3','4'];
+
+  /* ------------------------------------------------------------------ */
+  /* Utility                                                              */
+  /* ------------------------------------------------------------------ */
+
+  function rnd(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function rndFloat(min, max, dec) {
+    return (Math.random() * (max - min) + min).toFixed(dec);
+  }
+
+  function pick(arr) {
+    return arr[rnd(0, arr.length - 1)];
+  }
+
+  // Fills in template tokens and returns { html, spanCount }
+  function expandTemplate(tpl) {
+    var spanCount = 0;
+    var html = tpl
+      .replace(/<SPAN>/g, function () { spanCount++; return '<span>'; })
+      .replace(/<\/SPAN>/g, '</span>')
+      .replace(/<R>B/g,  function () { return rndFloat(1, 99, 2) + 'B'; })
+      .replace(/<R>M/g,  function () { return rndFloat(10, 999, 1) + 'M'; })
+      .replace(/<R>bps/g, function () { return rnd(10, 450) + 'bps'; })
+      .replace(/<R>%/g,  function () { return rndFloat(0.5, 49.9, 1) + '%'; })
+      .replace(/<R>x/g,  function () { return rndFloat(1, 25, 1) + 'x'; })
+      .replace(/<R>/g,   function () { return rndFloat(0.5, 9999, 2); })
+      .replace(/<CO>/g,  function () { return pick(COMPANIES); })
+      .replace(/<QT>/g,  function () { return pick(QUARTERS); })
+      .replace(/<YR>/g,  function () { return rnd(2022, 2027); })
+      .replace(/<MON>/g, function () { return pick(MONTHS); });
+    return { html: html, spanCount: spanCount };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Counters                                                             */
+  /* ------------------------------------------------------------------ */
+
+  var counts = {
+    h1: 0, h2: 0, h3: 0, p: 0,
+    blockquote: 0, figcaption_address: 0, span: 0,
+    code_inline: 0, pre_code: 0
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Builder helpers                                                      */
+  /* ------------------------------------------------------------------ */
+
+  function makeH1(text) {
+    counts.h1++;
+    return '<h1>' + text + '</h1>';
+  }
+
+  function makeH2(text) {
+    counts.h2++;
+    return '<h2>' + text + '</h2>';
+  }
+
+  function makeH3(text) {
+    counts.h3++;
+    return '<h3>' + text + '</h3>';
+  }
+
+  function makeP() {
+    counts.p++;
+    var tpl = pick(PARA_POOL);
+    var exp = expandTemplate(tpl);
+    counts.span += exp.spanCount;
+    // Also count any inline <code> tags already present in the template
+    var codeMatches = exp.html.match(/<code>/g);
+    if (codeMatches) counts.code_inline += codeMatches.length;
+    return '<p>' + exp.html + '</p>';
+  }
+
+  function makeBlockquote(analystIdx) {
+    counts.blockquote++;
+    var analyst = ANALYSTS[analystIdx % ANALYSTS.length];
+    var quote = pick(QUOTE_POOL);
+    return '<blockquote>' + quote + '<br><strong>— ' + analyst + '</strong></blockquote>';
+  }
+
+  function makeFigcaption(n) {
+    counts.figcaption_address++;
+    return '<figcaption>Figure ' + n + ': ' + pick(COMPANIES) + ' — ' + pick(MONTHS) + ' ' + rnd(2022,2027) + ' earnings summary. Source: internal model.</figcaption>';
+  }
+
+  function makeAddress(n) {
+    counts.figcaption_address++;
+    return '<address>Prepared by: ' + pick(ANALYSTS) + ' | ' + pick(COMPANIES) + ' Research Division | Report #' + (1000 + n) + '</address>';
+  }
+
+  function makePreCode(idx) {
+    counts.pre_code++;
+    var snippets = [
+      'WACC = E/(E+D) * Re + D/(E+D) * Rd * (1 - T)\n' +
+      '     = ' + rndFloat(0.3,0.8,2) + ' * ' + rndFloat(0.06,0.14,4) +
+      ' + ' + rndFloat(0.2,0.7,2) + ' * ' + rndFloat(0.03,0.09,4) +
+      ' * (1 - ' + rndFloat(0.18,0.35,2) + ')\n' +
+      '     = ' + rndFloat(0.06,0.13,4),
+
+      'DCF Valuation (5-year horizon)\n' +
+      '  FCF[1] = ' + rndFloat(100,999,1) + 'M\n' +
+      '  FCF[2] = ' + rndFloat(100,999,1) + 'M\n' +
+      '  FCF[3] = ' + rndFloat(100,999,1) + 'M\n' +
+      '  FCF[4] = ' + rndFloat(100,999,1) + 'M\n' +
+      '  FCF[5] = ' + rndFloat(100,999,1) + 'M\n' +
+      '  Terminal Value = FCF[5] * (1 + g) / (WACC - g)\n' +
+      '  Equity Value   = PV(FCFs) + PV(TV) - Net Debt',
+
+      'Sensitivity: EV/EBITDA vs. EBITDA Margin\n' +
+      '  Margin  8%  → EV: $' + rndFloat(1,5,2) + 'B\n' +
+      '  Margin 10%  → EV: $' + rndFloat(3,7,2) + 'B\n' +
+      '  Margin 12%  → EV: $' + rndFloat(5,10,2) + 'B\n' +
+      '  Margin 14%  → EV: $' + rndFloat(7,14,2) + 'B\n' +
+      '  Margin 16%  → EV: $' + rndFloat(10,20,2) + 'B',
+
+      'LBO Model — Exit Assumptions\n' +
+      '  Entry EV/EBITDA : ' + rndFloat(7,15,1) + 'x\n' +
+      '  Exit  EV/EBITDA : ' + rndFloat(8,18,1) + 'x\n' +
+      '  Leverage        : ' + rndFloat(3,7,1) + 'x EBITDA\n' +
+      '  Hold Period     : ' + rnd(3,7) + ' years\n' +
+      '  IRR             : ' + rndFloat(12,35,1) + '%\n' +
+      '  MOIC            : ' + rndFloat(1.5,4.5,2) + 'x',
+
+      'Bond Yield Decomposition\n' +
+      '  Risk-free rate   : ' + rndFloat(3,6,2) + '%\n' +
+      '  Credit spread    : +' + rnd(50,350) + 'bps\n' +
+      '  Liquidity premium: +' + rnd(5,80) + 'bps\n' +
+      '  Term premium     : +' + rnd(10,100) + 'bps\n' +
+      '  ─────────────────────────────\n' +
+      '  All-in yield     : ' + rndFloat(4,11,2) + '%',
+
+      'Regression: Revenue ~ GDP + CPI + FedFunds\n' +
+      '  Intercept  : ' + rndFloat(-500,500,2) + '\n' +
+      '  β_GDP      : ' + rndFloat(50,500,2) + '\n' +
+      '  β_CPI      : ' + rndFloat(-200,200,2) + '\n' +
+      '  β_FedFunds : ' + rndFloat(-300,50,2) + '\n' +
+      '  R²         : ' + rndFloat(0.70,0.97,4) + '\n' +
+      '  p-value    : ' + rndFloat(0.0001,0.05,6),
+
+      'Portfolio Attribution (Brinson-Hood-Beebower)\n' +
+      '  Allocation effect  : +' + rndFloat(0,150,1) + 'bps\n' +
+      '  Selection effect   : +' + rndFloat(0,200,1) + 'bps\n' +
+      '  Interaction effect : ' + rndFloat(-50,50,1) + 'bps\n' +
+      '  ─────────────────────────────\n' +
+      '  Active return      : +' + rndFloat(0,250,1) + 'bps',
+
+      'Altman Z-Score\n' +
+      '  X1 = Working Capital / Total Assets    = ' + rndFloat(0.05,0.45,4) + '\n' +
+      '  X2 = Retained Earnings / Total Assets  = ' + rndFloat(0.1,0.6,4) + '\n' +
+      '  X3 = EBIT / Total Assets               = ' + rndFloat(0.05,0.3,4) + '\n' +
+      '  X4 = Market Cap / Total Liabilities    = ' + rndFloat(0.5,5,4) + '\n' +
+      '  X5 = Revenue / Total Assets            = ' + rndFloat(0.4,2.5,4) + '\n' +
+      '  Z  = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + X5 = ' + rndFloat(1.5,5,3),
+    ];
+    return '<pre><code>' + snippets[idx % snippets.length] + '</code></pre>';
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Section definitions                                                  */
+  /* ------------------------------------------------------------------ */
+
+  // We need: 10 h1, 80 h2, 200 h3, 2000 p, 50 blockquotes, 20 fig/address, 800 spans, 60 code inline, 40 pre>code
+  // Strategy:
+  //   10 h1 top-level chapters
+  //   Each chapter: 8 h2 sections (10 * 8 = 80)
+  //   Each h2: 2-3 h3 subsections → distribute 200 across 80 h2s = ~2.5 each → use 2 or 3 alternately
+  //   Each h3: ~8-10 paragraphs → 200 h3 * 10 = 2000 p
+  //   Blockquotes: 50 distributed → roughly 1 every 4 h2s
+  //   figcaption/address: 20 distributed
+  //   spans: generated organically via PARA_POOL templates; supplement if needed
+  //   pre>code: 40 → one per 5 h2s
+  //   code inline: comes from PARA_POOL templates (every ~2 paras has one); supplement if needed
+
+  var h2Titles = [
+    ['Executive Summary','Key Financial Highlights','Investment Thesis Overview','Risk Factors and Mitigants','Sector Positioning'],
+    ['Earnings Analysis','Revenue Decomposition','Margin Dynamics','Cash Flow Review','Capital Structure'],
+    ['Valuation Framework','DCF Assumptions','Comparable Company Analysis','Precedent Transactions','Sensitivity Analysis'],
+    ['Macroeconomic Context','Interest Rate Environment','Credit Market Conditions','Currency Exposure','Geopolitical Risk'],
+    ['Operating Performance','Segment Revenue Breakdown','Cost Efficiency Initiatives','EBITDA Bridge','Working Capital Analysis'],
+    ['Balance Sheet Review','Debt Maturity Schedule','Liquidity Assessment','Covenant Compliance','Credit Rating Trajectory'],
+    ['Capital Allocation','Dividend Policy','Share Repurchase Activity','M&A Strategy','Organic Growth Priorities'],
+    ['Competitive Landscape','Market Share Analysis','Peer Benchmarking','Porter\'s Five Forces','Regulatory Environment'],
+    ['Management & Governance','Board Composition','Insider Ownership','ESG Initiatives','Succession Planning'],
+    ['Forward Guidance','Consensus Estimates','Model Assumptions','Bull / Base / Bear Cases','Key Catalysts to Watch']
+  ];
+
+  var h3Titles = [
+    'Quarterly Trend Analysis','YoY Variance Attribution','Geographic Revenue Split',
+    'Product-Mix Contribution','Customer Concentration','Recurring vs. Non-Recurring Revenue',
+    'Adjusted vs. GAAP Reconciliation','Free Cash Flow Generation','Net Debt Evolution',
+    'Covenant Headroom','Equity Risk Premium','Beta Estimation','Terminal Growth Rate',
+    'Cross-Cycle Margins','Operating Leverage','Pricing Power','Competitive Moat Assessment',
+    'Regulatory Tailwinds','ESG Premium','Buyback Yield','Dividend Sustainability',
+    'Leverage Trajectory','Interest Coverage','Debt Paydown Capacity','M&A Pipeline'
+  ];
+
+  /* ------------------------------------------------------------------ */
+  /* Main generation                                                      */
+  /* ------------------------------------------------------------------ */
+
+  var html = [];
+
+  var bqIdx       = 0;   // blockquote counter
+  var fcapIdx     = 0;   // figcaption/address counter
+  var preIdx      = 0;   // pre>code counter
+  var h3GlobalIdx = 0;   // h3 index for title picking
+
+  // We need 200 h3 across 80 h2s → alternate 2 and 3 per h2
+  // 80 h2s: 40 get 3 h3, 40 get 2 h3 = 40*3 + 40*2 = 200 ✓
+  // Each h3 needs 10 paragraphs = 200 * 10 = 2000 ✓
+
+  for (var chap = 0; chap < 10; chap++) {
+    // h1
+    var chapTitles = [
+      'Global Financial Markets — Annual Research Compendium',
+      'Equity Research: Large-Cap Technology & Software',
+      'Fixed Income and Credit Strategy Outlook',
+      'Macroeconomic Research: Central Bank Policy Review',
+      'Private Equity and Leveraged Buyout Analysis',
+      'Mergers, Acquisitions, and Corporate Finance',
+      'Quantitative Portfolio Construction and Risk Models',
+      'Emerging Markets: Sovereign and Corporate Credit',
+      'ESG Integration and Sustainable Finance',
+      'Special Situations and Distressed Debt Analysis'
+    ];
+    html.push(makeH1(chapTitles[chap]));
+
+    // Each chapter has 8 h2 sections
+    for (var sec = 0; sec < 8; sec++) {
+      var h2Label = h2Titles[chap % h2Titles.length][sec % 5] +
+                    ' — Chapter ' + (chap + 1) + ', Section ' + (sec + 1);
+      html.push(makeH2(h2Label));
+
+      // Blockquote: target 44 from main loop (every even section across 10 chapters)
+      if (bqIdx < 44 && sec % 2 === 0) {
+        html.push(makeBlockquote(bqIdx));
+        bqIdx++;
+      }
+
+      // pre>code: 40 total across 80 h2s → every other h2
+      if (preIdx < 40 && sec % 2 === 1) {
+        html.push(makePreCode(preIdx));
+        preIdx++;
+      }
+
+      // h3 count: alternate 2 and 3
+      var h3PerSec = ((chap * 8 + sec) % 2 === 0) ? 3 : 2;
+
+      for (var sub = 0; sub < h3PerSec; sub++) {
+        var h3Title = h3Titles[h3GlobalIdx % h3Titles.length] +
+                      ' (' + pick(COMPANIES) + ', ' + pick(TICKERS) + ')';
+        html.push(makeH3(h3Title));
+        h3GlobalIdx++;
+
+        // 10 paragraphs per h3
+        for (var pp = 0; pp < 10; pp++) {
+          html.push(makeP());
+        }
+
+        // figcaption or address: 20 total, spread across h3s
+        if (fcapIdx < 20 && (h3GlobalIdx % 10 === 0)) {
+          if (fcapIdx % 2 === 0) {
+            html.push(makeFigcaption(fcapIdx + 1));
+          } else {
+            html.push(makeAddress(fcapIdx + 1));
+          }
+          fcapIdx++;
+        }
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Span supplement: ensure >= 800 spans                                */
+  /* ------------------------------------------------------------------ */
+  // Most spans come from paragraph templates. If total < 800, add inline paragraphs
+  // with additional spans. We'll check after building the HTML string and patch if needed.
+
+  /* ------------------------------------------------------------------ */
+  /* Inline code supplement: ensure >= 60 inline <code> tags             */
+  /* ------------------------------------------------------------------ */
+  // Inline <code> tags come from paragraph templates. Supplement with dedicated
+  // "formula note" paragraphs if needed.
+
+  var codeFormulas = [
+    '<code>ROI = (Gain - Cost) / Cost</code>',
+    '<code>EPS = Net Income / Diluted Shares</code>',
+    '<code>P/E = Market Price / EPS</code>',
+    '<code>EBITDA = Net Income + Interest + Taxes + D&amp;A</code>',
+    '<code>FCF = Operating CF - Capex</code>',
+    '<code>D/E = Total Debt / Shareholders Equity</code>',
+    '<code>Current Ratio = Current Assets / Current Liabilities</code>',
+    '<code>Quick Ratio = (Cash + ST Investments + Receivables) / Current Liabilities</code>',
+    '<code>ROE = Net Income / Average Shareholders Equity</code>',
+    '<code>ROA = Net Income / Average Total Assets</code>',
+    '<code>Asset Turnover = Revenue / Average Total Assets</code>',
+    '<code>Interest Coverage = EBIT / Interest Expense</code>',
+    '<code>Dividend Yield = DPS / Market Price</code>',
+    '<code>Payout Ratio = Dividends / Net Income</code>',
+    '<code>EV = Market Cap + Net Debt + Preferred + Minority Interest</code>',
+    '<code>EV/EBITDA = Enterprise Value / EBITDA</code>',
+    '<code>EV/Revenue = Enterprise Value / Revenue</code>',
+    '<code>PEG = P/E Ratio / EPS Growth Rate</code>',
+    '<code>Beta = Cov(Ri, Rm) / Var(Rm)</code>',
+    '<code>Sharpe = (Rp - Rf) / σp</code>'
+  ];
+
+  /* ------------------------------------------------------------------ */
+  /* Blockquote supplement: ensure >= 50 blockquotes                     */
+  /* ------------------------------------------------------------------ */
+  // Main loop produces 44; add 6 more here in a dedicated analyst commentary section.
+  html.push('<h2>Analyst Commentary — Additional Research Notes</h2>');
+  html.push('<h3>Independent Analyst Views</h3>');
+  while (bqIdx < 50) {
+    html.push(makeBlockquote(bqIdx));
+    bqIdx++;
+    // Space out the supplements with a brief paragraph
+    html.push(makeP());
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Financial table (100 rows × 15 cols)                                */
+  /* ------------------------------------------------------------------ */
+
+  var tableHeaders = [
+    'Quarter','Revenue ($M)','EBITDA ($M)','Net Income ($M)','EPS ($)',
+    'P/E (x)','Debt Ratio','Cash Flow ($M)','Assets ($B)','Liabilities ($B)',
+    'Equity ($B)','ROE (%)','ROI (%)','YoY (%)','Notes'
+  ];
+
+  var noteOptions = [
+    'Beat est.','Missed est.','In-line','Guidance raised','Guidance cut',
+    'Special div.','Buyback auth.','Acquisition','Divestiture','Restatement',
+    'CEO change','CFO change','Covenant waiver','Debt refi','Rights issue'
+  ];
+
+  var tableHtml = [];
+  tableHtml.push('<h2>Consolidated Financial Data — 100-Quarter Historical Summary</h2>');
+  tableHtml.push('<table>');
+  tableHtml.push('<thead><tr>');
+  for (var th = 0; th < tableHeaders.length; th++) {
+    tableHtml.push('<th>' + tableHeaders[th] + '</th>');
+  }
+  tableHtml.push('</tr></thead>');
+  tableHtml.push('<tbody>');
+
+  for (var row = 0; row < 100; row++) {
+    var qNum   = (row % 4) + 1;
+    var yr     = 2000 + Math.floor(row / 4);
+    var rev    = rndFloat(200, 5000, 1);
+    var ebitda = (parseFloat(rev) * rndFloat(0.08, 0.35, 3)).toFixed(1);
+    var ni     = (parseFloat(ebitda) * rndFloat(0.4, 0.85, 3)).toFixed(1);
+    var eps    = rndFloat(0.10, 8.00, 2);
+    var pe     = rndFloat(8, 45, 1);
+    var dr     = rndFloat(0.10, 0.75, 2);
+    var cf     = rndFloat(50, 2000, 1);
+    var assets = rndFloat(1, 80, 2);
+    var liab   = (parseFloat(assets) * rndFloat(0.3, 0.7, 3)).toFixed(2);
+    var equity = (parseFloat(assets) - parseFloat(liab)).toFixed(2);
+    var roe    = rndFloat(5, 35, 1);
+    var roi    = rndFloat(3, 28, 1);
+    var yoy    = rndFloat(-15, 45, 1);
+    var note   = noteOptions[row % noteOptions.length];
+
+    tableHtml.push('<tr>');
+    tableHtml.push('<td>Q' + qNum + ' ' + yr + '</td>');
+    tableHtml.push('<td>' + rev + '</td>');
+    tableHtml.push('<td>' + ebitda + '</td>');
+    tableHtml.push('<td>' + ni + '</td>');
+    tableHtml.push('<td>' + eps + '</td>');
+    tableHtml.push('<td>' + pe + '</td>');
+    tableHtml.push('<td>' + dr + '</td>');
+    tableHtml.push('<td>' + cf + '</td>');
+    tableHtml.push('<td>' + assets + '</td>');
+    tableHtml.push('<td>' + liab + '</td>');
+    tableHtml.push('<td>' + equity + '</td>');
+    tableHtml.push('<td>' + roe + '%</td>');
+    tableHtml.push('<td>' + roi + '%</td>');
+    tableHtml.push('<td>' + (yoy >= 0 ? '+' : '') + yoy + '%</td>');
+    tableHtml.push('<td>' + note + '</td>');
+    tableHtml.push('</tr>');
+  }
+
+  tableHtml.push('</tbody></table>');
+
+  /* ------------------------------------------------------------------ */
+  /* Assemble and inject                                                  */
+  /* ------------------------------------------------------------------ */
+
+  var fullHtml = html.join('\n') + '\n' + tableHtml.join('\n');
+
+  // --- Supplement inline <code> tags if below 60 ---
+  var currentCodeCount = (fullHtml.match(/<code>/g) || []).length;
+  // Subtract pre>code blocks (each pre has one <code>)
+  var inlineCodeCount = currentCodeCount - counts.pre_code;
+  if (inlineCodeCount < 60) {
+    var needed = 60 - inlineCodeCount;
+    var codeSupp = [];
+    codeSupp.push('<h3>Formula Reference — Supplemental Notation</h3>');
+    for (var ci = 0; ci < needed; ci++) {
+      var formula = codeFormulas[ci % codeFormulas.length];
+      codeSupp.push('<p>The expression ' + formula +
+        ' is applied throughout this report. A ' +
+        '<span>' + pick(COMPANIES) + '</span>' +
+        ' research note from <span>' + pick(MONTHS) + ' ' + rnd(2022,2026) + '</span>' +
+        ' confirms industry-wide adoption of this metric.</p>');
+      counts.p++;
+      counts.span += 2;
+    }
+    fullHtml = fullHtml + '\n' + codeSupp.join('\n');
+  }
+
+  // --- Supplement spans if below 800 ---
+  var currentSpanCount = (fullHtml.match(/<span>/g) || []).length;
+  if (currentSpanCount < 800) {
+    var spanNeeded = 800 - currentSpanCount;
+    var spanSupp = [];
+    spanSupp.push('<h3>Supplemental Data Points — <span>Span Coverage Extension</span></h3>');
+    spanNeeded--; // counted the one above
+    // Build pairs of spans per paragraph
+    while (spanNeeded > 0) {
+      var take = Math.min(4, spanNeeded);
+      var pParts = ['Supplemental observation: '];
+      for (var si = 0; si < take; si++) {
+        pParts.push('<span>' + pick(COMPANIES) + '</span> reported ' +
+          '<span>$' + rndFloat(100,9999,1) + 'M</span> in Q' + pick(QUARTERS) + ' ' + rnd(2022,2026) + '. ');
+      }
+      spanSupp.push('<p>' + pParts.join('') + '</p>');
+      counts.p++;
+      spanNeeded -= take;
+    }
+    fullHtml = fullHtml + '\n' + spanSupp.join('\n');
+  }
+
+  document.getElementById('content-root').innerHTML = fullHtml;
+
+  /* ------------------------------------------------------------------ */
+  /* Update perf-meta with actual counts                                 */
+  /* ------------------------------------------------------------------ */
+
+  var meta = document.getElementById('perf-meta');
+  if (meta) {
+    var actualP    = document.querySelectorAll('p').length;
+    var actualSpan = document.querySelectorAll('p span').length;
+    var actualTd   = document.querySelectorAll('td').length;
+    meta.setAttribute('data-actual-p-count',    actualP);
+    meta.setAttribute('data-actual-span-count', actualSpan);
+    meta.setAttribute('data-actual-td-count',   actualTd);
+    meta.setAttribute('data-actual-h1-count',   document.querySelectorAll('h1').length);
+    meta.setAttribute('data-actual-h2-count',   document.querySelectorAll('h2').length);
+    meta.setAttribute('data-actual-h3-count',   document.querySelectorAll('h3').length);
+    meta.setAttribute('data-actual-bq-count',   document.querySelectorAll('blockquote').length);
+    meta.setAttribute('data-actual-pre-count',  document.querySelectorAll('pre').length);
+    meta.setAttribute('data-actual-code-inline-count',
+      document.querySelectorAll('p code, h3 code').length);
+    meta.setAttribute('data-actual-figcaption-address-count',
+      document.querySelectorAll('figcaption, address').length);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Console summary for manual inspection                               */
+  /* ------------------------------------------------------------------ */
+  if (typeof console !== 'undefined') {
+    console.log('[BlurrySite Perf] page-text-heavy loaded');
+    console.log('  h1:', document.querySelectorAll('h1').length);
+    console.log('  h2:', document.querySelectorAll('h2').length);
+    console.log('  h3:', document.querySelectorAll('h3').length);
+    console.log('  p:', document.querySelectorAll('p').length);
+    console.log('  blockquote:', document.querySelectorAll('blockquote').length);
+    console.log('  figcaption+address:', document.querySelectorAll('figcaption, address').length);
+    console.log('  span (in p):', document.querySelectorAll('p span').length);
+    console.log('  code inline (in p/h3):', document.querySelectorAll('p code, h3 code').length);
+    console.log('  pre>code:', document.querySelectorAll('pre code').length);
+    console.log('  td:', document.querySelectorAll('td').length);
+  }
+})();
+</script>
+
+</body>
+</html>

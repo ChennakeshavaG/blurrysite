@@ -351,6 +351,32 @@
         return false;
       }
 
+      // ── Screen share blur (from background fan-out) ─────────────────────
+      case blsi.command.screen_share_blur: {
+        const am_s = (Store.get().automate || {}).settings || {};
+        if ((am_s.screen_share || {}).enabled) {
+          log.flow('trigger.screenShareBlur');
+          (async () => {
+            await Store.save_automate_blur(hostname, 'screen_share', true);
+            await _sync();
+            if (sendResponse) sendResponse({ ok: true });
+          })();
+          return true;
+        }
+        if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
+        break;
+      }
+
+      case blsi.command.screen_share_unblur: {
+        log.flow('trigger.screenShareUnblur');
+        (async () => {
+          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await _sync();
+          if (sendResponse) sendResponse({ ok: true });
+        })();
+        return true;
+      }
+
       default:
         break;
     }
@@ -423,40 +449,35 @@
     // Delegate blur reconciliation to _sync() — reads resolved model, calls handleSite.
     await _sync();
 
-    // Auto-blur + blur timer — main frame only (tab-level concerns)
+    // Auto-blur — main frame only (tab-level concerns)
     if (IS_MAIN_FRAME) {
+      const screen_share = resolved.automate_screen_share || {};
       const idle = resolved.automate_idle || {};
       const tab_switch = resolved.automate_tab_switch || {};
-      const timer = resolved.automate_timer || {};
+
+      // Screen share detection — inject getDisplayMedia wrapper if enabled.
+      if (screen_share.enabled && resolved.enabled) {
+        blsi.ScreenShare.init();
+      } else {
+        blsi.ScreenShare.destroy();
+      }
 
       if ((idle.enabled || tab_switch.enabled) && resolved.enabled) {
         blsi.AutoBlur.init({
           idleTimeout: _to_seconds(idle.value || 5, idle.unit || 'min'),
           tabSwitch: !!tab_switch.enabled,
           idle: !!idle.enabled,
-          onIdle: async () => {
-            await Store.save_blur_state(hostname, true);
+          onIdle: async ({ reason } = {}) => {
+            await Store.save_automate_blur(hostname, reason || 'idle', true);
             await _sync();
           },
           onActive: async () => {
-            await Store.save_blur_state(hostname, false);
+            await Store.patch_automate_blur(hostname, { idle: false, tab_switch: false });
             await _sync();
           },
         });
       } else {
         blsi.AutoBlur.destroy();
-      }
-
-      if (timer.enabled && timer.value > 0 && resolved.enabled) {
-        if (!blsi.BlurTimer.isActive()) {
-          const timerMinutes = _to_seconds(timer.value, timer.unit || 'min') / 60;
-          blsi.BlurTimer.start(timerMinutes, async () => {
-            await Store.save_blur_state(hostname, false);
-            await _sync();
-          });
-        }
-      } else if (!timer.enabled || timer.value === 0) {
-        blsi.BlurTimer.stop();
       }
     }
 
@@ -464,9 +485,11 @@
     // conflict with the blur engine's text-check stamping.
     const anyDetect = resolved.pii_email || resolved.pii_numeric;
     if (anyDetect && resolved.enabled) {
+      blsi.BlurEngine.injectPiiRules(resolved.pii_mode, resolved.pii_redaction_color);
       blsi.PiiDetector.scan(document.body, { email: resolved.pii_email, numeric: resolved.pii_numeric });
       blsi.PiiDetector.observeMutations(document.body);
     } else {
+      blsi.BlurEngine.removePiiRules();
       blsi.PiiDetector.stopObserving();
       blsi.PiiDetector.clear(document.body);
     }
@@ -476,6 +499,9 @@
 
   async function init() {
     log.flow('init.start', { href: location.href, hostname });
+    // Signal to perf tests (and any page listeners) that the content script is
+    // beginning initialization. Anchors blur_ms timer in run-fixture.js.
+    document.dispatchEvent(new CustomEvent('bl-si-init-start'));
 
     // 1. Populate storage cache (single read of all tracked keys).
     try {
@@ -519,11 +545,12 @@
     //    but skip shortcuts + blur restore.
     if (resolved.enabled === false) {
       Store.on_change(handleStorageChange);
+      document.dispatchEvent(new CustomEvent('bl-si-ready'));
       return;
     }
 
     // 8–9. Apply all stored settings — single authoritative call that covers
-    //      blur restore, PII scan, AutoBlur, BlurTimer, shortcuts, and CSS vars.
+    //      blur restore, PII scan, AutoBlur, shortcuts, and CSS vars.
     Engine.resetCounters();
     await applyState(resolved, null);
 
@@ -551,6 +578,9 @@
       revealMode: resolved.reveal_mode,
       pickerMode: resolved.picker_mode,
     });
+    // Signal to perf tests that initialization is fully complete (blur applied,
+    // shortcuts registered, storage subscription active).
+    document.dispatchEvent(new CustomEvent('bl-si-ready'));
   }
 
   // ── iframe postMessage broadcast ──────────────────────────────────────────

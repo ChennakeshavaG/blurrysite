@@ -23,12 +23,19 @@
      Text-check elements and picker blurs use data-bl-si-blur attribute. ────────── */
 
 /**
- * data-bl-si-blur: stamped on text-check elements (div, span, etc.) that pass
- * the hasMeaningfulTextContent gate, and on individual picker/context blurs.
+ * data-bl-si-blur: stamped on blur-all text-check elements (div, span, etc.)
+ * that pass the hasMeaningfulTextContent gate.
  * The injected <style> also includes this rule, but this static version
- * provides a fallback and handles picker blurs when blur-all is off.
+ * provides a gaussian fallback when blur-all is off.
  */
 [data-bl-si-blur]:not([data-bl-si-reveal]) {
+  filter: blur(var(--bl-si-radius, 10px)) !important;
+  transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
+  user-select: none !important;
+}
+
+/* data-bl-si-pick-blur: picker items — gaussian baseline, overridden by injected bl-si-pick-blur-styles for frosted/color */
+[data-bl-si-pick-blur]:not([data-bl-si-reveal]) {
   filter: blur(var(--bl-si-radius, 10px)) !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: none !important;
@@ -42,18 +49,9 @@
  * masked) takes over via source-order; this rule is the gaussian fallback.
  */
 [data-bl-si-pii]:not([data-bl-si-reveal]) {
-  filter: blur(var(--bl-si-radius, 10px)) !important;
+  filter: blur(12px) !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: none !important;
-}
-
-/* ─── Masked mode: asterisk replacement via ::after ─────────────────────────── */
-
-[data-bl-si-mask-text]::after {
-  content: attr(data-bl-si-mask-text);
-  font-size: 1rem !important;
-  letter-spacing: 0.05em;
-  color: inherit;
 }
 
 /* ─── Reveal: attribute-driven, covers all blur modes ──────────────────────── */
@@ -66,13 +64,9 @@
 [data-bl-si-reveal] {
   filter: none !important;
   visibility: visible !important;
+  font-family: revert !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: auto !important;
-}
-
-/* Kill masked-mode asterisks on revealed elements */
-[data-bl-si-reveal][data-bl-si-mask-text]::after {
-  content: none !important;
 }
 
 /* Cascade reveal to blurred children of a revealed ancestor.
@@ -83,8 +77,20 @@
    no blurred "islands" remain inside the revealed area.
    Also pushed inside injectRules() for blur-all-ON source-order correctness. */
 [data-bl-si-reveal] [data-bl-si-blur],
-[data-bl-si-reveal] [data-bl-si-pii] {
+[data-bl-si-reveal] [data-bl-si-pii],
+[data-bl-si-reveal] [data-bl-si-pick-blur] {
   filter: none !important;
+  user-select: auto !important;
+}
+
+/* Pick-blur reveal — static fallback for gaussian mode (injected pick-blur style
+   handles frosted/color with their own reveal overrides). */
+[data-bl-si-pick-blur][data-bl-si-reveal] {
+  filter: none !important;
+  background-color: transparent !important;
+  color: inherit !important;
+  visibility: visible !important;
+  font-family: revert !important;
   user-select: auto !important;
 }
 

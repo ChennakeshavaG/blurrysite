@@ -33,16 +33,24 @@ const BlurrySitePopupState = (() => {
       },
       // auto_detect_pii section
       {
-        pii_enabled: model.auto_detect_pii.status,
-        pii_email:   model.auto_detect_pii.settings.email,
-        pii_numeric: model.auto_detect_pii.settings.numeric,
-        pii_mode:    model.auto_detect_pii.settings.pii_mode,
+        pii_enabled:           model.auto_detect_pii.status,
+        pii_email:             model.auto_detect_pii.settings.email,
+        pii_numeric:           model.auto_detect_pii.settings.numeric,
+        pii_mode:              model.auto_detect_pii.settings.pii_mode,
+        pii_redaction_color:   model.auto_detect_pii.settings.pii_redaction_color,
       },
       // automate section
       {
-        automate_timer:      model.automate.settings.timer,
-        automate_idle:       model.automate.settings.idle,
-        automate_tab_switch: model.automate.settings.tab_switch,
+        automate_screen_share: model.automate.settings.screen_share,
+        automate_idle:         model.automate.settings.idle,
+        automate_tab_switch:   model.automate.settings.tab_switch,
+        automate_blur_active:  (function() {
+          var e = (_hostname && model.automate_blur) ? (model.automate_blur[_hostname] || {}) : {};
+          return !!(e.idle || e.tab_switch || e.screen_share);
+        }()),
+        automate_blur_triggers: (_hostname && model.automate_blur)
+          ? (model.automate_blur[_hostname] || { idle: false, tab_switch: false, screen_share: false })
+          : { idle: false, tab_switch: false, screen_share: false },
       },
       // shortcuts
       { shortcuts: model.shortcuts || {} }
@@ -132,8 +140,11 @@ const BlurrySitePopupState = (() => {
       } else if (key === 'pii_mode') {
         piiSettingsPatch.pii_mode = val;
         hasPiiSettings = true;
-      } else if (key === 'automate_timer') {
-        automateSettingsPatch.timer = val;
+      } else if (key === 'pii_redaction_color') {
+        piiSettingsPatch.pii_redaction_color = val;
+        hasPiiSettings = true;
+      } else if (key === 'automate_screen_share') {
+        automateSettingsPatch.screen_share = val;
         hasAutomateSettings = true;
       } else if (key === 'automate_idle') {
         automateSettingsPatch.idle = val;
@@ -146,33 +157,61 @@ const BlurrySitePopupState = (() => {
       }
     }
 
-    // Apply all patches — collect promises to run them
+    // Apply all patches — collect promises to run them.
+    // Status + settings for the same section are merged into one patch_section call
+    // to avoid generating two storage writes → two onChanged events → concurrent
+    // handleStorageChange executions in the content script (_activeItems Map race).
     const writes = [];
-    if (hasGlobal)          writes.push(blsi.Model.save_settings(globalPatch));
-    if (blurAllPatch)       writes.push(blsi.Model.patch_section('blur_all', blurAllPatch));
-    if (pickBlurStatusPatch !== null) {
-      writes.push(blsi.Model.patch_section('pick_and_blur', { status: pickBlurStatusPatch }));
+    if (hasGlobal)    writes.push(blsi.Model.save_settings(globalPatch));
+    if (blurAllPatch) writes.push(blsi.Model.patch_section('blur_all', blurAllPatch));
+
+    const pickBlurPatch = {};
+    if (pickBlurStatusPatch !== null) pickBlurPatch.status = pickBlurStatusPatch;
+    if (hasPickBlurSettings)          pickBlurPatch.settings = pickBlurSettingsPatch;
+    if (Object.keys(pickBlurPatch).length) {
+      writes.push(blsi.Model.patch_section('pick_and_blur', pickBlurPatch));
     }
-    if (hasPickBlurSettings) {
-      writes.push(blsi.Model.patch_section('pick_and_blur', { settings: pickBlurSettingsPatch }));
+
+    const piiPatch = {};
+    if (piiStatusPatch !== null) piiPatch.status = piiStatusPatch;
+    if (hasPiiSettings)          piiPatch.settings = piiSettingsPatch;
+    if (Object.keys(piiPatch).length) {
+      writes.push(blsi.Model.patch_section('auto_detect_pii', piiPatch));
     }
-    if (piiStatusPatch !== null) {
-      writes.push(blsi.Model.patch_section('auto_detect_pii', { status: piiStatusPatch }));
-    }
-    if (hasPiiSettings) {
-      writes.push(blsi.Model.patch_section('auto_detect_pii', { settings: piiSettingsPatch }));
-    }
+
     if (hasAutomateSettings) {
       writes.push(blsi.Model.patch_section('automate', { settings: automateSettingsPatch }));
     }
-    if (shortcutsPatch) {
+    if (shortcutsPatch !== null) {
       writes.push(blsi.Model.patch_section('shortcuts', shortcutsPatch));
     }
 
     await Promise.all(writes);
 
-    // Update local _model from the authoritative cache after all writes
+    // Refresh all state from the authoritative cache after writes
+    refreshFromStorage();
+  }
+
+  // ── Refresh all hostname-specific state from storage cache ───────────────
+  /**
+   * Re-reads _model, _blurItems, and _isPageBlurred from the authoritative
+   * storage cache. Call after any blsi.Model write so UI derives from storage,
+   * not from optimistic local state.
+   */
+  function refreshFromStorage() {
     _model = blsi.Model.get();
+    const pickEnabled = !!(_model && _model.pick_and_blur && _model.pick_and_blur.status);
+    if (_hostname) {
+      const entry = blsi.Model.get_site_entry(_hostname);
+      // Mirror the gate in storage_model.resolve(): items are only active when pick-blur is on.
+      _blurItems = (entry && pickEnabled) ? (entry.items || []) : [];
+      _isPageBlurred = (entry && entry.blur_all !== null)
+        ? !!entry.blur_all
+        : _model.blur_all.status;
+    } else {
+      // No hostname (e.g. chrome://newtab): derive blur state from global default only.
+      _isPageBlurred = _model ? _model.blur_all.status : false;
+    }
   }
 
   // ── External change subscription ──────────────────────────────────────────
@@ -187,7 +226,7 @@ const BlurrySitePopupState = (() => {
   return {
     get,
     setModel, setHostname, setBlurItems, setPageBlurred, setNeutralAfterClear,
-    saveSettings, onExternalChange,
+    saveSettings, onExternalChange, refreshFromStorage,
   };
 })();
 

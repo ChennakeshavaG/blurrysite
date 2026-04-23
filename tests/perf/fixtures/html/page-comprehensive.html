@@ -1,0 +1,1047 @@
+<!-- BlurrySite Perf Fixture: page-comprehensive | ALL 5 categories | TEXT+MEDIA+FORM+TABLE+STRUCTURE -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlurrySite Perf Fixture — Comprehensive Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f5f7fa; color: #1a1a2e; }
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    nav { background: #1a1a2e; color: white; padding: 20px; }
+    nav a { color: #a0aec0; text-decoration: none; display: block; padding: 6px 0; font-size: 0.9em; }
+    nav a:hover { color: white; }
+    aside { background: #16213e; color: white; padding: 20px; }
+    aside .stat-card { background: rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    aside .stat-value { font-size: 1.5em; font-weight: bold; color: #68d391; }
+    aside .stat-label { font-size: 0.8em; color: #a0aec0; margin-top: 2px; }
+    main { padding: 24px; overflow-y: auto; }
+    .card { background: white; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #e0e0e0; padding: 6px 10px; font-size: 0.85em; }
+    th { background: #f0f4ff; font-weight: 600; }
+    tr:nth-child(even) td { background: #fafbff; }
+    input, select, textarea { border: 1px solid #ccc; padding: 6px; border-radius: 4px; font-size: 0.9em; display: block; width: 100%; margin-bottom: 8px; }
+    input[type="checkbox"], input[type="radio"] { width: auto; display: inline; margin: 0 6px 0 0; }
+    fieldset { border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px 16px; margin-bottom: 12px; }
+    legend { font-size: 0.85em; font-weight: 600; padding: 0 6px; color: #4f46e5; }
+    button { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+    button:hover { background: #4338ca; }
+    button.secondary { background: #6b7280; }
+    button.danger { background: #ef4444; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
+    .media-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .media-item { border-radius: 6px; overflow: hidden; background: #e8eaf6; }
+    .media-item canvas, .media-item video, .media-item img, .media-item svg { display: block; width: 100%; height: auto; }
+    .article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    article { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    article h3 { margin: 0 0 8px 0; font-size: 1em; color: #1a1a2e; }
+    article p { margin: 0 0 8px 0; font-size: 0.88em; color: #4b5563; line-height: 1.5; }
+    section { margin-bottom: 32px; }
+    section > h2 { font-size: 1.1em; color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; }
+    blockquote { border-left: 3px solid #4f46e5; margin: 10px 0; padding: 6px 12px; color: #374151; background: #f5f3ff; border-radius: 0 4px 4px 0; font-style: italic; font-size: 0.9em; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 0.85em; color: #7c3aed; }
+    .nav-list { list-style: none; margin: 0; padding: 0; }
+    .nav-list li { padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.85em; }
+    .section-nav ul { list-style: none; padding: 0; margin: 0; display: flex; gap: 16px; flex-wrap: wrap; }
+    .section-nav li a { color: #4f46e5; text-decoration: none; font-size: 0.9em; }
+    #perf-meta { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- perf metadata sentinel -->
+<div id="perf-meta" data-fixture="comprehensive" data-text-count="400" data-media-count="70" data-form-count="130" data-table-cells="320" data-structure-count="50"></div>
+
+<!-- ========== TOP NAV ========== -->
+<nav id="top-nav" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 24px; padding: 14px 28px; position: sticky; top: 0; z-index: 100;">
+  <h1 style="margin:0; font-size:1.1em; color:#fff; letter-spacing:.5px;">AccountDash</h1>
+  <span style="color:#a0aec0; font-size:.85em;">v4.2.1</span>
+  <div style="margin-left:auto; display:flex; gap:12px; align-items:center;">
+    <span style="color:#68d391; font-size:.8em;">&#9679; Live</span>
+    <span style="color:#a0aec0; font-size:.8em;">User: admin@corp.io</span>
+    <button style="padding:6px 14px; font-size:.8em;">Logout</button>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- ========== LEFT SIDEBAR ========== -->
+  <aside id="sidebar">
+    <h2 style="margin:0 0 16px; font-size:.95em; text-transform:uppercase; letter-spacing:.8px; color:#a0aec0;">Navigation</h2>
+    <nav>
+      <ul class="nav-list" id="sidebar-nav"></ul>
+    </nav>
+    <h2 style="margin:20px 0 12px; font-size:.9em; text-transform:uppercase; letter-spacing:.8px; color:#a0aec0;">Quick Stats</h2>
+    <div id="sidebar-stats"></div>
+  </aside>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main id="main-content">
+
+    <!-- === SECTION: Text Category === -->
+    <section id="text-section">
+      <h2>Content Overview</h2>
+
+      <!-- h1 × 5 -->
+      <div id="headings-h1"></div>
+
+      <!-- h2 × 30, h3 × 45 inline in article grid -->
+      <div id="heading-blocks"></div>
+
+      <!-- p × 200 -->
+      <div id="paragraphs" class="card"></div>
+
+      <!-- blockquote × 40 -->
+      <div id="blockquotes" class="card"></div>
+
+      <!-- span × 40, strong/em/code × 40 inline -->
+      <div id="inline-text" class="card"></div>
+    </section>
+
+    <!-- === SECTION: Structure Category === -->
+    <section id="structure-section">
+      <h2>Dashboard Panels</h2>
+
+      <!-- section × 10 -->
+      <div id="section-blocks"></div>
+
+      <!-- article × 15 -->
+      <div id="article-cards" class="article-grid"></div>
+
+      <!-- nav × 5 -->
+      <div id="nav-blocks"></div>
+
+      <!-- aside × 10 -->
+      <div id="aside-panels"></div>
+
+      <!-- div × 10 -->
+      <div id="div-blocks"></div>
+    </section>
+
+    <!-- === SECTION: Table Category === -->
+    <section id="table-section">
+      <h2>Account Dashboard Summary</h2>
+      <div class="card" style="overflow-x:auto;">
+        <table id="main-table">
+          <caption>Account Dashboard Summary</caption>
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- === SECTION: Form Category === -->
+    <section id="form-section">
+      <h2>Settings &amp; Configuration</h2>
+      <div class="card">
+        <form id="settings-form" autocomplete="off">
+          <div id="form-text-inputs"></div>
+          <div id="form-email-inputs"></div>
+          <div id="form-password-inputs"></div>
+          <div id="form-number-inputs"></div>
+          <div id="form-fieldsets"></div>
+          <div id="form-selects"></div>
+          <div id="form-textareas"></div>
+          <div id="form-buttons"></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- === SECTION: Media Category === -->
+    <section id="media-section">
+      <h2>Media Gallery</h2>
+      <div class="card">
+        <div class="media-gallery" id="media-gallery"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ─── Utility ───────────────────────────────────────────────────────────────
+
+  const lorem = [
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+    'Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+    'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.',
+    'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum.',
+    'Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia.',
+    'Pellentesque habitant morbi tristique senectus et netus et malesuada fames.',
+    'Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere.',
+    'Curabitur pretium tincidunt lacus. Nulla gravida orci a odio.',
+    'Nullam varius, turpis molestie dictum semper, nisi lorem egestas odio.',
+    'Praesent blandit laoreet nibh. Fusce convallis metus id felis luctus.',
+    'Integer in mauris eu nibh euismod gravida dui sed erat.',
+    'Donec aliquet, tortor sed accumsan bibendum, erat ligula aliquet magna.',
+    'Proin quam etiam ultrices. Suspendisse in justo eu magna luctus suscipit.',
+    'Sed lectus. Donec mollis hendrerit risus. Phasellus nec sem in justo.',
+    'Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor.',
+  ];
+
+  const quotes = [
+    'The best way to predict the future is to create it.',
+    'Data is the new oil, and privacy is the new currency.',
+    'Security is not a product, but a process.',
+    'In God we trust; all others bring data.',
+    'The price of privacy is eternal vigilance.',
+    'Information wants to be free, but security wants it locked.',
+    'Privacy is not an option, and it shouldn\'t be the price we accept for just getting on the internet.',
+    'Your personal data is yours — protect it fiercely.',
+    'Every company is a data company whether they like it or not.',
+    'Compliance is a floor, not a ceiling.',
+  ];
+
+  function pick(arr, i) { return arr[i % arr.length]; }
+  function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+  function el(tag, attrs, text) {
+    const e = document.createElement(tag);
+    if (attrs) Object.entries(attrs).forEach(([k, v]) => {
+      if (k === 'style') { e.style.cssText = v; }
+      else if (k.startsWith('data-')) { e.dataset[k.slice(5)] = v; }
+      else { e[k] = v; }
+    });
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function append(parentId, children) {
+    const p = document.getElementById(parentId);
+    if (!p) return;
+    children.forEach(c => p.appendChild(c));
+  }
+
+  // ─── SVG data-URI helper ───────────────────────────────────────────────────
+
+  const SVG_COLORS = [
+    '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444',
+    '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
+  ];
+
+  function svgDataUri(w, h, fill, label) {
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'>`
+      + `<rect width='${w}' height='${h}' fill='${fill}'/>`
+      + `<text x='50%' y='50%' fill='white' text-anchor='middle' dy='.35em' `
+      + `font-family='sans-serif' font-size='13'>${label}</text></svg>`;
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
+
+  // ─── VIDEO via canvas.captureStream ────────────────────────────────────────
+
+  function makeVideoStream(videoEl, colorSeed, width, height) {
+    const c = document.createElement('canvas');
+    c.width = width;
+    c.height = height;
+    const ctx = c.getContext('2d');
+    let hue = (colorSeed * 37) % 360;
+    const idx = videoEl.dataset.idx || '';
+    let running = true;
+    function draw() {
+      if (!running) return;
+      ctx.fillStyle = `hsl(${hue++ % 360}, 60%, 45%)`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = `bold ${Math.floor(height / 7)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Video ' + idx, width / 2, height / 2);
+      ctx.font = `${Math.floor(height / 10)}px sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText(width + '×' + height, width / 2, height / 2 + Math.floor(height / 6));
+      requestAnimationFrame(draw);
+    }
+    draw();
+    try {
+      videoEl.srcObject = c.captureStream(15);
+      videoEl.play().catch(function () {});
+    } catch (e) {
+      // captureStream unsupported in this context — leave blank
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // TEXT CATEGORY  (400 elements total)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // --- h1 × 5 ---
+  (function buildH1() {
+    const titles = [
+      'Enterprise Account Dashboard',
+      'Analytics & Reporting Suite',
+      'User Management Console',
+      'Security & Compliance Hub',
+      'Data Intelligence Platform',
+    ];
+    const frag = document.createDocumentFragment();
+    titles.forEach(function (t) {
+      const h = el('h1', { style: 'font-size:1.6em;margin:0 0 8px;color:#1a1a2e;' }, t);
+      frag.appendChild(h);
+    });
+    document.getElementById('headings-h1').appendChild(frag);
+  }());
+
+  // --- h2 × 30 + h3 × 45, plus structural wrapping divs ---
+  (function buildHeadingBlocks() {
+    const h2Topics = [
+      'Revenue Analytics', 'User Acquisition', 'Security Audit', 'Compliance Reports',
+      'API Throughput', 'Cache Statistics', 'Error Rates', 'Latency Metrics',
+      'Storage Usage', 'Bandwidth Summary', 'License Management', 'Role Definitions',
+      'Notification Rules', 'Webhook Events', 'Audit Trail', 'Export Schedules',
+      'Data Retention', 'Access Policies', 'SSO Configuration', 'Two-Factor Auth',
+      'IP Allowlist', 'Rate Limits', 'Token Management', 'Billing Overview',
+      'Invoice History', 'Support Tickets', 'SLA Metrics', 'Uptime Reports',
+      'Deployment Log', 'Release Notes',
+    ];
+    const h3Topics = [
+      'Monthly Breakdown', 'Weekly Trend', 'Daily Summary', 'Hourly Granularity', 'YTD Comparison',
+      'Top Accounts', 'New Registrations', 'Churned Users', 'Reactivations', 'Dormant Accounts',
+      'Failed Logins', 'Suspicious Activity', 'Blocked IPs', 'Geo Distribution', 'Device Breakdown',
+      'GDPR Summary', 'CCPA Requests', 'Data Exports', 'Deletion Requests', 'Consent Logs',
+      'Endpoint Health', 'Response Codes', 'Retry Counts', 'Queue Depth', 'Worker Status',
+      'Hit Rate', 'Eviction Policy', 'Memory Usage', 'Key Expiry', 'TTL Overview',
+      '5xx Errors', '4xx Errors', '3xx Redirects', 'Timeout Count', 'Circuit Breaker',
+      'P50 Latency', 'P95 Latency', 'P99 Latency', 'Mean Latency', 'Max Latency',
+      'Block Storage', 'Object Storage', 'Log Retention', 'Backup Size', 'Archive Usage',
+    ];
+
+    const container = document.getElementById('heading-blocks');
+    let h3Idx = 0;
+    h2Topics.forEach(function (topic) {
+      const block = el('div', { style: 'margin-bottom:18px;' });
+      block.appendChild(el('h2', { style: 'font-size:1.05em;color:#374151;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin:0 0 6px;' }, topic));
+      // add 1-2 h3 per h2 block
+      const count = (h3Idx < 30) ? 2 : 1;
+      for (let i = 0; i < count && h3Idx < 45; i++, h3Idx++) {
+        block.appendChild(el('h3', { style: 'font-size:.9em;color:#6b7280;margin:4px 0;' }, h3Topics[h3Idx % h3Topics.length]));
+        const p = el('p', { style: 'font-size:.82em;color:#9ca3af;margin:2px 0 6px;' }, pick(lorem, h3Idx));
+        block.appendChild(p);
+      }
+      container.appendChild(block);
+    });
+    // fill remaining h3 if any
+    while (h3Idx < 45) {
+      const h = el('h3', { style: 'font-size:.9em;color:#6b7280;margin:4px 0;' }, h3Topics[h3Idx % h3Topics.length]);
+      container.appendChild(h);
+      h3Idx++;
+    }
+  }());
+
+  // --- p × 200 ---
+  (function buildParagraphs() {
+    const container = document.getElementById('paragraphs');
+    container.appendChild(el('h2', { style: 'margin:0 0 12px;font-size:1em;' }, 'Report Narratives'));
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 200; i++) {
+      const p = el('p', { style: 'margin:6px 0;font-size:.88em;color:#374151;line-height:1.55;' },
+        'P' + (i + 1) + ': ' + pick(lorem, i) + ' ' + pick(lorem, i + 3));
+      frag.appendChild(p);
+    }
+    container.appendChild(frag);
+  }());
+
+  // --- blockquote × 40 ---
+  (function buildBlockquotes() {
+    const container = document.getElementById('blockquotes');
+    container.appendChild(el('h2', { style: 'margin:0 0 12px;font-size:1em;' }, 'Key Insights'));
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 40; i++) {
+      const bq = el('blockquote', {}, pick(quotes, i) + ' — Source ' + (i + 1));
+      frag.appendChild(bq);
+    }
+    container.appendChild(frag);
+  }());
+
+  // --- span × 40, strong × 14, em × 13, code × 13 (= 80 inline) ---
+  (function buildInlineText() {
+    const container = document.getElementById('inline-text');
+    container.appendChild(el('h2', { style: 'margin:0 0 12px;font-size:1em;' }, 'Inline Annotations'));
+    const frag = document.createDocumentFragment();
+
+    for (let i = 0; i < 40; i++) {
+      const wrapper = el('p', { style: 'font-size:.88em;color:#374151;margin:5px 0;' });
+      const s = el('span', { style: 'color:#4f46e5;margin-right:4px;', 'data-span-index': String(i) },
+        'Span-' + (i + 1) + ': ');
+      s.appendChild(document.createTextNode(pick(lorem, i)));
+      wrapper.appendChild(s);
+      frag.appendChild(wrapper);
+    }
+
+    const strongWords = [
+      'Critical Alert', 'High Priority', 'Action Required', 'Escalated',
+      'Overdue', 'Flagged', 'Blocked', 'Pending Review',
+      'Approved', 'Declined', 'Archived', 'Expired', 'Renewed', 'Active',
+    ];
+    for (let i = 0; i < 14; i++) {
+      const p = el('p', { style: 'font-size:.88em;margin:4px 0;' });
+      p.appendChild(el('strong', {}, strongWords[i % strongWords.length]));
+      p.appendChild(document.createTextNode(': ' + pick(lorem, i + 5)));
+      frag.appendChild(p);
+    }
+
+    const emPhrases = [
+      'Note:', 'See also:', 'Important:', 'Reminder:', 'Tip:',
+      'Warning:', 'Caution:', 'Advisory:', 'Status:', 'Update:',
+      'Info:', 'Detail:', 'Context:',
+    ];
+    for (let i = 0; i < 13; i++) {
+      const p = el('p', { style: 'font-size:.88em;margin:4px 0;color:#374151;' });
+      p.appendChild(el('em', {}, emPhrases[i % emPhrases.length]));
+      p.appendChild(document.createTextNode(' ' + pick(lorem, i + 7)));
+      frag.appendChild(p);
+    }
+
+    const codeSnippets = [
+      'GET /api/v2/users', 'POST /api/v2/events', 'DELETE /api/v1/sessions',
+      'curl -X GET /health', 'SELECT * FROM accounts', 'UPDATE users SET status',
+      'response.status_code', 'headers["Authorization"]', 'config.timeout_ms',
+      'env.DATABASE_URL', 'process.env.SECRET', 'ctx.request.body', 'err.stack',
+    ];
+    for (let i = 0; i < 13; i++) {
+      const p = el('p', { style: 'font-size:.88em;margin:4px 0;color:#374151;' });
+      p.appendChild(document.createTextNode('Execute: '));
+      p.appendChild(el('code', {}, codeSnippets[i % codeSnippets.length]));
+      p.appendChild(document.createTextNode(' to retrieve records.'));
+      frag.appendChild(p);
+    }
+
+    container.appendChild(frag);
+  }());
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // STRUCTURE CATEGORY  (50 blocks total)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // --- section × 10 ---
+  (function buildSectionBlocks() {
+    const container = document.getElementById('section-blocks');
+    const topics = [
+      'Revenue Metrics', 'User Activity', 'Security Events', 'API Usage',
+      'Storage Stats', 'Compliance Status', 'Billing Summary', 'Support Overview',
+      'Deployment Status', 'System Health',
+    ];
+    topics.forEach(function (topic, i) {
+      const sec = el('section', { style: 'margin-bottom:16px;background:white;border-radius:6px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);' });
+      sec.appendChild(el('h3', { style: 'margin:0 0 8px;font-size:.95em;color:#1a1a2e;' }, topic));
+      sec.appendChild(el('p', { style: 'margin:0 0 6px;font-size:.84em;color:#6b7280;' }, pick(lorem, i)));
+      sec.appendChild(el('p', { style: 'margin:0;font-size:.82em;color:#9ca3af;' }, 'Section ' + (i + 1) + ' of 10 — Last updated: 2026-04-22'));
+      container.appendChild(sec);
+    });
+  }());
+
+  // --- article × 15 ---
+  (function buildArticleCards() {
+    const container = document.getElementById('article-cards');
+    const cardTitles = [
+      'Q1 Revenue Report', 'User Growth Analysis', 'Security Posture Review',
+      'API Deprecation Notice', 'Cache Hit Rate Trends', 'Error Budget Status',
+      'Latency Anomaly Report', 'Storage Forecast', 'Bandwidth Alert',
+      'License Renewal Reminder', 'Role Assignment Summary', 'Audit Log Export',
+      'Data Retention Policy Update', 'Two-Factor Adoption Rate', 'SLA Compliance Report',
+    ];
+    cardTitles.forEach(function (title, i) {
+      const art = document.createElement('article');
+      art.appendChild(el('h3', {}, title));
+      art.appendChild(el('p', {}, pick(lorem, i)));
+      const meta = el('p', { style: 'font-size:.78em;color:#9ca3af;margin:0;' },
+        'Article ' + (i + 1) + ' · April 2026 · by System');
+      art.appendChild(meta);
+      container.appendChild(art);
+    });
+  }());
+
+  // --- nav × 5 ---
+  (function buildNavBlocks() {
+    const container = document.getElementById('nav-blocks');
+    const navSets = [
+      { title: 'Account Navigation', links: ['Dashboard', 'Analytics', 'Users', 'Billing', 'Settings'] },
+      { title: 'Security Navigation', links: ['Firewall', 'Access Logs', 'Threat Intel', 'SIEM', 'Policies'] },
+      { title: 'Report Navigation', links: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual'] },
+      { title: 'Admin Navigation', links: ['Roles', 'Permissions', 'Audit Trail', 'Exports', 'API Keys'] },
+      { title: 'Support Navigation', links: ['Tickets', 'SLA', 'Escalations', 'Knowledge Base', 'Chat'] },
+    ];
+    navSets.forEach(function (ns) {
+      const nav = el('nav', { style: 'background:white;border-radius:6px;padding:12px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);' });
+      nav.appendChild(el('strong', { style: 'font-size:.85em;color:#374151;' }, ns.title));
+      const ul = el('ul', { style: 'list-style:none;padding:0;margin:6px 0 0;display:flex;gap:12px;flex-wrap:wrap;' });
+      ns.links.forEach(function (lnk) {
+        const li = document.createElement('li');
+        li.appendChild(el('a', { href: '#', style: 'font-size:.84em;color:#4f46e5;text-decoration:none;' }, lnk));
+        ul.appendChild(li);
+      });
+      nav.appendChild(ul);
+      container.appendChild(nav);
+    });
+  }());
+
+  // --- aside × 10 ---
+  (function buildAsidePanels() {
+    const container = document.getElementById('aside-panels');
+    const panels = [
+      { title: 'Alerts', body: '3 critical alerts require attention.' },
+      { title: 'Quick Actions', body: 'Export CSV, Refresh Data, Archive Old Records.' },
+      { title: 'Recent Activity', body: 'admin@corp.io logged in from 10.0.0.1 at 09:14.' },
+      { title: 'Scheduled Jobs', body: 'Next backup: 2026-04-23 02:00 UTC.' },
+      { title: 'Top Users', body: 'alice, bob, charlie, diana, erin.' },
+      { title: 'System Status', body: 'All services operational. Uptime 99.97%.' },
+      { title: 'License Info', body: '427 seats used of 500. Renews 2026-09-01.' },
+      { title: 'Data Summary', body: '18.4 GB stored. 2.1 TB transferred this month.' },
+      { title: 'Open Tickets', body: '12 open, 3 overdue, 47 resolved this week.' },
+      { title: 'Release Notes', body: 'v4.2.1 — hotfix for session timeout edge case.' },
+    ];
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' });
+    panels.forEach(function (p, i) {
+      const aside = el('aside', { style: 'background:white;border-radius:6px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.07);border-left:3px solid ' + SVG_COLORS[i % SVG_COLORS.length] + ';' });
+      aside.appendChild(el('strong', { style: 'font-size:.82em;color:#374151;display:block;margin-bottom:4px;' }, p.title));
+      aside.appendChild(el('p', { style: 'margin:0;font-size:.8em;color:#6b7280;' }, p.body));
+      grid.appendChild(aside);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- div × 10 ---
+  (function buildDivBlocks() {
+    const container = document.getElementById('div-blocks');
+    const divLabels = [
+      'Performance KPIs', 'Cost Center Breakdown', 'Throughput Graph Placeholder',
+      'Error Distribution', 'User Cohort Summary', 'Retention Funnel',
+      'Conversion Metrics', 'Churn Analysis', 'Feature Flag Status', 'Experiment Results',
+    ];
+    divLabels.forEach(function (label, i) {
+      const d = el('div', { style: 'background:white;border-radius:6px;padding:12px 16px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:14px;' });
+      const badge = el('span', { style: 'background:' + SVG_COLORS[i % SVG_COLORS.length] + ';color:white;border-radius:4px;padding:4px 10px;font-size:.78em;white-space:nowrap;' }, label);
+      d.appendChild(badge);
+      d.appendChild(el('p', { style: 'margin:0;font-size:.84em;color:#6b7280;' }, pick(lorem, i + 2)));
+      container.appendChild(d);
+    });
+  }());
+
+  // --- sidebar stats ---
+  (function buildSidebarStats() {
+    const container = document.getElementById('sidebar-stats');
+    const stats = [
+      { label: 'Total Users', value: '8,421' },
+      { label: 'Active Sessions', value: '312' },
+      { label: 'Requests/min', value: '14,703' },
+      { label: 'Error Rate', value: '0.08%' },
+      { label: 'Uptime', value: '99.97%' },
+      { label: 'DB Queries/s', value: '2,841' },
+    ];
+    stats.forEach(function (s) {
+      const card = el('div', { style: 'background:rgba(255,255,255,.07);border-radius:8px;padding:10px;margin-bottom:10px;' });
+      card.appendChild(el('div', { style: 'font-size:1.3em;font-weight:bold;color:#68d391;' }, s.value));
+      card.appendChild(el('div', { style: 'font-size:.78em;color:#a0aec0;margin-top:2px;' }, s.label));
+      container.appendChild(card);
+    });
+  }());
+
+  // --- sidebar nav links ---
+  (function buildSidebarNav() {
+    const ul = document.getElementById('sidebar-nav');
+    const links = [
+      'Dashboard', 'Analytics', 'Users', 'Security', 'Compliance',
+      'API Keys', 'Billing', 'Roles', 'Settings', 'Support',
+      'Audit Logs', 'Export', 'Reports', 'Notifications', 'Integrations',
+    ];
+    links.forEach(function (lnk) {
+      const li = document.createElement('li');
+      li.appendChild(el('a', { href: '#', style: 'color:#a0aec0;text-decoration:none;font-size:.84em;display:block;padding:4px 0;' }, lnk));
+      ul.appendChild(li);
+    });
+  }());
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // TABLE CATEGORY  (1 table × 20 rows × 16 cols = 320 td cells)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  (function buildTable() {
+    const colHeaders = [
+      'Account ID', 'Username', 'Email', 'Plan', 'Status',
+      'Sessions', 'Requests', 'Errors', 'Latency ms', 'Storage GB',
+      'Last Login', 'Created', 'Region', 'Role', 'MFA', 'Billing',
+    ];
+    const plans = ['Starter', 'Pro', 'Enterprise', 'Trial'];
+    const statuses = ['Active', 'Suspended', 'Pending', 'Archived'];
+    const regions = ['us-east-1', 'eu-west-1', 'ap-south-1', 'us-west-2'];
+    const roles = ['admin', 'viewer', 'editor', 'auditor'];
+    const billing = ['Monthly', 'Annual', 'Metered'];
+
+    const thead = document.getElementById('table-head');
+    const trHead = document.createElement('tr');
+    colHeaders.forEach(function (h) {
+      trHead.appendChild(el('th', {}, h));
+    });
+    thead.appendChild(trHead);
+
+    const tbody = document.getElementById('table-body');
+    for (let r = 0; r < 20; r++) {
+      const tr = document.createElement('tr');
+      const id = 'ACC-' + String(10000 + r * 317).padStart(6, '0');
+      const username = ['alice', 'bob', 'charlie', 'diana', 'erin', 'frank',
+        'grace', 'heidi', 'ivan', 'judy', 'kyle', 'laura',
+        'mike', 'nina', 'oscar', 'paula', 'quinn', 'ray', 'sara', 'ted'][r];
+      const cells = [
+        id,
+        username,
+        username + '@corp.io',
+        pick(plans, r),
+        pick(statuses, r),
+        String(rand(1, 50)),
+        String(rand(100, 99999)),
+        String(rand(0, 500)),
+        String(rand(10, 3200)),
+        String((rand(100, 18400) / 100).toFixed(2)),
+        '2026-04-' + String(rand(1, 22)).padStart(2, '0'),
+        '2024-0' + String(rand(1, 9)) + '-' + String(rand(1, 28)).padStart(2, '0'),
+        pick(regions, r),
+        pick(roles, r),
+        r % 3 === 0 ? 'Yes' : 'No',
+        pick(billing, r),
+      ];
+      cells.forEach(function (val) {
+        tr.appendChild(el('td', {}, val));
+      });
+      tbody.appendChild(tr);
+    }
+  }());
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // FORM CATEGORY  (130 elements total)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // --- input[type=text] × 20 ---
+  (function buildTextInputs() {
+    const container = document.getElementById('form-text-inputs');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:0 0 8px;color:#374151;' }, 'Text Fields'));
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;' });
+    const labels = [
+      'Full Name', 'Company', 'Department', 'Job Title', 'Employee ID',
+      'Phone Number', 'Address Line 1', 'Address Line 2', 'City', 'State',
+      'ZIP Code', 'Country', 'Cost Center', 'Project Code', 'Team Name',
+      'Manager Name', 'Office Location', 'Badge Number', 'Employee Since', 'Alt Contact',
+    ];
+    labels.forEach(function (lbl, i) {
+      const wrap = el('div', {});
+      wrap.appendChild(el('label', { style: 'font-size:.78em;color:#6b7280;display:block;margin-bottom:2px;' }, lbl));
+      const inp = el('input', { type: 'text', placeholder: lbl, 'data-field-index': String(i) });
+      inp.value = ['Alice Johnson', 'Acme Corp'][i % 2] + ' ' + (i + 1);
+      wrap.appendChild(inp);
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- input[type=email] × 15 ---
+  (function buildEmailInputs() {
+    const container = document.getElementById('form-email-inputs');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:0 0 8px;color:#374151;' }, 'Email Fields'));
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;' });
+    const emailLabels = [
+      'Primary Email', 'Work Email', 'Recovery Email', 'Billing Email', 'Notify Email',
+      'CC Email 1', 'CC Email 2', 'BCC Email', 'Reply-To', 'Forwarding Email',
+      'Escalation Email', 'NOC Email', 'Audit Email', 'Compliance Email', 'Legal Email',
+    ];
+    const users = ['alice', 'bob', 'charlie', 'diana', 'erin', 'frank', 'grace', 'heidi',
+      'ivan', 'judy', 'kyle', 'laura', 'mike', 'nina', 'oscar'];
+    emailLabels.forEach(function (lbl, i) {
+      const wrap = el('div', {});
+      wrap.appendChild(el('label', { style: 'font-size:.78em;color:#6b7280;display:block;margin-bottom:2px;' }, lbl));
+      const inp = el('input', { type: 'email', placeholder: 'user@example.com', 'data-email-index': String(i) });
+      inp.value = users[i] + '@corp.io';
+      wrap.appendChild(inp);
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- input[type=password] × 15 ---
+  (function buildPasswordInputs() {
+    const container = document.getElementById('form-password-inputs');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:0 0 8px;color:#374151;' }, 'Password Fields'));
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;' });
+    const pwLabels = [
+      'Current Password', 'New Password', 'Confirm Password',
+      'API Secret', 'DB Password', 'Vault Token',
+      'Admin PIN', 'Recovery Key', 'Encryption Key',
+      'SSH Passphrase', 'PGP Passphrase', 'S3 Secret Key',
+      'JWT Secret', 'HMAC Key', 'Service Token',
+    ];
+    pwLabels.forEach(function (lbl, i) {
+      const wrap = el('div', {});
+      wrap.appendChild(el('label', { style: 'font-size:.78em;color:#6b7280;display:block;margin-bottom:2px;' }, lbl));
+      const inp = el('input', { type: 'password', placeholder: '••••••••', 'data-pw-index': String(i) });
+      inp.value = 'S3cr3t!#' + (i + 1);
+      wrap.appendChild(inp);
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- input[type=number] × 15 ---
+  (function buildNumberInputs() {
+    const container = document.getElementById('form-number-inputs');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:0 0 8px;color:#374151;' }, 'Numeric Fields'));
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;' });
+    const numLabels = [
+      'Seat Count', 'Max Sessions', 'Rate Limit (rpm)', 'Timeout (ms)', 'Retry Count',
+      'Cache TTL (s)', 'Idle Timeout (s)', 'Max File Size (MB)', 'Concurrency Limit', 'Queue Depth',
+      'Log Retention (days)', 'Backup Frequency (h)', 'Alert Threshold (%)', 'Min Balance', 'Invoice Days',
+    ];
+    const defaults = [500, 100, 1000, 5000, 3, 3600, 300, 100, 50, 200, 90, 24, 80, 100, 30];
+    numLabels.forEach(function (lbl, i) {
+      const wrap = el('div', {});
+      wrap.appendChild(el('label', { style: 'font-size:.78em;color:#6b7280;display:block;margin-bottom:2px;' }, lbl));
+      const inp = el('input', { type: 'number', 'data-num-index': String(i) });
+      inp.value = String(defaults[i]);
+      wrap.appendChild(inp);
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- fieldsets with checkbox × 8 + radio × 7 ---
+  (function buildFieldsets() {
+    const container = document.getElementById('form-fieldsets');
+
+    // Checkbox fieldset
+    const fs1 = el('fieldset', {});
+    fs1.appendChild(el('legend', {}, 'Feature Toggles'));
+    const checkLabels = [
+      'Enable MFA', 'Allow API Access', 'Enable Audit Log',
+      'Allow Exports', 'Enable SSO', 'Show Advanced Options',
+      'Allow Guest Access', 'Enable Beta Features',
+    ];
+    const cbGrid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:6px;' });
+    checkLabels.forEach(function (lbl, i) {
+      const lEl = el('label', { style: 'font-size:.84em;color:#374151;display:flex;align-items:center;gap:4px;cursor:pointer;' });
+      const cb = el('input', { type: 'checkbox', 'data-cb-index': String(i) });
+      if (i % 2 === 0) cb.checked = true;
+      lEl.appendChild(cb);
+      lEl.appendChild(document.createTextNode(lbl));
+      cbGrid.appendChild(lEl);
+    });
+    fs1.appendChild(cbGrid);
+    container.appendChild(fs1);
+
+    // Radio fieldset
+    const fs2 = el('fieldset', {});
+    fs2.appendChild(el('legend', {}, 'Notification Preference'));
+    const radioLabels = ['Email Only', 'SMS Only', 'Push Only', 'Email + SMS', 'All Channels', 'Digest', 'None'];
+    const rbGrid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:6px;' });
+    radioLabels.forEach(function (lbl, i) {
+      const lEl = el('label', { style: 'font-size:.84em;color:#374151;display:flex;align-items:center;gap:4px;cursor:pointer;' });
+      const rb = el('input', { type: 'radio', name: 'notify_pref', 'data-rb-index': String(i) });
+      if (i === 0) rb.checked = true;
+      lEl.appendChild(rb);
+      lEl.appendChild(document.createTextNode(lbl));
+      rbGrid.appendChild(lEl);
+    });
+    fs2.appendChild(rbGrid);
+    container.appendChild(fs2);
+  }());
+
+  // --- select × 20 ---
+  (function buildSelects() {
+    const container = document.getElementById('form-selects');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:8px 0;color:#374151;' }, 'Dropdown Selectors'));
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;' });
+    const selectConfigs = [
+      { label: 'Timezone',       opts: ['UTC', 'US/Eastern', 'US/Pacific', 'Europe/London', 'Asia/Kolkata', 'Asia/Tokyo'] },
+      { label: 'Language',       opts: ['English', 'Spanish', 'French', 'German', 'Japanese', 'Mandarin'] },
+      { label: 'Date Format',    opts: ['YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', 'DD.MM.YYYY', 'MMM D YYYY', 'D MMMM YYYY'] },
+      { label: 'Currency',       opts: ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'AUD'] },
+      { label: 'Plan Type',      opts: ['Starter', 'Pro', 'Enterprise', 'Trial', 'Legacy', 'Custom'] },
+      { label: 'Billing Cycle',  opts: ['Monthly', 'Quarterly', 'Annual', 'Biennial', 'Metered', 'Prepaid'] },
+      { label: 'Support Tier',   opts: ['Community', 'Basic', 'Standard', 'Priority', 'Dedicated', 'SLA'] },
+      { label: 'Region',         opts: ['us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-south-1', 'ap-northeast-1'] },
+      { label: 'Role',           opts: ['admin', 'editor', 'viewer', 'auditor', 'billing', 'readonly'] },
+      { label: 'Status',         opts: ['Active', 'Suspended', 'Pending', 'Archived', 'Locked', 'Trial'] },
+      { label: 'Auth Provider',  opts: ['Local', 'Google', 'GitHub', 'Okta', 'Azure AD', 'OneLogin'] },
+      { label: 'MFA Method',     opts: ['TOTP', 'SMS', 'Email OTP', 'Hardware Key', 'Biometric', 'None'] },
+      { label: 'Log Level',      opts: ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL', 'TRACE'] },
+      { label: 'Storage Tier',   opts: ['Standard', 'Infrequent', 'Archive', 'Cold', 'Glacier', 'Instant'] },
+      { label: 'Export Format',  opts: ['CSV', 'JSON', 'XML', 'XLSX', 'Parquet', 'Avro'] },
+      { label: 'Notify Freq.',   opts: ['Immediately', 'Hourly', 'Daily', 'Weekly', 'Monthly', 'Never'] },
+      { label: 'Encryption',     opts: ['AES-128', 'AES-256', 'ChaCha20', 'RSA-2048', 'RSA-4096', 'None'] },
+      { label: 'Backup Policy',  opts: ['Daily', '2x Daily', 'Weekly', 'Monthly', 'Continuous', 'Manual'] },
+      { label: 'IP Policy',      opts: ['Any', 'Allowlist Only', 'Block TOR', 'Block VPN', 'Geo-restrict', 'Strict'] },
+      { label: 'Session TTL',    opts: ['15 min', '30 min', '1 hour', '4 hours', '8 hours', '24 hours'] },
+    ];
+    selectConfigs.forEach(function (cfg, i) {
+      const wrap = el('div', {});
+      wrap.appendChild(el('label', { style: 'font-size:.78em;color:#6b7280;display:block;margin-bottom:2px;' }, cfg.label));
+      const sel = el('select', { 'data-sel-index': String(i) });
+      cfg.opts.forEach(function (opt) {
+        sel.appendChild(el('option', { value: opt.toLowerCase().replace(/\s+/g, '_') }, opt));
+      });
+      wrap.appendChild(sel);
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- textarea × 10 ---
+  (function buildTextareas() {
+    const container = document.getElementById('form-textareas');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:8px 0;color:#374151;' }, 'Text Areas'));
+    const taConfigs = [
+      { label: 'Notes',              content: 'Periodic review required. All settings confirmed by admin team on 2026-04-15.' },
+      { label: 'IP Allowlist',       content: '10.0.0.0/8\n192.168.1.0/24\n172.16.0.0/12' },
+      { label: 'SSH Public Key',     content: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... user@corp' },
+      { label: 'Custom Headers',     content: 'X-Correlation-ID: {uuid}\nX-Request-Timestamp: {iso8601}' },
+      { label: 'Webhook Payload',    content: '{"event": "user.updated", "timestamp": "{{now}}", "actor": "{{user_id}}"}' },
+      { label: 'SAML Metadata XML',  content: '<?xml version="1.0"?><EntityDescriptor entityID="https://corp.io/sso">...</EntityDescriptor>' },
+      { label: 'Terms Acknowledgement', content: 'I acknowledge that all data processing activities comply with internal policies and GDPR.' },
+      { label: 'Legal Notes',        content: 'See attached SOW #2026-Q1-0042. Signed by legal team 2026-01-15.' },
+      { label: 'Escalation Script',  content: 'Step 1: Page on-call engineer.\nStep 2: Open war room.\nStep 3: Notify CTO if unresolved after 30 min.' },
+      { label: 'Release Notes',      content: '## v4.2.1\n- Fix session timeout edge case\n- Performance improvements in query planner\n- Updated dependency: lodash@4.17.21' },
+    ];
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;' });
+    taConfigs.forEach(function (cfg, i) {
+      const wrap = el('div', {});
+      wrap.appendChild(el('label', { style: 'font-size:.78em;color:#6b7280;display:block;margin-bottom:2px;' }, cfg.label));
+      const ta = document.createElement('textarea');
+      ta.rows = 3;
+      ta.dataset.taIndex = String(i);
+      ta.style.cssText = 'width:100%;border:1px solid #ccc;padding:6px;border-radius:4px;font-size:.82em;font-family:monospace;resize:vertical;';
+      ta.textContent = cfg.content;
+      wrap.appendChild(ta);
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
+  }());
+
+  // --- button × 20 ---
+  (function buildButtons() {
+    const container = document.getElementById('form-buttons');
+    container.appendChild(el('h3', { style: 'font-size:.92em;margin:8px 0;color:#374151;' }, 'Actions'));
+    const btnWrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;padding-top:4px;' });
+    const buttons = [
+      { label: 'Save Settings',       type: 'submit',  cls: '' },
+      { label: 'Cancel',              type: 'button',  cls: 'secondary' },
+      { label: 'Reset to Defaults',   type: 'reset',   cls: '' },
+      { label: 'Delete Account',      type: 'button',  cls: 'danger' },
+      { label: 'Export Data',         type: 'button',  cls: '' },
+      { label: 'Import Config',       type: 'button',  cls: '' },
+      { label: 'Run Audit',           type: 'button',  cls: '' },
+      { label: 'Rotate Keys',         type: 'button',  cls: 'danger' },
+      { label: 'Sync Now',            type: 'button',  cls: '' },
+      { label: 'Revoke All Sessions', type: 'button',  cls: 'danger' },
+      { label: 'Send Test Email',     type: 'button',  cls: 'secondary' },
+      { label: 'Verify Domain',       type: 'button',  cls: '' },
+      { label: 'Enable MFA',          type: 'button',  cls: '' },
+      { label: 'Download Report',     type: 'button',  cls: 'secondary' },
+      { label: 'Schedule Backup',     type: 'button',  cls: '' },
+      { label: 'Clear Cache',         type: 'button',  cls: 'secondary' },
+      { label: 'Archive Records',     type: 'button',  cls: 'secondary' },
+      { label: 'Publish Changes',     type: 'submit',  cls: '' },
+      { label: 'Preview',             type: 'button',  cls: 'secondary' },
+      { label: 'Help',                type: 'button',  cls: 'secondary' },
+    ];
+    buttons.forEach(function (b, i) {
+      const btn = el('button', { type: b.type, className: b.cls, 'data-btn-index': String(i) }, b.label);
+      if (b.cls) btn.className = b.cls;
+      btnWrap.appendChild(btn);
+    });
+    container.appendChild(btnWrap);
+  }());
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // MEDIA CATEGORY  (70 elements total)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  (function buildMedia() {
+    const gallery = document.getElementById('media-gallery');
+
+    // --- img × 40 ---
+    // sizes: mix of 50×50, 200×150, 400×300
+    const imgSizes = [
+      { w: 400, h: 300 }, { w: 200, h: 150 }, { w: 50, h: 50 },
+      { w: 200, h: 150 }, { w: 400, h: 300 }, { w: 50, h: 50 },
+      { w: 400, h: 300 }, { w: 200, h: 150 }, { w: 50, h: 50 }, { w: 200, h: 150 },
+    ];
+    for (let i = 0; i < 40; i++) {
+      const sz = imgSizes[i % imgSizes.length];
+      const fill = encodeURIComponent(SVG_COLORS[i % SVG_COLORS.length]);
+      const label = encodeURIComponent('Image ' + (i + 1));
+      const src = svgDataUri(sz.w, sz.h, SVG_COLORS[i % SVG_COLORS.length], 'Image ' + (i + 1));
+      const wrap = el('div', { style: 'border-radius:6px;overflow:hidden;background:#e8eaf6;' });
+      const img = el('img', {
+        src: src,
+        alt: 'Perf fixture image ' + (i + 1),
+        width: String(sz.w),
+        height: String(sz.h),
+        style: 'display:block;max-width:100%;height:auto;',
+        loading: 'lazy',
+      });
+      img.dataset.imgIndex = String(i);
+      wrap.appendChild(img);
+      gallery.appendChild(wrap);
+    }
+
+    // --- video × 10 ---
+    const videoSizes = [
+      { w: 320, h: 180 }, { w: 256, h: 144 }, { w: 320, h: 180 }, { w: 256, h: 144 }, { w: 320, h: 180 },
+      { w: 256, h: 144 }, { w: 320, h: 180 }, { w: 256, h: 144 }, { w: 320, h: 180 }, { w: 256, h: 144 },
+    ];
+    for (let i = 0; i < 10; i++) {
+      const sz = videoSizes[i];
+      const wrap = el('div', { style: 'border-radius:6px;overflow:hidden;background:#111;' });
+      const vid = document.createElement('video');
+      vid.setAttribute('autoplay', '');
+      vid.setAttribute('muted', '');
+      vid.setAttribute('playsinline', '');
+      vid.setAttribute('loop', '');
+      vid.width = sz.w;
+      vid.height = sz.h;
+      vid.style.cssText = 'display:block;max-width:100%;height:auto;background:#111;';
+      vid.dataset.idx = String(i + 1);
+      vid.dataset.videoIndex = String(i);
+      wrap.appendChild(vid);
+      gallery.appendChild(wrap);
+      // Defer stream setup until after DOM insertion
+      (function (videoEl, colorSeed, w, h) {
+        requestAnimationFrame(function () {
+          makeVideoStream(videoEl, colorSeed, w, h);
+        });
+      }(vid, i * 50 + 10, sz.w, sz.h));
+    }
+
+    // --- canvas × 10 ---
+    const canvasPalettes = [
+      ['#4f46e5', '#6366f1'], ['#0ea5e9', '#38bdf8'], ['#10b981', '#34d399'],
+      ['#f59e0b', '#fbbf24'], ['#ef4444', '#f87171'], ['#8b5cf6', '#a78bfa'],
+      ['#ec4899', '#f472b6'], ['#14b8a6', '#2dd4bf'], ['#f97316', '#fb923c'],
+      ['#6366f1', '#818cf8'],
+    ];
+    for (let i = 0; i < 10; i++) {
+      const wrap = el('div', { style: 'border-radius:6px;overflow:hidden;background:#e8eaf6;' });
+      const cvs = document.createElement('canvas');
+      cvs.width = 240;
+      cvs.height = 160;
+      cvs.style.cssText = 'display:block;max-width:100%;height:auto;';
+      cvs.dataset.canvasIndex = String(i);
+      wrap.appendChild(cvs);
+      gallery.appendChild(wrap);
+      // Draw after insertion
+      (function (canvas, palette, idx) {
+        requestAnimationFrame(function () {
+          try {
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            grad.addColorStop(0, palette[0]);
+            grad.addColorStop(1, palette[1]);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Canvas ' + (idx + 1), canvas.width / 2, canvas.height / 2 - 10);
+            ctx.font = '12px sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.fillText(canvas.width + ' × ' + canvas.height + ' px', canvas.width / 2, canvas.height / 2 + 12);
+            // decorative circles
+            ctx.beginPath();
+            ctx.arc(30, 30, 20, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(canvas.width - 30, canvas.height - 30, 28, 0, Math.PI * 2);
+            ctx.fill();
+          } catch (e) { /* canvas not available */ }
+        });
+      }(cvs, canvasPalettes[i], i));
+    }
+
+    // --- svg × 10 ---
+    const svgColors2 = [
+      '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444',
+      '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
+    ];
+    const svgShapes = [
+      function (c) { /* circle + rect */
+        return '<rect x="10" y="10" width="80" height="80" rx="8" fill="' + c + '"/>'
+          + '<circle cx="120" cy="50" r="35" fill="' + c + '" opacity=".7"/>';
+      },
+      function (c) { /* triangles */
+        return '<polygon points="60,10 110,90 10,90" fill="' + c + '"/>'
+          + '<polygon points="130,10 180,90 80,90" fill="' + c + '" opacity=".6"/>';
+      },
+      function (c) { /* path wave */
+        return '<path d="M0 50 Q40 10 80 50 Q120 90 160 50 Q200 10 240 50" stroke="' + c + '" stroke-width="4" fill="none"/>'
+          + '<path d="M0 80 Q40 40 80 80 Q120 120 160 80 Q200 40 240 80" stroke="' + c + '" stroke-width="3" fill="none" opacity=".5"/>';
+      },
+      function (c) { /* lines */
+        return '<line x1="10" y1="10" x2="230" y2="90" stroke="' + c + '" stroke-width="3"/>'
+          + '<line x1="10" y1="50" x2="230" y2="50" stroke="' + c + '" stroke-width="2" opacity=".5"/>'
+          + '<line x1="10" y1="90" x2="230" y2="10" stroke="' + c + '" stroke-width="3"/>';
+      },
+      function (c) { /* ellipses */
+        return '<ellipse cx="80" cy="50" rx="70" ry="35" fill="' + c + '" opacity=".8"/>'
+          + '<ellipse cx="170" cy="50" rx="50" ry="28" fill="' + c + '" opacity=".5"/>';
+      },
+      function (c) { /* hexagon-ish polylines */
+        return '<polyline points="50,10 90,10 120,50 90,90 50,90 20,50" stroke="' + c + '" stroke-width="3" fill="none"/>'
+          + '<polyline points="130,20 170,20 200,50 170,80 130,80 100,50" stroke="' + c + '" stroke-width="2" fill="none" opacity=".6"/>';
+      },
+      function (c) { /* concentric circles */
+        return '<circle cx="120" cy="50" r="45" stroke="' + c + '" stroke-width="3" fill="none"/>'
+          + '<circle cx="120" cy="50" r="30" stroke="' + c + '" stroke-width="2" fill="none" opacity=".7"/>'
+          + '<circle cx="120" cy="50" r="15" fill="' + c + '"/>';
+      },
+      function (c) { /* diamond + cross */
+        return '<polygon points="120,10 190,50 120,90 50,50" fill="' + c + '" opacity=".8"/>'
+          + '<line x1="120" y1="10" x2="120" y2="90" stroke="#fff" stroke-width="2"/>'
+          + '<line x1="50" y1="50" x2="190" y2="50" stroke="#fff" stroke-width="2"/>';
+      },
+      function (c) { /* arcs */
+        return '<path d="M30 70 A50 50 0 0 1 130 70" stroke="' + c + '" stroke-width="4" fill="none"/>'
+          + '<path d="M80 80 A60 60 0 0 1 200 80" stroke="' + c + '" stroke-width="3" fill="none" opacity=".6"/>';
+      },
+      function (c) { /* star-like path */
+        return '<path d="M120 10 L130 45 L165 45 L138 65 L148 100 L120 80 L92 100 L102 65 L75 45 L110 45 Z" fill="' + c + '"/>';
+      },
+    ];
+
+    for (let i = 0; i < 10; i++) {
+      const wrap = el('div', { style: 'border-radius:6px;overflow:hidden;background:#f5f3ff;padding:8px;' });
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svgEl = document.createElementNS(svgNS, 'svg');
+      svgEl.setAttribute('xmlns', svgNS);
+      svgEl.setAttribute('viewBox', '0 0 240 100');
+      svgEl.setAttribute('width', '240');
+      svgEl.setAttribute('height', '100');
+      svgEl.style.cssText = 'display:block;max-width:100%;height:auto;';
+      svgEl.dataset.svgIndex = String(i);
+      const inner = svgShapes[i](svgColors2[i]);
+      // Use innerHTML on a temp div to parse, then append children
+      const tmp = document.createElement('div');
+      tmp.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg">' + inner + '</svg>';
+      const tmpSvg = tmp.querySelector('svg');
+      while (tmpSvg && tmpSvg.firstChild) {
+        svgEl.appendChild(tmpSvg.firstChild);
+      }
+      // label text
+      const textEl = document.createElementNS(svgNS, 'text');
+      textEl.setAttribute('x', '120');
+      textEl.setAttribute('y', '96');
+      textEl.setAttribute('text-anchor', 'middle');
+      textEl.setAttribute('font-size', '8');
+      textEl.setAttribute('fill', '#9ca3af');
+      textEl.setAttribute('font-family', 'sans-serif');
+      textEl.textContent = 'SVG ' + (i + 1);
+      svgEl.appendChild(textEl);
+      wrap.appendChild(svgEl);
+      gallery.appendChild(wrap);
+    }
+  }());
+
+}());
+</script>
+</body>
+</html>

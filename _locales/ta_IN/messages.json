@@ -192,12 +192,6 @@
   "setting_idle_timeout_hint": {
     "message": "தானியங்கி மங்கல் தூண்டப்படுவதற்கு முன் செயலின்மை வினாடிகள்."
   },
-  "setting_blur_timer": {
-    "message": "மங்கல் நேரமானி"
-  },
-  "setting_blur_timer_hint": {
-    "message": "இத்தனை நிமிடங்களுக்குப் பிறகு மங்கலை தானாக நீக்கு. 0 = நிறுத்து."
-  },
   "reveal_click": {
     "message": "க்ளிக் செய்து எட்டிப் பார்"
   },
@@ -588,9 +582,6 @@
   "pii_chip_asterisked": {
     "message": "Asterisked"
   },
-  "automate_timer": {
-    "message": "Timer"
-  },
   "automate_idle": {
     "message": "Idle"
   },
@@ -633,7 +624,10 @@
   "mode_switch_confirm": {
     "message": "பயன்முறை மாற்றினால் $COUNT$ சேமித்த மங்கல் நீக்கப்படும். தொடரவா?",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "mode_switch_btn": {
@@ -660,7 +654,10 @@
   "mode_pick_item_count": {
     "message": "$COUNT$ உருப்படிகள்",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "tooltip_mode_dynamic": {
@@ -671,24 +668,6 @@
   },
   "tooltip_mode_sticky_screen": {
     "message": "திரையில் நிலைத்த மங்கல் பகுதி வரையவும்"
-  },
-  "automate_timer_start": {
-    "message": "Start"
-  },
-  "automate_timer_stop": {
-    "message": "Stop"
-  },
-  "automate_timer_remaining": {
-    "message": "⏱ $TIME$ remaining",
-    "placeholders": {
-      "time": { "content": "$1", "example": "4:32" }
-    }
-  },
-  "automate_timer_triggered": {
-    "message": "Triggered"
-  },
-  "automate_timer_min_error": {
-    "message": "Minimum is 30 s"
   },
   "automate_idle_max_warn": {
     "message": "Max is 50 min (Chrome API limit)"

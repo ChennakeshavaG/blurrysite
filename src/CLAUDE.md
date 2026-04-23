@@ -47,15 +47,16 @@ Rules:
  7. storage_model.js      → blsi.Model (direct chrome.storage access; single blsi_model key; resolve/patch/debounced_patch)
  8. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
  9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/observeMutations/stopObserving)
-10. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
-11. blur_timer.js         → blsi.BlurTimer (countdown timer; start/stop/getRemaining/isActive)
+10. fonts.js              → blsi.Fonts (embedded WOFF2 font assets; FONT_FACE string for "bl-si-redact-asterisk")
+11. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
 12. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
-13. reveal_controller.js  → blsi.Reveal
-14. shortcut_handler.js   → blsi.Shortcuts
-15. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
-16. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
-18. picker.js             → blsi.Picker
-19. content_script.js     → (no global, binds all above)
+13. screen_share.js       → blsi.ScreenShare (getDisplayMedia wrapper; init/destroy — sends SCREEN_SHARE_STARTED/ENDED to background)
+15. reveal_controller.js  → blsi.Reveal
+16. shortcut_handler.js   → blsi.Shortcuts
+17. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
+18. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
+19. picker.js             → blsi.Picker
+20. content_script.js     → (no global, binds all above)
 ```
 
 A module may only depend on modules loaded before it.
@@ -142,7 +143,7 @@ A module may only depend on modules loaded before it.
 - `destroy()` removes all document listeners + `clearAll()`. Only used on disable paths.
 - Listeners are registered at capture phase on `document` for mouseover/mouseout, bubble phase for click/keydown. Input / textarea / select / button / contenteditable targets are skipped inside `onRevealClick` — do not move that guard.
 - Hover mode has a 50ms mouseout debounce via `setTimeout`; reset on any mouseover to avoid flicker on element boundaries.
-- **Reveal is attribute-driven, not inline-style.** `_revealElement` stamps `data-bl-si-reveal="1"`; CSS rules in `styles/content.css` + injected `<style>` override all four blur modes (gaussian, frosted, redacted, masked) simultaneously. Zone overlays are the exception — they use inline `backdrop-filter` since they have no injected CSS. Trade-off: `background-color: transparent` may strip legitimate element backgrounds during reveal; acceptable since reveal is temporary.
+- **Reveal is attribute-driven, not inline-style.** `_revealElement` stamps `data-bl-si-reveal="1"`; CSS rules in `styles/content.css` + injected `<style>` override all four blur modes (gaussian, frosted, redacted, masked) simultaneously — including `font-family: revert` to undo the font-replacement masking. Zone overlays are the exception — they use inline `backdrop-filter` since they have no injected CSS. Trade-off: `background-color: transparent` may strip legitimate element backgrounds during reveal; acceptable since reveal is temporary.
 - No JS mode branching needed. The CSS overrides are no-ops for properties the active blur mode doesn't set.
 
 ### selector_utils.js
@@ -160,9 +161,14 @@ A module may only depend on modules loaded before it.
 - `debounced_patch(section, delta, delay?)` — same as `patch_section` but batches rapid calls (default **150 ms**). Use from popup inputs to avoid saturating storage writes.
 - `save_settings(patch)` — merges a partial settings patch into `model.settings`. Pass only the keys you want to update; unspecified keys are preserved.
 - `resolve(hostname, url)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `blur_all_active` and `blur_items` in the output. Single call site in content_script — replaces the old `UrlMatcher.resolveSettings` approach.
-- `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` / `clear_host(host)` / `clear_all()` — blur item CRUD. All Promise-based; operate on the `site_rules` section of the model.
+- `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
+- `clear_host(host)` — clears `blur_all` + items + `automate_blur[host]` in a single atomic write.
+- `clear_all()` — clears `blur_all` + items for all exact rules + resets `automate_blur: {}` in a single atomic write.
 - `get_cached_blur_state(host)` — synchronous; reads blur state from cache (no I/O). Use in hot paths (MO callbacks).
 - `get_blur_state(host)` / `save_blur_state(host, state)` — async blur-all state read/write.
+- `save_automate_blur(hostname, trigger, bool)` — write one automate trigger (`'idle'|'tab_switch'|'screen_share'`) for a hostname.
+- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one storage write.
+- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname.
 - `get_rules()` / `save_rules(rules)` — URL rules CRUD. Rules are an array of `{ hostname_value, hostname_type, blur_all, items, settings }` where `hostname_type` is `'wildcard'|'regex'` (non-exact entries only).
 - `_reset_cache()` — test-only helper. Clears the in-memory cache so tests start from a clean slate.
 

@@ -4,9 +4,6 @@
   const State = window.BlurrySitePopupState;
   const UI    = window.BlurrySitePopupUI;
 
-  // UI-only accordion state — not persisted; always starts on blur-all
-  let _expandedMode = 'blur-all';
-
   // ── Scroll arrows ─────────────────────────────────────────────────────────
   function _updateScrollArrows() {
     const main   = document.getElementById('bl-view-main');
@@ -30,19 +27,9 @@
   // ── Render coordinator ────────────────────────────────────────────────────
   function _renderCurrent() {
     const { settings, blurItems, isPageBlurred } = State.get();
-    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _expandedMode);
+    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _onSave);
     UI.updateClearAll(settings, blurItems, isPageBlurred);
     _updateScrollArrows();
-    const timer = settings && settings.automate_timer;
-    if (timer && timer.enabled && timer.started_at) {
-      UI.startCountdown(timer, () => {
-        if (State.get().settings.automate_timer.enabled) {
-          _saveAndApply({ automate_timer: { value: timer.value, unit: timer.unit, enabled: false, started_at: null } });
-        }
-      });
-    } else {
-      UI.stopCountdown();
-    }
   }
 
   async function _saveAndApply(patch) {
@@ -102,23 +89,10 @@
     // ── Live reactivity via external storage changes ─────────────────────
     State.onExternalChange((newModel) => {
       if (!newModel) return;
-      State.setModel(newModel);
-
-      const { hostname: h } = State.get();
-      if (h) {
-        const entry = blsi.Model.get_site_entry(h);
-        if (entry) {
-          State.setBlurItems(entry.items || []);
-          // blur_all: null means inherit global
-          const blurAllActive = entry.blur_all !== null
-            ? !!entry.blur_all
-            : newModel.blur_all.status;
-          State.setPageBlurred(blurAllActive);
-        } else {
-          State.setPageBlurred(newModel.blur_all.status);
-        }
-      }
-
+      // storage_model._cache is already set to newModel before on_change fires.
+      // refreshFromStorage() re-derives _model + hostname-specific state from the cache.
+      // When _hostname is empty (no-URL tab), only _model and _isPageBlurred are updated.
+      State.refreshFromStorage();
       _renderCurrent();
     });
 
@@ -228,9 +202,9 @@
     document.getElementById('bl-modes').addEventListener('change', async (e) => {
       if (e.target.id === 'bl-blur-all-toggle') {
         const checked = e.target.checked;
-        State.setPageBlurred(checked);
         const { hostname } = State.get();
         if (hostname) await blsi.Model.save_blur_state(hostname, checked);
+        State.refreshFromStorage();
         _renderCurrent();
         UI.showToast(checked ? 'toast_blur_all' : 'toast_cleared');
         return;
@@ -243,14 +217,6 @@
 
     // ── Mode block click handler ──────────────────────────────────────────
     document.getElementById('bl-modes').addEventListener('click', async (e) => {
-      // Accordion: clicking collapsed block header expands it
-      const collapsedBlock = e.target.closest('.bl-mode-block--collapsed');
-      if (collapsedBlock && !e.target.closest('.bl-toggle')) {
-        _expandedMode = collapsedBlock.classList.contains('bl-mode-block--blur-all') ? 'blur-all' : 'pick-blur';
-        _renderCurrent();
-        return;
-      }
-
       // Remove a pick-blur item
       const removeBtn = e.target.closest('[data-item-id]');
       if (removeBtn) {
@@ -258,14 +224,13 @@
         const { hostname } = State.get();
         if (itemId && hostname) {
           await blsi.Model.remove_blur_item(hostname, itemId);
-          const items = (await blsi.Model.get_blur_items(hostname)) || [];
-          State.setBlurItems(items);
+          State.refreshFromStorage();
           _renderCurrent();
         }
         return;
       }
 
-      // Picker mode chip — save and open picker
+      // Picker mode chip — save mode and open picker
       const pickerModeChip = e.target.closest('[data-picker-mode]');
       if (pickerModeChip) {
         const mode = pickerModeChip.dataset.pickerMode;
@@ -285,11 +250,28 @@
         return;
       }
 
-      // Type chip (blur mode or pick-blur type)
+      // Open Picker button — launch picker with currently saved mode and close popup
+      const openPickerBtn = e.target.closest('[data-action="open-picker"]');
+      if (openPickerBtn) {
+        const { settings } = State.get();
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]) {
+            chrome.tabs.sendMessage(
+              tabs[0].id,
+              { type: blsi.command.toggle_picker, picker_mode: settings.picker_mode || 'sticky-page' },
+              () => { void chrome.runtime.lastError; }
+            );
+          }
+          window.close();
+        });
+        return;
+      }
+
+      // Type chip (blur mode or pick-blur type) — derive block from DOM ancestry
       const typeChip = e.target.closest('[data-type]');
       if (typeChip) {
         const type = typeChip.dataset.type;
-        if (_expandedMode === 'blur-all') {
+        if (typeChip.closest('.bl-mode-block--blur-all')) {
           await _onSave({ blur_mode: type });
         } else {
           await _onSave({ pick_blur_type: type });
@@ -308,15 +290,14 @@
       // Clear All — data-mode tells us which block
       const clearBtn = e.target.closest('[data-action="clear-all"]');
       if (clearBtn) {
-        const mode = clearBtn.dataset.mode || _expandedMode;
+        const mode = clearBtn.dataset.mode;
         const { hostname } = State.get();
         if (mode === 'blur-all') {
-          State.setPageBlurred(false);
           if (hostname) await blsi.Model.save_blur_state(hostname, false);
         } else {
           if (hostname) await blsi.Model.clear_host(hostname);
-          State.setBlurItems([]);
         }
+        State.refreshFromStorage();
         _renderCurrent();
         UI.showToast('toast_cleared');
         return;

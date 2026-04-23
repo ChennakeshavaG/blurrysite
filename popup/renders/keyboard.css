@@ -1,132 +1,235 @@
-/* popup_shortcuts.css — Shortcuts sub-page styles
+/* keyboard.css — Shortcuts sub-page styles
  *
  * Reuses from popup.css (do not redefine here):
  *   .bl-subpage, .bl-subpage__body, .bl-subpage__header, .bl-back-btn
  */
 
+/* ── Section header (Reset All) ──────────────────────────────────────── */
+.bl-sc-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.bl-sc-reset-all-btn {
+  font-size: var(--bl-text-xs);
+  background: none;
+  border: none;
+  color: var(--bl-text-dim);
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+
+.bl-sc-reset-all-btn:hover {
+  color: var(--bl-text-muted);
+}
+
 /* ── Action list ─────────────────────────────────────────────────────── */
 .bl-sc-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
-}
-
-/* ── Single action row ───────────────────────────────────────────────── */
-.bl-sc-row {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bl-raised);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.bl-sc-row:last-child {
-  border-bottom: none;
-}
-
-.bl-sc-row__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
-.bl-sc-row__label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--bl-text-primary);
-  flex: 1;
+/* ── Single action card ───────────────────────────────────────────────── */
+.bl-sc-row {
+  background: var(--bl-raised);
+  border: 1px solid var(--bl-divider);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
 }
 
-.bl-sc-row__binding {
-  font-size: 11px;
+/* ── Card top: icon + text + keycaps in one row ──────────────────────── */
+.bl-sc-card-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.bl-sc-card-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  line-height: 0;
+}
+
+.bl-sc-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bl-sc-card-label {
+  font-size: var(--bl-text-md);
+  font-weight: 600;
+  color: var(--bl-text-primary);
+  line-height: 1.25;
+}
+
+.bl-sc-card-desc {
+  font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
-  font-family: monospace;
-  background: var(--bl-raised);
-  padding: 2px 8px;
-  border-radius: 4px;
+  line-height: 1.35;
+}
+
+/* ── Centered binding row — between card header and footer ───────────── */
+.bl-sc-binding-row {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 2px;
+}
+
+/* ── Keycap binding container ─────────────────────────────────────────── */
+.bl-sc-row__binding {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .bl-sc-row__binding--none {
+  display: block;
+  font-size: var(--bl-text-xs);
   font-style: italic;
   color: var(--bl-text-dim);
-  background: none;
-  padding: 0;
 }
 
-/* ── Row action buttons ──────────────────────────────────────────────── */
-.bl-sc-change-btn {
-  font-size: 11px;
-  padding: 3px 8px;
-  background: none;
-  border: 1px solid var(--bl-raised);
-  border-radius: 5px;
-  color: var(--bl-text-muted);
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  flex-shrink: 0;
-}
-
-.bl-sc-change-btn:hover {
+/* ── Individual key badge ─────────────────────────────────────────────── */
+.bl-sc-keycap {
+  display: inline-block;
+  font-family: monospace;
+  font-size: var(--bl-text-md);
+  font-style: normal;
   color: var(--bl-text-primary);
-  border-color: var(--bl-text-muted);
+  background: var(--bl-surface);
+  border: 1px solid var(--bl-divider);
+  border-bottom-color: color-mix(in srgb, var(--bl-text-dim) 55%, transparent);
+  border-radius: 6px;
+  padding: 4px 10px 5px;
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--bl-base) 65%, transparent);
+  line-height: 1.4;
+  user-select: none;
+  letter-spacing: 0;
 }
 
+/* ── Separator between keycaps ───────────────────────────────────────── */
+.bl-sc-key-sep {
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-dim);
+  user-select: none;
+  line-height: 1;
+}
+
+/* ── Card footer: reset (left) + change (right) ──────────────────────── */
+.bl-sc-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bl-divider);
+}
+
+/* ── Reset per-action (bottom left) ──────────────────────────────────── */
 .bl-sc-reset-btn {
-  font-size: 10px;
+  font-size: var(--bl-text-xs);
   background: none;
   border: none;
   color: var(--bl-text-dim);
   cursor: pointer;
   padding: 0;
   transition: color 0.15s;
-  flex-shrink: 0;
 }
 
 .bl-sc-reset-btn:hover {
   color: var(--bl-text-muted);
 }
 
-/* ── Capture mode container ──────────────────────────────────────────── */
+/* ── Change button (bottom right) ────────────────────────────────────── */
+.bl-sc-change-btn {
+  font-size: var(--bl-text-sm);
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--bl-sc-accent, var(--bl-text-muted)) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl-sc-accent, var(--bl-text-muted)) 45%, transparent);
+  border-radius: 5px;
+  color: var(--bl-sc-accent, var(--bl-text-muted));
+  cursor: pointer;
+  flex-shrink: 0;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.bl-sc-change-btn:hover {
+  background: color-mix(in srgb, var(--bl-sc-accent, var(--bl-text-muted)) 18%, transparent);
+  border-color: var(--bl-sc-accent, var(--bl-text-muted));
+}
+
+/* ── Capture mode ────────────────────────────────────────────────────── */
+.bl-sc-row--capturing {
+  border-color: color-mix(in srgb, var(--bl-amber) 45%, var(--bl-divider));
+}
+
 .bl-sc-capture {
-  margin-top: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bl-divider);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .bl-sc-capture__prompt {
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
+  line-height: 1.4;
 }
 
+/* Preview: shows live keycaps while recording */
 .bl-sc-capture__preview {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--bl-amber);
-  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
   min-height: 22px;
 }
 
 .bl-sc-capture__preview--empty {
-  color: var(--bl-text-dim);
-  font-weight: 400;
+  font-size: var(--bl-text-sm);
   font-style: italic;
+  color: var(--bl-text-dim);
+}
+
+/* Amber-tinted keycaps in capture preview */
+.bl-sc-capture__preview .bl-sc-keycap {
+  border-color: color-mix(in srgb, var(--bl-amber) 45%, var(--bl-divider));
+  color: var(--bl-amber);
+}
+
+.bl-sc-capture__preview .bl-sc-key-sep {
+  color: color-mix(in srgb, var(--bl-amber) 55%, var(--bl-text-dim));
 }
 
 .bl-sc-capture__warning {
-  font-size: 10px;
+  font-size: var(--bl-text-xs);
   color: var(--bl-danger);
+  line-height: 1.35;
 }
 
 .bl-sc-capture__actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
-/* ── Capture action buttons ──────────────────────────────────────────── */
+/* ── Capture save / cancel ───────────────────────────────────────────── */
 .bl-sc-save-btn {
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   padding: 4px 14px;
   background: var(--bl-amber);
   color: var(--bl-base);
@@ -148,14 +251,14 @@
 }
 
 .bl-sc-cancel-btn {
-  font-size: 11px;
+  font-size: var(--bl-text-sm);
   padding: 4px 10px;
   background: none;
-  border: 1px solid var(--bl-raised);
+  border: 1px solid var(--bl-divider);
   border-radius: 6px;
   color: var(--bl-text-muted);
   cursor: pointer;
-  transition: color 0.15s;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .bl-sc-cancel-btn:hover {

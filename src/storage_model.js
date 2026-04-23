@@ -95,6 +95,7 @@ const StorageModel = (() => {
     var raw = await _storage_get();
     if (raw) {
       _cache = blsi.validate_model(raw);
+      if (!_deep_equal(raw, _cache)) await _storage_set(_cache);
     } else {
       _cache = blsi.build_default_model();
       await _storage_set(_cache);
@@ -231,15 +232,25 @@ const StorageModel = (() => {
     resolved.pick_blur_color   = m.pick_and_blur.settings.blur_color;
 
     // ── 4. auto_detect_pii feature settings ───────────────────────────────
-    resolved.pii_enabled = m.auto_detect_pii.status;
-    resolved.pii_email   = m.auto_detect_pii.settings.email;
-    resolved.pii_numeric = m.auto_detect_pii.settings.numeric;
-    resolved.pii_mode    = m.auto_detect_pii.settings.pii_mode;
+    resolved.pii_enabled          = m.auto_detect_pii.status;
+    resolved.pii_email            = m.auto_detect_pii.settings.email;
+    resolved.pii_numeric          = m.auto_detect_pii.settings.numeric;
+    resolved.pii_mode             = m.auto_detect_pii.settings.pii_mode;
+    resolved.pii_redaction_color  = m.auto_detect_pii.settings.pii_redaction_color;
 
     // ── 5. automate feature settings ──────────────────────────────────────
-    resolved.automate_timer      = m.automate.settings.timer;
-    resolved.automate_idle       = m.automate.settings.idle;
-    resolved.automate_tab_switch = m.automate.settings.tab_switch;
+    resolved.automate_screen_share = m.automate.settings.screen_share;
+    resolved.automate_idle         = m.automate.settings.idle;
+    resolved.automate_tab_switch   = m.automate.settings.tab_switch;
+
+    // ── 5b. automate_blur — per-hostname transient trigger state ──────────
+    var automate_entry = (m.automate_blur || {})[hostname] || {};
+    resolved.automate_blur_active   = !!(automate_entry.idle || automate_entry.tab_switch || automate_entry.screen_share);
+    resolved.automate_blur_triggers = {
+      idle:         !!automate_entry.idle,
+      tab_switch:   !!automate_entry.tab_switch,
+      screen_share: !!automate_entry.screen_share,
+    };
 
     // ── 6. shortcuts ───────────────────────────────────────────────────────
     resolved.shortcuts = m.shortcuts || {};
@@ -274,12 +285,15 @@ const StorageModel = (() => {
 
     // ── 9. blur_all_active for this hostname ───────────────────────────────
     // exact.blur_all overrides global default; null = inherit global.
-    resolved.blur_all_active = exact
+    // automate_blur triggers OR on top — never clobber manual preference.
+    var manual_blur = exact
       ? (exact.blur_all !== null ? !!exact.blur_all : m.blur_all.status)
       : m.blur_all.status;
+    resolved.blur_all_active = manual_blur || resolved.automate_blur_active;
 
     // ── 10. blur items for this hostname ───────────────────────────────────
-    resolved.blur_items = exact ? (exact.items || []) : [];
+    // Gated on pick_and_blur.status — items are "paused" (not applied) when off.
+    resolved.blur_items = (exact && m.pick_and_blur.status) ? (exact.items || []) : [];
 
     return resolved;
   }
@@ -330,6 +344,39 @@ const StorageModel = (() => {
     await set_site_entry(hostname, { blur_all: !!is_active });
   }
 
+  // ── Public: automate_blur CRUD ─────────────────────────────────────────────
+
+  async function save_automate_blur(hostname, trigger, is_active) {
+    if (!_is_valid_hostname(hostname)) return;
+    var valid = { idle: true, tab_switch: true, screen_share: true };
+    if (!valid[trigger]) return;
+    var current = get();
+    var ab      = Object.assign({}, current.automate_blur || {});
+    var entry   = Object.assign({ idle: false, tab_switch: false, screen_share: false }, ab[hostname] || {});
+    entry[trigger] = !!is_active;
+    ab[hostname] = entry;
+    await _write(Object.assign({}, current, { automate_blur: ab }));
+  }
+
+  async function patch_automate_blur(hostname, patch) {
+    if (!_is_valid_hostname(hostname)) return;
+    var current = get();
+    var ab      = Object.assign({}, current.automate_blur || {});
+    var entry   = Object.assign({ idle: false, tab_switch: false, screen_share: false }, ab[hostname] || {});
+    var valid   = { idle: true, tab_switch: true, screen_share: true };
+    for (var k in patch) { if (valid[k]) entry[k] = !!patch[k]; }
+    ab[hostname] = entry;
+    await _write(Object.assign({}, current, { automate_blur: ab }));
+  }
+
+  async function clear_automate_blur(hostname) {
+    if (!_is_valid_hostname(hostname)) return;
+    var current = get();
+    var ab = Object.assign({}, current.automate_blur || {});
+    delete ab[hostname];
+    await _write(Object.assign({}, current, { automate_blur: ab }));
+  }
+
   async function save_blur_item(hostname, item) {
     if (!_is_valid_hostname(hostname) || !_is_valid_item(item)) return;
     var entry = get_site_entry(hostname);
@@ -350,7 +397,23 @@ const StorageModel = (() => {
 
   async function clear_host(hostname) {
     if (!_is_valid_hostname(hostname)) return;
-    await set_site_entry(hostname, { items: [], blur_all: null });
+    var current = get();
+    var rules   = current.site_rules.slice();
+    var idx     = _find_exact_idx(hostname);
+    var base    = idx >= 0 ? rules[idx] : {
+      hostname_value: hostname,
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      settings:       {},
+    };
+    var merged     = blsi.deep_merge(base, { items: [], blur_all: null });
+    var next_rules = idx >= 0
+      ? rules.map(function(r, i) { return i === idx ? merged : r; })
+      : rules.concat([merged]);
+    var ab = Object.assign({}, current.automate_blur || {});
+    delete ab[hostname];
+    await _write(Object.assign({}, current, { site_rules: next_rules, automate_blur: ab }));
   }
 
   async function clear_all() {
@@ -359,7 +422,7 @@ const StorageModel = (() => {
       if (r.hostname_type !== blsi.pattern_types.exact) return r;
       return Object.assign({}, r, { items: [], blur_all: null });
     });
-    await _write(Object.assign({}, current, { site_rules: next_rules }));
+    await _write(Object.assign({}, current, { site_rules: next_rules, automate_blur: {} }));
   }
 
   // ── Public: URL rules (wildcard / regex site_rules) ────────────────────────
@@ -436,6 +499,10 @@ const StorageModel = (() => {
     remove_blur_item,
     clear_host,
     clear_all,
+    // Automate blur trigger state
+    save_automate_blur,
+    patch_automate_blur,
+    clear_automate_blur,
     // URL rules
     get_rules,
     save_rules,

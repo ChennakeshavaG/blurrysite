@@ -4,7 +4,7 @@
  * Hybrid CSS + data-attribute blur system:
  *  - CSS Style Cases -> Always-blur tags (h1, p, img, etc.) → injected <style> with tag selectors
  *  - DOM Mutation Observer Cases ->Text-check tags (div, span, li, etc.) → data-bl-si-blur attribute.
- *  - Picker/context menu → data-bl-si-blur on individual elements
+ *  - Picker/context menu → data-bl-si-pick-blur on individual elements (sole attribute; separate from blur-all)
  *
  * Uses attributes instead of class based to avoid issues from redering frameworks which primarly work on class changes (React, Vue .,etc)
  * This Attribute approach makes the blurring less susceptible to website functionality breakagaes
@@ -16,7 +16,8 @@ const BlurEngine = (() => {
   "use strict";
 
   const SVG_FILTER_ID = blsi.ids.svg_filters;
-  const STYLE_ID = "bl-si-blur-styles";
+  const STYLE_ID      = "bl-si-blur-styles";
+  const PICK_STYLE_ID = "bl-si-pick-blur-styles";
 
   // ── Category selector definitions ──────────────────────────────────────────
 
@@ -344,10 +345,10 @@ const BlurEngine = (() => {
         `filter: none !important; ` +
         `user-select: none !important;`;
     } else if (isMasked) {
-      // filter: none cancels the static content.css gaussian rule so asterisks
-      // (::after) are crisp, not blurry.
+      // Font replacement: every character renders as a filled disc glyph (●).
+      // filter: none cancels the static content.css gaussian rule.
       blurDecl =
-        `font-size: 0 !important; ` +
+        `font-family: "bl-si-redact-disc" !important; ` +
         `filter: none !important; ` +
         `user-select: none !important;`;
     } else {
@@ -365,6 +366,8 @@ const BlurEngine = (() => {
     }
 
     const rules = [];
+
+    if (isMasked && blsi.Fonts) rules.push(blsi.Fonts.DISC_FONT_FACE);
 
     // Always-blur tags via CSS — auto-applies to present + future elements
     if (alwaysBlurSelector) {
@@ -384,7 +387,7 @@ const BlurEngine = (() => {
     // - Redacted: visibility:hidden hides image content so the background-color
     //   (already in blurDecl) shows through in the user's chosen redaction colour.
     //   brightness(0) always produced black regardless of --bl-si-redaction-color.
-    // - Masked: brightness(0) makes media black (font-size:0 has no effect on images).
+    // - Masked: brightness(0) makes media black (font-family replacement has no effect on image content).
     if (isRedacted || isMasked) {
       const mediaTags = "img,video,canvas,svg,picture,audio";
       const mediaDecl = isRedacted
@@ -411,8 +414,7 @@ const BlurEngine = (() => {
     // For shadow roots, these overrides are equally required so that reveal works
     // on elements inside the shadow tree.
     // visibility:hidden is used for media in redacted mode — must be reset on reveal.
-    rules.push(`[data-bl-si-reveal] { filter: none !important; visibility: visible !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
-    rules.push(`[data-bl-si-reveal][data-bl-si-mask-text]::after { content: none !important; }`);
+    rules.push(`[data-bl-si-reveal] { filter: none !important; visibility: visible !important; font-family: revert !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
     // Cascade reveal to blurred children of a revealed ancestor.
     // When revealAncestorChain stamps data-bl-si-reveal on a parent (e.g. <p>),
     // sibling [data-bl-si-blur] children inside it would still paint their own
@@ -435,6 +437,65 @@ const BlurEngine = (() => {
     const container = root.head ?? root;
     const el = container.querySelector && container.querySelector('#' + STYLE_ID);
     if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  const PII_STYLE_ID = "bl-si-pii-styles";
+
+  function removePiiRules() {
+    const el = document.head && document.head.querySelector('#' + PII_STYLE_ID);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function injectPiiRules(mode, color) {
+    removePiiRules();
+    if (!document.head) return;
+
+    const piiSel = `[data-bl-si-pii]:not([data-bl-si-reveal])`;
+    const isRedacted   = mode === blsi.pii_modes.redacted;
+    const isAsterisked = mode === blsi.pii_modes.asterisked;
+    const isFrosted    = mode === blsi.pii_modes.frosted;
+
+    if (isFrosted) ensureSvgFilter(document);
+
+    let blurDecl;
+    if (isRedacted) {
+      const c = (color && /^#[0-9a-fA-F]{6}$/.test(color)) ? color : 'var(--bl-si-redaction-color, #000)';
+      blurDecl =
+        `background-color: ${c} !important; ` +
+        `color: transparent !important; ` +
+        `border-color: ${c} !important; ` +
+        `text-decoration-color: transparent !important; ` +
+        `filter: none !important; ` +
+        `user-select: none !important;`;
+    } else if (isAsterisked) {
+      // Font replacement: every character renders as a 6-arm asterisk glyph.
+      blurDecl =
+        `font-family: "bl-si-redact-asterisk" !important; ` +
+        `filter: none !important; ` +
+        `user-select: none !important;`;
+    } else {
+      const filterValue = isFrosted
+        ? `url(#bl-si-frosted-filter)`
+        : `blur(12px)`;
+      blurDecl =
+        `filter: ${filterValue} !important; ` +
+        `transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ` +
+        `user-select: none !important;`;
+    }
+
+    const rules = [];
+
+    if (isAsterisked && blsi.Fonts) rules.push(blsi.Fonts.ASTERISK_FONT_FACE);
+
+    rules.push(`${piiSel} { ${blurDecl} }`);
+
+    // Reveal overrides — must come after blur rules (source-order wins for !important at equal specificity).
+    rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; font-family: revert !important; color: revert !important; background-color: revert !important; user-select: auto !important; }`);
+
+    const styleEl = document.createElement("style");
+    styleEl.id = PII_STYLE_ID;
+    styleEl.textContent = rules.join("\n");
+    document.head.appendChild(styleEl);
   }
 
   function isBlurAllActive() {
@@ -478,7 +539,6 @@ const BlurEngine = (() => {
             (cats.structure !== false || cats.text !== false) &&
             (thorough || hasMeaningfulTextContent(el))) {
           el.dataset.blSiBlur = '1';
-          if (isMasked) _stampMaskText(el);
         }
         return;
       }
@@ -505,7 +565,6 @@ const BlurEngine = (() => {
       }
       if (shouldStamp) {
         el.dataset.blSiBlur = "1";
-        if (isMasked) _stampMaskText(el);
       }
     });
 
@@ -545,17 +604,72 @@ const BlurEngine = (() => {
     );
   }
 
-  // ── Mask text helper (masked mode) ──────────────────────────────────────────
+  // ── Pick & Blur mode injection ─────────────────────────────────────────────
 
-  function _stampMaskText(element) {
-    const len = (element.textContent || '').length;
-    if (len > 0) {
-      element.dataset.blSiMaskText = '*'.repeat(Math.min(len, 100));
-    }
+  function _colorToRgba(color) {
+    if (!color || !color.hex) return 'rgba(0,0,0,1)';
+    const hex = color.hex.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const a = typeof color.opacity === 'number' ? color.opacity : 1;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
   }
 
-  function _clearMaskAttrs(element) {
-    delete element.dataset.blSiMaskText;
+  function removePickBlurRules(root) {
+    const container = root.head ?? root;
+    const el = container.querySelector && container.querySelector('#' + PICK_STYLE_ID);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function injectPickBlurRules(root, type, color) {
+    removePickBlurRules(root);
+    // gaussian: static content.css rule handles [data-bl-si-pick-blur] already
+    if (!type || type === blsi.pick_blur_modes.gaussian) return;
+
+    const rules = [];
+    const notRevealed = '[data-bl-si-pick-blur]:not([data-bl-si-reveal])';
+    const revealSel   = '[data-bl-si-pick-blur][data-bl-si-reveal]';
+
+    if (type === blsi.pick_blur_modes.frosted) {
+      ensureSvgFilter(root);
+      rules.push(
+        notRevealed + ' { ' +
+        'filter: url(#bl-si-frosted-filter) !important; ' +
+        'transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ' +
+        'user-select: none !important; }'
+      );
+      rules.push(revealSel + ' { filter: none !important; }');
+
+    } else if (type === blsi.pick_blur_modes.color) {
+      const rgba = _colorToRgba(color);
+      rules.push(
+        '[data-bl-si-pick-blur]:not(.bl-si-zone-overlay):not([data-bl-si-reveal]) { ' +
+        'background-color: ' + rgba + ' !important; ' +
+        'color: transparent !important; ' +
+        'filter: none !important; ' +
+        'user-select: none !important; }'
+      );
+      rules.push(
+        '.bl-si-zone-overlay[data-bl-si-pick-blur]:not([data-bl-si-reveal]) { ' +
+        'backdrop-filter: none !important; ' +
+        '-webkit-backdrop-filter: none !important; ' +
+        'background: ' + rgba + ' !important; ' +
+        'border: none !important; }'
+      );
+      rules.push(
+        revealSel + ' { ' +
+        'background-color: transparent !important; ' +
+        'color: inherit !important; ' +
+        'filter: none !important; }'
+      );
+    }
+
+    if (!rules.length) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = PICK_STYLE_ID;
+    styleEl.textContent = rules.join('\n');
+    (root.head ?? root).appendChild(styleEl);
   }
 
   // ── Individual element blur (picker / context menu) ────────────────────────
@@ -570,7 +684,7 @@ const BlurEngine = (() => {
   function removeBlur(element) {
     if (!element || !(element instanceof Element)) return;
     delete element.dataset.blSiBlur;
-    _clearMaskAttrs(element);
+    delete element.dataset.blSiPickBlur;
   }
 
   function toggleBlur(element) {
@@ -584,9 +698,7 @@ const BlurEngine = (() => {
 
   function isBlurred(element) {
     if (!element || !(element instanceof Element)) return false;
-    // Individual data attribute blur
-    if (element.dataset.blSiBlur) return true;
-    // Blur-all CSS rule: check if tag matches an always-blur selector
+    if (element.dataset.blSiBlur || element.dataset.blSiPickBlur) return true;
     if (isBlurAllActive() && selectorCache) {
       const tag = element.tagName.toLowerCase();
       // Only always-blur tags are covered by CSS. Text-check tags need data attr.
@@ -614,7 +726,7 @@ const BlurEngine = (() => {
    */
   function isVisuallyBlurred(element) {
     if (!element || !(element instanceof Element)) return false;
-    if (element.dataset.blSiBlur) return true;
+    if (element.dataset.blSiBlur || element.dataset.blSiPickBlur) return true;
     if (element.dataset.blSiPii) return true;  // PII spans have their own CSS rule
     if (isBlurAllActive() && selectorCache) {
       const tag = element.tagName.toLowerCase();
@@ -701,6 +813,7 @@ const BlurEngine = (() => {
     // screen-share privacy overlays).
     const anchor = zoneData.anchor === "screen" ? "screen" : "page";
     el.dataset.blSiZoneAnchor = anchor;
+    el.dataset.blSiPickBlur = '1';
 
     const position = anchor === "screen" ? "fixed" : "absolute";
     el.style.cssText =
@@ -789,7 +902,9 @@ const BlurEngine = (() => {
   function _applyDynamicItem(item) {
     try {
       const el = blsi.SelectorUtils.restoreSelector(item.selector);
-      if (el) applyBlur(el);
+      if (el && !_isExtensionUI(el)) {
+        el.dataset.blSiPickBlur = '1';
+      }
     } catch (_e) {
       /* invalid selector */
     }
@@ -800,7 +915,7 @@ const BlurEngine = (() => {
   function _removeDynamicItem(item) {
     try {
       const el = blsi.SelectorUtils.restoreSelector(item.selector);
-      if (el) removeBlur(el);
+      if (el) delete el.dataset.blSiPickBlur;
     } catch (_e) {
       /* invalid selector */
     }
@@ -952,6 +1067,7 @@ const BlurEngine = (() => {
   function teardown(root) {
     disconnectObserver(root);
     removeRules(root);
+    removePickBlurRules(root);
 
     // ONE pass: clear stamps + collect shadow hosts for post-loop recursion.
     // Recursing inside forEach risks processing a child's shadow root before
@@ -960,7 +1076,9 @@ const BlurEngine = (() => {
     root.querySelectorAll('*').forEach(el => {
       if (el.dataset.blSiBlur && !el.dataset.blSiPii) {
         delete el.dataset.blSiBlur;
-        _clearMaskAttrs(el);
+      }
+      if (el.dataset.blSiPickBlur) {
+        delete el.dataset.blSiPickBlur;
       }
       if (el.shadowRoot) shadowHosts.push(el);
     });
@@ -991,7 +1109,7 @@ const BlurEngine = (() => {
 
     injectRules(document, cats, mode);
     document.querySelectorAll('[data-bl-si-blur]').forEach(el => {
-      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; _clearMaskAttrs(el); }
+      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; }
     });
     const shadowRoots = stampElements(document, cats, thorough, mode);
     observeRoot(document);
@@ -1015,7 +1133,7 @@ const BlurEngine = (() => {
 
     injectRules(shadowRoot, cats, mode);
     shadowRoot.querySelectorAll('[data-bl-si-blur]').forEach(el => {
-      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; _clearMaskAttrs(el); }
+      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; }
     });
     const nested = stampElements(shadowRoot, cats, thorough, mode);
     observeRoot(shadowRoot);
@@ -1134,6 +1252,13 @@ const BlurEngine = (() => {
       // persist when blur-all is off.
       const { added, removed } = _reconcileItems(settings.blur_items || []);
 
+      // idempotent: re-inject on every call so mode/color changes take effect without a DOM pass
+      if (settings.pick_blur_enabled && (settings.blur_items || []).length > 0) {
+        injectPickBlurRules(document, settings.pick_blur_type, settings.pick_blur_color);
+      } else {
+        removePickBlurRules(document);
+      }
+
       if (blsi.Logger && blsi.Logger.enabled) {
         blsi.Logger.scope('engine').flow('handleSite', {
           active: isActive,
@@ -1160,6 +1285,8 @@ const BlurEngine = (() => {
     // Do NOT call from content_script, popup, picker, or reveal — use handleSite().
     injectRules,
     removeRules,
+    injectPickBlurRules,
+    removePickBlurRules,
     isBlurAllActive,
     stampElements,
     tryBlurTextCheck,
@@ -1182,6 +1309,10 @@ const BlurEngine = (() => {
     removeZoneOverlay,
     getZoneOverlays,
     removeAllZoneOverlays,
+
+    // PII mode CSS injection
+    injectPiiRules,
+    removePiiRules,
 
     // Utilities
     ensureSvgFilter,

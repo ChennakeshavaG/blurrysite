@@ -1,0 +1,536 @@
+<!-- BlurrySite Perf Fixture: page-pii-rich | pii_detector.scan stress test -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PII Rich — BlurrySite Perf Fixture</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+    section { margin-bottom: 40px; border-top: 2px solid #333; padding-top: 20px; }
+    .pii-group { margin-bottom: 8px; line-height: 2; }
+    span { font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>PII Detector Stress Test</h1>
+  <div id="perf-meta" data-fixture="pii-rich" data-isolated-spans="3400" data-inline-paragraphs="600"></div>
+
+  <section id="section-a">
+    <h2>Section A — Isolated Patterns</h2>
+    <div id="section-a-content"></div>
+  </section>
+
+  <section id="section-b">
+    <h2>Section B — Inline Prose</h2>
+    <div id="section-b-content"></div>
+  </section>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ── Section A data pools ────────────────────────────────────────────────
+
+      // 1500 emails — varied local parts, domains, TLDs
+      var emailLocalParts = [
+        'user','admin','john.doe','jane.smith','alice','bob','carol','dave',
+        'eve','frank','grace','heidi','ivan','judy','karl','laura','mike',
+        'nancy','oscar','pat','quinn','rose','sam','tina','ulrich','vera',
+        'will','xena','yusuf','zoe','support','sales','billing','info',
+        'contact','noreply','helpdesk','ops','dev','cto','ceo','hr','legal',
+        'team','recruiting','finance','marketing','engineering','product',
+        'data','security','compliance','audit','accounts','payroll','it',
+        'webmaster','postmaster','abuse','hostmaster','root','sysadmin',
+        'api','service','bot','notify','alerts','reports','newsletter',
+        'press','media','investor','partners','affiliates','vendors',
+        'j.doe','a.smith','b.jones','c.brown','d.wilson','e.taylor',
+        'f.moore','g.anderson','h.thomas','i.jackson','j.white','k.harris',
+        'l.martin','m.garcia','n.martinez','o.robinson','p.clark','q.rodriguez',
+        'r.lewis','s.lee','t.walker','u.hall','v.allen','w.young','x.hernandez',
+        'y.king','z.wright','first.last','firstname.lastname','fl123','abc456',
+        'xyz789','test123','demo456','sample789','admin2024','user2025',
+        'contact2024','support2025','info2024'
+      ];
+      var emailDomains = [
+        'company.com','example.org','test-domain.net','acme.io','corp.co',
+        'firm.biz','startup.io','enterprise.com','business.net','agency.org',
+        'mycompany.com','yourfirm.net','thebusiness.org','techcorp.io',
+        'globalfirm.com','localshop.net','bigcorp.biz','newstartup.co',
+        'consultants.com','partners.org','solutions.net','systems.io',
+        'services.com','digital.agency','cloudco.net','datahouse.org',
+        'analytics.io','platform.com','network.net','media.co',
+        'finance-group.com','health-services.org','edu-institute.net',
+        'research-lab.io','manufacturing.com','logistics-co.net',
+        'retail-brand.org','wholesale.biz','insurance-co.com','bank-group.net'
+      ];
+
+      function makeEmail(i) {
+        var local = emailLocalParts[i % emailLocalParts.length];
+        var domain = emailDomains[Math.floor(i / emailLocalParts.length) % emailDomains.length];
+        // Add numeric suffix when cycling through to keep uniqueness
+        var suffix = (Math.floor(i / (emailLocalParts.length * emailDomains.length)) > 0)
+          ? (Math.floor(i / (emailLocalParts.length * emailDomains.length)) + 1)
+          : '';
+        return local + suffix + '@' + domain;
+      }
+
+      // 500 phone-like tokens
+      var phoneFmts = [
+        function(n) {
+          var area = 200 + (n % 800);
+          var mid = 100 + ((n * 7) % 900);
+          var last = 1000 + ((n * 13) % 9000);
+          return area + '-' + mid + '-' + last;
+        },
+        function(n) {
+          var area = 200 + (n % 800);
+          var mid = 100 + ((n * 7) % 900);
+          var last = 1000 + ((n * 13) % 9000);
+          return '(' + area + ') ' + mid + '-' + last;
+        },
+        function(n) {
+          var area = 200 + (n % 800);
+          var mid = 100 + ((n * 7) % 900);
+          var last = 1000 + ((n * 13) % 9000);
+          return '+1-' + area + '-' + mid + '-' + last;
+        },
+        function(n) {
+          var area = 200 + (n % 800);
+          var mid = 100 + ((n * 7) % 900);
+          var last = 1000 + ((n * 13) % 9000);
+          return '+44 ' + area + ' ' + mid + ' ' + last;
+        },
+        function(n) {
+          var a = 70000 + ((n * 17) % 30000);
+          var b = 10000 + ((n * 11) % 89999);
+          return '+91 ' + a + ' ' + b;
+        }
+      ];
+      function makePhone(i) {
+        return phoneFmts[i % phoneFmts.length](i);
+      }
+
+      // 500 currency amounts
+      var currencyFmts = [
+        function(n) {
+          var val = ((n + 1) * 137) % 100000;
+          return '$' + val.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+        },
+        function(n) {
+          var val = ((n + 1) * 211) % 200000;
+          return '€' + val.toLocaleString('de-DE');
+        },
+        function(n) {
+          var val = ((n + 1) * 307) % 1000000;
+          return '₹' + val.toLocaleString('en-IN');
+        },
+        function(n) {
+          var val = ((n + 1) * 173) % 50000;
+          return '£' + val.toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2});
+        },
+        function(n) {
+          var val = ((n + 1) * 251) % 500000;
+          return '¥' + val.toLocaleString('ja-JP');
+        }
+      ];
+      function makeCurrency(i) {
+        var raw = currencyFmts[i % currencyFmts.length](i);
+        // Ensure commas are present for large numbers; fallback for environments without toLocaleString
+        return raw;
+      }
+
+      // 500 comma-grouped numbers (raw, no currency symbol)
+      function makeCommaNumber(i) {
+        var val = 10000 + ((i + 1) * 1237) % 9990000;
+        // Format with commas manually for reliability
+        var s = String(val);
+        var result = '';
+        var start = s.length % 3 || 3;
+        result = s.slice(0, start);
+        for (var p = start; p < s.length; p += 3) {
+          result += ',' + s.slice(p, p + 3);
+        }
+        return result;
+      }
+
+      // 150 version strings (suppressed — should NOT match PII numeric)
+      var versionPool = [
+        'v1.0.0','v1.2.3','v2.0.0','v2.1.0','v2.14.0','v3.0.0','v3.1.4',
+        'v4.0.1','v5.2.0','v6.0.0','v7.3.1','v8.0.0','v9.1.2','v10.0.1',
+        'v10.2.0','v11.0.0','v12.3.4','v13.0.0','v14.1.0','v15.0.2',
+        '1.0.0','2.0.0','2.3.1','3.0.0','3.2.1','4.0.0','4.1.2',
+        '5.0.0','6.1.0','7.0.0','8.2.3','9.0.1','10.0.0','11.2.0',
+        'v0.1.0','v0.2.3','v0.9.0','v0.10.0','v1.0.0-beta','v2.0.0-rc1',
+        'v3.0.0-alpha','v4.0.0-preview','v1.2.3-patch1','v2.0.1-hotfix'
+      ];
+      function makeVersion(i) {
+        return versionPool[i % versionPool.length];
+      }
+
+      // 150 public prices (suppressed)
+      var publicPrices = [
+        '$9.99/month','$19.99/month','$29.99/month','$49.99/month','$99.99/month',
+        '$4.99/month','$14.99/month','$39.99/month','$79.99/month','$149.99/month',
+        '€9.99/month','€19.99/month','€29.99/month','€49/month','€99/month',
+        '$9/year','$99/year','$199/year','$299/year','$499/year',
+        '€29/year','€49/year','€99/year','€199/year','€299/year',
+        '$9.99/yr','$19.99/yr','$49.99/yr','$99/yr','$199/yr',
+        '£7.99/month','£14.99/month','£29.99/month','£49.99/month','£9.99/yr',
+        '$1.99/week','$4.99/week','$9.99/week','$19.99/week','$0.99/day',
+        '€1.99/week','€4.99/week','¥980/month','¥1980/month','¥9800/year'
+      ];
+      function makePublicPrice(i) {
+        return publicPrices[i % publicPrices.length];
+      }
+
+      // 100 engagement counts (suppressed)
+      var engagementSuffixes = [
+        ' followers',' likes',' views',' subscribers',' shares',
+        ' comments',' retweets',' reactions',' upvotes',' downloads'
+      ];
+      function makeEngagement(i) {
+        var val = 100 + ((i + 1) * 317) % 9900;
+        var s = String(val);
+        var formatted = '';
+        var start = s.length % 3 || 3;
+        formatted = s.slice(0, start);
+        for (var p = start; p < s.length; p += 3) {
+          formatted += ',' + s.slice(p, p + 3);
+        }
+        return formatted + engagementSuffixes[i % engagementSuffixes.length];
+      }
+
+      // ── Section A builder ───────────────────────────────────────────────────
+
+      var secAContainer = document.getElementById('section-a-content');
+      var aSpans = [];
+
+      // Helper: append groups of 10 spans as <p class="pii-group">
+      function appendSpanGroup(tokens, startIdx) {
+        var CHUNK = 10;
+        for (var i = 0; i < tokens.length; i += CHUNK) {
+          var p = document.createElement('p');
+          p.className = 'pii-group';
+          var chunk = tokens.slice(i, i + CHUNK);
+          for (var j = 0; j < chunk.length; j++) {
+            var sp = document.createElement('span');
+            sp.textContent = chunk[j];
+            p.appendChild(sp);
+            if (j < chunk.length - 1) {
+              p.appendChild(document.createTextNode(' '));
+            }
+            aSpans.push(sp);
+          }
+          secAContainer.appendChild(p);
+        }
+      }
+
+      // Emails — 1500
+      var emailTokens = [];
+      for (var i = 0; i < 1500; i++) emailTokens.push(makeEmail(i));
+      appendSpanGroup(emailTokens);
+
+      // Phone-like — 500
+      var phoneTokens = [];
+      for (var i = 0; i < 500; i++) phoneTokens.push(makePhone(i));
+      appendSpanGroup(phoneTokens);
+
+      // Currency — 500
+      var currencyTokens = [];
+      for (var i = 0; i < 500; i++) currencyTokens.push(makeCurrency(i));
+      appendSpanGroup(currencyTokens);
+
+      // Comma-grouped numbers — 500
+      var commaNumTokens = [];
+      for (var i = 0; i < 500; i++) commaNumTokens.push(makeCommaNumber(i));
+      appendSpanGroup(commaNumTokens);
+
+      // Version strings (suppressed) — 150
+      var versionTokens = [];
+      for (var i = 0; i < 150; i++) versionTokens.push(makeVersion(i));
+      appendSpanGroup(versionTokens);
+
+      // Public prices (suppressed) — 150
+      var priceTokens = [];
+      for (var i = 0; i < 150; i++) priceTokens.push(makePublicPrice(i));
+      appendSpanGroup(priceTokens);
+
+      // Engagement counts (suppressed) — 100
+      var engTokens = [];
+      for (var i = 0; i < 100; i++) engTokens.push(makeEngagement(i));
+      appendSpanGroup(engTokens);
+
+      // ── Section B data pools ────────────────────────────────────────────────
+
+      var secBContainer = document.getElementById('section-b-content');
+
+      // Email pools for prose
+      var proseMails = [
+        'john@acme.com','alice@corp.com','bob@firm.org','carol@startup.io',
+        'david@enterprise.net','emma@consultants.com','frank@agency.biz',
+        'grace@solutions.net','henry@platform.io','iris@cloudco.com',
+        'james@datahouse.org','karen@analytics.io','leon@techcorp.com',
+        'maria@globalfirm.net','nick@services.co','olivia@partners.org',
+        'peter@systems.net','quinn@media.agency','rachel@finance-group.com',
+        'steve@health-services.org','tanya@research-lab.io','uma@logistics-co.net',
+        'victor@retail-brand.org','wendy@manufacturing.com','xander@wholesale.biz',
+        'yasmin@insurance-co.com','zach@bank-group.net','support@helpdesk.io',
+        'billing@accounts.com','legal@compliance.org','ops@devteam.net',
+        'cto@bigcorp.io','ceo@newstartup.co','hr@recruiting.com',
+        'admin2@corp.net','info2@agency.org','press@media.co',
+        'vendor@suppliers.net','partner@affiliate.com','audit@compliance.biz',
+        'payroll@finance.org','security@infosec.io','data@analytics.com',
+        'api@services.net','notify@alerts.io','reports@dashboard.com',
+        'newsletter@marketing.org','webmaster@website.net','postmaster@mail.co',
+        'noreply@notifications.com','investor@relations.org'
+      ];
+
+      // Phone pool for prose
+      var prosePhones = [
+        '415-555-0192','(800) 555-0100','+1-888-555-0143','212-555-0187',
+        '(650) 555-0234','+44 20 7946 0958','(312) 555-0167','(713) 555-0199',
+        '+91 98765 43210','(404) 555-0211','+1-415-555-0178','(206) 555-0145',
+        '(202) 555-0132','(617) 555-0176','+1-800-555-0123','(702) 555-0188',
+        '(305) 555-0165','(214) 555-0143','+1-877-555-0199','(503) 555-0121'
+      ];
+
+      // Currency pool for prose
+      var proseCurrencies = [
+        '$12,450.00','$4,567,890','$8,750.50','€8,750.50','$125,000.00',
+        '$45,000','€18,500','£32,000','₹1,50,000','¥450,000',
+        '$3,200.00','€5,600','$99,000','£12,000','$250,000',
+        '€75,000','$1,200,000','£450,000','₹45,00,000','$67,800.00'
+      ];
+
+      // Invoice/reference IDs for prose
+      var invoiceIds = [
+        'INV-2024-00123','INV-2024-00456','INV-2024-00789','INV-2025-01011',
+        'ACC-998-2341','ACC-112-5543','REF-2024-99001','REF-2025-00342',
+        'TXN-8834-2024','TXN-9912-2025','ORD-20240115','ORD-20250301',
+        'CASE-2024-3344','CASE-2025-1122','PO-20240901','PO-20251015',
+        'ACCT-334-XY','ACCT-556-ZW','CONTRACT-2024-001','CONTRACT-2025-042'
+      ];
+
+      // Date strings for prose
+      var proseDates = [
+        '2024-03-15','2024-06-30','2024-12-31','2025-01-15','2025-03-01',
+        '2025-06-30','2024-09-30','2025-09-15','2024-04-01','2025-12-31',
+        '15/03/2024','30/06/2024','01/01/2025','31/12/2025','15/09/2024'
+      ];
+
+      // Filler sentence fragments for prose
+      var fillerStart = [
+        'Please reach out to','You can contact our team member','For inquiries email',
+        'The primary contact is','Our billing department contact is',
+        'Customer service representative','The account manager is',
+        'Please direct all questions to','The authorized signatory is',
+        'The registered email address for this account is',
+        'All correspondence should be sent to','For support, contact',
+        'The designated point of contact is','As confirmed by',
+        'Your assigned consultant is','The project lead is',
+        'Our compliance officer can be reached at','The finance team contact is',
+        'Escalation contact:','Technical liaison:',
+        'The vendor representative is','The client contact is'
+      ];
+
+      var fillerMid = [
+        'for further assistance.','to schedule a meeting.',
+        'regarding this matter.','to resolve this issue.',
+        'for account inquiries.','for billing questions.',
+        'before the deadline.','as soon as possible.',
+        'at your earliest convenience.','during business hours.',
+        'for more information.','to confirm the details.',
+        'to process your request.','to complete the transaction.',
+        'for compliance purposes.'
+      ];
+
+      var fillerTransfer = [
+        'A wire transfer of','The payment amount is','Invoice total:',
+        'The outstanding balance is','Credit issued:','Debit applied:',
+        'Funds transferred:','Amount due:','Total invoiced:','Net amount:'
+      ];
+
+      var fillerAccount = [
+        'from account','to account','via account','charged to account',
+        'credited to account','debited from account','linked to account',
+        'associated with reference','under reference','tagged as reference'
+      ];
+
+      var fillerVersion = [
+        'see release notes for version','as documented in','fixed in version',
+        'introduced in version','deprecated in version','available since version',
+        'upgraded to version','rolled back to version','patched in version',
+        'regression identified in version'
+      ];
+
+      var fillerEngagement = [
+        'The post received','This article has','The video reached','Total engagement:',
+        'Current count:','Reported metric:','Dashboard shows','Analytics report:',
+        'Last 30 days:','This quarter:'
+      ];
+
+      var sentenceClosings = [
+        'Please confirm receipt.','Kindly acknowledge.','Let us know if you have questions.',
+        'Action required by end of day.','No response needed.',
+        'Please process at your earliest convenience.','Thank you for your cooperation.',
+        'Regards,','Best wishes,','Kind regards,'
+      ];
+
+      function pick(arr, seed) {
+        return arr[Math.abs(seed) % arr.length];
+      }
+
+      // Paragraph template types for variety
+      // Each type specifies a builder function
+      var paraBuilders = [
+
+        // Type 0: email + phone
+        function(idx) {
+          var email1 = pick(proseMails, idx);
+          var email2 = pick(proseMails, idx + 7);
+          var phone = pick(prosePhones, idx);
+          return pick(fillerStart, idx) + ' ' + email1 + ' at ' + phone +
+            '. Alternatively, CC ' + email2 + ' ' + pick(fillerMid, idx) + ' ' +
+            pick(sentenceClosings, idx);
+        },
+
+        // Type 1: currency + account reference
+        function(idx) {
+          var amount = pick(proseCurrencies, idx);
+          var ref = pick(invoiceIds, idx);
+          var amount2 = pick(proseCurrencies, idx + 3);
+          return pick(fillerTransfer, idx) + ' ' + amount + ' ' +
+            pick(fillerAccount, idx) + ' ' + ref + '. An additional charge of ' +
+            amount2 + ' was applied. ' + pick(sentenceClosings, idx + 1);
+        },
+
+        // Type 2: multiple emails
+        function(idx) {
+          var e1 = pick(proseMails, idx);
+          var e2 = pick(proseMails, idx + 11);
+          var e3 = pick(proseMails, idx + 23);
+          var e4 = pick(proseMails, idx + 37);
+          return 'CC: ' + e1 + ', ' + e2 + ', ' + e3 + '. Primary recipient: ' +
+            e4 + '. ' + pick(fillerMid, idx) + ' ' + pick(sentenceClosings, idx + 2);
+        },
+
+        // Type 3: numeric + suppression mixed
+        function(idx) {
+          var amount = pick(proseCurrencies, idx);
+          var ver = pick(versionPool, idx);
+          var eng = makeEngagement(idx % 100);
+          var email = pick(proseMails, idx);
+          return 'Revenue increased to ' + amount + ' following the ' + ver +
+            ' release. ' + pick(fillerStart, idx + 3) + ' ' + email +
+            ' for the full breakdown. The announcement generated ' + eng + '.';
+        },
+
+        // Type 4: invoice + amount + date
+        function(idx) {
+          var inv = pick(invoiceIds, idx);
+          var amount = pick(proseCurrencies, idx);
+          var date = pick(proseDates, idx);
+          var email = pick(proseMails, idx);
+          return 'Invoice ' + inv + ', amount ' + amount + ', due ' + date +
+            '. For queries, contact ' + email + '. ' + pick(sentenceClosings, idx + 3);
+        },
+
+        // Type 5: email + currency + version mention
+        function(idx) {
+          var email = pick(proseMails, idx);
+          var amount = pick(proseCurrencies, idx);
+          var ver = pick(versionPool, idx + 5);
+          return 'The renewal quote for ' + email + ' has been updated to ' +
+            amount + ' annually. This pricing applies from ' + ver + ' onwards. ' +
+            pick(fillerMid, idx + 2);
+        },
+
+        // Type 6: phone + currency + reference
+        function(idx) {
+          var phone = pick(prosePhones, idx);
+          var amount = pick(proseCurrencies, idx);
+          var ref = pick(invoiceIds, idx + 4);
+          return 'Call ' + phone + ' to dispute charge of ' + amount +
+            '. Reference number: ' + ref + '. ' + pick(sentenceClosings, idx + 4);
+        },
+
+        // Type 7: double email + double currency
+        function(idx) {
+          var e1 = pick(proseMails, idx);
+          var e2 = pick(proseMails, idx + 19);
+          var a1 = pick(proseCurrencies, idx);
+          var a2 = pick(proseCurrencies, idx + 5);
+          return 'Transfer of ' + a1 + ' approved by ' + e1 + '. Counterparty ' +
+            e2 + ' confirmed receipt. Net settlement: ' + a2 + '. ' +
+            pick(sentenceClosings, idx + 5);
+        },
+
+        // Type 8: version + engagement + email
+        function(idx) {
+          var ver = pick(versionPool, idx + 3);
+          var eng1 = makeEngagement(idx % 100);
+          var eng2 = makeEngagement((idx + 30) % 100);
+          var email = pick(proseMails, idx);
+          return 'The ' + ver + ' changelog post reached ' + eng1 + ' and ' +
+            eng2 + '. ' + pick(fillerStart, idx + 5) + ' ' + email +
+            ' for media inquiries. ' + pick(sentenceClosings, idx + 6);
+        },
+
+        // Type 9: multi-line data record style
+        function(idx) {
+          var e1 = pick(proseMails, idx);
+          var phone = pick(prosePhones, idx + 3);
+          var amount = pick(proseCurrencies, idx + 2);
+          var ref = pick(invoiceIds, idx + 6);
+          var date = pick(proseDates, idx + 2);
+          return 'Account: ' + e1 + ' | Phone: ' + phone + ' | Amount: ' +
+            amount + ' | Ref: ' + ref + ' | Date: ' + date + '.';
+        },
+
+        // Type 10: narrative with 3 emails
+        function(idx) {
+          var e1 = pick(proseMails, idx);
+          var e2 = pick(proseMails, idx + 13);
+          var e3 = pick(proseMails, idx + 29);
+          var amount = pick(proseCurrencies, idx + 1);
+          return 'The proposal was reviewed by ' + e1 + '. Budget approval came from ' +
+            e2 + ' for a total of ' + amount + '. Final sign-off provided by ' + e3 + '. ' +
+            pick(sentenceClosings, idx + 7);
+        },
+
+        // Type 11: currency + phone + date
+        function(idx) {
+          var amount = pick(proseCurrencies, idx + 4);
+          var phone = pick(prosePhones, idx + 7);
+          var date = pick(proseDates, idx + 4);
+          var email = pick(proseMails, idx + 6);
+          return 'A payment of ' + amount + ' is expected by ' + date +
+            '. Contact ' + phone + ' or email ' + email + ' to arrange settlement. ' +
+            pick(sentenceClosings, idx + 8);
+        },
+
+        // Type 12: suppression + real PII mixed
+        function(idx) {
+          var price = pick(publicPrices, idx % publicPrices.length);
+          var e1 = pick(proseMails, idx);
+          var e2 = pick(proseMails, idx + 17);
+          var eng = makeEngagement(idx % 100);
+          return 'The subscription plan at ' + price + ' was discussed with ' + e1 +
+            '. The campaign managed by ' + e2 + ' has accumulated ' + eng + '. ' +
+            pick(sentenceClosings, idx + 9);
+        }
+      ];
+
+      // Build 600 paragraphs for Section B
+      for (var i = 0; i < 600; i++) {
+        var builder = paraBuilders[i % paraBuilders.length];
+        var text = builder(i);
+        var p = document.createElement('p');
+        p.textContent = text;
+        secBContainer.appendChild(p);
+      }
+
+    })();
+  </script>
+</body>
+</html>

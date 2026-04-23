@@ -99,4 +99,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // async sendResponse
   }
+
+  // ── Screen share relay — fan out to other tabs ─────────────────────────
+  // Stateless: no module-level Set (service worker can sleep between events).
+  // On STARTED: blur all tabs except the one sharing.
+  // On ENDED: unblur every tab (each checks its own screen_share.enabled setting).
+  if (message && message.type === blsi.command.screen_share_started) {
+    const senderTabId = sender.tab && sender.tab.id;
+    chrome.tabs.query({}, (tabs) => {
+      for (const tab of tabs) {
+        if (tab.id && tab.id !== senderTabId) {
+          chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_blur }).catch(() => {});
+        }
+      }
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message && message.type === blsi.command.screen_share_ended) {
+    chrome.tabs.query({}, (tabs) => {
+      for (const tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_unblur }).catch(() => {});
+        }
+      }
+    });
+    sendResponse({ ok: true });
+    return true;
+  }
 });

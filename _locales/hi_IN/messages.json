@@ -192,12 +192,6 @@
   "setting_idle_timeout_hint": {
     "message": "ऑटो-धुंधलापन शुरू होने से पहले निष्क्रियता के सेकंड।"
   },
-  "setting_blur_timer": {
-    "message": "धुंधलापन टाइमर"
-  },
-  "setting_blur_timer_hint": {
-    "message": "इतने मिनट बाद धुंधलापन ऑटो-क्लियर करें। 0 = बंद।"
-  },
   "reveal_click": {
     "message": "क्लिक से झलक"
   },
@@ -588,9 +582,6 @@
   "pii_chip_asterisked": {
     "message": "Asterisked"
   },
-  "automate_timer": {
-    "message": "Timer"
-  },
   "automate_idle": {
     "message": "Idle"
   },
@@ -633,7 +624,10 @@
   "mode_switch_confirm": {
     "message": "मोड बदलने से $COUNT$ सहेजा गया धुंधलापन हट जाएगा। जारी रखें?",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "mode_switch_btn": {
@@ -660,7 +654,10 @@
   "mode_pick_item_count": {
     "message": "$COUNT$ आइटम",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "tooltip_mode_dynamic": {
@@ -671,24 +668,6 @@
   },
   "tooltip_mode_sticky_screen": {
     "message": "स्क्रीन पर स्थिर धुंधला क्षेत्र बनाएं"
-  },
-  "automate_timer_start": {
-    "message": "Start"
-  },
-  "automate_timer_stop": {
-    "message": "Stop"
-  },
-  "automate_timer_remaining": {
-    "message": "⏱ $TIME$ remaining",
-    "placeholders": {
-      "time": { "content": "$1", "example": "4:32" }
-    }
-  },
-  "automate_timer_triggered": {
-    "message": "Triggered"
-  },
-  "automate_timer_min_error": {
-    "message": "Minimum is 30 s"
   },
   "automate_idle_max_warn": {
     "message": "Max is 50 min (Chrome API limit)"

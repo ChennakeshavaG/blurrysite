@@ -2,8 +2,8 @@ const BlurrySitePopupUI = (() => {
   'use strict';
 
   // ── Theme ────────────────────────────────────────────────────────────────
-  const LOGO_DARK     = '../icons/icon-dark.png';
-  const LOGO_LIGHT    = '../icons/icon-light.png';
+  const LOGO_DARK     = '../icons/logo-dark.png';
+  const LOGO_LIGHT    = '../icons/logo-light.png';
   const LOGO_FALLBACK = '../icons/icon48.png';
 
   const _SVG_SUN  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
@@ -109,30 +109,7 @@ const BlurrySitePopupUI = (() => {
   function updateClearAll(settings, blurItems, isPageBlurred) {
     const btn = document.getElementById('bl-clear-all');
     if (!btn || !settings) return;
-    // When pick_blur_enabled is the expanded mode the relevant item is blurItems;
-    // otherwise (blur-all expanded) check isPageBlurred.
     btn.disabled = !isPageBlurred && blurItems.length === 0;
-  }
-
-  // ── Timer countdown ───────────────────────────────────────────────────────
-  let _countdownInterval = null;
-
-  function startCountdown(timer, onExpire) {
-    if (_countdownInterval) return; // already running
-    BlurrySitePopupRender.updateTimerCountdown(timer); // immediate tick
-    _countdownInterval = setInterval(() => {
-      const stillRunning = BlurrySitePopupRender.updateTimerCountdown(timer);
-      if (!stillRunning) {
-        clearInterval(_countdownInterval);
-        _countdownInterval = null;
-        if (onExpire) onExpire();
-      }
-    }, 1000);
-  }
-
-  function stopCountdown() {
-    clearInterval(_countdownInterval);
-    _countdownInterval = null;
   }
 
   return {
@@ -142,7 +119,6 @@ const BlurrySitePopupUI = (() => {
     renderPowerButton,
     showView,
     updateClearAll,
-    startCountdown, stopCountdown,
   };
 })();
 

@@ -17,7 +17,8 @@ popup/
   popup.css           — all popup styles (mode blocks, chips, sliders, toasts, etc.)
   theme.css           — CSS custom properties (dark/light tokens)
   renders/
-    main.js           — BlurrySitePopupRender: renderAll + updateTimerCountdown
+    shared.js         — BlurrySitePopupShared: t, makeToggle, updateFill, makeDivider
+    main.js           — BlurrySitePopupRender: renderAll
     howtoblur.js      — BlurrySitePopupRenderHtb: HTB sub-page body
     automate.js       — BlurrySitePopupRenderAutomate: Automate sub-page body
     keyboard.js       — BlurrySitePopupRenderShortcuts: Shortcuts sub-page body
@@ -45,6 +46,7 @@ theme.css → popup.css → renders/howtoblur.css → renders/automate.css
 ../src/shortcut_label.js
 ../src/url_matcher.js
 ../src/storage_model.js
+renders/shared.js
 renders/main.js
 renders/howtoblur.js
 renders/automate.js
@@ -63,9 +65,11 @@ popup.js            ← coordinator loads last
 
 | File | Window global | Role |
 |---|---|---|
+| `renders/shared.js` | `BlurrySitePopupShared` | shared helpers: `t`, `makeToggle`, `updateFill`, `makeDivider` |
 | `popup_state.js` | `BlurrySitePopupState` | state owner |
 | `popup_ui.js` | `BlurrySitePopupUI` | DOM helpers |
 | `renders/main.js` | `BlurrySitePopupRender` | main renderer |
+
 | `renders/howtoblur.js` | `BlurrySitePopupRenderHtb` | HTB sub-page |
 | `renders/automate.js` | `BlurrySitePopupRenderAutomate` | Automate sub-page |
 | `renders/keyboard.js` | `BlurrySitePopupRenderShortcuts` | Shortcuts sub-page |
@@ -107,19 +111,13 @@ applyI18n()                                       // walk [data-i18n] elements
 renderPowerButton(enabled)                        // toggle power class + show/hide main/off views
 showView(viewId, isEnabled)                       // see Navigation section below
 updateClearAll(settings, blurItems, isPageBlurred)
-startCountdown(timer, onExpire)                   // idempotent — no-op if already running
-stopCountdown()
 ```
 
 ### BlurrySitePopupRender (renders/main.js)
 
 ```js
-renderAll(settings, blurItems, isPageBlurred, expandedMode)
+renderAll(settings, blurItems, isPageBlurred)
   // Renders modes block, PII section, automate section. Called after every state change.
-  // expandedMode: 'blur-all' | 'pick-blur' — which accordion block is expanded (UI-only, not persisted).
-
-updateTimerCountdown(timer)
-  // Updates #bl-automate-timer-val. Returns true if still counting, false if expired.
 ```
 
 ### Sub-page renderers (renders/*.js)
@@ -174,8 +172,7 @@ chrome.storage.onChanged fires in content_script → blsi.Model.on_change → ha
   ↓
 _renderCurrent()
   ├─ BlurrySitePopupRender.renderAll(...)
-  ├─ UI.updateClearAll(...)
-  └─ UI.startCountdown(...) or UI.stopCountdown()
+  └─ UI.updateClearAll(...)
 ```
 
 Content scripts react to storage changes automatically via `blsi.Model.on_change()` — there is no explicit tab notification step. `popup.js` has two save helpers:
@@ -214,14 +211,12 @@ Each mode block declares `--bl-mode-accent` (indigo for blur-all, purple for pic
 
 ### Separator bars
 
-Use empty `<span class="bl-compact-sep">` or `<span class="bl-opt-sep">` — CSS renders the 2px bar. Do not use the `|` character as a text separator.
+Use empty `<span class="bl-opt-sep">` — CSS renders the 2px bar. Do not use the `|` character as a text separator.
 
-### State classes on mode blocks
+### Mode block variant classes
 
 | Class | Meaning |
 |---|---|
-| `bl-mode-block--expanded` | currently expanded accordion block |
-| `bl-mode-block--collapsed` | collapsed block (click to expand) |
 | `bl-mode-block--blur-all` | blur-all mode (indigo accent) |
 | `bl-mode-block--pick-blur` | pick-blur mode (purple accent) |
 
@@ -243,9 +238,6 @@ No hardcoded user-visible strings. Keys live in `_locales/en/messages.json` (sou
 ### string_lint.js allow-list
 If a new file introduces a `"v"` version prefix or toast key string that triggers the linter, add an entry to `ALLOW_LIST` in `scripts/string_lint.js`. Do not suppress the linter globally.
 
-### Countdown is idempotent
-`UI.startCountdown(timer, onExpire)` is a no-op if the interval is already running. Call it freely inside `_renderCurrent()` — it will not create duplicate intervals.
-
 ### Mode switching clears items
 `_doModeSwitch(newMode)` wipes `_blurItems` and calls `_renderCurrent()`. Before switching, `_showSwitchDialog` confirms with the user if items exist.
 
@@ -261,4 +253,4 @@ Run after any popup change:
 npm run test:unit
 ```
 
-Expected: **638 passing**.
+Expected: **656 passing**.

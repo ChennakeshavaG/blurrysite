@@ -23,18 +23,19 @@ Every source file exposes exactly one window global. Using the wrong name causes
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_MODEL` (no shortcuts — built lazily), `reveal_dfs_max_depth`, `modifier_codes`, `is_valid()`, `category_of()`, `build_default_model()`, `validate_model()`, `isValidShortcutEntry()`, `deep_merge()`. Enums: `reveal_modes`, `blur_modes`, `picker_modes`, `pick_blur_modes`, `pii_modes`, `timer_units`, `idle_units`, `pattern_types`, `SUPPORTED_LANGUAGES`, `css`, `ids` |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_MODEL` (no shortcuts — built lazily), `reveal_dfs_max_depth`, `modifier_codes`, `is_valid()`, `category_of()`, `build_default_model()`, `validate_model()`, `isValidShortcutEntry()`, `deep_merge()`. Enums: `reveal_modes`, `blur_modes`, `picker_modes`, `pick_blur_modes`, `pii_modes`, `idle_units`, `pattern_types`, `SUPPORTED_LANGUAGES`, `css`, `ids` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; everything else gated. `scope(name)` returns a tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
-| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `get_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage` directly (no background relay) |
+| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `get_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `save_automate_blur`, `patch_automate_blur`, `clear_automate_blur`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage` directly (no background relay) |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
 | `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all |
-| `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
-| `src/blur_timer.js` | `blsi.BlurTimer` | `start(minutes, onExpire)`, `stop()`, `getRemaining()`, `isActive()` — countdown timer that fires `onExpire` when elapsed |
+| `src/fonts.js` | `blsi.Fonts` | `FONT_FACE` — base64-encoded `@font-face` string for `"bl-si-redact-asterisk"` (text-security-disc, OFL-1.1). Used by `blur_engine` for masked / asterisked modes. |
+| `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `injectPiiRules(mode)`, `removePiiRules()`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
+| `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()` — detects `getDisplayMedia()` calls in the page's MAIN world; sends `SCREEN_SHARE_STARTED`/`SCREEN_SHARE_ENDED` to background which fans out `SCREEN_SHARE_BLUR`/`SCREEN_SHARE_UNBLUR` to other tabs |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
 | `src/shortcut_handler.js` | `blsi.Shortcuts` | `init(shortcuts, callbacks)` — accepts `{ 'action-id': { binding: [{code, mods}] } }` shape (kebab-case action ids). `destroy`, `showToast`, `_setPickerActive`, `_getFireToken` (for content_script dedup). Reads mods from event booleans (side-agnostic). Reads label from `blsi.Actions.get(id).label` for toast. |
 | `src/selection_blur.js` | `blsi.SelectionBlur` | `init()`, `destroy()`, `blurSelection()`, `clearAll()`, `getSelectionBlurs()`, `removeSelectionBlur(id)` — text-selection driven blur via `[data-bl-si-blur]` spans. `blurSelection()` takes no args; reads `document.getSelection()` internally. |
@@ -42,7 +43,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii_detector → blur_engine → blur_timer → auto_blur → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii_detector → fonts → blur_engine → auto_blur → screen_share → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -62,6 +63,15 @@ Any mismatch between sender message type and background.js handler silently drop
 | Page load complete | `RESTORE` |
 | Context menu blur | `CONTEXT_BLUR` |
 | Context menu unblur | `CONTEXT_UNBLUR` |
+| Screen share active (fan-out to other tabs) | `SCREEN_SHARE_BLUR` |
+| Screen share ended (fan-out to all tabs) | `SCREEN_SHARE_UNBLUR` |
+
+### content_script.js → background.js (screen share relay)
+
+| Event | Type string |
+|---|---|
+| `getDisplayMedia()` call succeeded in page | `SCREEN_SHARE_STARTED` |
+| All display tracks ended | `SCREEN_SHARE_ENDED` |
 
 ### popup.js → content_script.js
 
@@ -87,6 +97,7 @@ Settings use **snake_case** keys everywhere. There is no two-shape duality — t
   automate:          { status, settings },
   shortcuts,         // per-action shortcut definitions
   site_rules,        // array of URL-rule entries
+  automate_blur,     // per-hostname transient trigger state (see below)
 }
 ```
 
@@ -161,7 +172,7 @@ PII blur is **independent of blur-all**. PII spans carry `[data-bl-si-pii]` only
 
 **`pick_blur_enabled`** — whether Pick & Blur mode is independently enabled: `true` (default) | `false`. Both Blur All and Pick & Blur can be on simultaneously; no "active mode" concept. Persisted to storage.
 
-**`pick_blur_type`** — blur type for Pick & Blur mode: `'gaussian'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'masked'` — those are PII-only types. Use `blsi.pick_blur_modes` enum.
+**`pick_blur_type`** — blur type for Pick & Blur mode: `'gaussian'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'masked'` — not available for Pick & Blur. Use `blsi.pick_blur_modes` enum.
 
 **`pick_blur_color`** — color for Pick & Blur `'color'` type:
 ```js
@@ -175,15 +186,46 @@ pick_and_blur.settings.pick_blur_color = { hex: '#000000', opacity: 1.0 }
 **`automate`** — automation trigger settings (feature-grouped under `automate.settings`):
 ```js
 automate.settings = {
-  timer:      { value: 0, unit: 'min', enabled: false, started_at: null },  // value 0–99; unit from timer_units; started_at: ms timestamp or null
-  idle:       { value: 5, unit: 'min', enabled: false },                    // value 1–99; unit from idle_units (no 'hr')
-  tab_switch: { enabled: false },
+  screen_share: { enabled: false },                   // boolean only — see screen share detection
+  idle:         { value: 5, unit: 'min', enabled: false }, // value 1–99; unit from idle_units (no 'hr')
+  tab_switch:   { enabled: false },
 }
 ```
-- `timer.unit` accepts `blsi.timer_units` (`'sec'` | `'min'` | `'hr'`). `value: 0` means disabled. Practical minimum 30 s — UI validates and rejects < 30 s.
-- `timer.started_at` — ms timestamp (`Date.now()`) set when the user clicks Start in the Automate subpage, `null` when stopped or not yet started. Popup uses this to compute the live countdown. Content script ignores it (uses `enabled` only).
+- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `navigator.mediaDevices.getDisplayMedia` in the page's MAIN world. When a share starts, background fans out `SCREEN_SHARE_BLUR` to all other tabs; those tabs apply a transient blur (no storage write). When sharing ends, background fans out `SCREEN_SHARE_UNBLUR` to all tabs; transient blur is cleared. The sharing tab itself is NOT blurred.
 - `idle.unit` accepts `blsi.idle_units` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `value` min is 1. UI warns when value exceeds 3000 s.
 - `tab_switch.enabled` is boolean only.
+
+### Settings Shape: automate_blur (transient trigger state)
+
+**`automate_blur`** — top-level hostname-keyed object tracking which automate trigger is currently active per site. Never written by user actions — only by automate trigger handlers in `content_script.js`.
+
+```js
+automate_blur = {
+  'gmail.com': { idle: true, tab_switch: false, screen_share: false },
+  'github.com': { idle: false, tab_switch: false, screen_share: true },
+}
+```
+
+Default: `{}` (empty object). Each hostname entry defaults all sub-keys to `false`.
+
+**`blur_all_active` OR logic** — `resolve()` computes:
+```
+manual_blur   = exact.blur_all !== null ? !!exact.blur_all : global_status
+automate_any  = idle || tab_switch || screen_share (from automate_blur[hostname])
+blur_all_active = manual_blur || automate_any
+```
+
+Automate triggers NEVER write `blur_all`. `onActive()` only clears automate_blur sub-keys — manual blur survives when the user returns from idle.
+
+`resolve()` also exposes two derived keys:
+- `resolved.automate_blur_active` — boolean, true if any trigger is active
+- `resolved.automate_blur_triggers` — `{ idle, tab_switch, screen_share }` booleans
+
+`blsi.Model` methods for automate_blur:
+- `save_automate_blur(hostname, trigger, bool)` — write one trigger (`'idle'|'tab_switch'|'screen_share'`)
+- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one storage write
+- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname
+- `clear_host(hostname)` / `clear_all()` — also clear automate_blur atomically
 
 ---
 
@@ -230,7 +272,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 638 unit tests, fast
+npm run test:unit          # 656 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 

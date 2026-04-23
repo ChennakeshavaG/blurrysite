@@ -11,7 +11,13 @@
     "i18n:lint": "node scripts/i18n_lint.js",
     "string:lint": "node scripts/string_lint.js",
     "build": "node build.js",
-    "release": "npm run test:unit && npm run build"
+    "release": "npm run test:unit && npm run build",
+    "test:perf:playwright": "cd tests/perf/playwright && npm install --prefer-offline 2>/dev/null; npm test",
+    "test:perf:fixture": "cd tests/perf/playwright && node run-fixture.js",
+    "test:perf:fixture:headless": "cd tests/perf/playwright && node run-fixture.js --headless",
+    "test:perf:all-fixtures": "cd tests/perf/playwright && node run-all-fixtures.js",
+    "test:perf:all-fixtures:headless": "cd tests/perf/playwright && node run-all-fixtures.js --headless",
+    "test:perf:analysis": "cd tests/perf/playwright && node generate-analysis.js"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -22,5 +28,8 @@
     "jest-environment-jsdom": "^29.7.0",
     "puppeteer": "^23.11.1",
     "puppeteer-core": "^23.11.1"
+  },
+  "dependencies": {
+    "text-security": "^3.2.1"
   }
 }

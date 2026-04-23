@@ -1,17 +1,8 @@
 /**
  * keyboard.js — Shortcuts sub-page body renderer
  *
- * Renders a list of all shortcut actions from blsi.Actions, each with
- * its current binding display, a Change button (activates inline capture
- * mode), and a Reset link.
- *
- * Inline capture mode:
- *   - listens for keydown on document (capture phase)
- *   - records chord = { code, mods } — requires at least one modifier
- *   - shows live chord preview via blsi.ShortcutLabel.chordLabel
- *   - warns if chord is in blsi.ShortcutLabel.RESERVED (does not block)
- *   - Save → calls onSave({ SHORTCUTS: { [action.id]: { binding: [chord] } } })
- *   - Cancel / Escape → restores normal row display
+ * Card-based layout: each action gets a card with icon, label, description,
+ * keycap-style binding badge, and an inline capture mode for recording new chords.
  *
  * Exposed as window.BlurrySitePopupRenderShortcuts.
  * Must load after action_registry.js and shortcut_label.js.
@@ -20,16 +11,36 @@
 const BlurrySitePopupRenderShortcuts = (() => {
   'use strict';
 
-  /** i18n helper */
-  function _t(key) {
-    return chrome.i18n.getMessage(key) || key;
-  }
+  var _t = BlurrySitePopupShared.t;
+
+  /** i18n key pairs per action id */
+  var ACTION_I18N = {
+    'toggle-blur-all': { label: 'shortcut_toggle_blur_all', hint: 'shortcut_toggle_blur_all_hint' },
+    'toggle-picker':   { label: 'shortcut_toggle_picker',   hint: 'shortcut_toggle_picker_hint' },
+    'clear-all':       { label: 'shortcut_clear_all',       hint: 'shortcut_clear_all_hint' },
+    'screenshot':      { label: 'shortcut_screenshot',       hint: 'shortcut_screenshot_hint' },
+  };
+
+  /** Accent CSS variable per action (references theme tokens) */
+  var ACTION_ACCENT = {
+    'toggle-blur-all': 'var(--bl-indigo)',
+    'toggle-picker':   'var(--bl-purple)',
+    'clear-all':       'var(--bl-danger)',
+    'screenshot':      'var(--bl-sky)',
+  };
+
+  /** SVG icon markup per action (18×18, stroke-width 2, inside 32px badge) */
+  var ACTION_ICONS = {
+    'toggle-blur-all': '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 8s3-4.5 7-4.5S15 8 15 8s-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+    'toggle-picker':   '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="4"/><line x1="8" y1="1" x2="8" y2="4"/><line x1="8" y1="12" x2="8" y2="15"/><line x1="1" y1="8" x2="4" y2="8"/><line x1="12" y1="8" x2="15" y2="8"/></svg>',
+    'clear-all':       '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5l1.5 1.5L6.5 12H4.5L3 10.5 9.5 4z"/><line x1="1" y1="14" x2="15" y2="14"/></svg>',
+    'screenshot':      '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="5" width="14" height="9" rx="1.5"/><path d="M5.5 5L7 3h2l1.5 2"/><circle cx="8" cy="9.5" r="2"/></svg>',
+  };
 
   /**
-   * Set of KeyboardEvent.code values that represent modifier-only keypresses.
-   * These are skipped during capture — we wait for an actual key with a modifier.
+   * KeyboardEvent.code values treated as modifier-only — skipped during capture.
    */
-  const MODIFIER_CODES = new Set([
+  var MODIFIER_CODES = new Set([
     'AltLeft', 'AltRight',
     'ControlLeft', 'ControlRight',
     'MetaLeft', 'MetaRight',
@@ -38,175 +49,210 @@ const BlurrySitePopupRenderShortcuts = (() => {
     'OSLeft', 'OSRight',
   ]);
 
-  /**
-   * Ordered list of modifiers to check on a keydown event.
-   * Matches the mods shape used in settings.SHORTCUTS.
-   */
-  const TRACKED_MODS = ['Alt', 'Control', 'Meta', 'Shift'];
+  /** Ordered modifier names to check on a keydown event. */
+  var TRACKED_MODS = ['Alt', 'Control', 'Meta', 'Shift'];
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  /**
-   * Get the current binding for an action from settings.
-   * Falls back to action.defaultBinding if no override exists.
-   *
-   * @param {object} action - Action object from blsi.Actions.list()
-   * @param {object} settings - Full settings object (read-only)
-   * @returns {Array<{code: string, mods: Array<string>}>}
-   */
   function _currentBinding(action, settings) {
-    const entry = settings.shortcuts && settings.shortcuts[action.id];
+    var entry = settings.shortcuts && settings.shortcuts[action.id];
     return entry ? entry.binding : action.defaultBinding;
   }
 
   /**
-   * Render the binding display text for an action's current binding.
-   * Returns empty string if binding is missing or empty.
+   * Build DOM elements for a single chord rendered as keycap badges.
+   * Returns an array: [...modKeycaps, sep, codeKeycap].
+   * Falls back gracefully if ShortcutLabel helpers are unavailable.
    *
    * @param {Array<{code: string, mods: Array<string>}>} binding
-   * @returns {string}
+   * @returns {Array<HTMLElement>}
    */
-  function _bindingText(binding) {
-    if (!Array.isArray(binding) || binding.length === 0) return '';
-    return blsi.ShortcutLabel.bindingLabel(binding);
+  function _buildKeycaps(binding) {
+    if (!Array.isArray(binding) || binding.length === 0) return [];
+    var chord = binding[0]; // phase 1: single-chord bindings only
+    var mods = chord.mods || [];
+    var SL = blsi.ShortcutLabel;
+    var labels = mods.map(function(m) { return SL.modLabel(m); });
+    labels.push(SL.codeLabel(chord.code));
+
+    var els = [];
+    for (var i = 0; i < labels.length; i++) {
+      if (i > 0) {
+        var sep = document.createElement('span');
+        sep.className = 'bl-sc-key-sep';
+        sep.textContent = '+';
+        els.push(sep);
+      }
+      var cap = document.createElement('kbd');
+      cap.className = 'bl-sc-keycap';
+      cap.textContent = labels[i];
+      els.push(cap);
+    }
+    return els;
   }
 
-  // ── Row builders ───────────────────────────────────────────────────────────
+  // ── Row builders ──────────────────────────────────────────────────────────────
 
   /**
-   * Build the "normal" (non-capture) state for a row.
-   * Appends elements into rowEl.
-   *
-   * @param {HTMLElement} rowEl - .bl-sc-row element
-   * @param {object} action - Action from blsi.Actions
-   * @param {object} settings - Full settings
-   * @param {function} onSave - Callback for partial settings patch
-   * @param {function} activateCapture - Called when "Change" is clicked
+   * Build the normal (non-capture) card state for a row.
    */
   function _buildNormalRow(rowEl, action, settings, onSave, activateCapture) {
     rowEl.innerHTML = '';
+    rowEl.className = 'bl-sc-row';
 
-    const topEl = document.createElement('div');
-    topEl.className = 'bl-sc-row__top';
+    var i18nKeys = ACTION_I18N[action.id] || {};
+    var label    = _t(i18nKeys.label) || action.label;
+    var hint     = _t(i18nKeys.hint)  || action.description;
+    var accent   = ACTION_ACCENT[action.id] || 'var(--bl-text-muted)';
 
-    // Label
-    const labelEl = document.createElement('span');
-    labelEl.className = 'bl-sc-row__label';
-    labelEl.textContent = action.label;
-    topEl.appendChild(labelEl);
+    // ── Card inner ────────────────────────────────────────────────────────────
 
-    // Binding display
-    const binding = _currentBinding(action, settings);
-    const bindingText = _bindingText(binding);
-    const bindingEl = document.createElement('span');
-    if (bindingText) {
+    var innerEl = document.createElement('div');
+    innerEl.className = 'bl-sc-card-inner';
+
+    // Icon
+    var iconEl = document.createElement('span');
+    iconEl.className = 'bl-sc-card-icon';
+    iconEl.style.color = accent;
+    iconEl.innerHTML = ACTION_ICONS[action.id] || '';
+    innerEl.appendChild(iconEl);
+
+    // Label + description
+    var textEl = document.createElement('div');
+    textEl.className = 'bl-sc-card-text';
+
+    var labelEl = document.createElement('span');
+    labelEl.className = 'bl-sc-card-label';
+    labelEl.textContent = label;
+    textEl.appendChild(labelEl);
+
+    var descEl = document.createElement('span');
+    descEl.className = 'bl-sc-card-desc';
+    descEl.textContent = hint;
+    textEl.appendChild(descEl);
+
+    innerEl.appendChild(textEl);
+    rowEl.appendChild(innerEl);
+
+    // Keycap binding — centered row between card header and footer
+    var binding = _currentBinding(action, settings);
+    var hasBinding = Array.isArray(binding) && binding.length > 0;
+
+    var bindingRowEl = document.createElement('div');
+    bindingRowEl.className = 'bl-sc-binding-row';
+
+    var bindingEl = document.createElement('div');
+    if (hasBinding) {
       bindingEl.className = 'bl-sc-row__binding';
-      bindingEl.textContent = bindingText;
+      var keycaps = _buildKeycaps(binding);
+      for (var ki = 0; ki < keycaps.length; ki++) {
+        bindingEl.appendChild(keycaps[ki]);
+      }
     } else {
       bindingEl.className = 'bl-sc-row__binding bl-sc-row__binding--none';
       bindingEl.textContent = _t('shortcut_modal_placeholder');
     }
-    topEl.appendChild(bindingEl);
+    bindingRowEl.appendChild(bindingEl);
+    rowEl.appendChild(bindingRowEl);
 
-    // Change button
-    const changeBtn = document.createElement('button');
-    changeBtn.className = 'bl-sc-change-btn';
-    changeBtn.textContent = _t('shortcut_customize');
-    changeBtn.type = 'button';
-    changeBtn.addEventListener('click', () => activateCapture(action));
-    topEl.appendChild(changeBtn);
+    // ── Card footer: reset (left) + change (right) ────────────────────────────
 
-    rowEl.appendChild(topEl);
+    var footerEl = document.createElement('div');
+    footerEl.className = 'bl-sc-card-footer';
 
-    // Reset link (below the top row)
-    const resetBtn = document.createElement('button');
+    var resetBtn = document.createElement('button');
     resetBtn.className = 'bl-sc-reset-btn';
     resetBtn.textContent = _t('shortcut_reset');
     resetBtn.type = 'button';
-    resetBtn.addEventListener('click', () => {
-      onSave({
-        shortcuts: {
-          [action.id]: { binding: action.defaultBinding.map(function(c) {
-            return { code: c.code, mods: Array.isArray(c.mods) ? [...c.mods] : [] };
-          }) },
-        },
+    resetBtn.addEventListener('click', function() {
+      var defaultBinding = action.defaultBinding.map(function(c) {
+        return { code: c.code, mods: Array.isArray(c.mods) ? c.mods.slice() : [] };
       });
-      // Update binding display inline by rebuilding the normal row with the default binding
-      const patchedSettings = Object.assign({}, settings, {
+      onSave({ shortcuts: { [action.id]: { binding: defaultBinding } } });
+      var patchedSettings = Object.assign({}, settings, {
         shortcuts: Object.assign({}, settings.shortcuts, {
-          [action.id]: { binding: action.defaultBinding.map(function(c) {
-            return { code: c.code, mods: Array.isArray(c.mods) ? [...c.mods] : [] };
-          }) },
+          [action.id]: { binding: defaultBinding },
         }),
       });
       _buildNormalRow(rowEl, action, patchedSettings, onSave, activateCapture);
     });
-    rowEl.appendChild(resetBtn);
+    footerEl.appendChild(resetBtn);
+
+    var changeBtn = document.createElement('button');
+    changeBtn.className = 'bl-sc-change-btn';
+    changeBtn.textContent = _t('shortcut_customize');
+    changeBtn.type = 'button';
+    changeBtn.style.setProperty('--bl-sc-accent', accent);
+    changeBtn.addEventListener('click', function() { activateCapture(action); });
+    footerEl.appendChild(changeBtn);
+
+    rowEl.appendChild(footerEl);
   }
 
   /**
-   * Build the "capture" (recording) state for a row.
-   * Replaces row content with the capture UI and attaches a document keydown
-   * listener. Cleans up listener on save / cancel / escape.
-   *
-   * @param {HTMLElement} rowEl - .bl-sc-row element
-   * @param {object} action - Action from blsi.Actions
-   * @param {object} settings - Full settings (read-only)
-   * @param {function} onSave - Callback for partial settings patch
-   * @param {function} activateCapture - Passed through for re-activation after save
-   * @param {function} cancelCapture - Called to exit capture mode cleanly
+   * Build the capture (recording) state for a row.
+   * Replaces card content with the capture UI and attaches a document keydown
+   * listener at capture phase. Cleans up on save / cancel / escape.
    */
   function _buildCaptureRow(rowEl, action, settings, onSave, activateCapture, cancelCapture) {
     rowEl.innerHTML = '';
+    rowEl.className = 'bl-sc-row bl-sc-row--capturing';
 
-    // Keep a reference to the recorded chord
-    let recordedChord = null;
+    var recordedChord = null;
 
-    // ── Top row: label only (no binding display / buttons — replaced by capture UI) ──
-    const topEl = document.createElement('div');
-    topEl.className = 'bl-sc-row__top';
+    var i18nKeys = ACTION_I18N[action.id] || {};
+    var label    = _t(i18nKeys.label) || action.label;
+    var accent   = ACTION_ACCENT[action.id] || 'var(--bl-text-muted)';
 
-    const labelEl = document.createElement('span');
-    labelEl.className = 'bl-sc-row__label';
-    labelEl.textContent = action.label;
-    topEl.appendChild(labelEl);
+    // ── Card inner (icon + label only — no description in capture mode) ───────
 
-    rowEl.appendChild(topEl);
+    var innerEl = document.createElement('div');
+    innerEl.className = 'bl-sc-card-inner';
 
-    // ── Capture UI block ──────────────────────────────────────────────────────
-    const captureEl = document.createElement('div');
+    var iconEl = document.createElement('span');
+    iconEl.className = 'bl-sc-card-icon';
+    iconEl.style.color = accent;
+    iconEl.innerHTML = ACTION_ICONS[action.id] || '';
+    innerEl.appendChild(iconEl);
+
+    var labelEl = document.createElement('span');
+    labelEl.className = 'bl-sc-card-label';
+    labelEl.textContent = label;
+    innerEl.appendChild(labelEl);
+
+    rowEl.appendChild(innerEl);
+
+    // ── Capture UI ────────────────────────────────────────────────────────────
+
+    var captureEl = document.createElement('div');
     captureEl.className = 'bl-sc-capture';
 
-    // Prompt
-    const promptEl = document.createElement('p');
+    var promptEl = document.createElement('p');
     promptEl.className = 'bl-sc-capture__prompt';
     promptEl.textContent = _t('shortcut_modal_prompt');
     captureEl.appendChild(promptEl);
 
-    // Preview
-    const previewEl = document.createElement('div');
+    var previewEl = document.createElement('div');
     previewEl.className = 'bl-sc-capture__preview bl-sc-capture__preview--empty';
     previewEl.textContent = _t('shortcut_modal_placeholder');
     captureEl.appendChild(previewEl);
 
-    // Warning (hidden initially)
-    const warningEl = document.createElement('div');
+    var warningEl = document.createElement('div');
     warningEl.className = 'bl-sc-capture__warning';
     warningEl.hidden = true;
     captureEl.appendChild(warningEl);
 
-    // Action buttons
-    const actionsEl = document.createElement('div');
+    var actionsEl = document.createElement('div');
     actionsEl.className = 'bl-sc-capture__actions';
 
-    const saveBtn = document.createElement('button');
+    var saveBtn = document.createElement('button');
     saveBtn.className = 'bl-sc-save-btn';
     saveBtn.textContent = _t('modal_save');
     saveBtn.type = 'button';
     saveBtn.disabled = true;
     actionsEl.appendChild(saveBtn);
 
-    const cancelBtn = document.createElement('button');
+    var cancelBtn = document.createElement('button');
     cancelBtn.className = 'bl-sc-cancel-btn';
     cancelBtn.textContent = _t('modal_cancel');
     cancelBtn.type = 'button';
@@ -218,28 +264,19 @@ const BlurrySitePopupRenderShortcuts = (() => {
     // ── Keydown capture handler ───────────────────────────────────────────────
 
     function onKeyDown(e) {
-      // Always prevent default in capture mode so browser shortcuts don't fire
       e.preventDefault();
       e.stopPropagation();
 
-      // Escape → cancel
       if (e.code === 'Escape') {
         cleanup();
         cancelCapture(action);
         return;
       }
 
-      // Skip modifier-only keypresses — wait for a real key
-      if (MODIFIER_CODES.has(e.code)) {
-        return;
-      }
+      if (MODIFIER_CODES.has(e.code)) return;
 
-      // Collect held modifiers
-      const mods = TRACKED_MODS.filter(function(m) {
-        return e.getModifierState(m);
-      });
+      var mods = TRACKED_MODS.filter(function(m) { return e.getModifierState(m); });
 
-      // Require at least one modifier
       if (mods.length === 0) {
         previewEl.className = 'bl-sc-capture__preview bl-sc-capture__preview--empty';
         previewEl.textContent = _t('shortcut_modal_no_modifier');
@@ -249,19 +286,21 @@ const BlurrySitePopupRenderShortcuts = (() => {
         return;
       }
 
-      // Record chord
       recordedChord = { code: e.code, mods: mods };
 
-      // Update preview
+      // Render keycaps in preview
       previewEl.className = 'bl-sc-capture__preview';
-      previewEl.textContent = blsi.ShortcutLabel.chordLabel(recordedChord);
+      previewEl.innerHTML = '';
+      var keycaps = _buildKeycaps([recordedChord]);
+      for (var ki = 0; ki < keycaps.length; ki++) {
+        previewEl.appendChild(keycaps[ki]);
+      }
 
-      // Check reserved
       if (blsi.ShortcutLabel.isReserved(recordedChord)) {
-        const reserved = blsi.ShortcutLabel.lookup(recordedChord);
+        var reserved = blsi.ShortcutLabel.lookup(recordedChord);
         warningEl.textContent = (reserved && reserved.label)
-          ? '\u26a0\ufe0f Reserved: ' + reserved.label + ' — saving anyway will override it.'
-          : '\u26a0\ufe0f This chord is reserved by the browser.';
+          ? '⚠️ Reserved: ' + reserved.label + ' — saving anyway will override it.'
+          : '⚠️ This chord is reserved by the browser.';
         warningEl.hidden = false;
       } else {
         warningEl.hidden = true;
@@ -281,14 +320,9 @@ const BlurrySitePopupRenderShortcuts = (() => {
     saveBtn.addEventListener('click', function() {
       if (!recordedChord) return;
       cleanup();
-      const chord = recordedChord;
-      onSave({
-        shortcuts: {
-          [action.id]: { binding: [chord] },
-        },
-      });
-      // Rebuild normal row with the new binding reflected
-      const patchedSettings = Object.assign({}, settings, {
+      var chord = recordedChord;
+      onSave({ shortcuts: { [action.id]: { binding: [chord] } } });
+      var patchedSettings = Object.assign({}, settings, {
         shortcuts: Object.assign({}, settings.shortcuts, {
           [action.id]: { binding: [chord] },
         }),
@@ -304,67 +338,72 @@ const BlurrySitePopupRenderShortcuts = (() => {
     });
   }
 
-  // ── Main renderBody ────────────────────────────────────────────────────────
+  // ── Main renderBody ───────────────────────────────────────────────────────────
 
   /**
    * Render the Shortcuts sub-page body into containerEl.
    *
    * @param {HTMLElement} containerEl - The .bl-subpage__body div
    * @param {object}      settings    - Full settings object (read-only)
-   * @param {function}    onSave      - Called with partial settings patch; popup.js deep-merges & saves
+   * @param {function}    onSave      - Called with partial settings patch
    */
   function renderBody(containerEl, settings, onSave) {
     containerEl.innerHTML = '';
 
-    const actions = blsi.Actions.list();
+    var actions = blsi.Actions.list();
 
-    // Track which row is currently in capture mode so we can cancel it
-    // when the user clicks "Change" on a different row.
-    let activeCaptureAction = null;
-    // Map of action.id → rowEl for cancel lookup
-    const rowEls = {};
+    var activeCaptureAction = null;
+    var rowEls = {};
 
-    /**
-     * Exit capture mode for the given action, restoring its normal display.
-     * Called by cancelBtn click, Escape key, and when another row is activated.
-     */
     function cancelCapture(action) {
       activeCaptureAction = null;
-      const rowEl = rowEls[action.id];
-      if (rowEl) {
-        _buildNormalRow(rowEl, action, settings, onSave, activateCapture);
-      }
+      var rowEl = rowEls[action.id];
+      if (rowEl) _buildNormalRow(rowEl, action, settings, onSave, activateCapture);
     }
 
-    /**
-     * Activate capture mode for a given action.
-     * If another row is in capture mode, cancel it first.
-     */
     function activateCapture(action) {
-      // Cancel any active capture first
       if (activeCaptureAction && activeCaptureAction.id !== action.id) {
-        const prevAction = activeCaptureAction;
+        var prev = activeCaptureAction;
         activeCaptureAction = null;
-        const prevRowEl = rowEls[prevAction.id];
-        if (prevRowEl) {
-          _buildNormalRow(prevRowEl, prevAction, settings, onSave, activateCapture);
-        }
+        var prevRowEl = rowEls[prev.id];
+        if (prevRowEl) _buildNormalRow(prevRowEl, prev, settings, onSave, activateCapture);
       }
       activeCaptureAction = action;
-      const rowEl = rowEls[action.id];
-      if (rowEl) {
-        _buildCaptureRow(rowEl, action, settings, onSave, activateCapture, cancelCapture);
-      }
+      var rowEl = rowEls[action.id];
+      if (rowEl) _buildCaptureRow(rowEl, action, settings, onSave, activateCapture, cancelCapture);
     }
 
-    // ── Build the list ──────────────────────────────────────────────────────
+    // ── Reset All header ──────────────────────────────────────────────────────
 
-    const listEl = document.createElement('div');
+    var headerEl = document.createElement('div');
+    headerEl.className = 'bl-sc-header';
+
+    var resetAllBtn = document.createElement('button');
+    resetAllBtn.className = 'bl-sc-reset-all-btn';
+    resetAllBtn.textContent = _t('shortcut_reset_all');
+    resetAllBtn.type = 'button';
+    resetAllBtn.addEventListener('click', function() {
+      activeCaptureAction = null;
+      var allDefaults = blsi.Actions.defaultBindings();
+      onSave({ shortcuts: allDefaults });
+      var resetSettings = Object.assign({}, settings, { shortcuts: allDefaults });
+      for (var ai = 0; ai < actions.length; ai++) {
+        var a = actions[ai];
+        var rowEl = rowEls[a.id];
+        if (rowEl) _buildNormalRow(rowEl, a, resetSettings, onSave, activateCapture);
+      }
+    });
+    headerEl.appendChild(resetAllBtn);
+    containerEl.appendChild(headerEl);
+
+    // ── Action card list ──────────────────────────────────────────────────────
+
+    var listEl = document.createElement('div');
     listEl.className = 'bl-sc-list';
 
     for (var i = 0; i < actions.length; i++) {
-      const action = actions[i];
-      const rowEl = document.createElement('div');
+      var action = actions[i];
+      var rowEl = document.createElement('div');
       rowEl.className = 'bl-sc-row';
       rowEls[action.id] = rowEl;
       _buildNormalRow(rowEl, action, settings, onSave, activateCapture);

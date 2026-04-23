@@ -475,7 +475,8 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<div id="target">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#target' }];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(document.getElementById('target').dataset.blSiBlur).toBe('1');
+      expect(document.getElementById('target').dataset.blSiPickBlur).toBe('1');
+      expect(document.getElementById('target').dataset.blSiBlur).toBeUndefined();
     });
 
     test('removes items no longer in storage', async () => {
@@ -484,7 +485,7 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.items = [];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(document.getElementById('rm').dataset.blSiBlur).toBeUndefined();
+      expect(document.getElementById('rm').dataset.blSiPickBlur).toBeUndefined();
     });
 
     test('creates zone overlay for sticky items', async () => {
@@ -522,7 +523,7 @@ describe('blsi.BlurEngine', () => {
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#idem' }];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(document.getElementById('idem').dataset.blSiBlur).toBe('1');
+      expect(document.getElementById('idem').dataset.blSiPickBlur).toBe('1');
     });
     // MISSING: no test for dynamic item whose selector matches nothing (element not in DOM)
     // MISSING: no test for sticky item with anchor:'screen' (position:fixed overlay)
@@ -640,13 +641,13 @@ describe('blsi.BlurEngine', () => {
       fakeStorage.blurState = true;
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#pick' }];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(document.getElementById('pick').dataset.blSiBlur).toBeDefined();
+      expect(document.getElementById('pick').dataset.blSiPickBlur).toBe('1');
 
       // Trigger a refresh by flipping THOROUGH_BLUR — _enablePageWide nukes
       // all stamps, item reconcile must restore picker stamps.
       fakeStorage.settings.thorough_blur = true;
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(document.getElementById('pick').dataset.blSiBlur).toBeDefined();
+      expect(document.getElementById('pick').dataset.blSiPickBlur).toBe('1');
     });
 
     test('ENABLED=false tears everything down', async () => {
@@ -658,6 +659,7 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(blsi.BlurEngine.isPageBlurred).toBe(false);
       expect(document.getElementById('bl-si-blur-styles')).toBeNull();
+      expect(document.getElementById('gone').dataset.blSiPickBlur).toBeUndefined();
       expect(document.getElementById('gone').dataset.blSiBlur).toBeUndefined();
     });
 
@@ -726,8 +728,8 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 2', selector: '#b' }];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(document.getElementById('a').dataset.blSiBlur).toBeUndefined();
-      expect(document.getElementById('b').dataset.blSiBlur).toBe('1');
+      expect(document.getElementById('a').dataset.blSiPickBlur).toBeUndefined();
+      expect(document.getElementById('b').dataset.blSiPickBlur).toBe('1');
     });
   });
 
@@ -1227,6 +1229,127 @@ describe('blsi.BlurEngine', () => {
       const s = { enabled: true, blur_all_active: true };
       blsi.BlurEngine.handleIframe(s, f);
       expect(f.dataset.blSiBlur).toBeUndefined();
+    });
+  });
+
+  // ─── Pick & Blur attribute + CSS injection (data-bl-si-pick-blur) ────────────
+  // USER IMPACT: selected blur mode (gaussian/frosted/color) actually applied to
+  // picked elements instead of always falling back to gaussian.
+  describe('pick & blur — data-bl-si-pick-blur attribute', () => {
+    beforeEach(() => {
+      blsi.BlurEngine.resetCounters();
+    });
+
+    test('_applyDynamicItem stamps data-bl-si-pick-blur, NOT data-bl-si-blur', async () => {
+      document.body.innerHTML = '<p id="p1">text</p>';
+      await blsi.BlurEngine.handleSite({
+        enabled: true, blur_all_active: false, blur_items: [{ type: 'dynamic', name: 'Dynamic 1', selector: '#p1' }],
+        pick_blur_enabled: true, pick_blur_type: 'gaussian', pick_blur_color: { hex: '#000000', opacity: 1 },
+      });
+      const el = document.getElementById('p1');
+      expect(el.dataset.blSiPickBlur).toBe('1');
+      expect(el.dataset.blSiBlur).toBeUndefined();
+    });
+
+    test('_removeDynamicItem clears data-bl-si-pick-blur', async () => {
+      document.body.innerHTML = '<p id="p2">text</p>';
+      const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#p2' };
+      const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'gaussian', pick_blur_color: { hex: '#000000', opacity: 1 } };
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
+      expect(document.getElementById('p2').dataset.blSiPickBlur).toBe('1');
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
+      expect(document.getElementById('p2').dataset.blSiPickBlur).toBeUndefined();
+    });
+
+    test('createZoneOverlay stamps data-bl-si-pick-blur on overlay', () => {
+      blsi.BlurEngine.createZoneOverlay({ id: 'z_pick', name: 'Z', x: 0, y: 0, width: 50, height: 50 });
+      const zone = document.querySelector('[data-bl-si-zone="z_pick"]');
+      expect(zone).not.toBeNull();
+      expect(zone.dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('removeBlur clears data-bl-si-pick-blur as well as data-bl-si-blur', () => {
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.dataset.blSiBlur = '1';
+      el.dataset.blSiPickBlur = '1';
+      blsi.BlurEngine.removeBlur(el);
+      expect(el.dataset.blSiBlur).toBeUndefined();
+      expect(el.dataset.blSiPickBlur).toBeUndefined();
+    });
+
+    test('isBlurred returns true when only data-bl-si-pick-blur is set', () => {
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.dataset.blSiPickBlur = '1';
+      expect(blsi.BlurEngine.isBlurred(el)).toBe(true);
+    });
+
+    test('isVisuallyBlurred returns true when only data-bl-si-pick-blur is set', () => {
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.dataset.blSiPickBlur = '1';
+      expect(blsi.BlurEngine.isVisuallyBlurred(el)).toBe(true);
+    });
+  });
+
+  describe('pick & blur — injectPickBlurRules / removePickBlurRules', () => {
+    afterEach(() => {
+      blsi.BlurEngine.removePickBlurRules(document);
+    });
+
+    test('gaussian mode injects nothing (static content.css covers it)', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'gaussian', { hex: '#ff0000', opacity: 1 });
+      expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
+    });
+
+    test('null/undefined type injects nothing', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, null, null);
+      expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
+    });
+
+    test('color mode injects background-color rule for dynamic elements', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#ff0000', opacity: 0.9 });
+      const style = document.getElementById('bl-si-pick-blur-styles');
+      expect(style).not.toBeNull();
+      expect(style.textContent).toContain('background-color');
+      expect(style.textContent).toContain('rgba(255,0,0,0.9)');
+      expect(style.textContent).toContain('data-bl-si-pick-blur');
+    });
+
+    test('color mode injects zone overlay override', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
+      const css = document.getElementById('bl-si-pick-blur-styles').textContent;
+      expect(css).toContain('bl-si-zone-overlay');
+      expect(css).toContain('backdrop-filter: none');
+    });
+
+    test('color mode injects reveal cancel rule', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
+      const css = document.getElementById('bl-si-pick-blur-styles').textContent;
+      expect(css).toContain('data-bl-si-reveal]');
+      expect(css).toContain('background-color: transparent');
+    });
+
+    test('frosted mode injects filter:url rule', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'frosted', null);
+      const css = document.getElementById('bl-si-pick-blur-styles').textContent;
+      expect(css).toContain('url(#bl-si-frosted-filter)');
+      expect(css).toContain('data-bl-si-pick-blur');
+    });
+
+    test('removePickBlurRules removes bl-si-pick-blur-styles', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
+      expect(document.getElementById('bl-si-pick-blur-styles')).not.toBeNull();
+      blsi.BlurEngine.removePickBlurRules(document);
+      expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
+    });
+
+    test('injectPickBlurRules is idempotent — re-inject replaces existing style', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#ff0000', opacity: 1 });
+      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#00ff00', opacity: 1 });
+      expect(document.querySelectorAll('#bl-si-pick-blur-styles')).toHaveLength(1);
+      expect(document.getElementById('bl-si-pick-blur-styles').textContent).toContain('rgba(0,255,0,1)');
     });
   });
 });
