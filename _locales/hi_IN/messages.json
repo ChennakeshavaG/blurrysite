@@ -680,5 +680,26 @@
   },
   "automate_footer": {
     "message": "When triggered → applies current blur mode settings"
+  },
+  "automate_screen_share": {
+    "message": "Screen Share"
+  },
+  "automate_triggered_by": {
+    "message": "Active:"
+  },
+  "automate_turn_off": {
+    "message": "Turn Off"
+  },
+  "automate_toast_screen_share": {
+    "message": "Blur applied — screen share active"
+  },
+  "automate_toast_idle": {
+    "message": "Blur applied — idle detected"
+  },
+  "automate_toast_tab_switch": {
+    "message": "Blur applied — tab switch"
+  },
+  "automate_toast_skipped": {
+    "message": "Blur already active — automate skipped"
   }
 }

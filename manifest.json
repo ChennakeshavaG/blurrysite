@@ -16,6 +16,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "js": ["src/screen_share_main.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["<all_urls>"],
       "js": [
         "src/constants.js",
         "src/content_i18n.js",
@@ -65,6 +72,13 @@
         "mac": "Alt+Shift+U"
       },
       "description": "Remove blur from all elements on the current page"
+    },
+    "open-settings": {
+      "suggested_key": {
+        "default": "Alt+Shift+O",
+        "mac": "Alt+Shift+O"
+      },
+      "description": "Open Blurry Site settings panel (or settings tab in normal browser)"
     }
   },
 
@@ -89,7 +103,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["_locales/*/*.json"],
+      "resources": ["_locales/*/*.json", "popup/popup.html"],
       "matches": ["<all_urls>"]
     }
   ],

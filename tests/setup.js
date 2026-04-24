@@ -62,6 +62,11 @@ global.chrome = {
       remove: jest.fn(),
       clear: jest.fn(),
     },
+    session: {
+      get: jest.fn((key, cb) => { if (cb) cb({}); }),
+      set: jest.fn((_data, cb) => { if (cb) cb(); }),
+      remove: jest.fn((_key, cb) => { if (cb) cb(); }),
+    },
     sync: {
       get: jest.fn(),
       set: jest.fn(),

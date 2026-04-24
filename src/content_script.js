@@ -41,6 +41,12 @@
   /** True when running in the top-level document, false inside any iframe */
   const IS_MAIN_FRAME = window === window.top;
 
+  /** True when the page is running as an installed PWA (standalone display mode) */
+  const IS_PWA = IS_MAIN_FRAME && window.matchMedia('(display-mode: standalone)').matches;
+
+  /** Shadow DOM host element for the in-page settings panel (PWA only) */
+  let _pwaPanelHost = null;
+
   /**
    * Top-level page hostname — used exclusively for blur_all_hosts lookup so
    * cross-origin iframes follow the parent page's blur-all state rather than
@@ -64,7 +70,6 @@
 
   // ── Unit conversion helper ────────────────────────────────────────────────
   function _to_seconds(value, unit) {
-    if (unit === 'hr') return value * 3600;
     if (unit === 'min') return value * 60;
     return value; // sec
   }
@@ -76,6 +81,8 @@
    */
   async function _sync() {
     const resolved = Store.resolve(_topHostname, location.href);
+    settings = resolved;
+    applySettingsToDom(resolved);
     await Engine.handleSite(resolved);
   }
 
@@ -178,7 +185,7 @@
     onExitPicker() {
       if (isPickerActive) {
         Picker.deactivate();
-        isPickerActive = false;
+        setPickerActive(false);
       }
     },
   };
@@ -230,7 +237,7 @@
       fireTokens[actionId] = nowTs;
     }
 
-    if (settings.enabled === false && type !== blsi.popup.get_status) {
+    if (settings.enabled === false && type !== blsi.popup.get_status && type !== blsi.command.toggle_panel) {
       if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
       return false;
     }
@@ -351,6 +358,16 @@
         return false;
       }
 
+      // ── PWA settings panel toggle ───────────────────────────────────────
+      case blsi.command.toggle_panel: {
+        if (_pwaPanelHost) {
+          _pwaPanelHost.hidden = !_pwaPanelHost.hidden;
+          log.flow('trigger.togglePanel', { hidden: _pwaPanelHost.hidden });
+        }
+        if (sendResponse) sendResponse({ ok: true });
+        break;
+      }
+
       // ── Screen share blur (from background fan-out) ─────────────────────
       case blsi.command.screen_share_blur: {
         const am_s = (Store.get().automate || {}).settings || {};
@@ -359,6 +376,8 @@
           (async () => {
             await Store.save_automate_blur(hostname, 'screen_share', true);
             await _sync();
+            if (settings.automate_blur_only)    Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 2500);
+            if (settings.automate_blur_skipped) Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
             if (sendResponse) sendResponse({ ok: true });
           })();
           return true;
@@ -468,8 +487,14 @@
           tabSwitch: !!tab_switch.enabled,
           idle: !!idle.enabled,
           onIdle: async ({ reason } = {}) => {
-            await Store.save_automate_blur(hostname, reason || 'idle', true);
+            const trigger = reason || 'idle';
+            await Store.save_automate_blur(hostname, trigger, true);
             await _sync();
+            const toastKey = trigger === 'tab_switch'
+              ? 'automate_toast_tab_switch'
+              : 'automate_toast_idle';
+            if (settings.automate_blur_only)    Shortcuts.showToast(chrome.i18n.getMessage(toastKey), 2500);
+            if (settings.automate_blur_skipped) Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
           },
           onActive: async () => {
             await Store.patch_automate_blur(hostname, { idle: false, tab_switch: false });
@@ -493,6 +518,64 @@
       blsi.PiiDetector.stopObserving();
       blsi.PiiDetector.clear(document.body);
     }
+  }
+
+  // ── PWA settings panel ────────────────────────────────────────────────────
+
+  function _injectPwaPanel() {
+    const host = document.createElement('div');
+    host.id = 'bl-si-pwa-panel-host';
+    host.hidden = true;
+    const shadow = host.attachShadow({ mode: 'closed' });
+
+    const style = document.createElement('style');
+    style.textContent = [
+      ':host{all:initial;position:fixed;bottom:24px;right:24px;z-index:2147483647;display:block}',
+      ':host([hidden]){display:none!important}',
+      '.w{position:relative;display:inline-block}',
+      '.c{position:absolute;top:-10px;right:-10px;z-index:1;width:22px;height:22px;',
+      'border-radius:50%;background:#1e1e2e;color:#fff;border:1.5px solid rgba(255,255,255,0.18);',
+      'cursor:pointer;font-size:13px;line-height:1;padding:0;display:flex;',
+      'align-items:center;justify-content:center;',
+      'box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:system-ui,-apple-system,sans-serif}',
+      '.c:hover{background:#2d2d44}',
+      'iframe{width:320px;height:580px;border:none;border-radius:16px;display:block;',
+      'box-shadow:0 8px 40px rgba(0,0,0,0.35),0 2px 12px rgba(0,0,0,0.15)}',
+    ].join('');
+
+    const wrap = document.createElement('div');
+    wrap.className = 'w';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'c';
+    closeBtn.setAttribute('aria-label', 'Close Blurry Site settings');
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => { host.hidden = true; });
+
+    const iframe = document.createElement('iframe');
+    iframe.src = chrome.runtime.getURL('popup/popup.html');
+
+    wrap.appendChild(closeBtn);
+    wrap.appendChild(iframe);
+    shadow.appendChild(style);
+    shadow.appendChild(wrap);
+    document.body.appendChild(host);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !host.hidden) { host.hidden = true; }
+    }, true);
+
+    return host;
+  }
+
+  function _checkPwaHint() {
+    chrome.storage.local.get('blsi_pwa_hint_shown', (result) => {
+      if (result && result.blsi_pwa_hint_shown) return;
+      chrome.storage.local.set({ blsi_pwa_hint_shown: true });
+      const isMac = typeof navigator !== 'undefined' &&
+        navigator.platform && navigator.platform.toLowerCase().includes('mac');
+      Shortcuts.showToast('PWA — right-click or press ' + (isMac ? '⌥⇧O' : 'Alt+Shift+O') + ' to open settings');
+    });
   }
 
   // ── Initialisation ─────────────────────────────────────────────────────────
@@ -521,6 +604,12 @@
 
     // 3. Apply CSS custom properties from resolved settings.
     applySettingsToDom(resolved);
+
+    // 3b. In PWA mode, inject the shadow DOM settings panel early so the
+    //     message handler can toggle it as soon as it's registered.
+    if (IS_PWA) {
+      _pwaPanelHost = _injectPwaPanel();
+    }
 
     // 4. Register message listener from background / popup.
     chrome.runtime.onMessage.addListener(handleMessage);
@@ -553,6 +642,28 @@
     //      blur restore, PII scan, AutoBlur, shortcuts, and CSS vars.
     Engine.resetCounters();
     await applyState(resolved, null);
+
+    // 9b. Catch-up for tabs opened while a screen share is already active.
+    //     The fan-out on SCREEN_SHARE_STARTED only reaches tabs open at that
+    //     moment. Check the session flag background persists so we don't miss it.
+    if (IS_MAIN_FRAME) {
+      try {
+        const ss = await chrome.storage.session.get('blsi_screen_share_active');
+        const screen_share_cfg = (resolved.automate_screen_share) || {};
+        if (ss.blsi_screen_share_active && screen_share_cfg.enabled) {
+          await Store.save_automate_blur(hostname, 'screen_share', true);
+          await _sync();
+          if (settings.automate_blur_only)
+            Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 2500);
+          if (settings.automate_blur_skipped)
+            Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
+        }
+      } catch (_e) {}
+    }
+
+    // 9c. Show one-time PWA hint after Shortcuts is initialized (applyState
+    //     calls Shortcuts.init so showToast is available).
+    if (IS_PWA) _checkPwaHint();
 
     // 10. Subscribe AFTER initial restore so we don't race with cross-tab events
     //     during the cold-start window.

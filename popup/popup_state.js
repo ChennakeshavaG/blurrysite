@@ -23,7 +23,10 @@ const BlurrySitePopupState = (() => {
       // Global settings (blur_radius, reveal_mode, enabled, thorough_blur, etc.)
       model.settings,
       // blur_all section
-      { blur_mode: model.blur_all.settings.blur_mode },
+      {
+        blur_mode:       model.blur_all.settings.blur_mode,
+        blur_categories: model.blur_all.settings.blur_categories,
+      },
       // pick_and_blur section
       {
         pick_blur_enabled: model.pick_and_blur.status,
@@ -45,11 +48,12 @@ const BlurrySitePopupState = (() => {
         automate_idle:         model.automate.settings.idle,
         automate_tab_switch:   model.automate.settings.tab_switch,
         automate_blur_active:  (function() {
-          var e = (_hostname && model.automate_blur) ? (model.automate_blur[_hostname] || {}) : {};
-          return !!(e.idle || e.tab_switch || e.screen_share);
+          var t = _hostname ? blsi.Model.get_automate_blur(_hostname)
+            : { idle: false, tab_switch: false, screen_share: false };
+          return !!(t.idle || t.tab_switch || t.screen_share);
         }()),
-        automate_blur_triggers: (_hostname && model.automate_blur)
-          ? (model.automate_blur[_hostname] || { idle: false, tab_switch: false, screen_share: false })
+        automate_blur_triggers: _hostname
+          ? blsi.Model.get_automate_blur(_hostname)
           : { idle: false, tab_switch: false, screen_share: false },
       },
       // shortcuts
@@ -87,7 +91,7 @@ const BlurrySitePopupState = (() => {
     // ── Global settings keys (live directly in model.settings) ───────────
     const globalKeys = [
       'blur_radius', 'transition_duration', 'highlight_color', 'redaction_color',
-      'reveal_mode', 'enabled', 'thorough_blur', 'language', 'tab_privacy', 'blur_categories',
+      'reveal_mode', 'enabled', 'thorough_blur', 'language', 'tab_privacy',
     ];
     const globalPatch = {};
     let hasGlobal = false;
@@ -117,7 +121,11 @@ const BlurrySitePopupState = (() => {
         globalPatch[key] = val;
         hasGlobal = true;
       } else if (key === 'blur_mode') {
-        blurAllPatch = { settings: { blur_mode: val } };
+        if (!blurAllPatch) blurAllPatch = { settings: {} };
+        blurAllPatch.settings.blur_mode = val;
+      } else if (key === 'blur_categories') {
+        if (!blurAllPatch) blurAllPatch = { settings: {} };
+        blurAllPatch.settings.blur_categories = val;
       } else if (key === 'pick_blur_enabled') {
         pickBlurStatusPatch = val;
       } else if (key === 'picker_mode') {
@@ -205,13 +213,23 @@ const BlurrySitePopupState = (() => {
       const entry = blsi.Model.get_site_entry(_hostname);
       // Mirror the gate in storage_model.resolve(): items are only active when pick-blur is on.
       _blurItems = (entry && pickEnabled) ? (entry.items || []) : [];
-      _isPageBlurred = (entry && entry.blur_all !== null)
+      const manualBlur = (entry && entry.blur_all !== null)
         ? !!entry.blur_all
         : _model.blur_all.status;
+      const automateEntry = blsi.Model.get_automate_blur(_hostname);
+      const automateBlur = !!(automateEntry.idle || automateEntry.tab_switch || automateEntry.screen_share);
+      _isPageBlurred = manualBlur || automateBlur;
     } else {
       // No hostname (e.g. chrome://newtab): derive blur state from global default only.
       _isPageBlurred = _model ? _model.blur_all.status : false;
     }
+  }
+
+  // ── Clear automate blur for current hostname ──────────────────────────────
+  async function clearAutomateBlur() {
+    if (!_hostname) return;
+    await blsi.Model.clear_automate_blur(_hostname);
+    refreshFromStorage();
   }
 
   // ── External change subscription ──────────────────────────────────────────
@@ -226,7 +244,7 @@ const BlurrySitePopupState = (() => {
   return {
     get,
     setModel, setHostname, setBlurItems, setPageBlurred, setNeutralAfterClear,
-    saveSettings, onExternalChange, refreshFromStorage,
+    saveSettings, clearAutomateBlur, onExternalChange, refreshFromStorage,
   };
 })();
 

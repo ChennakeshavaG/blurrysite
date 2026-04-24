@@ -29,13 +29,14 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelectors(el) → string[]` (ordered structural→semantic; use for saving), `getSelector(el) → string\|null` (compat alias → `getSelectors()[0]`), `isSelectorStable(el) → bool` (fast O(1) check; true if id/class/aria/data-* found), `generateId`, `restoreSelector(string\|string[]) → Element\|null` (tries each in order, returns first unique match), `restoreAllSelectors` |
-| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `get_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `save_automate_blur`, `patch_automate_blur`, `clear_automate_blur`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage` directly (no background relay) |
+| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `save_automate_blur`, `patch_automate_blur`, `clear_automate_blur`, `get_automate_blur`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage.local` (model) and `chrome.storage.session` (automate_blur) directly (no background relay) |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
 | `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all |
 | `src/fonts.js` | `blsi.Fonts` | `DISC_FONT_FACE`, `ASTERISK_FONT_FACE` — base64-encoded `@font-face` strings for `"bl-si-censored-disc"` and `"bl-si-starred-asterisk"` (OFL-1.1). Used by `blur_engine` for censored / starred modes. |
 | `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `injectPiiRules(mode)`, `removePiiRules()`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
-| `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()` — detects `getDisplayMedia()` calls in the page's MAIN world; sends `SCREEN_SHARE_STARTED`/`SCREEN_SHARE_ENDED` to background which fans out `SCREEN_SHARE_BLUR`/`SCREEN_SHARE_UNBLUR` to other tabs |
+| `src/screen_share_main.js` | _(none — MAIN world)_ | No global; runs at `document_start` in page's MAIN world. Wraps `navigator.mediaDevices.getDisplayMedia`; fires `'__blsi_screen_share'` CustomEvent on share start/stop. No `chrome.*` access. |
+| `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()` — isolated-world bridge; listens for `'__blsi_screen_share'` CustomEvents from MAIN world. On share start opens port `'blsi-screen-share'` + sends `SCREEN_SHARE_STARTED`; on share end disconnects port + sends `SCREEN_SHARE_ENDED`. Port disconnect (crash/close/nav) fans out `SCREEN_SHARE_UNBLUR` in background as crash-safety net. |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
 | `src/shortcut_handler.js` | `blsi.Shortcuts` | `init(shortcuts, callbacks)` — accepts `{ 'action-id': { binding: [{code, mods}] } }` shape (kebab-case action ids). `destroy`, `showToast`, `_setPickerActive`, `_getFireToken` (for content_script dedup). Reads mods from event booleans (side-agnostic). Reads label from `blsi.Actions.get(id).label` for toast. |
 | `src/selection_blur.js` | `blsi.SelectionBlur` | `init()`, `destroy()`, `blurSelection()`, `clearAll()`, `getSelectionBlurs()`, `removeSelectionBlur(id)` — text-selection driven blur via `[data-bl-si-blur]` spans. `blurSelection()` takes no args; reads `document.getSelection()` internally. |
@@ -43,7 +44,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order is fixed by `manifest.json`** — constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii_detector → fonts → blur_engine → auto_blur → screen_share → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
+**Load order is fixed by `manifest.json`** — `screen_share_main.js` runs first in MAIN world at `document_start`. Isolated world at `document_idle`: constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii_detector → fonts → blur_engine → auto_blur → screen_share → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -60,9 +61,11 @@ Any mismatch between sender message type and background.js handler silently drop
 | Alt+Shift+B shortcut | `TOGGLE_BLUR_ALL` |
 | Alt+Shift+P shortcut | `TOGGLE_PICKER` |
 | Alt+Shift+U shortcut | `CLEAR_ALL_BLUR` |
+| Alt+Shift+O shortcut (PWA) / tab open (normal) | `TOGGLE_PANEL` |
 | Page load complete | `RESTORE` |
 | Context menu blur | `CONTEXT_BLUR` |
 | Context menu unblur | `CONTEXT_UNBLUR` |
+| Context menu "Open Settings Panel" (PWA) | `TOGGLE_PANEL` |
 | Screen share active (fan-out to other tabs) | `SCREEN_SHARE_BLUR` |
 | Screen share ended (fan-out to all tabs) | `SCREEN_SHARE_UNBLUR` |
 
@@ -97,8 +100,8 @@ Settings use **snake_case** keys everywhere. There is no two-shape duality — t
   automate:          { status, settings },
   shortcuts,         // per-action shortcut definitions
   site_rules,        // array of URL-rule entries
-  automate_blur,     // per-hostname transient trigger state (see below)
 }
+// automate_blur lives separately in chrome.storage.session['blsi_automate_blur'] — NOT in blsi_model
 ```
 
 **`shortcuts`** — per-action shortcut definitions (v2 shape):
@@ -191,40 +194,44 @@ automate.settings = {
   tab_switch:   { enabled: false },
 }
 ```
-- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `navigator.mediaDevices.getDisplayMedia` in the page's MAIN world. When a share starts, background fans out `SCREEN_SHARE_BLUR` to all other tabs; those tabs apply a transient blur (no storage write). When sharing ends, background fans out `SCREEN_SHARE_UNBLUR` to all tabs; transient blur is cleared. The sharing tab itself is NOT blurred.
+- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `navigator.mediaDevices.getDisplayMedia` in the page's MAIN world. When a share starts, `screen_share.js` opens a port (`blsi-screen-share`) and sends `SCREEN_SHARE_STARTED`; background fans out `SCREEN_SHARE_BLUR` to all other tabs. Those tabs write `automate_blur[hostname].screen_share = true` to `chrome.storage.session`. New tabs picking up mid-share read the session entry on init. When sharing ends (or the tab crashes/closes), the port disconnect fans out `SCREEN_SHARE_UNBLUR`; all tabs clear the session entry. The sharing tab itself is NOT blurred. **Smart skip**: if blur-all or pick-and-blur is already enabled on the page, automate defers (sets `automate_blur_skipped = true`) and shows a "Blur already active — automate skipped" toast instead of applying its own blur.
 - `idle.unit` accepts `blsi.idle_units` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `value` min is 1. UI warns when value exceeds 3000 s.
 - `tab_switch.enabled` is boolean only.
 
 ### Settings Shape: automate_blur (transient trigger state)
 
-**`automate_blur`** — top-level hostname-keyed object tracking which automate trigger is currently active per site. Never written by user actions — only by automate trigger handlers in `content_script.js`.
+**`automate_blur`** — hostname-keyed object tracking which automate trigger is currently active per site. Stored in **`chrome.storage.session`** (key: `blsi_automate_blur`) — NOT in `blsi_model`. Session storage is cleared automatically on browser close/crash, preventing stale triggers from persisting across sessions.
 
 ```js
-automate_blur = {
+// chrome.storage.session['blsi_automate_blur']:
+{
   'gmail.com': { idle: true, tab_switch: false, screen_share: false },
   'github.com': { idle: false, tab_switch: false, screen_share: true },
 }
 ```
 
-Default: `{}` (empty object). Each hostname entry defaults all sub-keys to `false`.
+Default: `{}` (empty object). Each hostname entry defaults all sub-keys to `false`. Never written by user actions — only by automate trigger handlers in `content_script.js`.
 
 **`blur_all_active` OR logic** — `resolve()` computes:
 ```
 manual_blur   = exact.blur_all !== null ? !!exact.blur_all : global_status
-automate_any  = idle || tab_switch || screen_share (from automate_blur[hostname])
+automate_any  = idle || tab_switch || screen_share (from _automate_cache[hostname])
 blur_all_active = manual_blur || automate_any
 ```
 
 Automate triggers NEVER write `blur_all`. `onActive()` only clears automate_blur sub-keys — manual blur survives when the user returns from idle.
 
-`resolve()` also exposes two derived keys:
+`resolve()` also exposes four derived keys:
 - `resolved.automate_blur_active` — boolean, true if any trigger is active
 - `resolved.automate_blur_triggers` — `{ idle, tab_switch, screen_share }` booleans
+- `resolved.automate_blur_only` — boolean, true when automate is the **sole** reason for blur (no manual/pick blur active); in this case `blur_mode`, `blur_categories`, `blur_radius`, `thorough_blur`, `reveal_mode`, `transition_duration`, `redaction_color`, and `highlight_color` are all overridden with DEFAULT_MODEL values
+- `resolved.automate_blur_skipped` — boolean, true when automate fired but deferred because blur-all or pick-and-blur was already enabled
 
 `blsi.Model` methods for automate_blur:
-- `save_automate_blur(hostname, trigger, bool)` — write one trigger (`'idle'|'tab_switch'|'screen_share'`)
-- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one storage write
-- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname
+- `get_automate_blur(hostname)` — returns `{ idle, tab_switch, screen_share }` from in-memory session cache
+- `save_automate_blur(hostname, trigger, bool)` — write one trigger to session storage
+- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one session storage write
+- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname from session storage
 - `clear_host(hostname)` / `clear_all()` — also clear automate_blur atomically
 
 ---

@@ -1,10 +1,12 @@
 /**
- * screen_share.js — Screen share detection via getDisplayMedia() wrapping
+ * screen_share.js — Screen share event bridge (isolated world)
  *
- * Injects a tiny script into the page's MAIN world to intercept getDisplayMedia()
- * calls. When a web app (Google Meet, Zoom web, Teams) starts or stops a screen
- * share, notifies the background via SCREEN_SHARE_STARTED / SCREEN_SHARE_ENDED.
+ * Listens for '__blsi_screen_share' CustomEvents dispatched by screen_share_main.js
+ * (world: "MAIN") and relays them to the background via chrome.runtime messaging.
  * Background fans out SCREEN_SHARE_BLUR to all other open tabs.
+ *
+ * The getDisplayMedia() interceptor lives in screen_share_main.js (world: "MAIN",
+ * run_at: "document_start") — no script injection here.
  *
  * Covers: web-app screen shares only. OS-level captures (Zoom desktop, Discord)
  * are not detectable via browser APIs.
@@ -15,44 +17,30 @@
 const BlurrySiteScreenShare = (() => {
   'use strict';
 
-  let _handler = null;
-
-  function _inject() {
-    var s = document.createElement('script');
-    s.textContent = '(function(){' +
-      'var orig=navigator.mediaDevices&&' +
-      'typeof navigator.mediaDevices.getDisplayMedia==="function"' +
-      '?navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices):null;' +
-      'if(!orig)return;' +
-      'navigator.mediaDevices.getDisplayMedia=async function(c){' +
-      'var stream=await orig(c);' +
-      'document.dispatchEvent(new CustomEvent("__blsi_screen_share",{detail:{active:true}}));' +
-      'var tracks=stream.getTracks(),n=tracks.length;' +
-      'if(n===0){' +
-      'document.dispatchEvent(new CustomEvent("__blsi_screen_share",{detail:{active:false}}));' +
-      'return stream;}' +
-      'tracks.forEach(function(t){' +
-      't.addEventListener("ended",function(){' +
-      'if(--n===0)document.dispatchEvent(new CustomEvent("__blsi_screen_share",{detail:{active:false}}));' +
-      '});});' +
-      'return stream;};' +
-      '})();';
-    (document.head || document.documentElement).appendChild(s);
-    s.remove();
-  }
+  let _handler   = null;
+  let _sharePort = null;
 
   function init() {
-    _inject();
+    destroy(); // deregister any prior listener before adding a new one
     _handler = function(e) {
-      var type = e.detail.active
-        ? blsi.command.screen_share_started
-        : blsi.command.screen_share_ended;
-      chrome.runtime.sendMessage({ type: type }).catch(function() {});
+      if (e.detail.active) {
+        // Open a persistent port — its lifetime IS the share's lifetime.
+        // Port disconnect fires on any exit: crash, close, navigation, or normal end.
+        // background.js onConnect handler fans out SCREEN_SHARE_BLUR to other tabs.
+        _sharePort = chrome.runtime.connect({ name: 'blsi-screen-share' });
+        chrome.runtime.sendMessage({ type: blsi.command.screen_share_started }).catch(function() {});
+      } else {
+        // Normal end: disconnect port first (triggers background onDisconnect fan-out),
+        // then send ENDED as a redundant cleanup signal.
+        if (_sharePort) { _sharePort.disconnect(); _sharePort = null; }
+        chrome.runtime.sendMessage({ type: blsi.command.screen_share_ended }).catch(function() {});
+      }
     };
     document.addEventListener('__blsi_screen_share', _handler);
   }
 
   function destroy() {
+    if (_sharePort) { _sharePort.disconnect(); _sharePort = null; }
     if (_handler) document.removeEventListener('__blsi_screen_share', _handler);
     _handler = null;
   }

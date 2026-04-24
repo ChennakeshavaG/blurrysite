@@ -28,8 +28,8 @@ const BlurrySitePopupRenderHtb = (() => {
   // ── Section builders ─────────────────────────────────────────────────────────
 
   /**
-   * Type chips — Blur All: Gaussian/Frosted/Redacted/Masked
-   *              Pick & Blur: Gaussian/Frosted/Color
+   * Type chips — Blur All: Blur/Frosted/Redacted/Censored
+   *              Pick & Blur: Blur/Frosted/Color
    * Clicking a chip calls onSave with new blur_mode or pick_blur_type
    * and updates sibling section visibility.
    */
@@ -97,7 +97,6 @@ const BlurrySitePopupRenderHtb = (() => {
    */
   function _updateVisibility(activeType, isBlurAll, refs) {
     var hideStrength       = (activeType === 'redacted' || activeType === 'censored' || activeType === 'color');
-    var hideReveal         = false;
     var hideCats           = !isBlurAll;
     var showColor          = (!isBlurAll && activeType === 'color');
     var showRedactionColor = (isBlurAll && activeType === 'redacted');
@@ -105,7 +104,6 @@ const BlurrySitePopupRenderHtb = (() => {
     if (refs.catsDivider)        { refs.catsDivider.hidden        = hideCats; }
     if (refs.catsGroup)          { refs.catsGroup.hidden           = hideCats; }
     if (refs.strengthDiv)        { refs.strengthDiv.hidden         = hideStrength; }
-    if (refs.revealDiv)          { refs.revealDiv.hidden            = hideReveal; }
     if (refs.colorDiv)           { refs.colorDiv.hidden             = !showColor; }
     if (refs.redactionColorDiv)  { refs.redactionColorDiv.hidden    = !showRedactionColor; }
 
@@ -302,6 +300,43 @@ const BlurrySitePopupRenderHtb = (() => {
   }
 
   /**
+   * Transition toggle — always visible; instant (0ms) vs smooth (150ms).
+   */
+  function _buildTransition(settings, onSave) {
+    var group = document.createElement('div');
+    group.className = 'bl-htb-group';
+
+    var row = document.createElement('div');
+    row.className = 'bl-form-row';
+
+    var labelWrap = document.createElement('div');
+    var labelText = document.createElement('span');
+    labelText.className = 'bl-form-row__label';
+    labelText.textContent = _t('setting_transition');
+    labelWrap.appendChild(labelText);
+
+    var isSmooth = (typeof settings.transition_duration === 'number')
+      ? settings.transition_duration > 0
+      : true;
+
+    var tog = _makeToggle('bl-htb-transition-toggle', isSmooth, _t('setting_transition'));
+    tog.input.addEventListener('change', function () {
+      onSave({ transition_duration: tog.input.checked ? 150 : 0 });
+    });
+
+    row.appendChild(labelWrap);
+    row.appendChild(tog.label);
+    group.appendChild(row);
+
+    var hint = document.createElement('p');
+    hint.className = 'bl-section__hint';
+    hint.textContent = _t('setting_transition_hint');
+    group.appendChild(hint);
+
+    return group;
+  }
+
+  /**
    * Color picker — shown only in Pick & Blur + Color type.
    */
   function _buildColorPicker(settings, onSave) {
@@ -424,7 +459,6 @@ const BlurrySitePopupRenderHtb = (() => {
 
     var hideCats           = !isBlurAll;
     var hideStrength       = (activeType === 'redacted' || activeType === 'censored' || activeType === 'color');
-    var hideReveal         = false;
     var showColor          = (!isBlurAll && activeType === 'color');
     var showRedactionColor = (isBlurAll && activeType === 'redacted');
 
@@ -435,9 +469,12 @@ const BlurrySitePopupRenderHtb = (() => {
     var revealDiv = document.createElement('div');
     var revealGroup = _buildReveal(settings, onSave);
     revealDiv.appendChild(revealGroup);
-    revealDiv.hidden = hideReveal;
     containerEl.appendChild(revealDiv);
     sectionRefs.revealDiv = revealDiv;
+
+    // ── 1.5. Transition (instant vs smooth) ───────────────────────────────────
+    containerEl.appendChild(_makeDivider());
+    containerEl.appendChild(_buildTransition(settings, onSave));
 
     // ── 2. Type chips (Blur Look) ──────────────────────────────────────────────
     containerEl.appendChild(_makeDivider());

@@ -85,8 +85,8 @@ describe('BlurrySite constants', () => {
 
     test('settings has correct default values', () => {
       const s = PB.DEFAULT_MODEL.settings;
-      expect(s.blur_radius).toBe(6);
-      expect(s.transition_duration).toBe(150);
+      expect(s.blur_radius).toBe(8);
+      expect(s.transition_duration).toBe(300);
       expect(s.highlight_color).toBe('#f59e0b');
       expect(s.reveal_mode).toBe('hover');
       expect(s.enabled).toBe(true);
@@ -94,14 +94,18 @@ describe('BlurrySite constants', () => {
       expect(s.language).toBe('auto');
     });
 
-    test('settings.blur_categories has correct defaults', () => {
-      const bc = PB.DEFAULT_MODEL.settings.blur_categories;
+    test('blur_all.settings.blur_categories has correct defaults', () => {
+      const bc = PB.DEFAULT_MODEL.blur_all.settings.blur_categories;
       expect(bc.text).toBe(true);
       expect(bc.media).toBe(true);
       expect(bc.form).toBe(false);
       expect(bc.table).toBe(true);
       expect(bc.structure).toBe(true);
       expect(Object.keys(bc)).toHaveLength(5);
+    });
+
+    test('settings does not contain blur_categories', () => {
+      expect(PB.DEFAULT_MODEL.settings.blur_categories).toBeUndefined();
     });
 
     test('blur_all.settings.blur_mode defaults to blur', () => {
@@ -130,10 +134,8 @@ describe('BlurrySite constants', () => {
       expect(a.settings.tab_switch.enabled).toBe(false);
     });
 
-    test('automate_blur default is empty object', () => {
-      expect(PB.DEFAULT_MODEL.automate_blur).toBeDefined();
-      expect(typeof PB.DEFAULT_MODEL.automate_blur).toBe('object');
-      expect(Object.keys(PB.DEFAULT_MODEL.automate_blur)).toHaveLength(0);
+    test('automate_blur is not in DEFAULT_MODEL (lives in session storage)', () => {
+      expect(PB.DEFAULT_MODEL.automate_blur).toBeUndefined();
     });
 
     test('is frozen', () => {
@@ -147,10 +149,10 @@ describe('BlurrySite constants', () => {
   describe('build_default_model', () => {
     test('returns a mutable deep clone with shortcuts', () => {
       const m = PB.build_default_model();
-      expect(m.settings.blur_radius).toBe(6);
+      expect(m.settings.blur_radius).toBe(8);
       m.settings.blur_radius = 20;
       expect(m.settings.blur_radius).toBe(20);
-      expect(PB.DEFAULT_MODEL.settings.blur_radius).toBe(6);
+      expect(PB.DEFAULT_MODEL.settings.blur_radius).toBe(8);
     });
 
     test('includes shortcuts from action registry', () => {
@@ -165,8 +167,8 @@ describe('BlurrySite constants', () => {
 
     test('nested objects are cloned (not shared)', () => {
       const m = PB.build_default_model();
-      m.settings.blur_categories.form = true;
-      expect(PB.DEFAULT_MODEL.settings.blur_categories.form).toBe(false);
+      m.blur_all.settings.blur_categories.form = true;
+      expect(PB.DEFAULT_MODEL.blur_all.settings.blur_categories.form).toBe(false);
     });
   });
 
@@ -212,9 +214,9 @@ describe('BlurrySite constants', () => {
   describe('validate_model', () => {
     test('returns full defaults for null input', () => {
       const m = PB.validate_model(null);
-      expect(m.settings.blur_radius).toBe(6);
+      expect(m.settings.blur_radius).toBe(8);
       expect(m.settings.enabled).toBe(true);
-      expect(m.settings.blur_categories.text).toBe(true);
+      expect(m.blur_all.settings.blur_categories.text).toBe(true);
       expect(m.shortcuts).toBeDefined();
     });
 
@@ -222,17 +224,17 @@ describe('BlurrySite constants', () => {
       const input = PB.build_default_model();
       input.settings.blur_radius = 15;
       input.settings.enabled = false;
-      input.settings.blur_categories.form = true;
+      input.blur_all.settings.blur_categories.form = true;
       const result = PB.validate_model(input);
       expect(result.settings.blur_radius).toBe(15);
       expect(result.settings.enabled).toBe(false);
-      expect(result.settings.blur_categories.form).toBe(true);
+      expect(result.blur_all.settings.blur_categories.form).toBe(true);
     });
 
     test('replaces out-of-range blur_radius with default', () => {
       const input = PB.build_default_model();
       input.settings.blur_radius = 999;
-      expect(PB.validate_model(input).settings.blur_radius).toBe(6);
+      expect(PB.validate_model(input).settings.blur_radius).toBe(8);
     });
 
     test('replaces invalid reveal_mode with default', () => {
@@ -258,17 +260,28 @@ describe('BlurrySite constants', () => {
 
     test('fills missing sections with defaults', () => {
       const result = PB.validate_model({});
-      expect(result.settings.blur_radius).toBe(6);
+      expect(result.settings.blur_radius).toBe(8);
       expect(result.settings.reveal_mode).toBe('hover');
       expect(result.settings.language).toBe('auto');
       expect(result.settings.enabled).toBe(true);
       expect(result.settings.thorough_blur).toBe(false);
-      expect(Object.keys(result.settings.blur_categories)).toHaveLength(5);
+      expect(Object.keys(result.blur_all.settings.blur_categories)).toHaveLength(5);
       expect(result.blur_all).toBeDefined();
       expect(result.pick_and_blur).toBeDefined();
       expect(result.auto_detect_pii).toBeDefined();
       expect(result.automate).toBeDefined();
       expect(Array.isArray(result.site_rules)).toBe(true);
+    });
+
+    test('migrates blur_categories from old settings key to blur_all.settings', () => {
+      // Simulates existing user storage where blur_categories was under settings
+      const old = PB.build_default_model();
+      old.settings.blur_categories = { text: true, media: false, form: true, table: true, structure: true };
+      delete old.blur_all.settings.blur_categories;
+      const result = PB.validate_model(old);
+      expect(result.blur_all.settings.blur_categories.media).toBe(false);
+      expect(result.blur_all.settings.blur_categories.form).toBe(true);
+      expect(result.settings.blur_categories).toBeUndefined();
     });
 
     test('validates shortcut entries in shortcuts section', () => {
@@ -439,41 +452,6 @@ describe('BlurrySite constants', () => {
       const m = PB.build_default_model();
       m.automate.settings.idle = { value: 0, unit: 'min', enabled: false };
       expect(PB.validate_model(m).automate.settings.idle.value).toBe(5);
-    });
-
-    test('automate_blur: valid entry passes through', () => {
-      const m = PB.build_default_model();
-      m.automate_blur = { 'example.com': { idle: true, tab_switch: false, screen_share: true } };
-      const result = PB.validate_model(m);
-      expect(result.automate_blur['example.com'].idle).toBe(true);
-      expect(result.automate_blur['example.com'].tab_switch).toBe(false);
-      expect(result.automate_blur['example.com'].screen_share).toBe(true);
-    });
-
-    test('automate_blur: missing fields default to false', () => {
-      const m = PB.build_default_model();
-      m.automate_blur = { 'example.com': {} };
-      const result = PB.validate_model(m);
-      expect(result.automate_blur['example.com'].idle).toBe(false);
-      expect(result.automate_blur['example.com'].tab_switch).toBe(false);
-      expect(result.automate_blur['example.com'].screen_share).toBe(false);
-    });
-
-    test('automate_blur: prototype pollution keys are dropped', () => {
-      const m = PB.build_default_model();
-      m.automate_blur = { '__proto__': { idle: true }, 'ok.com': { idle: true } };
-      const result = PB.validate_model(m);
-      // __proto__ is filtered out — only ok.com should remain as own key
-      expect(Object.keys(result.automate_blur)).toHaveLength(1);
-      expect(Object.keys(result.automate_blur)[0]).toBe('ok.com');
-      expect(result.automate_blur['ok.com'].idle).toBe(true);
-    });
-
-    test('automate_blur: non-object input defaults to empty', () => {
-      const m = PB.build_default_model();
-      m.automate_blur = 'invalid';
-      const result = PB.validate_model(m);
-      expect(result.automate_blur).toEqual({});
     });
 
     test('shortcuts: rejects empty binding array', () => {

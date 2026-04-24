@@ -10,8 +10,6 @@
  *   blsi.DEFAULT_MODEL             // frozen model shape
  *   blsi.build_default_model()     // mutable deep clone + lazy shortcuts
  *   blsi.validate_model(raw)       // validate/repair a stored model
- *   blsi.BlurEngine.applyBlur(el)  // module access (Java-style)
- *   blsi.Model.resolve(host, url)  // storage module
  *
  * Exposed as globalThis.blsi (IIFE — no ES module syntax).
  * Uses globalThis so it works in both window (content scripts) and
@@ -36,6 +34,7 @@ const Constants = (() => {
     context_unblur:        'CONTEXT_UNBLUR',
     blur_selection:        'BLUR_SELECTION',
     capture_viewport:      'CAPTURE_VIEWPORT',
+    toggle_panel:          'TOGGLE_PANEL',           // background → content (PWA settings panel)
     screen_share_started:  'SCREEN_SHARE_STARTED',  // content → background
     screen_share_ended:    'SCREEN_SHARE_ENDED',    // content → background
     screen_share_blur:     'SCREEN_SHARE_BLUR',     // background → content (other tabs)
@@ -165,8 +164,8 @@ const Constants = (() => {
 
   const DEFAULT_MODEL = Object.freeze({
     settings: Object.freeze({
-      blur_radius:         6,
-      transition_duration: 150,
+      blur_radius:         8,
+      transition_duration: 300,
       highlight_color:     '#f59e0b',
       redaction_color:     '#000000',
       reveal_mode:         'hover',
@@ -174,19 +173,19 @@ const Constants = (() => {
       thorough_blur:       false,
       language:            'auto',
       tab_privacy:         false,
-      blur_categories: Object.freeze({
-        text:      true,
-        media:     true,
-        form:      false,
-        table:     true,
-        structure: true,
-      }),
     }),
 
     blur_all: Object.freeze({
       status: false,   // global default; per-site state lives in site_rules[i].blur_all
       settings: Object.freeze({
         blur_mode: 'blur',
+        blur_categories: Object.freeze({
+          text:      true,
+          media:     true,
+          form:      false,
+          table:     true,
+          structure: true,
+        }),
       }),
     }),
 
@@ -220,11 +219,6 @@ const Constants = (() => {
 
     site_rules: Object.freeze([]),
     // shortcuts: built lazily — not frozen here
-
-    // Per-hostname automate trigger state. Separate from blur_all so automate
-    // triggers never clobber the user's manual blur preference.
-    // Shape: { [hostname]: { idle: bool, tab_switch: bool, screen_share: bool } }
-    automate_blur: Object.freeze({}),
   });
 
   // ── Deep merge ─────────────────────────────────────────────────────────────
@@ -332,15 +326,6 @@ const Constants = (() => {
           ? s.language : d.settings.language,
 
         tab_privacy: (typeof s.tab_privacy === 'boolean') ? s.tab_privacy : d.settings.tab_privacy,
-
-        blur_categories: (() => {
-          const cats = (s.blur_categories && typeof s.blur_categories === 'object') ? s.blur_categories : {};
-          const out = {};
-          for (const key of Object.keys(d.settings.blur_categories)) {
-            out[key] = (typeof cats[key] === 'boolean') ? cats[key] : d.settings.blur_categories[key];
-          }
-          return out;
-        })(),
       };
     }
 
@@ -355,6 +340,20 @@ const Constants = (() => {
         settings: {
           blur_mode: Object.values(blur_modes).includes(migrated_blur_mode)
             ? migrated_blur_mode : d.blur_all.settings.blur_mode,
+          blur_categories: (() => {
+            // Prefer new location (blur_all.settings.blur_categories).
+            // Fall back to model.settings.blur_categories for one-time migration of
+            // existing users whose data still lives under the old settings key.
+            const _old_s = (model.settings && typeof model.settings === 'object') ? model.settings : {};
+            const cats = (ba_s.blur_categories && typeof ba_s.blur_categories === 'object')
+              ? ba_s.blur_categories
+              : ((_old_s.blur_categories && typeof _old_s.blur_categories === 'object') ? _old_s.blur_categories : {});
+            const out = {};
+            for (const key of Object.keys(d.blur_all.settings.blur_categories)) {
+              out[key] = (typeof cats[key] === 'boolean') ? cats[key] : d.blur_all.settings.blur_categories[key];
+            }
+            return out;
+          })(),
         },
       };
     }
@@ -488,23 +487,6 @@ const Constants = (() => {
         }));
     }
 
-    // ── automate_blur ──────────────────────────────────────────────────────
-    {
-      const ab_in = (model.automate_blur && typeof model.automate_blur === 'object'
-        && !Array.isArray(model.automate_blur)) ? model.automate_blur : {};
-      const ab_out = Object.create(null);
-      for (const host of Object.keys(ab_in)) {
-        if (!host || host === '__proto__' || host === 'constructor') continue;
-        const e = (ab_in[host] && typeof ab_in[host] === 'object') ? ab_in[host] : {};
-        ab_out[host] = {
-          idle:         typeof e.idle         === 'boolean' ? e.idle         : false,
-          tab_switch:   typeof e.tab_switch   === 'boolean' ? e.tab_switch   : false,
-          screen_share: typeof e.screen_share === 'boolean' ? e.screen_share : false,
-        };
-      }
-      r.automate_blur = ab_out;
-    }
-
     return r;
   }
 
@@ -536,8 +518,6 @@ const Constants = (() => {
     build_default_model,
     validate_model,
     is_valid_shortcut_entry,
-    is_valid,
-    category_of,
   };
 })();
 

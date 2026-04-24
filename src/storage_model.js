@@ -14,8 +14,8 @@
  * write. When chrome.storage.onChanged fires back, we deep-compare against cache —
  * if they match, the change was ours and subscribers are NOT notified.
  *
- * Popup debouncing: callers use Model.debounced_save(patch, 150) for slider/toggle
- * changes that fire rapidly (e.g. blur-radius drag). Direct writes use Model.save().
+ * Popup debouncing: callers use Model.debounced_patch(section, delta) for slider/toggle
+ * changes that fire rapidly (e.g. blur-radius drag). Direct writes use Model.patch_section().
  *
  * Exposed as blsi.Model (IIFE — no ES module syntax).
  * Must load after: constants.js, action_registry.js, url_matcher.js.
@@ -24,13 +24,15 @@
 const StorageModel = (() => {
   'use strict';
 
-  const STORAGE_KEY  = 'blsi_model';
+  const STORAGE_KEY         = 'blsi_model';
+  const AUTOMATE_SESSION_KEY = 'blsi_automate_blur';
   const ITEM_LIMIT   = 10;
   const RULES_LIMIT  = 200;
 
   // ── Private cache + subscriber ─────────────────────────────────────────────
-  var _cache     = null;   // null = not yet initialised
-  var _on_change = null;   // function(newModel, oldModel) | null
+  var _cache          = null;   // null = not yet initialised
+  var _automate_cache = {};     // mirrors chrome.storage.session blsi_automate_blur
+  var _on_change      = null;   // function(newModel, oldModel) | null
 
   // ── Chrome storage wrappers ────────────────────────────────────────────────
   function _storage_get() {
@@ -46,6 +48,31 @@ const StorageModel = (() => {
       var payload = {};
       payload[STORAGE_KEY] = model;
       chrome.storage.local.set(payload, function() { resolve(); });
+    });
+  }
+
+  // ── Session storage helpers (automate_blur lives here; cleared on browser close) ─
+  function _session_get() {
+    return new Promise(function(resolve) {
+      if (chrome.storage && chrome.storage.session) {
+        chrome.storage.session.get(AUTOMATE_SESSION_KEY, function(r) {
+          resolve((r && r[AUTOMATE_SESSION_KEY]) || {});
+        });
+      } else {
+        resolve({});
+      }
+    });
+  }
+
+  function _session_set(data) {
+    return new Promise(function(resolve) {
+      if (chrome.storage && chrome.storage.session) {
+        var payload = {};
+        payload[AUTOMATE_SESSION_KEY] = data;
+        chrome.storage.session.set(payload, function() { resolve(); });
+      } else {
+        resolve();
+      }
     });
   }
 
@@ -74,15 +101,23 @@ const StorageModel = (() => {
 
   // ── chrome.storage.onChanged — self-echo detection ─────────────────────────
   chrome.storage.onChanged.addListener(function(changes, area) {
-    if (area !== 'local' || !(STORAGE_KEY in changes)) return;
+    if (area === 'local' && STORAGE_KEY in changes) {
+      var new_val = changes[STORAGE_KEY].newValue || null;
+      // Self-echo: our own write already updated _cache to this value
+      if (_deep_equal(_cache, new_val)) return;
+      var old_model = _cache;
+      _cache = new_val ? blsi.validate_model(new_val) : null;
+      if (_on_change) _on_change(_cache, old_model);
+    }
 
-    var new_val = changes[STORAGE_KEY].newValue || null;
-    // Self-echo: our own write already updated _cache to this value
-    if (_deep_equal(_cache, new_val)) return;
-
-    var old_model = _cache;
-    _cache = new_val ? blsi.validate_model(new_val) : null;
-    if (_on_change) _on_change(_cache, old_model);
+    if (area === 'session' && AUTOMATE_SESSION_KEY in changes) {
+      var new_automate = changes[AUTOMATE_SESSION_KEY].newValue || {};
+      // Self-echo: our own _session_set already updated _automate_cache
+      if (_deep_equal(_automate_cache, new_automate)) return;
+      _automate_cache = new_automate;
+      // Notify subscriber so content_script re-resolves and re-syncs blur state
+      if (_on_change) _on_change(_cache, _cache);
+    }
   });
 
   // ── Public: init + subscribe ───────────────────────────────────────────────
@@ -100,6 +135,9 @@ const StorageModel = (() => {
       _cache = blsi.build_default_model();
       await _storage_set(_cache);
     }
+    // Load per-hostname automate trigger state from session storage.
+    // Session storage is cleared on browser close → no stale triggers across restarts.
+    _automate_cache = await _session_get();
   }
 
   /** Subscribe to real (non-echo) storage changes from other contexts. */
@@ -223,7 +261,8 @@ const StorageModel = (() => {
     Object.assign(resolved, m.settings);
 
     // ── 2. blur_all feature settings ──────────────────────────────────────
-    resolved.blur_mode = m.blur_all.settings.blur_mode;
+    resolved.blur_mode       = m.blur_all.settings.blur_mode;
+    resolved.blur_categories = m.blur_all.settings.blur_categories;
 
     // ── 3. pick_and_blur feature settings ─────────────────────────────────
     resolved.pick_blur_enabled = m.pick_and_blur.status;
@@ -238,24 +277,10 @@ const StorageModel = (() => {
     resolved.pii_mode             = m.auto_detect_pii.settings.pii_mode;
     resolved.pii_redaction_color  = m.auto_detect_pii.settings.pii_redaction_color;
 
-    // ── 5. automate feature settings ──────────────────────────────────────
-    resolved.automate_screen_share = m.automate.settings.screen_share;
-    resolved.automate_idle         = m.automate.settings.idle;
-    resolved.automate_tab_switch   = m.automate.settings.tab_switch;
-
-    // ── 5b. automate_blur — per-hostname transient trigger state ──────────
-    var automate_entry = (m.automate_blur || {})[hostname] || {};
-    resolved.automate_blur_active   = !!(automate_entry.idle || automate_entry.tab_switch || automate_entry.screen_share);
-    resolved.automate_blur_triggers = {
-      idle:         !!automate_entry.idle,
-      tab_switch:   !!automate_entry.tab_switch,
-      screen_share: !!automate_entry.screen_share,
-    };
-
-    // ── 6. shortcuts ───────────────────────────────────────────────────────
+    // ── 5. shortcuts ───────────────────────────────────────────────────────
     resolved.shortcuts = m.shortcuts || {};
 
-    // ── 7. wildcard / regex site_rule override (first match wins) ─────────
+    // ── 6. wildcard / regex site_rule override (first match wins) ─────────
     var site_rules = m.site_rules || [];
     if (url && globalThis.blsi && blsi.UrlMatcher) {
       for (var i = 0; i < site_rules.length; i++) {
@@ -270,7 +295,7 @@ const StorageModel = (() => {
       }
     }
 
-    // ── 8. exact hostname site_rule ────────────────────────────────────────
+    // ── 7. exact hostname site_rule ────────────────────────────────────────
     var exact = null;
     for (var j = 0; j < site_rules.length; j++) {
       if (site_rules[j].hostname_type === blsi.pattern_types.exact &&
@@ -283,17 +308,53 @@ const StorageModel = (() => {
       Object.assign(resolved, exact.settings);
     }
 
-    // ── 9. blur_all_active for this hostname ───────────────────────────────
-    // exact.blur_all overrides global default; null = inherit global.
-    // automate_blur triggers OR on top — never clobber manual preference.
-    var manual_blur = exact
-      ? (exact.blur_all !== null ? !!exact.blur_all : m.blur_all.status)
-      : m.blur_all.status;
-    resolved.blur_all_active = manual_blur || resolved.automate_blur_active;
-
-    // ── 10. blur items for this hostname ───────────────────────────────────
+    // ── 8. blur items for this hostname ────────────────────────────────────
     // Gated on pick_and_blur.status — items are "paused" (not applied) when off.
     resolved.blur_items = (exact && m.pick_and_blur.status) ? (exact.items || []) : [];
+
+    // ── 9. automate ────────────────────────────────────────────────────────
+    // Feature config (what triggers are enabled and their settings).
+    resolved.automate_screen_share = m.automate.settings.screen_share;
+    resolved.automate_idle         = m.automate.settings.idle;
+    resolved.automate_tab_switch   = m.automate.settings.tab_switch;
+
+    // Trigger state — _automate_cache mirrors chrome.storage.session
+    // blsi_automate_blur. Cleared on browser close → no stale triggers.
+    var automate_entry = (_automate_cache || {})[hostname] || {};
+    resolved.automate_blur_active   = !!(automate_entry.idle || automate_entry.tab_switch || automate_entry.screen_share);
+    resolved.automate_blur_triggers = {
+      idle:         !!automate_entry.idle,
+      tab_switch:   !!automate_entry.tab_switch,
+      screen_share: !!automate_entry.screen_share,
+    };
+
+    // blur_all_active — exact.blur_all overrides global; null = inherit global.
+    // Automate applies blur only when neither blur-all nor pick-and-blur is
+    // already active. When it does apply, default settings are used so it
+    // never overwrites the user's intentional blur configuration.
+    var manual_blur         = exact
+      ? (exact.blur_all !== null ? !!exact.blur_all : m.blur_all.status)
+      : m.blur_all.status;
+    var blur_present        = manual_blur || m.pick_and_blur.status;
+    var automate_needs_blur = resolved.automate_blur_active && !blur_present;
+
+    resolved.blur_all_active       = manual_blur || automate_needs_blur;
+    resolved.automate_blur_only    = !!automate_needs_blur;
+    resolved.automate_blur_skipped = resolved.automate_blur_active && !!blur_present;
+
+    if (automate_needs_blur) {
+      var _def = blsi.DEFAULT_MODEL;
+      var _ds  = _def.settings;
+      var _dbs = _def.blur_all.settings;
+      resolved.blur_mode           = _dbs.blur_mode;
+      resolved.blur_categories     = _dbs.blur_categories;
+      resolved.blur_radius         = _ds.blur_radius;
+      resolved.thorough_blur       = _ds.thorough_blur;
+      resolved.reveal_mode         = _ds.reveal_mode;
+      resolved.transition_duration = _ds.transition_duration;
+      resolved.redaction_color     = _ds.redaction_color;
+      resolved.highlight_color     = _ds.highlight_color;
+    }
 
     return resolved;
   }
@@ -346,46 +407,53 @@ const StorageModel = (() => {
     return get().blur_all.status;
   }
 
-  async function get_blur_state(hostname) {
-    return get_cached_blur_state(hostname);
-  }
-
   async function save_blur_state(hostname, is_active) {
     if (!_is_valid_hostname(hostname)) return;
     await set_site_entry(hostname, { blur_all: !!is_active });
   }
 
-  // ── Public: automate_blur CRUD ─────────────────────────────────────────────
+  // ── Public: automate_blur CRUD (session storage) ──────────────────────────
+  // Data lives in chrome.storage.session (blsi_automate_blur key) — cleared on
+  // browser close, so stale trigger state never survives restarts or crashes.
 
   async function save_automate_blur(hostname, trigger, is_active) {
     if (!_is_valid_hostname(hostname)) return;
     var valid = { idle: true, tab_switch: true, screen_share: true };
     if (!valid[trigger]) return;
-    var current = get();
-    var ab      = Object.assign({}, current.automate_blur || {});
-    var entry   = Object.assign({ idle: false, tab_switch: false, screen_share: false }, ab[hostname] || {});
+    var ab    = Object.assign({}, _automate_cache || {});
+    var entry = Object.assign({ idle: false, tab_switch: false, screen_share: false }, ab[hostname] || {});
     entry[trigger] = !!is_active;
     ab[hostname] = entry;
-    await _write(Object.assign({}, current, { automate_blur: ab }));
+    _automate_cache = ab;   // update in-memory cache immediately (self-echo guard in onChanged)
+    await _session_set(ab);
   }
 
   async function patch_automate_blur(hostname, patch) {
     if (!_is_valid_hostname(hostname)) return;
-    var current = get();
-    var ab      = Object.assign({}, current.automate_blur || {});
-    var entry   = Object.assign({ idle: false, tab_switch: false, screen_share: false }, ab[hostname] || {});
-    var valid   = { idle: true, tab_switch: true, screen_share: true };
+    var ab    = Object.assign({}, _automate_cache || {});
+    var entry = Object.assign({ idle: false, tab_switch: false, screen_share: false }, ab[hostname] || {});
+    var valid = { idle: true, tab_switch: true, screen_share: true };
     for (var k in patch) { if (valid[k]) entry[k] = !!patch[k]; }
     ab[hostname] = entry;
-    await _write(Object.assign({}, current, { automate_blur: ab }));
+    _automate_cache = ab;
+    await _session_set(ab);
   }
 
   async function clear_automate_blur(hostname) {
     if (!_is_valid_hostname(hostname)) return;
-    var current = get();
-    var ab = Object.assign({}, current.automate_blur || {});
+    var ab = Object.assign({}, _automate_cache || {});
     delete ab[hostname];
-    await _write(Object.assign({}, current, { automate_blur: ab }));
+    _automate_cache = ab;
+    await _session_set(ab);
+  }
+
+  function get_automate_blur(hostname) {
+    var entry = (_automate_cache || {})[hostname] || {};
+    return {
+      idle:         !!entry.idle,
+      tab_switch:   !!entry.tab_switch,
+      screen_share: !!entry.screen_share,
+    };
   }
 
   async function save_blur_item(hostname, item) {
@@ -422,9 +490,8 @@ const StorageModel = (() => {
     var next_rules = idx >= 0
       ? rules.map(function(r, i) { return i === idx ? merged : r; })
       : rules.concat([merged]);
-    var ab = Object.assign({}, current.automate_blur || {});
-    delete ab[hostname];
-    await _write(Object.assign({}, current, { site_rules: next_rules, automate_blur: ab }));
+    await _write(Object.assign({}, current, { site_rules: next_rules }));
+    await clear_automate_blur(hostname);
   }
 
   async function clear_all() {
@@ -433,7 +500,10 @@ const StorageModel = (() => {
       if (r.hostname_type !== blsi.pattern_types.exact) return r;
       return Object.assign({}, r, { items: [], blur_all: null });
     });
-    await _write(Object.assign({}, current, { site_rules: next_rules, automate_blur: {} }));
+    await _write(Object.assign({}, current, { site_rules: next_rules }));
+    // Clear all automate trigger state from session storage
+    _automate_cache = {};
+    await _session_set({});
   }
 
   // ── Public: URL rules (wildcard / regex site_rules) ────────────────────────
@@ -482,7 +552,7 @@ const StorageModel = (() => {
   }
 
   // ── Test utility ───────────────────────────────────────────────────────────
-  function _reset_cache() { _cache = null; }
+  function _reset_cache() { _cache = null; _automate_cache = {}; }
 
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
@@ -504,16 +574,16 @@ const StorageModel = (() => {
     // Blur items
     get_blur_items,
     get_cached_blur_state,
-    get_blur_state,
     save_blur_state,
     save_blur_item,
     remove_blur_item,
     clear_host,
     clear_all,
-    // Automate blur trigger state
+    // Automate blur trigger state (session storage — cleared on browser close)
     save_automate_blur,
     patch_automate_blur,
     clear_automate_blur,
+    get_automate_blur,
     // URL rules
     get_rules,
     save_rules,

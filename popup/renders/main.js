@@ -194,7 +194,7 @@ const BlurrySitePopupRender = (() => {
 
   // ── Automate section ───────────────────────────────────────────────────────
 
-  function renderAutomateSection(settings) {
+  function renderAutomateSection(settings, onClearAutomate) {
     const summaryEl = document.getElementById('bl-automate-summary');
     if (!summaryEl) return;
     summaryEl.innerHTML = '';
@@ -208,7 +208,14 @@ const BlurrySitePopupRender = (() => {
       if (triggers.screen_share) activeNames.push(_t('automate_screen_share'));
       const banner = document.createElement('div');
       banner.className = 'bl-automate-active-banner';
-      banner.textContent = _t('automate_triggered_by') + ' ' + activeNames.join(', ');
+      const label = document.createElement('span');
+      label.textContent = _t('automate_triggered_by') + ' ' + activeNames.join(', ');
+      banner.appendChild(label);
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'bl-automate-clear-btn';
+      clearBtn.textContent = _t('automate_turn_off');
+      clearBtn.addEventListener('click', function() { if (onClearAutomate) onClearAutomate(); });
+      banner.appendChild(clearBtn);
       summaryEl.appendChild(banner);
     }
 
@@ -379,7 +386,7 @@ const BlurrySitePopupRender = (() => {
     title.className = 'bl-mode-block__title';
     title.textContent = _t('btn_blur_all');
     header.appendChild(title);
-    header.appendChild(_makeToggle('bl-blur-all-toggle', !!isPageBlurred, _t('btn_blur_all'), false));
+    header.appendChild(_makeToggle('bl-blur-all-toggle', !!isPageBlurred, _t('btn_blur_all')));
     el.appendChild(header);
 
     if (isPageBlurred) {
@@ -469,7 +476,7 @@ const BlurrySitePopupRender = (() => {
     title.className = 'bl-mode-block__title';
     title.textContent = _t('btn_picker');
     header.appendChild(title);
-    header.appendChild(_makeToggle('bl-pick-blur-toggle', !!pickBlurEnabled, _t('btn_picker'), false));
+    header.appendChild(_makeToggle('bl-pick-blur-toggle', !!pickBlurEnabled, _t('btn_picker')));
     el.appendChild(header);
 
     el.appendChild(_renderPickBlurInfo(settings, blurItems, !!pickBlurEnabled));
@@ -493,10 +500,10 @@ const BlurrySitePopupRender = (() => {
 
   // ── Render all sections ────────────────────────────────────────────────────
 
-  function renderAll(settings, blurItems, isPageBlurred, onSave) {
+  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate) {
     renderModesSection(settings, blurItems, isPageBlurred);
     renderPiiSection(settings, onSave);
-    renderAutomateSection(settings);
+    renderAutomateSection(settings, onClearAutomate);
   }
 
   return { renderAll, renderHtbSection, renderPiiSection, renderAutomateSection, renderModesSection };

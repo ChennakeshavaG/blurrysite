@@ -27,7 +27,7 @@
   // ── Render coordinator ────────────────────────────────────────────────────
   function _renderCurrent() {
     const { settings, blurItems, isPageBlurred } = State.get();
-    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _onSave);
+    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _onSave, _onClearAutomate);
     UI.updateClearAll(settings, blurItems, isPageBlurred);
     _updateScrollArrows();
   }
@@ -39,6 +39,11 @@
 
   async function _onSave(patch) {
     await _saveAndApply(patch);
+  }
+
+  async function _onClearAutomate() {
+    await State.clearAutomateBlur();
+    _renderCurrent();
   }
 
   // ── Open HTB sub-page ─────────────────────────────────────────────────────
@@ -76,10 +81,10 @@
     const model = blsi.Model.get();
     State.setModel(model);
 
-    const [items, pageBlurred] = await Promise.all([
+    const [items] = await Promise.all([
       hostname ? blsi.Model.get_blur_items(hostname) : Promise.resolve([]),
-      hostname ? blsi.Model.get_blur_state(hostname) : Promise.resolve(false),
     ]);
+    const pageBlurred = hostname ? blsi.Model.get_cached_blur_state(hostname) : false;
     State.setBlurItems(items || []);
     State.setPageBlurred(!!pageBlurred);
 

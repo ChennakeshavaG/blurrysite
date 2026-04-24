@@ -37,6 +37,11 @@ Rules:
 ## Module Load Order (enforced by manifest.json)
 
 ```
+MAIN world (world:"MAIN", run_at:"document_start" — separate content_scripts entry):
+  screen_share_main.js  → no global; wraps navigator.mediaDevices.getDisplayMedia;
+                          dispatches '__blsi_screen_share' CustomEvent on start/stop
+
+Isolated world (run_at:"document_idle"):
  0. constants.js          → globalThis.blsi (message types + DEFAULTS)
  1. content_i18n.js       → blsi.ContentI18n (popup/content i18n loader: init, t, currentLang)
  2. logger.js             → blsi.Logger (flow logger; toggle persisted at chrome.storage.local.blsi_debug; cross-context sync via storage.onChanged)
@@ -50,7 +55,7 @@ Rules:
 10. fonts.js              → blsi.Fonts (embedded WOFF2 font assets; FONT_FACE string for "bl-si-redact-asterisk")
 11. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
 12. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
-13. screen_share.js       → blsi.ScreenShare (getDisplayMedia wrapper; init/destroy — sends SCREEN_SHARE_STARTED/ENDED to background)
+13. screen_share.js       → blsi.ScreenShare (CustomEvent bridge; init/destroy — listens for '__blsi_screen_share' from MAIN world, opens port 'blsi-screen-share' + sends SCREEN_SHARE_STARTED/ENDED; port disconnect = crash-safety UNBLUR fan-out)
 15. reveal_controller.js  → blsi.Reveal
 16. shortcut_handler.js   → blsi.Shortcuts
 17. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
@@ -183,24 +188,25 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - `generateId()` returns an 8-char lowercase hex string.
 
 ### storage_model.js
-- Accesses `chrome.storage.local` directly — no background relay. All data lives under the single `blsi_model` key as a feature-grouped object.
-- `init_cache()` — must be called once (by content_script/popup init) before any `get()` or `patch_section()` calls. Loads `blsi_model` into in-memory cache.
+- Accesses `chrome.storage.local` (model) and `chrome.storage.session` (automate_blur) directly — no background relay. Model data lives under the single `blsi_model` key. Automate blur state lives under `blsi_automate_blur` in session storage (auto-cleared on browser close/crash).
+- `init_cache()` — must be called once (by content_script/popup init) before any `get()` or `patch_section()` calls. Loads `blsi_model` from local storage into `_cache` AND loads `blsi_automate_blur` from session storage into `_automate_cache`.
 - `on_change(listener)` — registers a callback fired whenever the cached model changes (from storage `onChanged`). Single subscriber — calling twice replaces the first. Popup uses this to react to cross-context updates.
 - `get()` — returns the full cached model. Never reads storage directly after init; always returns from cache.
 - `patch_section(section, delta)` — deep-merges `delta` into the named section, writes the updated model back to storage, and updates cache. Use for deliberate user-triggered saves.
 - `debounced_patch(section, delta, delay?)` — same as `patch_section` but batches rapid calls (default **150 ms**). Use from popup inputs to avoid saturating storage writes.
 - `save_settings(patch)` — merges a partial settings patch into `model.settings`. Pass only the keys you want to update; unspecified keys are preserved.
-- `resolve(hostname, url)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `blur_all_active` and `blur_items` in the output. Single call site in content_script — replaces the old `UrlMatcher.resolveSettings` approach.
+- `resolve(hostname, url)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `blur_all_active`, `blur_items`, `automate_blur_active`, and `automate_blur_triggers` in the output. Reads automate state from `_automate_cache` (session storage), not from the model.
 - `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
-- `clear_host(host)` — clears `blur_all` + items + `automate_blur[host]` in a single atomic write.
-- `clear_all()` — clears `blur_all` + items for all exact rules + resets `automate_blur: {}` in a single atomic write.
-- `get_cached_blur_state(host)` — synchronous; reads blur state from cache (no I/O). Use in hot paths (MO callbacks).
-- `get_blur_state(host)` / `save_blur_state(host, state)` — async blur-all state read/write.
-- `save_automate_blur(hostname, trigger, bool)` — write one automate trigger (`'idle'|'tab_switch'|'screen_share'`) for a hostname.
-- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one storage write.
-- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname.
+- `clear_host(host)` — clears `blur_all` + items for the host in local storage, then calls `clear_automate_blur(host)` to clear session storage separately.
+- `clear_all()` — clears `blur_all` + items for all exact rules in local storage + resets session storage (`blsi_automate_blur: {}`) separately.
+- `get_cached_blur_state(host)` — synchronous; reads blur state from cache (no I/O). Use everywhere — `get_blur_state` was removed.
+- `save_blur_state(host, state)` — async blur-all state write.
+- `get_automate_blur(hostname)` — synchronous; returns `{ idle, tab_switch, screen_share }` from `_automate_cache`. Use in popup to read current trigger state without going through model.
+- `save_automate_blur(hostname, trigger, bool)` — write one automate trigger (`'idle'|'tab_switch'|'screen_share'`) to `chrome.storage.session`.
+- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one session storage write.
+- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname from session storage.
 - `get_rules()` / `save_rules(rules)` — URL rules CRUD. Rules are an array of `{ hostname_value, hostname_type, blur_all, items, settings }` where `hostname_type` is `'wildcard'|'regex'` (non-exact entries only).
-- `_reset_cache()` — test-only helper. Clears the in-memory cache so tests start from a clean slate.
+- `_reset_cache()` — test-only helper. Clears both `_cache` and `_automate_cache` so tests start from a clean slate.
 
 ### action_registry.js
 - Single source of truth for every shortcut-driven action. `blsi.Actions`.

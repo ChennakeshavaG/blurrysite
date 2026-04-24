@@ -150,7 +150,8 @@ const BlurrySiteUrlMatcher = (() => {
    * Rule settings are partial — deep-merged over the global settings.
    */
   function resolveSettings(url, globalSettings, urlRules) {
-    let resolved = blsi.deep_merge(blsi.DEFAULT_MODEL.settings, globalSettings);
+    const defaults = blsi.deep_merge(blsi.DEFAULT_MODEL.settings, blsi.DEFAULT_MODEL.blur_all.settings);
+    let resolved = blsi.deep_merge(defaults, globalSettings);
 
     if (Array.isArray(urlRules)) {
       for (const rule of urlRules) {

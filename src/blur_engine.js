@@ -3,7 +3,7 @@
  *
  * Hybrid CSS + data-attribute blur system:
  *  - CSS Style Cases -> Always-blur tags (h1, p, img, etc.) → injected <style> with tag selectors
- *  - DOM Mutation Observer Cases ->Text-check tags (div, span, li, etc.) → data-bl-si-blur attribute.
+ *  - DOM Mutation Observer Cases ->Text-check tags (div, span, etc.) → data-bl-si-blur attribute.
  *  - Picker/context menu → data-bl-si-pick-blur on individual elements (sole attribute; separate from blur-all)
  *
  * Uses attributes instead of class based to avoid issues from redering frameworks which primarly work on class changes (React, Vue .,etc)
@@ -128,7 +128,7 @@ const BlurEngine = (() => {
     }),
   });
 
-  const DEFAULT_CATS = blsi.DEFAULT_MODEL.settings.blur_categories;
+  const DEFAULT_CATS = blsi.DEFAULT_MODEL.blur_all.settings.blur_categories;
 
   const CATEGORY_ORDER = Object.freeze([
     "text",
@@ -519,7 +519,6 @@ const BlurEngine = (() => {
   function stampElements(root, categories, thorough, mode) {
     const cats = categories || DEFAULT_CATS;
     _rebuildTextCheckSet(cats);
-    const isMasked = mode === blsi.blur_modes.masked;
 
     // Collect shadow roots piggybacked on the stamp pass — no extra traversal.
     const shadowRoots = [];
@@ -882,13 +881,6 @@ const BlurEngine = (() => {
   let _dynamicCounter = 0;
   let _stickyCounter = 0;
   let _pickerActive = false;
-  // Reserved for future tooltip-during-peek feature. Not currently used.
-  // See commit history for the stamp-then-reveal approach that was reverted
-  // because it created visual gaps on SPAs (WhatsApp: "Download for Mac"
-  // section unblurred on load when cursor was positioned over it).
-  // The correct approach likely needs a fundamentally different strategy
-  // (e.g., CSS :has() to style tooltip siblings, or a site-specific
-  // heuristic layer) rather than MO gating.
   let _currentSettings = null;
 
   // ── Idle-stamp queue ────────────────────────────────────────────────────────
@@ -1286,7 +1278,7 @@ const BlurEngine = (() => {
    * Settings must include:
    *   BLUR_ALL_ACTIVE {boolean} — whether blur-all is on for this host
    *   BLUR_ITEMS      {Array}   — per-host blur items (dynamic + sticky)
-   * Both are folded in by the caller (content_script._syncFromStorage) before calling.
+   * Both are included by blsi.Model.resolve() before the caller passes them in.
    *
    * Storage reads live in content_script — handleSite is stateless/pure w.r.t.
    * storage. Every caller MUST await — concurrent calls are dropped (mutex).
