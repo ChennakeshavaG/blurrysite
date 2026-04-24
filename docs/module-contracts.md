@@ -392,6 +392,67 @@ saveRules(rules)
 
 ---
 
+## 4b. storage_model.js (current — replaces storage_manager.js)
+
+`blsi.Model` — single source of truth for all persisted state. Direct `chrome.storage.local` access under key `blsi_model`. No background relay.
+
+### Snapshot API (site-rules snapshot redesign)
+
+SNAPSHOT_KEYS — the set of user-configurable keys captured into a site rule:
+
+```
+blur_radius     — from m.settings.blur_radius
+blur_mode       — from m.blur_all.settings.blur_mode
+reveal_mode     — from m.settings.reveal_mode
+thorough_blur   — from m.settings.thorough_blur
+blur_categories — from m.settings.blur_categories (object, deep copy)
+pick_blur_type  — from m.pick_and_blur.settings.blur_type
+pick_blur_color — from m.pick_and_blur.settings.blur_color (object, deep copy)
+pii_mode        — from m.auto_detect_pii.settings.pii_mode
+```
+
+```typescript
+capture_snapshot() → object
+  // Returns plain object with exactly SNAPSHOT_KEYS populated from cache.
+  // blur_categories and pick_blur_color are deep copies.
+  // Source is always the in-memory cache (get()).
+
+save_site_snapshot(hostname_value: string, hostname_type: string, snapshot: object) → Promise<void>
+  // Finds rule where r.hostname_value === hostname_value && r.hostname_type === hostname_type.
+  // If found: replaces r.settings with snapshot.
+  // If not found: creates new entry (hostname_type honoured).
+  // No-op if hostname_value is empty/non-string or snapshot is null/non-object.
+
+clear_site_snapshot(hostname_value: string, hostname_type: string) → Promise<void>
+  // Resets r.settings to {} for the matching rule. No-op if rule not found.
+  // Other rule fields (blur_all, items) are NOT changed.
+
+get_site_snapshot(hostname_value: string, hostname_type: string) → object | null
+  // Returns r.settings if non-empty, else null.
+  // Synchronous read from cache.
+```
+
+### resolve() — snapshot merging
+
+`resolve(hostname, url)` already handles populated `site_rules[i].settings` via `Object.assign(resolved, rule.settings)`. The merge order (later wins):
+
+```
+global settings → feature settings → wildcard/regex rule.settings → exact rule.settings
+```
+
+A full snapshot in `rule.settings` overrides all SNAPSHOT_KEYS for the resolved output. No changes to `resolve()` were needed — the snapshot design was chosen to be forward-compatible.
+
+### validate_model() — snapshot validation
+
+`validate_model()` validates `site_rules[i].settings`:
+- Only SNAPSHOT_KEYS are passed through (unknown keys are dropped).
+- `blur_categories`: validates each boolean value; invalid entries fall back to `DEFAULT_MODEL` defaults.
+- `pick_blur_color`: validates `hex` (6-char hex) and `opacity` (0–1); invalid values fall back to defaults.
+- Scalar keys (`blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `pick_blur_type`, `pii_mode`) are passed through as-is; `resolve()` applies per-feature coercion when building the resolved view.
+- Empty `{}` settings survive validate_model as `{}` (no inflation to defaults).
+
+---
+
 ## 5. shortcut_handler.js (v2)
 
 ### State

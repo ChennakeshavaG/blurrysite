@@ -194,12 +194,39 @@ const StorageModel = (() => {
     await _write(next);
   }
 
+  // ── Snapshot key set ──────────────────────────────────────────────────────
+  // Keys captured from global settings into a site rule snapshot.
+  // Source of truth: docs/site-rules-snapshot-plan.md §Snapshot Key Set.
+  var SNAPSHOT_KEYS = [
+    'blur_radius',
+    'blur_mode',
+    'reveal_mode',
+    'thorough_blur',
+    'blur_categories',   // object — deep copy
+    'pick_blur_type',
+    'pick_blur_color',   // object — deep copy
+    'pii_mode',
+  ];
+
   // ── Private: site_rules helpers ────────────────────────────────────────────
   function _find_exact_idx(hostname) {
     var rules = get().site_rules || [];
     for (var i = 0; i < rules.length; i++) {
       if (rules[i].hostname_type === blsi.pattern_types.exact &&
           rules[i].hostname_value === hostname) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Find rule index by hostname_value + hostname_type (works for all rule types).
+   * Returns -1 if not found.
+   */
+  function _find_rule_idx(hostname_value, hostname_type) {
+    var rules = get().site_rules || [];
+    for (var i = 0; i < rules.length; i++) {
+      if (rules[i].hostname_value === hostname_value &&
+          rules[i].hostname_type  === hostname_type) return i;
     }
     return -1;
   }
@@ -238,6 +265,110 @@ const StorageModel = (() => {
     });
     if (next_rules.length === current.site_rules.length) return;
     await _write(Object.assign({}, current, { site_rules: next_rules }));
+  }
+
+  // ── Public: snapshot API ──────────────────────────────────────────────────
+
+  /**
+   * Capture a settings snapshot from the current cached global model.
+   * Returns a plain object containing only SNAPSHOT_KEYS, with deep copies
+   * of any nested objects (blur_categories, pick_blur_color).
+   *
+   * Key mapping from model sections:
+   *   blur_radius     ← m.settings.blur_radius
+   *   blur_mode       ← m.blur_all.settings.blur_mode
+   *   reveal_mode     ← m.settings.reveal_mode
+   *   thorough_blur   ← m.settings.thorough_blur
+   *   blur_categories ← m.blur_all.settings.blur_categories  (deep copy)
+   *   pick_blur_type  ← m.pick_and_blur.settings.blur_type
+   *   pick_blur_color ← m.pick_and_blur.settings.blur_color  (deep copy)
+   *   pii_mode        ← m.auto_detect_pii.settings.pii_mode
+   */
+  function capture_snapshot() {
+    var m = get();
+    var snap = {};
+    snap.blur_radius    = m.settings.blur_radius;
+    snap.blur_mode      = m.blur_all.settings.blur_mode;
+    snap.reveal_mode    = m.settings.reveal_mode;
+    snap.thorough_blur  = m.settings.thorough_blur;
+    snap.blur_categories = JSON.parse(JSON.stringify(m.blur_all.settings.blur_categories));
+    snap.pick_blur_type  = m.pick_and_blur.settings.blur_type;
+    snap.pick_blur_color = JSON.parse(JSON.stringify(m.pick_and_blur.settings.blur_color));
+    snap.pii_mode        = m.auto_detect_pii.settings.pii_mode;
+    return snap;
+  }
+
+  /**
+   * Save a settings snapshot for a site rule identified by hostname_value + hostname_type.
+   * Finds the matching rule entry (creates it for exact rules if missing) and sets
+   * its .settings to the provided snapshot.
+   *
+   * For wildcard/regex rules the caller is responsible for ensuring the rule exists
+   * (via save_rules) before calling this. If not found, a new exact-type entry is
+   * created (consistent with set_site_entry behaviour).
+   *
+   * @param {string} hostname_value  e.g. 'github.com' or '*.example.com'
+   * @param {string} hostname_type   blsi.pattern_types value: 'exact'|'wildcard'|'regex'
+   * @param {object} snapshot        Plain object with SNAPSHOT_KEYS
+   */
+  async function save_site_snapshot(hostname_value, hostname_type, snapshot) {
+    if (!hostname_value || typeof hostname_value !== 'string') return;
+    if (!snapshot || typeof snapshot !== 'object') return;
+    var current = get();
+    var rules   = current.site_rules.slice();
+    var idx     = _find_rule_idx(hostname_value, hostname_type);
+    if (idx >= 0) {
+      var updated = Object.assign({}, rules[idx], { settings: Object.assign({}, snapshot) });
+      var next_rules = rules.map(function(r, i) { return i === idx ? updated : r; });
+      await _write(Object.assign({}, current, { site_rules: next_rules }));
+    } else {
+      // Rule not found — create new exact entry (wildcard/regex callers should
+      // pre-create via save_rules; this fallback keeps exact-type APIs consistent).
+      var new_entry = {
+        hostname_value: hostname_value,
+        hostname_type:  hostname_type || blsi.pattern_types.exact,
+        blur_all:       null,
+        items:          [],
+        settings:       Object.assign({}, snapshot),
+      };
+      await _write(Object.assign({}, current, { site_rules: rules.concat([new_entry]) }));
+    }
+  }
+
+  /**
+   * Clear (reset to {}) the settings snapshot for a site rule.
+   * No-op if the rule doesn't exist.
+   *
+   * @param {string} hostname_value
+   * @param {string} hostname_type
+   */
+  async function clear_site_snapshot(hostname_value, hostname_type) {
+    if (!hostname_value || typeof hostname_value !== 'string') return;
+    var current = get();
+    var rules   = current.site_rules.slice();
+    var idx     = _find_rule_idx(hostname_value, hostname_type);
+    if (idx < 0) return;
+    var updated    = Object.assign({}, rules[idx], { settings: {} });
+    var next_rules = rules.map(function(r, i) { return i === idx ? updated : r; });
+    await _write(Object.assign({}, current, { site_rules: next_rules }));
+  }
+
+  /**
+   * Return the .settings snapshot for a site rule, or null if the rule doesn't
+   * exist or its settings is empty ({}).
+   *
+   * @param {string} hostname_value
+   * @param {string} hostname_type
+   * @returns {object|null}
+   */
+  function get_site_snapshot(hostname_value, hostname_type) {
+    var rules = get().site_rules || [];
+    var idx   = _find_rule_idx(hostname_value, hostname_type);
+    if (idx < 0) return null;
+    var s = rules[idx].settings;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+    if (Object.keys(s).length === 0) return null;
+    return Object.assign({}, s);
   }
 
   // ── Public: resolve (content_script entry point) ───────────────────────────
@@ -569,6 +700,11 @@ const StorageModel = (() => {
     get_site_entry,
     set_site_entry,
     remove_site_entry,
+    // Snapshot API
+    capture_snapshot,
+    save_site_snapshot,
+    clear_site_snapshot,
+    get_site_snapshot,
     // Resolve (content_script)
     resolve,
     // Blur items

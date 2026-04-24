@@ -6,6 +6,7 @@
  *   init_cache, on_change, get,
  *   patch_section, debounced_patch, save_settings,
  *   get_all_site_rules, get_site_entry, set_site_entry, remove_site_entry,
+ *   capture_snapshot, save_site_snapshot, clear_site_snapshot, get_site_snapshot,
  *   resolve,
  *   get_blur_items, get_cached_blur_state, get_blur_state,
  *   save_blur_state, save_blur_item, remove_blur_item,
@@ -49,6 +50,10 @@ function buildStubSource() {
       get_site_entry:         jest.fn(() => null),
       set_site_entry:         jest.fn(),
       remove_site_entry:      jest.fn(),
+      capture_snapshot:       jest.fn(() => ({})),
+      save_site_snapshot:     jest.fn(),
+      clear_site_snapshot:    jest.fn(),
+      get_site_snapshot:      jest.fn(() => null),
       resolve:                jest.fn(() => ({})),
       get_blur_items:         jest.fn(() => Promise.resolve([])),
       get_cached_blur_state:  jest.fn(() => false),
@@ -1181,5 +1186,423 @@ describe('automate_blur', () => {
     await blsi.Model.clear_all();
     expect(blsi.Model.get_automate_blur('example.com').idle).toBe(false);
     expect(blsi.Model.get_automate_blur('other.com').tab_switch).toBe(false);
+  });
+});
+
+// ── capture_snapshot ──────────────────────────────────────────────────────────
+
+// USER IMPACT: popup "Save as site rule" form calls capture_snapshot() to freeze the
+// current global settings into a site rule. Must return all SNAPSHOT_KEYS with correct
+// types so the rule exactly reproduces the user's current configuration on next visit.
+describe('capture_snapshot', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('returns an object with all SNAPSHOT_KEYS present', () => {
+    const snap = blsi.Model.capture_snapshot();
+    const SNAPSHOT_KEYS = [
+      'blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
+      'blur_categories', 'pick_blur_type', 'pick_blur_color', 'pii_mode',
+    ];
+    for (const k of SNAPSHOT_KEYS) {
+      expect(snap).toHaveProperty(k);
+    }
+  });
+
+  test('returns exactly SNAPSHOT_KEYS — no extra keys', () => {
+    const snap = blsi.Model.capture_snapshot();
+    const SNAPSHOT_KEYS = new Set([
+      'blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
+      'blur_categories', 'pick_blur_type', 'pick_blur_color', 'pii_mode',
+    ]);
+    for (const k of Object.keys(snap)) {
+      expect(SNAPSHOT_KEYS.has(k)).toBe(true);
+    }
+    expect(Object.keys(snap).length).toBe(SNAPSHOT_KEYS.size);
+  });
+
+  test('snapshot values match default model values', async () => {
+    const snap = blsi.Model.capture_snapshot();
+    const d = blsi.build_default_model();
+    expect(snap.blur_radius).toBe(d.settings.blur_radius);
+    expect(snap.blur_mode).toBe(d.blur_all.settings.blur_mode);
+    expect(snap.reveal_mode).toBe(d.settings.reveal_mode);
+    expect(snap.thorough_blur).toBe(d.settings.thorough_blur);
+    expect(snap.blur_categories).toEqual(d.blur_all.settings.blur_categories);
+    expect(snap.pick_blur_type).toBe(d.pick_and_blur.settings.blur_type);
+    expect(snap.pick_blur_color).toEqual(d.pick_and_blur.settings.blur_color);
+    expect(snap.pii_mode).toBe(d.auto_detect_pii.settings.pii_mode);
+  });
+
+  test('capture reflects in-flight settings changes', async () => {
+    await blsi.Model.patch_section('settings', { blur_radius: 24, reveal_mode: 'click' });
+    await blsi.Model.patch_section('blur_all', { settings: { blur_mode: 'frosted' } });
+    const snap = blsi.Model.capture_snapshot();
+    expect(snap.blur_radius).toBe(24);
+    expect(snap.reveal_mode).toBe('click');
+    expect(snap.blur_mode).toBe('frosted');
+  });
+
+  test('blur_categories is a deep copy — mutating snapshot does not affect cache', () => {
+    const snap = blsi.Model.capture_snapshot();
+    snap.blur_categories.text = !snap.blur_categories.text;
+    const snap2 = blsi.Model.capture_snapshot();
+    expect(snap2.blur_categories.text).toBe(blsi.build_default_model().blur_all.settings.blur_categories.text);
+  });
+
+  test('pick_blur_color is a deep copy — mutating snapshot does not affect cache', () => {
+    const snap = blsi.Model.capture_snapshot();
+    snap.pick_blur_color.hex = '#ffffff';
+    const snap2 = blsi.Model.capture_snapshot();
+    expect(snap2.pick_blur_color.hex).toBe(blsi.build_default_model().pick_and_blur.settings.blur_color.hex);
+  });
+});
+
+// ── save_site_snapshot ────────────────────────────────────────────────────────
+
+// USER IMPACT: after editing settings and entering a URL pattern, user clicks Save.
+// The snapshot must be stored in the matching rule's .settings field so future visits
+// auto-apply the saved configuration.
+describe('save_site_snapshot', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('creates a new exact rule with the snapshot in .settings', async () => {
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
+    const snapshot = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot.blur_radius).toBe(snap.blur_radius);
+    expect(snapshot.blur_mode).toBe(snap.blur_mode);
+  });
+
+  test('updates .settings on an existing exact rule', async () => {
+    await blsi.Model.set_site_entry('github.com', { blur_all: true });
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
+    const rule = blsi.Model.get_site_entry('github.com');
+    expect(rule.blur_all).toBe(true);               // other fields preserved
+    expect(rule.settings.blur_radius).toBeDefined(); // snapshot applied
+  });
+
+  test('replaces previous snapshot on a second save', async () => {
+    const snap1 = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap1);
+
+    await blsi.Model.patch_section('settings', { blur_radius: 20 });
+    const snap2 = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap2);
+
+    const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
+    expect(stored.blur_radius).toBe(20);
+  });
+
+  test('works for wildcard rules created via save_rules', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: '*.example.com',
+      hostname_type:  blsi.pattern_types.wildcard,
+      settings:       {},
+    }]);
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('*.example.com', blsi.pattern_types.wildcard, snap);
+    const stored = blsi.Model.get_site_snapshot('*.example.com', blsi.pattern_types.wildcard);
+    expect(stored).not.toBeNull();
+    expect(stored.blur_radius).toBeDefined();
+  });
+
+  test('is a no-op for invalid hostname_value', async () => {
+    jest.clearAllMocks();
+    mockSet();
+    await blsi.Model.save_site_snapshot('', blsi.pattern_types.exact, {});
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  test('is a no-op for invalid (null) snapshot', async () => {
+    jest.clearAllMocks();
+    mockSet();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, null);
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+// ── clear_site_snapshot ───────────────────────────────────────────────────────
+
+// USER IMPACT: user deletes the snapshot from a rule — subsequent visits inherit
+// global settings instead of the saved snapshot.
+describe('clear_site_snapshot', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('resets .settings to {} for an existing rule', async () => {
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
+    await blsi.Model.clear_site_snapshot('github.com', blsi.pattern_types.exact);
+    const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
+    expect(stored).toBeNull();
+  });
+
+  test('leaves other fields on the rule intact after clear', async () => {
+    await blsi.Model.set_site_entry('github.com', { blur_all: true });
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
+    await blsi.Model.clear_site_snapshot('github.com', blsi.pattern_types.exact);
+    const rule = blsi.Model.get_site_entry('github.com');
+    expect(rule.blur_all).toBe(true);    // blur_all preserved
+    expect(rule.settings).toEqual({});   // settings cleared
+  });
+
+  test('is a no-op when rule does not exist', async () => {
+    jest.clearAllMocks();
+    mockSet();
+    await blsi.Model.clear_site_snapshot('nobody.com', blsi.pattern_types.exact);
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  test('is a no-op for invalid hostname_value', async () => {
+    jest.clearAllMocks();
+    mockSet();
+    await blsi.Model.clear_site_snapshot('', blsi.pattern_types.exact);
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+// ── get_site_snapshot ─────────────────────────────────────────────────────────
+
+// USER IMPACT: popup site-rules list renders each rule's snapshot summary.
+// Must return the stored snapshot or null (never a partial).
+describe('get_site_snapshot', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('returns null when rule does not exist', () => {
+    expect(blsi.Model.get_site_snapshot('nobody.com', blsi.pattern_types.exact)).toBeNull();
+  });
+
+  test('returns null when rule exists but settings is empty', async () => {
+    await blsi.Model.set_site_entry('github.com', { blur_all: true });
+    expect(blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact)).toBeNull();
+  });
+
+  test('returns settings object after save_site_snapshot', async () => {
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
+    const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
+    expect(stored).not.toBeNull();
+    expect(stored.blur_radius).toBe(snap.blur_radius);
+    expect(stored.blur_categories).toEqual(snap.blur_categories);
+  });
+
+  test('returns null after clear_site_snapshot', async () => {
+    const snap = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
+    await blsi.Model.clear_site_snapshot('github.com', blsi.pattern_types.exact);
+    expect(blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact)).toBeNull();
+  });
+});
+
+// ── validate_model — snapshot passthrough ─────────────────────────────────────
+
+// USER IMPACT: when the extension updates and re-validates stored model, a site rule
+// with a full snapshot must not be stripped or corrupted — users would lose their
+// per-site configurations silently.
+describe('validate_model snapshot passthrough', () => {
+  test('passes through all SNAPSHOT_KEYS in site_rules[i].settings', () => {
+    const model = blsi.build_default_model();
+    model.site_rules = [{
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      settings: {
+        blur_radius:     12,
+        blur_mode:       'frosted',
+        reveal_mode:     'click',
+        thorough_blur:   true,
+        blur_categories: { text: true, media: false, form: false, table: false, structure: false },
+        pick_blur_type:  'blur',
+        pick_blur_color: { hex: '#ff0000', opacity: 0.5 },
+        pii_mode:        'redacted',
+      },
+    }];
+    const validated = blsi.validate_model(model);
+    const s = validated.site_rules[0].settings;
+    expect(s.blur_radius).toBe(12);
+    expect(s.blur_mode).toBe('frosted');
+    expect(s.reveal_mode).toBe('click');
+    expect(s.thorough_blur).toBe(true);
+    expect(s.blur_categories).toEqual({ text: true, media: false, form: false, table: false, structure: false });
+    expect(s.pick_blur_type).toBe('blur');
+    expect(s.pick_blur_color).toEqual({ hex: '#ff0000', opacity: 0.5 });
+    expect(s.pii_mode).toBe('redacted');
+  });
+
+  test('validate_model strips unknown keys from site_rules[i].settings (only SNAPSHOT_KEYS survive)', () => {
+    const model = blsi.build_default_model();
+    model.site_rules = [{
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      settings: {
+        blur_radius: 10,
+        some_unknown_key: 'bad',
+        another_bad_key:  42,
+      },
+    }];
+    const validated = blsi.validate_model(model);
+    const s = validated.site_rules[0].settings;
+    expect(s.blur_radius).toBe(10);
+    expect(s.some_unknown_key).toBeUndefined();
+    expect(s.another_bad_key).toBeUndefined();
+  });
+
+  test('validate_model repairs invalid blur_categories values with defaults', () => {
+    const model = blsi.build_default_model();
+    model.site_rules = [{
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      settings: {
+        blur_categories: { text: 'yes', media: null, form: false, table: true, structure: true },
+      },
+    }];
+    const validated = blsi.validate_model(model);
+    const cats = validated.site_rules[0].settings.blur_categories;
+    const d = blsi.build_default_model();
+    // 'yes' and null are not booleans — repaired to defaults
+    expect(cats.text).toBe(d.blur_all.settings.blur_categories.text);
+    expect(cats.media).toBe(d.blur_all.settings.blur_categories.media);
+    // valid booleans preserved
+    expect(cats.form).toBe(false);
+    expect(cats.table).toBe(true);
+    expect(cats.structure).toBe(true);
+  });
+
+  test('validate_model repairs invalid pick_blur_color values with defaults', () => {
+    const model = blsi.build_default_model();
+    model.site_rules = [{
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      settings: {
+        pick_blur_color: { hex: 'not-a-hex', opacity: 5.0 },
+      },
+    }];
+    const validated = blsi.validate_model(model);
+    const pbc = validated.site_rules[0].settings.pick_blur_color;
+    const d = blsi.build_default_model();
+    expect(pbc.hex).toBe(d.pick_and_blur.settings.blur_color.hex);
+    expect(pbc.opacity).toBe(d.pick_and_blur.settings.blur_color.opacity);
+  });
+
+  test('empty settings {} survives validate_model as empty {}', () => {
+    const model = blsi.build_default_model();
+    model.site_rules = [{
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      settings:       {},
+    }];
+    const validated = blsi.validate_model(model);
+    expect(validated.site_rules[0].settings).toEqual({});
+  });
+});
+
+// ── resolve with full snapshot ────────────────────────────────────────────────
+
+// USER IMPACT: when a user visits a site with a saved snapshot, resolve() must apply
+// ALL snapshot keys — the exact saved configuration must override global settings.
+describe('resolve with full snapshot overrides', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('snapshot in exact site_rule overrides all SNAPSHOT_KEYS in resolved output', async () => {
+    const snapshot = {
+      blur_radius:     20,
+      blur_mode:       'frosted',
+      reveal_mode:     'click',
+      thorough_blur:   true,
+      blur_categories: { text: false, media: false, form: false, table: false, structure: false },
+      pick_blur_type:  'color',
+      pick_blur_color: { hex: '#123456', opacity: 0.7 },
+      pii_mode:        'redacted',
+    };
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
+
+    const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
+    expect(resolved.blur_radius).toBe(20);
+    expect(resolved.blur_mode).toBe('frosted');
+    expect(resolved.reveal_mode).toBe('click');
+    expect(resolved.thorough_blur).toBe(true);
+    expect(resolved.blur_categories).toEqual({ text: false, media: false, form: false, table: false, structure: false });
+    expect(resolved.pick_blur_type).toBe('color');
+    expect(resolved.pick_blur_color).toEqual({ hex: '#123456', opacity: 0.7 });
+    expect(resolved.pii_mode).toBe('redacted');
+  });
+
+  test('snapshot in wildcard site_rule overrides global SNAPSHOT_KEYS', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: '*.github.com',
+      hostname_type:  blsi.pattern_types.wildcard,
+      settings:       {},
+    }]);
+    const snapshot = { blur_radius: 18, blur_mode: 'redacted' };
+    await blsi.Model.save_site_snapshot('*.github.com', blsi.pattern_types.wildcard, snapshot);
+
+    const resolved = blsi.Model.resolve('sub.github.com', 'https://sub.github.com/page');
+    expect(resolved.blur_radius).toBe(18);
+    expect(resolved.blur_mode).toBe('redacted');
+  });
+
+  test('exact rule snapshot wins over wildcard snapshot (exact has higher priority)', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: '*.github.com',
+      hostname_type:  blsi.pattern_types.wildcard,
+      settings:       { blur_radius: 10 },
+    }]);
+    const exactSnap = { blur_radius: 30 };
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, exactSnap);
+
+    const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
+    expect(resolved.blur_radius).toBe(30);
+  });
+
+  test('non-SNAPSHOT_KEYS in resolved output come from global/feature settings when no override', async () => {
+    const snapshot = { blur_radius: 20 };
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
+
+    const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
+    // blur_all_active comes from global (not snapshot)
+    expect(typeof resolved.blur_all_active).toBe('boolean');
+    // blur_items comes from pick_and_blur.status gating (not snapshot)
+    expect(Array.isArray(resolved.blur_items)).toBe(true);
   });
 });

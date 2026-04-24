@@ -29,7 +29,7 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelectors(el) → string[]` (ordered structural→semantic; use for saving), `getSelector(el) → string\|null` (compat alias → `getSelectors()[0]`), `isSelectorStable(el) → bool` (fast O(1) check; true if id/class/aria/data-* found), `generateId`, `restoreSelector(string\|string[]) → Element\|null` (tries each in order, returns first unique match), `restoreAllSelectors` |
-| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `save_automate_blur`, `patch_automate_blur`, `clear_automate_blur`, `get_automate_blur`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage.local` (model) and `chrome.storage.session` (automate_blur) directly (no background relay) |
+| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `capture_snapshot`, `save_site_snapshot(hostname_value, hostname_type, snapshot)`, `clear_site_snapshot(hostname_value, hostname_type)`, `get_site_snapshot(hostname_value, hostname_type)`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `save_automate_blur`, `patch_automate_blur`, `clear_automate_blur`, `get_automate_blur`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage.local` (model) and `chrome.storage.session` (automate_blur) directly (no background relay) |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
 | `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all |
 | `src/fonts.js` | `blsi.Fonts` | `DISC_FONT_FACE`, `ASTERISK_FONT_FACE` — base64-encoded `@font-face` strings for `"bl-si-censored-disc"` and `"bl-si-starred-asterisk"` (OFL-1.1). Used by `blur_engine` for censored / starred modes. |
@@ -279,7 +279,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 703 unit tests, fast
+npm run test:unit          # 732 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 

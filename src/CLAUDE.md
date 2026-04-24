@@ -206,6 +206,10 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one session storage write.
 - `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname from session storage.
 - `get_rules()` / `save_rules(rules)` — URL rules CRUD. Rules are an array of `{ hostname_value, hostname_type, blur_all, items, settings }` where `hostname_type` is `'wildcard'|'regex'` (non-exact entries only).
+- `capture_snapshot()` — reads current global settings from cache; returns a plain object with only SNAPSHOT_KEYS (`blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `blur_categories`, `pick_blur_type`, `pick_blur_color`, `pii_mode`). Deep-copies `blur_categories` and `pick_blur_color`. Source values come from `m.settings.*`, `m.blur_all.settings.*`, `m.pick_and_blur.settings.*`, and `m.auto_detect_pii.settings.*`.
+- `save_site_snapshot(hostname_value, hostname_type, snapshot)` — finds or creates the matching rule entry in `site_rules[]` and sets its `.settings` to the snapshot. Works for all `hostname_type` values (`'exact'|'wildcard'|'regex'`). For wildcard/regex rules, ensure the rule exists via `save_rules()` first. Returns a Promise.
+- `clear_site_snapshot(hostname_value, hostname_type)` — resets `.settings` to `{}` for the matching rule. No-op if the rule doesn't exist. Returns a Promise.
+- `get_site_snapshot(hostname_value, hostname_type)` — returns the `.settings` object for the matching rule, or `null` if the rule doesn't exist or settings is empty `{}`. Synchronous.
 - `_reset_cache()` — test-only helper. Clears both `_cache` and `_automate_cache` so tests start from a clean slate.
 
 ### action_registry.js

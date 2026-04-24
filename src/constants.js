@@ -482,8 +482,45 @@ const Constants = (() => {
             }
             return false;
           }).slice(0, 10) : [],
-          settings: (rule.settings && typeof rule.settings === 'object' && !Array.isArray(rule.settings))
-            ? rule.settings : {},
+          settings: (() => {
+            const rs = (rule.settings && typeof rule.settings === 'object' && !Array.isArray(rule.settings))
+              ? rule.settings : {};
+            // Pass through only known SNAPSHOT_KEYS; validate nested objects.
+            const out = {};
+            // Must stay in sync with SNAPSHOT_KEYS in storage_model.js.
+            const SNAPSHOT_KEYS = [
+              'blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
+              'blur_categories', 'pick_blur_type', 'pick_blur_color', 'pii_mode',
+            ];
+            for (const k of SNAPSHOT_KEYS) {
+              if (!(k in rs)) continue;
+              if (k === 'blur_categories') {
+                const cats = (rs.blur_categories && typeof rs.blur_categories === 'object')
+                  ? rs.blur_categories : null;
+                if (cats) {
+                  const cats_out = {};
+                  for (const ck of Object.keys(d.blur_all.settings.blur_categories)) {
+                    cats_out[ck] = (typeof cats[ck] === 'boolean') ? cats[ck] : d.blur_all.settings.blur_categories[ck];
+                  }
+                  out.blur_categories = cats_out;
+                }
+              } else if (k === 'pick_blur_color') {
+                const pbc = (rs.pick_blur_color && typeof rs.pick_blur_color === 'object')
+                  ? rs.pick_blur_color : {};
+                out.pick_blur_color = {
+                  hex: (typeof pbc.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(pbc.hex))
+                    ? pbc.hex : d.pick_and_blur.settings.blur_color.hex,
+                  opacity: (typeof pbc.opacity === 'number' && pbc.opacity >= 0 && pbc.opacity <= 1)
+                    ? pbc.opacity : d.pick_and_blur.settings.blur_color.opacity,
+                };
+              } else {
+                // Scalar snapshot keys — pass through as-is (resolve() already
+                // applies per-feature validation when building the resolved view).
+                out[k] = rs[k];
+              }
+            }
+            return out;
+          })(),
         }));
     }
 

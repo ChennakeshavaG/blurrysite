@@ -18,42 +18,169 @@
 .bl-rules-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
 }
 
-.bl-rule-row {
+/* ── Collapsible card ───────────────────────────────────────────────── */
+
+.bl-rule-card {
+  border: 1px solid var(--bl-raised);
+  border-radius: 8px;
+  background: var(--bl-surface);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.bl-rule-card--expanded {
+  border-color: color-mix(in srgb, var(--bl-indigo) 35%, var(--bl-raised));
+}
+
+.bl-rule-card__header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--bl-raised);
+  padding: 9px 12px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
 }
 
-.bl-rule-row:last-child {
-  border-bottom: none;
+.bl-rule-card__header:focus-visible {
+  outline: 2px solid var(--bl-indigo);
+  outline-offset: -2px;
 }
 
-.bl-rule-row__info {
+.bl-rule-card__name {
   flex: 1;
   min-width: 0;
-}
-
-.bl-rule-row__name {
   font-size: var(--bl-text-base);
   font-weight: 600;
   color: var(--bl-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: monospace;
 }
 
-.bl-rule-row__pattern {
-  font-size: var(--bl-text-xs);
+.bl-rule-card__chevron {
+  font-size: 9px;
+  color: var(--bl-text-dim);
+  flex-shrink: 0;
+  line-height: 1;
+  margin-left: 2px;
+  transition: color 0.15s;
+}
+
+.bl-rule-card__header:hover .bl-rule-card__chevron {
   color: var(--bl-text-muted);
-  font-family: monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.bl-rule-card__body {
+  border-top: 1px solid var(--bl-raised);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Type badge ─────────────────────────────────────────────────────── */
+
+.bl-rule-type-badge {
+  flex-shrink: 0;
+  font-size: var(--bl-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+
+.bl-rule-type-badge--wildcard {
+  background: color-mix(in srgb, var(--bl-cyan) 14%, transparent);
+  color: var(--bl-cyan);
+}
+
+.bl-rule-type-badge--exact {
+  background: color-mix(in srgb, var(--bl-indigo) 14%, transparent);
+  color: var(--bl-indigo);
+}
+
+.bl-rule-type-badge--regex {
+  background: color-mix(in srgb, var(--bl-amber) 14%, transparent);
+  color: var(--bl-amber);
+}
+
+/* ── Settings snapshot (in card body + form) ────────────────────────── */
+
+.bl-rule-snapshot-label {
+  font-size: var(--bl-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bl-text-dim);
+  margin-bottom: 2px;
+}
+
+.bl-rule-snapshot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bl-rule-snapshot-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bl-rule-snapshot-key {
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-muted);
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.bl-rule-snapshot-val {
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-primary);
+  word-break: break-word;
+}
+
+.bl-rule-snapshot-empty {
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-dim);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* ── Card action row ────────────────────────────────────────────────── */
+
+.bl-rule-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bl-raised);
+}
+
+.bl-rule-recapture-btn {
+  font-size: var(--bl-text-sm);
+  background: none;
+  border: 1px solid var(--bl-raised);
+  border-radius: 5px;
+  color: var(--bl-text-muted);
+  cursor: pointer;
+  padding: 3px 8px;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.bl-rule-recapture-btn:hover {
+  color: var(--bl-cyan);
+  border-color: var(--bl-cyan);
 }
 
 .bl-rule-edit-btn {
@@ -63,8 +190,8 @@
   border-radius: 5px;
   color: var(--bl-text-muted);
   cursor: pointer;
-  padding: 2px 8px;
-  transition: color 0.15s;
+  padding: 3px 8px;
+  transition: color 0.15s, border-color 0.15s;
   flex-shrink: 0;
 }
 
@@ -83,11 +210,14 @@
   border-radius: 4px;
   transition: color 0.15s;
   flex-shrink: 0;
+  margin-left: auto; /* push delete to the right */
 }
 
 .bl-rule-delete-btn:hover {
   color: var(--bl-danger);
 }
+
+/* ── Add rule button ────────────────────────────────────────────────── */
 
 .bl-rule-add-btn {
   margin-top: 12px;
@@ -107,22 +237,29 @@
   border-color: var(--bl-cyan);
 }
 
+/* ── Form ───────────────────────────────────────────────────────────── */
+
 .bl-rule-form {
-  margin-top: 12px;
+  margin-top: 8px;
   background: var(--bl-surface);
   border: 1px solid var(--bl-raised);
   border-radius: 8px;
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+}
+
+.bl-rule-form__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bl-rule-form__label {
   font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
   display: block;
-  margin-bottom: 3px;
 }
 
 .bl-rule-form__input {
@@ -145,23 +282,54 @@
 .bl-rule-form__error {
   font-size: var(--bl-text-xs);
   color: var(--bl-danger);
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 .bl-rule-form__type {
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .bl-rule-form__radio {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
   cursor: pointer;
   accent-color: var(--bl-amber);
+}
+
+/* ── Form snapshot preview ──────────────────────────────────────────── */
+
+.bl-rule-form__preview-group {
+  background: var(--bl-raised);
+  border-radius: 6px;
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.bl-rule-form__preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.bl-rule-form__snapshot-note {
+  font-size: var(--bl-text-xs);
+  color: var(--bl-text-dim);
+  font-style: italic;
+}
+
+.bl-rule-form__snapshot-preview {
+  /* inherits .bl-rule-snapshot flex column */
+}
+
+.bl-rule-recapture-btn--inline {
+  margin-top: 6px;
+  align-self: flex-start;
 }
 
 .bl-rule-form__actions {
@@ -179,6 +347,11 @@
   border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.bl-rule-save-btn:hover {
+  opacity: 0.88;
 }
 
 .bl-rule-cancel-btn {
@@ -189,4 +362,10 @@
   border-radius: 6px;
   color: var(--bl-text-muted);
   cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.bl-rule-cancel-btn:hover {
+  border-color: var(--bl-text-muted);
+  color: var(--bl-text-primary);
 }
