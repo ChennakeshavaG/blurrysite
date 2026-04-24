@@ -42,15 +42,23 @@ const BlurrySitePopupRenderHtb = (() => {
     chips.className = 'bl-chips';
 
     var types = isBlurAll
-      ? ['gaussian', 'frosted', 'redacted', 'masked']
-      : ['gaussian', 'frosted', 'color'];
+      ? ['blur', 'frosted', 'redacted', 'censored']
+      : ['blur', 'frosted', 'color'];
 
     var labelKeys = {
-      gaussian: 'htb_chip_gaussian',
+      blur:     'htb_chip_blur',
       frosted:  'htb_chip_frosted',
       redacted: 'htb_chip_redacted',
-      masked:   'htb_chip_masked',
+      censored: 'htb_chip_censored',
       color:    'htb_chip_color',
+    };
+
+    var modeAssets = {
+      blur:     chrome.runtime.getURL('popup/assets/mode_blur.svg'),
+      frosted:  chrome.runtime.getURL('popup/assets/mode_frosted.svg'),
+      redacted: chrome.runtime.getURL('popup/assets/mode_redacted.svg'),
+      censored: chrome.runtime.getURL('popup/assets/mode_censored.svg'),
+      color:    chrome.runtime.getURL('popup/assets/mode_color.svg'),
     };
 
     for (var i = 0; i < types.length; i++) {
@@ -58,6 +66,7 @@ const BlurrySitePopupRenderHtb = (() => {
         var btn = document.createElement('button');
         btn.className = 'bl-chip' + (type === activeType ? ' bl-chip--active' : '');
         btn.textContent = _t(labelKeys[type]);
+        if (modeAssets[type]) btn.dataset.tooltipMedia = modeAssets[type];
         btn.addEventListener('click', function () {
           // Update active chip visually
           var allChips = chips.querySelectorAll('.bl-chip');
@@ -87,8 +96,8 @@ const BlurrySitePopupRenderHtb = (() => {
    * sections when the active type changes (without a full re-render).
    */
   function _updateVisibility(activeType, isBlurAll, refs) {
-    var hideStrength       = (activeType === 'redacted' || activeType === 'masked' || activeType === 'color');
-    var hideReveal         = (activeType === 'color');
+    var hideStrength       = (activeType === 'redacted' || activeType === 'censored' || activeType === 'color');
+    var hideReveal         = false;
     var hideCats           = !isBlurAll;
     var showColor          = (!isBlurAll && activeType === 'color');
     var showRedactionColor = (isBlurAll && activeType === 'redacted');
@@ -102,13 +111,13 @@ const BlurrySitePopupRenderHtb = (() => {
 
     if (refs.catsGroup) {
       var mediaItem = refs.catsGroup.querySelector('[data-bl-cat-key="media"]');
-      if (mediaItem) mediaItem.hidden = (activeType === 'masked');
+      if (mediaItem) mediaItem.hidden = (activeType === 'censored');
     }
   }
 
   /**
    * Categories grid — Blur All mode only.
-   * activeType hides the media item when mode is masked (not applicable).
+   * activeType hides the media item when mode is censored (not applicable).
    */
   function _buildCategories(settings, onSave, activeType) {
     var group = document.createElement('div');
@@ -155,7 +164,7 @@ const BlurrySitePopupRenderHtb = (() => {
         label.appendChild(cb);
         label.appendChild(span);
 
-        if (def.key === 'media') label.hidden = (activeType === 'masked');
+        if (def.key === 'media') label.hidden = (activeType === 'censored');
 
         grid.appendChild(label);
       })(catDefs[i]);
@@ -166,7 +175,7 @@ const BlurrySitePopupRenderHtb = (() => {
   }
 
   /**
-   * Strength slider — range 2–20, hidden for redacted/masked/color.
+   * Strength slider — range 2–20, hidden for redacted/censored/color.
    */
   function _buildStrength(settings, onSave) {
     var group = document.createElement('div');
@@ -411,11 +420,11 @@ const BlurrySitePopupRenderHtb = (() => {
     containerEl.innerHTML = '';
 
     if (isBlurAll === undefined) isBlurAll = true;
-    var activeType = isBlurAll ? (settings.blur_mode || 'gaussian') : (settings.pick_blur_type || 'gaussian');
+    var activeType = isBlurAll ? (settings.blur_mode || 'blur') : (settings.pick_blur_type || 'blur');
 
     var hideCats           = !isBlurAll;
-    var hideStrength       = (activeType === 'redacted' || activeType === 'masked' || activeType === 'color');
-    var hideReveal         = (activeType === 'color');
+    var hideStrength       = (activeType === 'redacted' || activeType === 'censored' || activeType === 'color');
+    var hideReveal         = false;
     var showColor          = (!isBlurAll && activeType === 'color');
     var showRedactionColor = (isBlurAll && activeType === 'redacted');
 
@@ -461,9 +470,11 @@ const BlurrySitePopupRenderHtb = (() => {
     containerEl.appendChild(catsGroup);
     sectionRefs.catsGroup = catsGroup;
 
-    // ── 5. Thorough blur (always visible) ──────────────────────────────────────
-    containerEl.appendChild(_makeDivider());
-    containerEl.appendChild(_buildThoroughBlur(settings, onSave));
+    // ── 5. Thorough blur (Blur All only) ──────────────────────────────────────
+    if (isBlurAll) {
+      containerEl.appendChild(_makeDivider());
+      containerEl.appendChild(_buildThoroughBlur(settings, onSave));
+    }
 
     // ── 6. Color picker (Pick & Blur + Color type only) ────────────────────────
     var colorDiv = document.createElement('div');

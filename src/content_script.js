@@ -87,20 +87,20 @@
 
   const pickerCallbacks = {
     async onBlur(el) {
-      const selector = Selector.getSelector(el);
-      if (!selector) return;
+      const selectors = Selector.getSelectors(el);
+      if (!selectors.length) return;
       const name = Engine.allocateDynamicName();
-      const item = { type: 'dynamic', name, selector };
-      log.flow('picker.blur', { name, selector });
+      const item = { type: 'dynamic', name, selectors };
+      log.flow('picker.blur', { name, selectors });
       await Store.save_blur_item(hostname, item);
       await _sync();
     },
 
     async onUnblur(el) {
-      const selector = Selector.getSelector(el);
-      if (!selector) return;
-      log.flow('picker.unblur', { selector });
-      await Store.remove_blur_item(hostname, selector);
+      const selectors = Selector.getSelectors(el);
+      if (!selectors.length) return;
+      log.flow('picker.unblur', { selectors });
+      await Store.remove_blur_item(hostname, selectors[0]);
       await _sync();
     },
 
@@ -295,14 +295,14 @@
           if (sendResponse) sendResponse({ ok: false, reason: 'no_target' });
           return false;
         }
-        const sel = Selector.getSelector(target);
-        if (!sel) {
+        const sels = Selector.getSelectors(target);
+        if (!sels.length) {
           if (sendResponse) sendResponse({ ok: false, reason: 'no_selector' });
           return false;
         }
         const name = Engine.allocateDynamicName();
-        const item = { type: 'dynamic', name, selector: sel };
-        log.flow('trigger.contextBlur', { name, selector: sel });
+        const item = { type: 'dynamic', name, selectors: sels };
+        log.flow('trigger.contextBlur', { name, selectors: sels });
         (async () => {
           await Store.save_blur_item(hostname, item);
           await _sync();
@@ -330,14 +330,14 @@
           if (sendResponse) sendResponse({ ok: false, reason: 'not_blurred' });
           return false;
         }
-        const sel = Selector.getSelector(unblurTarget);
-        if (!sel) {
+        const unblurSels = Selector.getSelectors(unblurTarget);
+        if (!unblurSels.length) {
           if (sendResponse) sendResponse({ ok: false, reason: 'no_selector' });
           return false;
         }
-        log.flow('trigger.contextUnblur', { selector: sel });
+        log.flow('trigger.contextUnblur', { selectors: unblurSels });
         (async () => {
-          await Store.remove_blur_item(hostname, sel);
+          await Store.remove_blur_item(hostname, unblurSels[0]);
           await _sync();
           if (sendResponse) sendResponse({ ok: true });
         })();

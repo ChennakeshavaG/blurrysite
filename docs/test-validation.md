@@ -255,30 +255,21 @@ Source module: `src/selector_utils.js` → `blsi.SelectorUtils`
 
 ---
 
-## 15. constants.test.js (91 tests) — `tests/unit/constants.test.js`
+## 15. constants.test.js — `tests/unit/constants.test.js`
 
 Source module: `src/constants.js` → `globalThis.blsi`
 
 | Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
-| Message types (3) | `blsi.STORAGE`, `blsi.COMMAND`, `blsi.POPUP` objects exist with correct string values; no undefined entries | Any message send | Message type string mismatch → message silently dropped |
-| Flat shorthand (1) | `blsi.COMMAND.TOGGLE_BLUR_ALL === 'TOGGLE_BLUR_ALL'` etc. match values used in background.js | Runtime message dispatch | Handler key mismatch → blur/unblur commands never received |
-| isValid (3) | `isValid('TOGGLE_BLUR_ALL')` → true; unknown type → false; null/undefined → false | Message validation in background.js | Invalid messages processed; valid messages rejected |
-| categoryOf (4) | Returns correct `BLUR_CATEGORIES` key for known type; returns null for unknown; handles all 5 categories | Category filter logic | Wrong category returned; category toggle affects wrong elements |
-| DEFAULT_SETTINGS (4) | All expected top-level keys present (`BLUR_RADIUS`, `REVEAL_MODE`, `THOROUGH_BLUR`, `PICKER_MODE`, `BLUR_CATEGORIES`, `AUTO_DETECT`); no unknown keys; types correct | Fresh install, settings reset | Wrong defaults applied; setting key missing causes crash |
-| BLUR_CATEGORIES (3) | Default has all 5 keys (`TEXT`, `MEDIA`, `FORM`, `TABLE`, `STRUCTURE`); all boolean; default values match doc | Fresh install | Category toggle broken for default-off categories |
-| buildDefaultSettings (2) | Returns object with `SHORTCUTS` populated from `blsi.Actions.defaultBindings()`; result is a fresh clone each call | Settings reset, first install | Shortcuts not in default settings; factory reset breaks shortcuts |
-| deepMerge (4) | Nested objects merged recursively; arrays replaced not merged; null source returns target; nested null key handled | Settings partial update | Nested settings key overwritten instead of merged; null key crashes |
-| validateSettings (12) | Migrates legacy `PICKER_MODE: 'sticky'` → `'sticky-page'`; removes unknown keys; coerces wrong types to default; preserves valid shortcuts; rejects invalid modifier; handles empty object; handles null; returns new object (does not mutate); `AUTO_DETECT.NUMERIC` coerced to boolean; `BLUR_RADIUS` clamped to range; `REVEAL_MODE` enum validated; deeply nested unknown keys stripped | Storage read on startup | Bad stored settings crash content_script; legacy settings not migrated |
-| Immutability (2) | `DEFAULT_SETTINGS` is frozen at top level; `BLUR_CATEGORIES` sub-object is frozen | (internal integrity) | Runtime mutation of defaults corrupts subsequent fresh installs |
-| Boundary values (11) | `BLUR_RADIUS` min/max; `MAX_PATTERN_LENGTH`; empty string shortcut binding; chord with all mods; chord with no mods; `REVEAL_MODE` all valid enum values; `NUMERIC` boolean coercion (truthy/falsy); `MODIFIER_CODES` array non-empty; `REVEAL_DFS_MAX_DEPTH` is positive integer | Edge case settings input | Out-of-range values accepted; enum values outside spec accepted |
-| ACTIVE_MODES enum (2) | `blsi.ACTIVE_MODES` has `BLUR_ALL: 'blur-all'` and `PICK_BLUR: 'pick-blur'`; object is frozen | Mode switch in popup | Wrong mode string stored; mode switch silently no-ops |
-| PICK_BLUR_MODES enum (2) | Has `GAUSSIAN`, `FROSTED`, `COLOR` only — no `REDACTED` or `MASKED`; frozen | Pick & Blur type selector | Redacted/masked type accepted as Pick & Blur type; wrong blur applied |
-| PII_MODES enum (2) | Has `GAUSSIAN`, `FROSTED`, `REDACTED`, `ASTERISKED`; frozen | PII blur type selector | PII type string rejected or wrong type stored |
-| TIMER_UNITS enum (2) | Has `SEC`, `MIN`, `HR`; frozen | Timer unit dropdown | Timer unit string rejected; timer misconfigured |
-| IDLE_UNITS enum (3) | Has `SEC` and `MIN` only; `HR` absent; frozen | Idle unit dropdown | `hr` idle unit stored → Chrome API max exceeded → auto-blur fires wrong |
-| DEFAULT_SETTINGS — popup redesign keys (8) | `ACTIVE_MODE` = `'blur-all'`; `PICK_BLUR_TYPE` = `'gaussian'`; `PICK_BLUR_COLOR` = `{HEX:'#000000', OPACITY:1.0}` (frozen); `PII_MODE` = `'gaussian'`; `AUTOMATE` default structure correct (TIMER/IDLE/TAB_SWITCH nested objects frozen); `buildDefaultSettings` includes all 5 keys | Fresh install | New popup UI keys missing from defaults; controls show undefined values |
-| validateSettings — popup redesign keys (33) | `ACTIVE_MODE`, `PICK_BLUR_TYPE`, `PICK_BLUR_COLOR`, `PII_MODE`, `AUTOMATE` validation — valid values pass through, invalid/missing fall back to defaults; `PICK_BLUR_TYPE` rejects `redacted`/`masked`; `PICK_BLUR_COLOR` validates 6-char hex and 0–1 opacity; `AUTOMATE.IDLE` rejects `hr` unit (Chrome API cap); `AUTOMATE.TIMER` VALUE 100 clamped to default 0; missing sub-keys fall back individually | Settings saved from popup with invalid/missing values | Corrupt settings silently accepted; blur type / color / automate triggers misconfigured |
+| Message types | `blsi.command`, `blsi.popup` objects exist with correct string values | Any message send | Message type string mismatch → message silently dropped |
+| isValid / categoryOf | `is_valid('TOGGLE_BLUR_ALL')` → true; unknown → false; `category_of` returns correct bucket | Message validation | Invalid messages processed; valid messages rejected |
+| build_default_model | All expected top-level sections present; `shortcuts` populated from `blsi.Actions.defaultBindings()`; result is a fresh clone each call | Fresh install, settings reset | New popup keys missing from defaults; factory reset breaks shortcuts |
+| deep_merge | Nested objects merged recursively; arrays replaced not merged; null source returns target | Settings partial update | Nested settings key overwritten instead of merged |
+| validate_model | Migrates legacy blur_mode values (`gaussian→blur`, `masked→solid`, `asterisked→hidden`); coerces wrong types to default; handles null/empty input; returns new object | Storage read on startup | Bad stored settings crash content_script; legacy settings not migrated |
+| Immutability | Enums (`blur_modes`, `reveal_modes`, etc.) are all frozen | (internal integrity) | Runtime mutation of enums corrupts subsequent checks |
+| Boundary values | `blur_radius` min/max; `blur_mode` enum validation; `picker_mode` migration; `pii_mode` migration; `idle_units` hr rejection; `automate_blur` valid/missing/pollution keys; shortcut binding validation | Edge case settings input | Out-of-range values accepted; enum values outside spec accepted |
+| site_rules: blur_all invariants (3) | `blur_all:false`, `blur_all:true`, `blur_all:null` all preserved by `validate_model` — not coerced to a different value | User toggles blur-all off/on for a site | `blur_all:false` coerced to null → site never explicitly turns off; toggle appears to have no effect |
+| site_rules: item shape validation (3) | New `selectors:string[]` shape passes; legacy `selector:string` shape passes; empty `selectors:[]` is stripped | Picker saves item; then any storage write occurs | New-format items stripped by old filter → items disappear as side-effect of any write (e.g. blur-all toggle) |
 
 ---
 
@@ -453,6 +444,37 @@ Unit tests for `BlurrySitePopupRender` — stateless DOM renderer for the popup 
 ### renderModesSection — blur-all active block contains subtitle with type and category count
 **Asserts:** Active blur-all block has `.bl-mode-block__subtitle` whose text includes the blur type name and category count.
 **Manual:** With `BLUR_MODE='gaussian'` and 4 categories enabled, subtitle shows "Gaussian · 4 categories".
+
+---
+
+## 22. storage_model.test.js — `tests/unit/storage_model.test.js`
+
+Source module: `src/storage_model.js` → `blsi.Model`
+
+| Group | What it asserts | User trigger | User impact |
+|---|---|---|---|
+| init_cache / get | `init_cache()` populates in-memory cache from `chrome.storage.local`; `get()` returns cached model without I/O | Any page load | Content script/popup reads stale or missing model |
+| patch_section / save_settings | `patch_section(section, delta)` deep-merges and writes; `save_settings(patch)` routes to `model.settings` | Popup saves a setting | Setting change not persisted; reverts on reload |
+| get_site_entry / set_site_entry / remove_site_entry | CRUD on `site_rules` array; `set_site_entry` upserts; `remove_site_entry` is no-op when absent | Site-specific settings changes | Wrong hostname entry modified; rules pile up without deduplicate |
+| save_blur_state — ON path | `save_blur_state('example.com', true)` writes `blur_all:true` to the site entry | User enables blur-all for a site | Blur not persisted; off after page reload |
+| save_blur_state — OFF path (3) | `save_blur_state('example.com', false)` writes `blur_all:false`; storage is written (not skipped); items on the same host survive the write | User turns off blur-all for a site | **Root cause of toggle-off bug**: `blur_all:false` not written, or written but items stripped as side-effect |
+| save_blur_state — guards | Empty hostname → no storage write | Invalid popup state | Storage polluted with empty-hostname entries |
+| get_cached_blur_state / get_blur_state | Synchronous cache read; inherits global when no per-host entry | Content script hot path (MO callback) | Wrong blur state used for site; MO triggers re-apply already-off blur |
+| save_blur_item / get_blur_items | Appends dynamic and sticky items; deduplicates by selector / selectors[0] / id; enforces per-host limit of 10; rejects invalid types and null | Picker saves an element blur | Duplicate items accumulate; over-limit items accepted causing storage bloat |
+| save_blur_item — new selectors[] shape (2) | Accepts `{ selectors: string[] }` shape; deduplicates by `selectors[0]` | Picker with multi-selector items | New-format items rejected; picker cannot save blurred elements |
+| remove_blur_item | Removes item by id; does not affect other items | Popup → remove item | Item re-appears after removal; wrong item removed |
+| clear_host / clear_all | `clear_host` clears blur_all + items + automate_blur for one host; `clear_all` clears everything atomically | Popup → clear site / clear all | Items from other sites deleted; or items survive after clear |
+| resolve | Returns `blur_all_active = manual_blur \|\| automate_any`; includes `blur_items` and `shortcuts` | Content script init and storage change | Wrong blur-all state resolved; items not included in resolved settings |
+| get_rules / save_rules | Wildcard/regex rule CRUD | URL rules panel | Rules not saved; wrong rule applied to site |
+| save_automate_blur / clear_automate_blur | Per-trigger write and clear for a hostname | Automate triggers (idle, tab-switch, screen-share) | Automate state not updated; blur persists after trigger ends |
+
+**Manual replication for save_blur_state — OFF path:**
+1. Install extension; navigate to any page (e.g. `https://example.com`)
+2. Open popup → enable Blur All (toggle ON)
+3. Use picker to blur at least one element
+4. Open popup → toggle blur-all OFF
+5. Reload the page
+6. Open popup — blur-all toggle must remain OFF; blurred items must still be listed
 
 ---
 

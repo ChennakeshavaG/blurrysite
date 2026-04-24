@@ -70,10 +70,10 @@ const Constants = (() => {
   });
 
   const blur_modes = Object.freeze({
-    gaussian: 'gaussian',
+    blur:     'blur',
     frosted:  'frosted',
     redacted: 'redacted',
-    masked:   'masked',
+    censored: 'censored',
   });
 
   // picker_modes — what happens when user clicks / sketches in the picker.
@@ -86,19 +86,19 @@ const Constants = (() => {
     sticky_screen: 'sticky-screen',
   });
 
-  // pick_blur_modes — blur types for Pick & Blur (no redacted/masked).
+  // pick_blur_modes — blur types for Pick & Blur (no redacted/censored).
   const pick_blur_modes = Object.freeze({
-    gaussian: 'gaussian',
-    frosted:  'frosted',
-    color:    'color',
+    blur:    'blur',
+    frosted: 'frosted',
+    color:   'color',
   });
 
   // pii_modes — blur types for auto-detect PII rendering.
   const pii_modes = Object.freeze({
-    gaussian:   'gaussian',
-    frosted:    'frosted',
-    redacted:   'redacted',
-    asterisked: 'asterisked',
+    blur:     'blur',
+    frosted:  'frosted',
+    redacted: 'redacted',
+    starred:  'starred',
   });
 
   // idle_units — hr excluded: Chrome idle API hard cap ~3000 s (50 min).
@@ -186,7 +186,7 @@ const Constants = (() => {
     blur_all: Object.freeze({
       status: false,   // global default; per-site state lives in site_rules[i].blur_all
       settings: Object.freeze({
-        blur_mode: 'gaussian',
+        blur_mode: 'blur',
       }),
     }),
 
@@ -194,7 +194,7 @@ const Constants = (() => {
       status: false,
       settings: Object.freeze({
         picker_mode: null,
-        blur_type:   'gaussian',
+        blur_type:   'blur',
         blur_color:  Object.freeze({ hex: '#000000', opacity: 1.0 }),
       }),
     }),
@@ -204,7 +204,7 @@ const Constants = (() => {
       settings: Object.freeze({
         email:              true,
         numeric:            true,
-        pii_mode:           'gaussian',
+        pii_mode:           'blur',
         pii_redaction_color: '#000000',
       }),
     }),
@@ -348,11 +348,13 @@ const Constants = (() => {
     {
       const ba   = (model.blur_all && typeof model.blur_all === 'object') ? model.blur_all : {};
       const ba_s = (ba.settings && typeof ba.settings === 'object') ? ba.settings : {};
+      // Migrate old enum values: gaussian→blur, masked→censored, solid→censored
+      const migrated_blur_mode = ({ gaussian: 'blur', masked: 'censored', solid: 'censored' })[ba_s.blur_mode] ?? ba_s.blur_mode;
       r.blur_all = {
         status: (typeof ba.status === 'boolean') ? ba.status : d.blur_all.status,
         settings: {
-          blur_mode: Object.values(blur_modes).includes(ba_s.blur_mode)
-            ? ba_s.blur_mode : d.blur_all.settings.blur_mode,
+          blur_mode: Object.values(blur_modes).includes(migrated_blur_mode)
+            ? migrated_blur_mode : d.blur_all.settings.blur_mode,
         },
       };
     }
@@ -364,14 +366,16 @@ const Constants = (() => {
       const pbc  = (pb_s.blur_color && typeof pb_s.blur_color === 'object') ? pb_s.blur_color : {};
       // Legacy 'sticky' → sticky-page migration
       const raw_picker = pb_s.picker_mode === 'sticky' ? picker_modes.sticky_page : pb_s.picker_mode;
+      // Migrate old enum value: gaussian→blur
+      const migrated_blur_type = pb_s.blur_type === 'gaussian' ? 'blur' : pb_s.blur_type;
       r.pick_and_blur = {
         status: (typeof pb.status === 'boolean') ? pb.status : d.pick_and_blur.status,
         settings: {
           picker_mode: (raw_picker === null || raw_picker === undefined)
             ? null
             : (Object.values(picker_modes).includes(raw_picker) ? raw_picker : null),
-          blur_type: Object.values(pick_blur_modes).includes(pb_s.blur_type)
-            ? pb_s.blur_type : d.pick_and_blur.settings.blur_type,
+          blur_type: Object.values(pick_blur_modes).includes(migrated_blur_type)
+            ? migrated_blur_type : d.pick_and_blur.settings.blur_type,
           blur_color: {
             hex: (typeof pbc.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(pbc.hex))
               ? pbc.hex : d.pick_and_blur.settings.blur_color.hex,
@@ -386,13 +390,15 @@ const Constants = (() => {
     {
       const ap   = (model.auto_detect_pii && typeof model.auto_detect_pii === 'object') ? model.auto_detect_pii : {};
       const ap_s = (ap.settings && typeof ap.settings === 'object') ? ap.settings : {};
+      // Migrate old enum values: gaussian→blur, asterisked→starred, hidden→starred
+      const migrated_pii_mode = ({ gaussian: 'blur', asterisked: 'starred', hidden: 'starred' })[ap_s.pii_mode] ?? ap_s.pii_mode;
       r.auto_detect_pii = {
         status: (typeof ap.status === 'boolean') ? ap.status : d.auto_detect_pii.status,
         settings: {
           email:    (typeof ap_s.email === 'boolean')   ? ap_s.email   : d.auto_detect_pii.settings.email,
           numeric:  (typeof ap_s.numeric === 'boolean') ? ap_s.numeric : d.auto_detect_pii.settings.numeric,
-          pii_mode: Object.values(pii_modes).includes(ap_s.pii_mode)
-            ? ap_s.pii_mode : d.auto_detect_pii.settings.pii_mode,
+          pii_mode: Object.values(pii_modes).includes(migrated_pii_mode)
+            ? migrated_pii_mode : d.auto_detect_pii.settings.pii_mode,
           pii_redaction_color: (typeof ap_s.pii_redaction_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(ap_s.pii_redaction_color))
             ? ap_s.pii_redaction_color : d.auto_detect_pii.settings.pii_redaction_color,
         },
@@ -464,6 +470,10 @@ const Constants = (() => {
           items: Array.isArray(rule.items) ? rule.items.filter(function(item) {
             if (!item || typeof item !== 'object') return false;
             if (item.type === 'dynamic') {
+              if (Array.isArray(item.selectors)) {
+                return item.selectors.length > 0 &&
+                  item.selectors.every(function(s) { return typeof s === 'string' && s.length > 0; });
+              }
               return typeof item.selector === 'string' && item.selector.length > 0;
             }
             if (item.type === 'sticky') {

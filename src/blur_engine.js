@@ -299,7 +299,9 @@ const BlurEngine = (() => {
     ":not(.bl-si-toast):not(.bl-si-toast *)" +
     ":not(.bl-si-toolbar):not(.bl-si-toolbar *)" +
     ":not(#" + SVG_FILTER_ID + ")" +
-    ":not([data-bl-si-reveal])";
+    ":not([data-bl-si-reveal])" +
+    ":not([data-bl-si-pick-blur])" +
+    ":not([data-bl-si-pii])";
 
   /**
    * Inject CSS rules for blur-all mode into `root` (document or shadow root).
@@ -331,7 +333,7 @@ const BlurEngine = (() => {
     // For shadow roots, --bl-si-radius is inherited from :root, so the same
     // CSS var reference works without any extra propagation.
     const isRedacted = mode === blsi.blur_modes.redacted;
-    const isMasked   = mode === blsi.blur_modes.masked;
+    const isMasked   = mode === blsi.blur_modes.censored;
 
     let blurDecl;
     if (isRedacted) {
@@ -348,7 +350,7 @@ const BlurEngine = (() => {
       // Font replacement: every character renders as a filled disc glyph (●).
       // filter: none cancels the static content.css gaussian rule.
       blurDecl =
-        `font-family: "bl-si-redact-disc" !important; ` +
+        `font-family: "bl-si-censored-disc" !important; ` +
         `filter: none !important; ` +
         `user-select: none !important;`;
     } else {
@@ -423,6 +425,7 @@ const BlurEngine = (() => {
     // a revealed ancestor. Also declared in content.css for the static (blur-all
     // OFF) case; both copies are needed for source-order correctness.
     rules.push(`[data-bl-si-reveal] [data-bl-si-blur] { filter: none !important; user-select: auto !important; }`);
+    rules.push(`[data-bl-si-reveal] [data-bl-si-pick-blur] { filter: none !important; background-color: transparent !important; color: inherit !important; font-family: revert !important; user-select: auto !important; }`);
     rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; user-select: auto !important; }`);
 
     if (rules.length === 0) return;
@@ -452,7 +455,7 @@ const BlurEngine = (() => {
 
     const piiSel = `[data-bl-si-pii]:not([data-bl-si-reveal])`;
     const isRedacted   = mode === blsi.pii_modes.redacted;
-    const isAsterisked = mode === blsi.pii_modes.asterisked;
+    const isAsterisked = mode === blsi.pii_modes.starred;
     const isFrosted    = mode === blsi.pii_modes.frosted;
 
     if (isFrosted) ensureSvgFilter(document);
@@ -470,7 +473,7 @@ const BlurEngine = (() => {
     } else if (isAsterisked) {
       // Font replacement: every character renders as a 6-arm asterisk glyph.
       blurDecl =
-        `font-family: "bl-si-redact-asterisk" !important; ` +
+        `font-family: "bl-si-starred-asterisk" !important; ` +
         `filter: none !important; ` +
         `user-select: none !important;`;
     } else {
@@ -535,7 +538,7 @@ const BlurEngine = (() => {
       // aren't invisible to blur. Shadow root content is handled separately
       // via handleDocument recursion. Gated on STRUCTURE or TEXT active.
       if (tag.includes('-')) {
-        if (!el.dataset.blSiBlur && !_isExtensionUI(el) &&
+        if (!el.dataset.blSiBlur && !el.dataset.blSiPickBlur && !el.dataset.blSiPii && !_isExtensionUI(el) &&
             (cats.structure !== false || cats.text !== false) &&
             (thorough || hasMeaningfulTextContent(el))) {
           el.dataset.blSiBlur = '1';
@@ -545,7 +548,7 @@ const BlurEngine = (() => {
 
       // Text-check stamping
       if (!_textCheckSet.has(tag)) return;
-      if (el.dataset.blSiBlur) return; // already stamped
+      if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return; // already stamped or owned by a competing blur system
       if (_isExtensionUI(el)) return;
       // Structural containers (div, section, etc.) always require the text gate —
       // blurring wrappers creates nested blur that breaks hover reveal.
@@ -577,7 +580,7 @@ const BlurEngine = (() => {
    */
   function tryBlurTextCheck(element, thorough) {
     if (!element || !(element instanceof Element)) return;
-    if (element.dataset.blSiBlur) return;
+    if (element.dataset.blSiBlur || element.dataset.blSiPickBlur || element.dataset.blSiPii) return;
     if (_isExtensionUI(element)) return;
     const tag = element.tagName.toLowerCase();
     if (!_textCheckSet.has(tag)) return;
@@ -624,8 +627,8 @@ const BlurEngine = (() => {
 
   function injectPickBlurRules(root, type, color) {
     removePickBlurRules(root);
-    // gaussian: static content.css rule handles [data-bl-si-pick-blur] already
-    if (!type || type === blsi.pick_blur_modes.gaussian) return;
+    // blur: static content.css rule handles [data-bl-si-pick-blur] already
+    if (!type || type === blsi.pick_blur_modes.blur) return;
 
     const rules = [];
     const notRevealed = '[data-bl-si-pick-blur]:not([data-bl-si-reveal])';
@@ -661,7 +664,8 @@ const BlurEngine = (() => {
         revealSel + ' { ' +
         'background-color: transparent !important; ' +
         'color: inherit !important; ' +
-        'filter: none !important; }'
+        'filter: none !important; ' +
+        'user-select: auto !important; }'
       );
     }
 
@@ -896,29 +900,23 @@ const BlurEngine = (() => {
   let _lastReconcileKey = null;
 
   function _itemId(item) {
-    return item && item.type === "dynamic" ? item.selector : item && item.id;
+    return item && item.type === "dynamic"
+      ? (item.selectors ? item.selectors[0] : item.selector)
+      : item && item.id;
   }
 
   function _applyDynamicItem(item) {
-    try {
-      const el = blsi.SelectorUtils.restoreSelector(item.selector);
-      if (el && !_isExtensionUI(el)) {
-        el.dataset.blSiPickBlur = '1';
-      }
-    } catch (_e) {
-      /* invalid selector */
+    const el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector);
+    if (el && !_isExtensionUI(el)) {
+      el.dataset.blSiPickBlur = '1';
     }
     const num = parseInt((item.name || "").replace("Dynamic ", ""), 10);
     if (!isNaN(num) && num > _dynamicCounter) _dynamicCounter = num;
   }
 
   function _removeDynamicItem(item) {
-    try {
-      const el = blsi.SelectorUtils.restoreSelector(item.selector);
-      if (el) delete el.dataset.blSiPickBlur;
-    } catch (_e) {
-      /* invalid selector */
-    }
+    const el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector);
+    if (el) delete el.dataset.blSiPickBlur;
   }
 
   function _applyStickyItem(item) {
@@ -1228,7 +1226,7 @@ const BlurEngine = (() => {
       }
 
       // ── Page-wide reconcile ─────────────────────────────────────────────────
-      // Skip DOM work when only CSS vars changed (blur_radius in gaussian mode,
+      // Skip DOM work when only CSS vars changed (blur_radius in blur mode,
       // highlight_color). Those propagate instantly via custom properties and
       // don't require a nuke+rescan. Frosted mode is the exception — its radius
       // lives in an SVG attribute and needs a full filter rebuild.

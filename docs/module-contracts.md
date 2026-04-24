@@ -65,7 +65,7 @@ Owns all reveal state (click target, hover target, ancestor chain, 50ms mouseout
 
 ```typescript
 type BlurCategories = { TEXT: boolean; MEDIA: boolean; FORM: boolean; TABLE: boolean; STRUCTURE: boolean };
-type BlurMode = 'solid' | 'frosted' | 'redacted' | 'masked' | null;
+type BlurMode = 'blur' | 'frosted' | 'redacted' | 'censored' | null;
 type Settings = { ENABLED?: boolean; BLUR_ALL_ACTIVE: boolean; BLUR_ITEMS: object[];
                   BLUR_CATEGORIES: BlurCategories; BLUR_MODE: BlurMode; THOROUGH_BLUR: boolean;
                   BLUR_RADIUS?: number; [key: string]: any };

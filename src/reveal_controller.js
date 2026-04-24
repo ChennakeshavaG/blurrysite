@@ -134,8 +134,8 @@ const BlurrySiteReveal = (() => {
     if (el && el instanceof Element) {
       var hasSel = ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive();
       var sel = hasSel
-        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pii]'
-        : '[data-bl-si-blur],[data-bl-si-pii]';
+        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]'
+        : '[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]';
       var candidates = el.querySelectorAll(sel);
       var useCoords = clientX !== undefined && clientY !== undefined;
       for (var i = candidates.length - 1; i >= 0; i--) {
@@ -158,17 +158,13 @@ const BlurrySiteReveal = (() => {
   }
 
   function _revealElement(el) {
-    if (_isZoneOverlay(el)) {
-      el.style.setProperty('transition', 'backdrop-filter var(--bl-si-transition-duration, 150ms) ease, -webkit-backdrop-filter var(--bl-si-transition-duration, 150ms) ease', 'important');
-      el.style.setProperty('backdrop-filter', 'none', 'important');
-      el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-    } else {
-      el.dataset.blSiReveal = '1';
+    el.dataset.blSiReveal = '1';
+    if (!_isZoneOverlay(el)) {
       // Stamp reveal on all blurred children — tag-matched (CSS rule) and
       // data-stamped (picker). querySelectorAll is browser-native and fast.
       var sel = (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive())
-        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pii]'
-        : '[data-bl-si-blur],[data-bl-si-pii]';
+        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]'
+        : '[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]';
       var children = el.querySelectorAll(sel);
       for (var i = 0; i < children.length; i++) {
         if (_isVisuallyBlurred(children[i])) {
@@ -181,11 +177,8 @@ const BlurrySiteReveal = (() => {
   }
 
   function _unrevealElement(el) {
-    if (_isZoneOverlay(el)) {
-      el.style.removeProperty('backdrop-filter');
-      el.style.removeProperty('-webkit-backdrop-filter');
-    } else {
-      delete el.dataset.blSiReveal;
+    delete el.dataset.blSiReveal;
+    if (!_isZoneOverlay(el)) {
       // Clean up by querying the reveal attr directly — no tag search needed
       var revealed = el.querySelectorAll('[data-bl-si-reveal]');
       for (var i = 0; i < revealed.length; i++) {
@@ -198,12 +191,7 @@ const BlurrySiteReveal = (() => {
 
   function _unrevealAll() {
     for (const el of _revealedElements) {
-      if (_isZoneOverlay(el)) {
-        el.style.removeProperty('backdrop-filter');
-        el.style.removeProperty('-webkit-backdrop-filter');
-      } else {
-        delete el.dataset.blSiReveal;
-      }
+      delete el.dataset.blSiReveal;
     }
     _revealedElements.clear();
   }
@@ -221,6 +209,24 @@ const BlurrySiteReveal = (() => {
       _unrevealAll();
       clearRevealedAncestors();
       _hoverRevealedEl = null;
+    }
+  }
+
+  // In click-reveal mode, pass-through clicks on `target="_blank"` links would
+  // open a new tab — disruptive since the user just revealed content in-page.
+  // Override: navigate in the same tab unless the user explicitly opted into a
+  // new tab via a modifier key (Ctrl/Cmd/Shift) or a non-left-button click.
+  function _redirectIfBlankLink(target, e) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+    var node = target;
+    while (node && node !== document.documentElement) {
+      if (node instanceof HTMLAnchorElement && node.href &&
+          (node.target === '_blank' || node.target === '_new')) {
+        e.preventDefault();
+        window.location.assign(node.href);
+        return;
+      }
+      node = node.parentElement;
     }
   }
 
@@ -253,7 +259,7 @@ const BlurrySiteReveal = (() => {
 
     const zone = _findZoneAtPoint(e.clientX, e.clientY);
     if (zone) {
-      if (zone === clickRevealedEl) return; // already revealed — let click act
+      if (zone === clickRevealedEl) { _redirectIfBlankLink(target, e); return; } // already revealed — let click act
       dismissClickReveal();
       _revealElement(zone);
       clickRevealedEl = zone;
@@ -267,8 +273,11 @@ const BlurrySiteReveal = (() => {
 
     // Click is inside the currently revealed area (the element itself or any
     // child) — pass through so links navigate, buttons fire, inputs focus.
+    // Override _blank links to navigate in-tab (modifier keys still open a new
+    // tab when the user explicitly intends it).
     if (clickRevealedEl && (blurredEl === clickRevealedEl ||
         (clickRevealedEl.contains && clickRevealedEl.contains(target)))) {
+      _redirectIfBlankLink(target, e);
       return;
     }
 

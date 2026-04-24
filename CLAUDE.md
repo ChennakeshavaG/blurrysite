@@ -28,11 +28,11 @@ Every source file exposes exactly one window global. Using the wrong name causes
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action has `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding a new action is one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
 | `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
-| `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelector`, `generateId`, `restoreSelector`, `restoreAllSelectors` |
+| `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelectors(el) → string[]` (ordered structural→semantic; use for saving), `getSelector(el) → string\|null` (compat alias → `getSelectors()[0]`), `isSelectorStable(el) → bool` (fast O(1) check; true if id/class/aria/data-* found), `generateId`, `restoreSelector(string\|string[]) → Element\|null` (tries each in order, returns first unique match), `restoreAllSelectors` |
 | `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `debounced_patch`, `save_settings`, `get_all_site_rules`, `get_site_entry`, `set_site_entry`, `remove_site_entry`, `resolve`, `get_blur_items`, `get_cached_blur_state`, `get_blur_state`, `save_blur_state`, `save_blur_item`, `remove_blur_item`, `save_automate_blur`, `patch_automate_blur`, `clear_automate_blur`, `clear_host`, `clear_all`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage` directly (no background relay) |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces the tab title with `…` when active |
 | `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all |
-| `src/fonts.js` | `blsi.Fonts` | `FONT_FACE` — base64-encoded `@font-face` string for `"bl-si-redact-asterisk"` (text-security-disc, OFL-1.1). Used by `blur_engine` for masked / asterisked modes. |
+| `src/fonts.js` | `blsi.Fonts` | `DISC_FONT_FACE`, `ASTERISK_FONT_FACE` — base64-encoded `@font-face` strings for `"bl-si-censored-disc"` and `"bl-si-starred-asterisk"` (OFL-1.1). Used by `blur_engine` for censored / starred modes. |
 | `src/blur_engine.js` | `blsi.BlurEngine` | Low-level: `applyBlur`, `removeBlur`, `toggleBlur`, `unblurAll`, `isBlurred`, `isVisuallyBlurred`, `injectRules`, `removeRules`, `isBlurAllActive`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `ensureSvgFilter`, `injectPiiRules(mode)`, `removePiiRules()`, `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `teardown`, `CATEGORY_SELECTORS`. High-level: `handleSite`, `handleDocument`, `observeRoot`, `disconnectObserver`, `resetCounters`, `allocateDynamicName`, `allocateStickyName`, `isPageBlurred` (getter), `_setPickerActiveForObserver` |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
 | `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()` — detects `getDisplayMedia()` calls in the page's MAIN world; sends `SCREEN_SHARE_STARTED`/`SCREEN_SHARE_ENDED` to background which fans out `SCREEN_SHARE_BLUR`/`SCREEN_SHARE_UNBLUR` to other tabs |
@@ -172,7 +172,7 @@ PII blur is **independent of blur-all**. PII spans carry `[data-bl-si-pii]` only
 
 **`pick_blur_enabled`** — whether Pick & Blur mode is independently enabled: `true` (default) | `false`. Both Blur All and Pick & Blur can be on simultaneously; no "active mode" concept. Persisted to storage.
 
-**`pick_blur_type`** — blur type for Pick & Blur mode: `'gaussian'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'masked'` — not available for Pick & Blur. Use `blsi.pick_blur_modes` enum.
+**`pick_blur_type`** — blur type for Pick & Blur mode: `'blur'` (default) | `'frosted'` | `'color'`. Does not include `'redacted'` or `'censored'` — not available for Pick & Blur. Use `blsi.pick_blur_modes` enum.
 
 **`pick_blur_color`** — color for Pick & Blur `'color'` type:
 ```js
@@ -181,7 +181,7 @@ pick_and_blur.settings.pick_blur_color = { hex: '#000000', opacity: 1.0 }
 // opacity: number 0–1 inclusive
 ```
 
-**`pii_mode`** — blur type for auto-detect PII rendering: `'gaussian'` (default) | `'frosted'` | `'redacted'` | `'asterisked'`. Use `blsi.pii_modes` enum.
+**`pii_mode`** — blur type for auto-detect PII rendering: `'blur'` (default) | `'frosted'` | `'redacted'` | `'starred'`. Use `blsi.pii_modes` enum.
 
 **`automate`** — automation trigger settings (feature-grouped under `automate.settings`):
 ```js
@@ -272,7 +272,7 @@ All elements (video, img, text containers, generic) are blurred via CSS class on
 
 ### Running tests
 ```bash
-npm run test:unit          # 656 unit tests, fast
+npm run test:unit          # 703 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -345,12 +345,12 @@ Docs are not optional artifacts — they are load-bearing references used by bot
 | Issue | Root cause | Status |
 |---|---|---|
 | ~~DRM video shows dark overlay~~ | Fixed — CSS `filter: blur()` works on DRM video (DRM blocks pixel extraction, not CSS rendering) | Resolved |
-| SPA selector staleness | `data-bl-si-id` stamped at blur time; re-rendered elements get new DOM nodes | Documented in `docs/browser-compatibility.md §6.3` |
+| SPA selector staleness | Dynamic blur items store `selectors: string[]` ordered structural→semantic. Structural (nth-of-type) paths fail when SPA re-renders the DOM; fallback selectors (class, aria, data-*, id) survive. Elements with no stable signals show "may not persist" warning in picker on hover. | Partially mitigated — picker shows warning; full SPA resilience requires semantic signals on the element |
 | Context menu blur has no element targeting | `contextMenus.onClicked` does not capture `targetElementId` in current impl | Known gap — `docs/browser-compatibility.md §6.6` |
 | `position: fixed` inside blurred containers shifts | CSS `filter` creates stacking context — browser spec behaviour | User education in README |
 | `position: sticky` inside blurred containers stops sticking | CSS `filter` creates stacking context — spec behaviour | Same root cause as `position: fixed` issue |
 | `<select>` dropdown options visible when opened | CSS filter only blurs closed state | Known limitation |
-| Reveal may strip element background color | `data-bl-si-reveal` sets `background-color: transparent` to cancel redacted mode; in gaussian/frosted, this removes legitimate backgrounds during temporary reveal | Acceptable — reveal is temporary (hover/click) |
+| Reveal may strip element background color | `data-bl-si-reveal` sets `background-color: transparent` to cancel redacted mode; in blur/frosted, this removes legitimate backgrounds during temporary reveal | Acceptable — reveal is temporary (hover/click) |
 | Hover reveal and click reveal work inside shadow roots; picker does not | `reveal_controller` uses `event.composedPath()[0]` to pierce shadow DOM retargeting — reveal now reaches elements inside shadow roots. `picker` still uses `event.target` and cannot reach inside shadow roots. | Hover/click reveal: fixed. Picker: Phase 2 |
 | `isBlurred()` returns false for alwaysBlur elements inside shadow roots | `isBlurAllActive()` checks `document.head` only; elements blurred by CSS injected into a shadow root are not detected. Picker can't reach them anyway until Phase 2. | Phase 2 |
 | Zone overlays misalign on pages with CSS `transform` on ancestor elements | `position:absolute` coordinate space anchors to the nearest transformed ancestor, not the document root — CSS spec behaviour | Known limitation — `position:fixed` screen-anchor zones are unaffected; page-anchor zones may appear offset on transform-heavy pages (rare) |

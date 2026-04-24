@@ -177,7 +177,7 @@ describe('patch_section', () => {
     const m = blsi.Model.get();
     // blur_all untouched
     expect(m.blur_all.status).toBe(false);
-    expect(m.blur_all.settings.blur_mode).toBe('gaussian');
+    expect(m.blur_all.settings.blur_mode).toBe('blur');
   });
 
   test('calls validate_model (invalid value is coerced to default)', async () => {
@@ -349,6 +349,46 @@ describe('save_blur_state / get_blur_state / get_cached_blur_state', () => {
     await blsi.Model.save_blur_state('', true);
     expect(chrome.storage.local.set).not.toHaveBeenCalled();
   });
+
+  test('save_blur_state writes per-host blur_all=false explicitly (turns off)', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    await blsi.Model.save_blur_state('example.com', true);
+    await blsi.Model.save_blur_state('example.com', false);
+    const entry = blsi.Model.get_site_entry('example.com');
+    expect(entry.blur_all).toBe(false);
+  });
+
+  test('save_blur_state false is persisted to storage (write is not skipped)', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    await blsi.Model.save_blur_state('example.com', true);
+    jest.clearAllMocks();
+    mockSet();
+
+    await blsi.Model.save_blur_state('example.com', false);
+    expect(chrome.storage.local.set).toHaveBeenCalled();
+    const writtenModel = chrome.storage.local.set.mock.calls[0][0].blsi_model;
+    const rule = writtenModel.site_rules.find(r => r.hostname_value === 'example.com');
+    expect(rule.blur_all).toBe(false);
+  });
+
+  test('save_blur_state false: existing items survive the write (validate_model must not strip them)', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: '#foo', name: 'Foo' });
+    // Toggling blur-all off must not strip items as a side-effect of the storage write
+    await blsi.Model.save_blur_state('example.com', false);
+    const items = await blsi.Model.get_blur_items('example.com');
+    expect(items).toHaveLength(1);
+    expect(items[0].selector).toBe('#foo');
+  });
 });
 
 // ── save_blur_item ────────────────────────────────────────────────────────────
@@ -379,6 +419,41 @@ describe('save_blur_item', () => {
 
     const items = await blsi.Model.get_blur_items('example.com');
     expect(items).toHaveLength(1);
+  });
+
+  test('accepts dynamic item with new selectors[] array shape', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    const item = { type: 'dynamic', selectors: ['body > div:nth-of-type(1)', '#foo'], name: 'Sel Array' };
+    await blsi.Model.save_blur_item('example.com', item);
+    const items = await blsi.Model.get_blur_items('example.com');
+    expect(items).toHaveLength(1);
+    expect(items[0].selectors[0]).toBe('body > div:nth-of-type(1)');
+  });
+
+  test('deduplicates new-shape selectors[] items by selectors[0]', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    const item = { type: 'dynamic', selectors: ['body > div:nth-of-type(1)', '#foo'], name: 'Dup1' };
+    await blsi.Model.save_blur_item('example.com', item);
+    await blsi.Model.save_blur_item('example.com', { ...item, name: 'Dup2' });
+    const items = await blsi.Model.get_blur_items('example.com');
+    expect(items).toHaveLength(1);
+  });
+
+  test('rejects dynamic item with empty selectors array', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+    jest.clearAllMocks();
+    mockSet();
+
+    await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selectors: [], name: 'Bad' });
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
   });
 
   test('deduplicates sticky items by id', async () => {
@@ -685,7 +760,7 @@ describe('resolve', () => {
     expect(resolved.reveal_mode).toBe('hover');
     expect(resolved.blur_categories).toBeDefined();
     // Feature settings
-    expect(resolved.blur_mode).toBe('gaussian');
+    expect(resolved.blur_mode).toBe('blur');
     expect(resolved.blur_all_active).toBe(false);
     expect(Array.isArray(resolved.blur_items)).toBe(true);
     expect(resolved.pick_blur_enabled).toBeDefined();

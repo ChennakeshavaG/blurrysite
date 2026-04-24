@@ -305,15 +305,26 @@ const StorageModel = (() => {
   }
 
   function _get_item_id(item) {
-    return item.type === 'dynamic' ? item.selector : item.id;
+    if (item.type === 'dynamic') {
+      return item.selectors ? item.selectors[0] : item.selector;
+    }
+    return item.id;
   }
 
   function _is_valid_item(item) {
     if (!item || typeof item !== 'object') return false;
     if (item.type === 'dynamic') {
-      return typeof item.selector === 'string' && item.selector.length > 0 &&
-        item.selector.length <= 2000 &&
-        typeof item.name === 'string' && item.name.length <= 100;
+      var name_ok = typeof item.name === 'string' && item.name.length <= 100;
+      // New shape: selectors array
+      if (Array.isArray(item.selectors)) {
+        return name_ok && item.selectors.length > 0 && item.selectors.length <= 6 &&
+          item.selectors.every(function(s) {
+            return typeof s === 'string' && s.length > 0 && s.length <= 2000;
+          });
+      }
+      // Legacy shape: single selector string
+      return name_ok && typeof item.selector === 'string' &&
+        item.selector.length > 0 && item.selector.length <= 2000;
     }
     if (item.type === 'sticky') {
       return typeof item.id === 'string' && item.id.length > 0 &&

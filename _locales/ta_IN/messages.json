@@ -201,17 +201,11 @@
   "reveal_none": {
     "message": "நிறுத்து — ஒருபோதும் காட்டாதே"
   },
-  "blur_mode_gaussian": {
-    "message": "தரநிலை"
-  },
   "blur_mode_frosted": {
     "message": "ஃப்ராஸ்டெட் (AI-தடை)"
   },
   "blur_mode_redacted": {
     "message": "மறைக்கப்பட்டது (திட தொகுதி)"
-  },
-  "blur_mode_masked": {
-    "message": "மாஸ்க் (நட்சத்திரங்கள்)"
   },
   "setting_redaction_color": {
     "message": "மறைப்பு நிறம்"
@@ -528,8 +522,8 @@
   "power_turn_on": {
     "message": "Turn On"
   },
-  "htb_chip_gaussian": {
-    "message": "Gaussian"
+  "htb_chip_blur": {
+    "message": "Blur"
   },
   "htb_chip_frosted": {
     "message": "Frosted"
@@ -537,8 +531,8 @@
   "htb_chip_redacted": {
     "message": "Redacted"
   },
-  "htb_chip_masked": {
-    "message": "Masked"
+  "htb_chip_censored": {
+    "message": "Censored"
   },
   "htb_chip_color": {
     "message": "Color"
@@ -568,10 +562,10 @@
     "message": "Strong"
   },
   "htb_pick_blur_note": {
-    "message": "Redacted & Masked available in Blur All mode."
+    "message": "Redacted & Censored available in Blur All mode."
   },
-  "pii_chip_gaussian": {
-    "message": "Gaussian"
+  "pii_chip_blur": {
+    "message": "Blur"
   },
   "pii_chip_frosted": {
     "message": "Frosted"
@@ -579,8 +573,8 @@
   "pii_chip_redacted": {
     "message": "Redacted"
   },
-  "pii_chip_asterisked": {
-    "message": "Asterisked"
+  "pii_chip_starred": {
+    "message": "Starred"
   },
   "automate_idle": {
     "message": "Idle"
@@ -611,6 +605,18 @@
   },
   "mode_pick_blur_empty": {
     "message": "No elements picked yet. Open the picker to start."
+  },
+  "mode_pick_off_hint": {
+    "message": "Pick & Blur is off. Toggle on to blur specific elements."
+  },
+  "mode_pick_off_paused": {
+    "message": "$COUNT$ items · paused",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
   },
   "mode_open_picker": {
     "message": "Open Picker"

@@ -21,10 +21,10 @@ function buildStubSource() {
 function makeSettings(overrides) {
   const base = {
     pick_blur_enabled: true,
-    blur_mode: 'gaussian',
-    pick_blur_type: 'gaussian',
+    blur_mode: 'blur',
+    pick_blur_type: 'blur',
     picker_mode: 'sticky-page',
-    pii_mode: 'gaussian',
+    pii_mode: 'blur',
     blur_radius: 6,
     reveal_mode: 'hover',
     enabled: true,
@@ -76,13 +76,13 @@ describe('renderHtbSection', () => {
     expect(active.dataset.type).toBe('frosted');
   });
 
-  test('pick-blur mode renders 3 type chips (no redacted/masked)', () => {
+  test('pick-blur mode renders 3 type chips (no redacted/censored)', () => {
     BlurrySitePopupRender.renderHtbSection(makeSettings(), false);
     const chips = document.querySelectorAll('#bl-htb-chips .bl-chip');
     expect(chips).toHaveLength(3);
     const types = [...chips].map(c => c.dataset.type);
     expect(types).not.toContain('redacted');
-    expect(types).not.toContain('masked');
+    expect(types).not.toContain('censored');
     expect(types).toContain('color');
   });
 
@@ -102,7 +102,7 @@ describe('renderHtbSection', () => {
   });
 
   test('summary Strength row uses Moderate label for radius 6', () => {
-    BlurrySitePopupRender.renderHtbSection(makeSettings({ blur_radius: 6, blur_mode: 'gaussian' }), true);
+    BlurrySitePopupRender.renderHtbSection(makeSettings({ blur_radius: 6, blur_mode: 'blur' }), true);
     const strengthRow = [...document.querySelectorAll('.bl-summary-row')].find(
       r => r.querySelector('.bl-summary-row__label').textContent === 'htb_label_strength'
     );
@@ -111,7 +111,7 @@ describe('renderHtbSection', () => {
   });
 
   test('summary Strength row uses Subtle label for radius 3', () => {
-    BlurrySitePopupRender.renderHtbSection(makeSettings({ blur_radius: 3, blur_mode: 'gaussian' }), true);
+    BlurrySitePopupRender.renderHtbSection(makeSettings({ blur_radius: 3, blur_mode: 'blur' }), true);
     const strengthRow = [...document.querySelectorAll('.bl-summary-row')].find(
       r => r.querySelector('.bl-summary-row__label').textContent === 'htb_label_strength'
     );
@@ -119,7 +119,7 @@ describe('renderHtbSection', () => {
   });
 
   test('summary Strength row uses Strong label for radius 10', () => {
-    BlurrySitePopupRender.renderHtbSection(makeSettings({ blur_radius: 10, blur_mode: 'gaussian' }), true);
+    BlurrySitePopupRender.renderHtbSection(makeSettings({ blur_radius: 10, blur_mode: 'blur' }), true);
     const strengthRow = [...document.querySelectorAll('.bl-summary-row')].find(
       r => r.querySelector('.bl-summary-row__label').textContent === 'htb_label_strength'
     );
@@ -127,7 +127,7 @@ describe('renderHtbSection', () => {
   });
 
   test('pick-blur mode has no Covers row in summary', () => {
-    BlurrySitePopupRender.renderHtbSection(makeSettings({ pick_blur_type: 'gaussian' }), false);
+    BlurrySitePopupRender.renderHtbSection(makeSettings({ pick_blur_type: 'blur' }), false);
     const labels = [...document.querySelectorAll('.bl-summary-row__label')].map(el => el.textContent);
     expect(labels).not.toContain('htb_label_covers');
   });
@@ -332,10 +332,10 @@ describe('renderModesSection', () => {
     expect(document.getElementById('bl-pick-blur-toggle').checked).toBe(false);
   });
 
-  test('pick-blur ON empty: shows mode_pick_on_empty text', () => {
+  test('pick-blur ON empty: shows mode_pick_blur_empty text', () => {
     BlurrySitePopupRender.renderModesSection(makeSettings({ pick_blur_enabled: true }), [], false);
     expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count')).toBeTruthy();
-    expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count').textContent).toBe('mode_pick_on_empty');
+    expect(document.querySelector('#bl-mode-pick-blur .bl-pick-count').textContent).toBe('mode_pick_blur_empty');
   });
 
   test('pick-blur with items: shows item list and Mode/Strength summary rows', () => {

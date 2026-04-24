@@ -104,15 +104,15 @@ describe('BlurrySite constants', () => {
       expect(Object.keys(bc)).toHaveLength(5);
     });
 
-    test('blur_all.settings.blur_mode defaults to gaussian', () => {
-      expect(PB.DEFAULT_MODEL.blur_all.settings.blur_mode).toBe('gaussian');
+    test('blur_all.settings.blur_mode defaults to blur', () => {
+      expect(PB.DEFAULT_MODEL.blur_all.settings.blur_mode).toBe('blur');
     });
 
     test('pick_and_blur defaults', () => {
       const pab = PB.DEFAULT_MODEL.pick_and_blur;
       expect(pab.status).toBe(false);
       expect(pab.settings.picker_mode).toBeNull();
-      expect(pab.settings.blur_type).toBe('gaussian');
+      expect(pab.settings.blur_type).toBe('blur');
     });
 
     test('auto_detect_pii defaults', () => {
@@ -120,7 +120,7 @@ describe('BlurrySite constants', () => {
       expect(pii.status).toBe(true);
       expect(pii.settings.email).toBe(true);
       expect(pii.settings.numeric).toBe(true);
-      expect(pii.settings.pii_mode).toBe('gaussian');
+      expect(pii.settings.pii_mode).toBe('blur');
     });
 
     test('automate defaults', () => {
@@ -303,9 +303,10 @@ describe('BlurrySite constants', () => {
     expect(PB.picker_modes.sticky_screen).toBe('sticky-screen');
   });
 
-  // pick_blur_modes intentionally excludes redacted (PII-only type).
-  test('pick_blur_modes excludes redacted', () => {
+  // pick_blur_modes intentionally excludes redacted and censored (Blur All-only types).
+  test('pick_blur_modes excludes redacted and censored', () => {
     expect(PB.pick_blur_modes.redacted).toBeUndefined();
+    expect(PB.pick_blur_modes.censored).toBeUndefined();
   });
 
   // idle_units intentionally excludes hr (Chrome idle API cap ~3000 s).
@@ -378,10 +379,26 @@ describe('BlurrySite constants', () => {
 
     test('blur_mode (in blur_all.settings) validates against enum', () => {
       const m = PB.build_default_model();
-      m.blur_all.settings.blur_mode = 'gaussian';
-      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('gaussian');
+      m.blur_all.settings.blur_mode = 'blur';
+      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('blur');
       m.blur_all.settings.blur_mode = 'invalid';
-      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('gaussian');
+      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('blur');
+    });
+
+    test('blur_mode migrates legacy values: gaussian→blur, masked→solid→censored', () => {
+      const m = PB.build_default_model();
+      m.blur_all.settings.blur_mode = 'gaussian';
+      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('blur');
+      m.blur_all.settings.blur_mode = 'masked';
+      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('censored');
+      m.blur_all.settings.blur_mode = 'solid';
+      expect(PB.validate_model(m).blur_all.settings.blur_mode).toBe('censored');
+    });
+
+    test('pick_and_blur blur_type migrates legacy gaussian→blur', () => {
+      const m = PB.build_default_model();
+      m.pick_and_blur.settings.blur_type = 'gaussian';
+      expect(PB.validate_model(m).pick_and_blur.settings.blur_type).toBe('blur');
     });
 
     test('picker_mode validates against enum', () => {
@@ -399,7 +416,17 @@ describe('BlurrySite constants', () => {
       m.auto_detect_pii.settings.pii_mode = 'redacted';
       expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('redacted');
       m.auto_detect_pii.settings.pii_mode = 'bogus';
-      expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('gaussian');
+      expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('blur');
+    });
+
+    test('pii_mode migrates legacy values: gaussian→blur, asterisked→hidden→starred', () => {
+      const m = PB.build_default_model();
+      m.auto_detect_pii.settings.pii_mode = 'gaussian';
+      expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('blur');
+      m.auto_detect_pii.settings.pii_mode = 'asterisked';
+      expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('starred');
+      m.auto_detect_pii.settings.pii_mode = 'hidden';
+      expect(PB.validate_model(m).auto_detect_pii.settings.pii_mode).toBe('starred');
     });
 
     test('automate.idle: hr unit rejected — falls back to min', () => {
@@ -461,6 +488,65 @@ describe('BlurrySite constants', () => {
       m.shortcuts['toggle-blur-all'] = { binding: [{ code: 'KeyK', mods: ['Control', 'Shift'] }] };
       const result = PB.validate_model(m);
       expect(result.shortcuts['toggle-blur-all'].binding[0].code).toBe('KeyK');
+    });
+
+    // ── site_rules: blur_all and items invariants ──────────────────────────
+    // blur_all:false must survive — the popup toggle-off path writes this value
+    // and validate_model runs on every storage write. Coercing false→null would
+    // silently revert the user's "turn off blur" action.
+    test('site_rules: blur_all:false is preserved (not coerced to null)', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{ hostname_value: 'example.com', hostname_type: 'exact', blur_all: false, items: [], settings: {} }];
+      const result = PB.validate_model(m);
+      expect(result.site_rules[0].blur_all).toBe(false);
+    });
+
+    test('site_rules: blur_all:true is preserved', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{ hostname_value: 'example.com', hostname_type: 'exact', blur_all: true, items: [], settings: {} }];
+      const result = PB.validate_model(m);
+      expect(result.site_rules[0].blur_all).toBe(true);
+    });
+
+    test('site_rules: blur_all:null (inherit) is preserved', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{ hostname_value: 'example.com', hostname_type: 'exact', blur_all: null, items: [], settings: {} }];
+      const result = PB.validate_model(m);
+      expect(result.site_rules[0].blur_all).toBeNull();
+    });
+
+    // selectors[] shape was previously stripped by the items filter, causing
+    // items to disappear as a side-effect of any storage write (including toggle-off).
+    test('site_rules: dynamic item with selectors[] array passes validation', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{
+        hostname_value: 'example.com', hostname_type: 'exact', blur_all: null, settings: {},
+        items: [{ type: 'dynamic', selectors: ['#foo', '.bar'], name: 'Multi' }],
+      }];
+      const result = PB.validate_model(m);
+      expect(result.site_rules[0].items).toHaveLength(1);
+      expect(result.site_rules[0].items[0].selectors[0]).toBe('#foo');
+    });
+
+    test('site_rules: dynamic item with legacy selector string passes validation', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{
+        hostname_value: 'example.com', hostname_type: 'exact', blur_all: null, settings: {},
+        items: [{ type: 'dynamic', selector: '#foo', name: 'Old' }],
+      }];
+      const result = PB.validate_model(m);
+      expect(result.site_rules[0].items).toHaveLength(1);
+      expect(result.site_rules[0].items[0].selector).toBe('#foo');
+    });
+
+    test('site_rules: dynamic item with empty selectors[] is stripped', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{
+        hostname_value: 'example.com', hostname_type: 'exact', blur_all: null, settings: {},
+        items: [{ type: 'dynamic', selectors: [], name: 'Empty' }],
+      }];
+      const result = PB.validate_model(m);
+      expect(result.site_rules[0].items).toHaveLength(0);
     });
   });
 

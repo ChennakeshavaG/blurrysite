@@ -71,7 +71,7 @@ beforeAll(() => { loadBlurEngine(); });
 const fakeStorage = {
   settings: {
     blur_categories: { text: true, media: true, form: true, table: true, structure: true },
-    blur_mode: 'solid',
+    blur_mode: 'censored',
     thorough_blur: false,
     enabled: true,
   },
@@ -85,7 +85,7 @@ beforeEach(() => {
   document.querySelectorAll('[data-bl-si-blur]').forEach(el => delete el.dataset.blSiBlur);
   fakeStorage.settings = {
     blur_categories: { text: true, media: true, form: true, table: true, structure: true },
-    blur_mode: 'solid',
+    blur_mode: 'censored',
     thorough_blur: false,
     enabled: true,
   };
@@ -524,6 +524,29 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('idem').dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('applies dynamic item using new selectors[] array shape', async () => {
+      document.body.innerHTML = '<div id="newshape">x</div>';
+      fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selectors: ['body > div:nth-of-type(1)', '#newshape'] }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(document.getElementById('newshape').dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('falls back to second selector when first does not match', async () => {
+      document.body.innerHTML = '<div id="fallback">x</div>';
+      fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selectors: ['#stale-no-match', '#fallback'] }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(document.getElementById('fallback').dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('removes dynamic item using selectors[] shape', async () => {
+      document.body.innerHTML = '<div id="rmsel">x</div>';
+      fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selectors: ['#rmsel'] }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      fakeStorage.items = [];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(document.getElementById('rmsel').dataset.blSiPickBlur).toBeUndefined();
     });
     // MISSING: no test for dynamic item whose selector matches nothing (element not in DOM)
     // MISSING: no test for sticky item with anchor:'screen' (position:fixed overlay)
@@ -1233,8 +1256,8 @@ describe('blsi.BlurEngine', () => {
   });
 
   // ─── Pick & Blur attribute + CSS injection (data-bl-si-pick-blur) ────────────
-  // USER IMPACT: selected blur mode (gaussian/frosted/color) actually applied to
-  // picked elements instead of always falling back to gaussian.
+  // USER IMPACT: selected blur mode (blur/frosted/color) actually applied to
+  // picked elements instead of always falling back to blur.
   describe('pick & blur — data-bl-si-pick-blur attribute', () => {
     beforeEach(() => {
       blsi.BlurEngine.resetCounters();
@@ -1244,7 +1267,7 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<p id="p1">text</p>';
       await blsi.BlurEngine.handleSite({
         enabled: true, blur_all_active: false, blur_items: [{ type: 'dynamic', name: 'Dynamic 1', selector: '#p1' }],
-        pick_blur_enabled: true, pick_blur_type: 'gaussian', pick_blur_color: { hex: '#000000', opacity: 1 },
+        pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 },
       });
       const el = document.getElementById('p1');
       expect(el.dataset.blSiPickBlur).toBe('1');
@@ -1254,7 +1277,7 @@ describe('blsi.BlurEngine', () => {
     test('_removeDynamicItem clears data-bl-si-pick-blur', async () => {
       document.body.innerHTML = '<p id="p2">text</p>';
       const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#p2' };
-      const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'gaussian', pick_blur_color: { hex: '#000000', opacity: 1 } };
+      const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
       await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
       expect(document.getElementById('p2').dataset.blSiPickBlur).toBe('1');
       await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
@@ -1298,8 +1321,8 @@ describe('blsi.BlurEngine', () => {
       blsi.BlurEngine.removePickBlurRules(document);
     });
 
-    test('gaussian mode injects nothing (static content.css covers it)', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'gaussian', { hex: '#ff0000', opacity: 1 });
+    test('blur mode injects nothing (static content.css covers it)', () => {
+      blsi.BlurEngine.injectPickBlurRules(document, 'blur', { hex: '#ff0000', opacity: 1 });
       expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
     });
 

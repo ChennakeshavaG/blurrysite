@@ -80,6 +80,7 @@ const Picker = (() => {
   let toolbarEl = null;
   let toolbarLabelEl = null;
   let modeSelectEl = null;
+  let selectorWarningEl = null;
 
   // ─── Toast notification ───────────────────────────────────────────────────────
 
@@ -294,6 +295,11 @@ const Picker = (() => {
     });
     closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
 
+    // ── Selector stability warning — shown on hover when no stable selector ──
+    selectorWarningEl = document.createElement('div');
+    selectorWarningEl.className = 'bl-si-selector-warning';
+    selectorWarningEl.textContent = '⚠ ' + _t('pickerSelectorWarning', 'May not persist on reload');
+
     // Pill layout: [⚓ grip] [(prefix)] [mode chip] [Clear] [×]
     // prefix is optional — empty in non-English locales (see prefixLabel above).
     toolbarEl.appendChild(dragHandle);
@@ -301,6 +307,7 @@ const Picker = (() => {
     toolbarEl.appendChild(modeSelectEl);
     toolbarEl.appendChild(clearBtn);
     toolbarEl.appendChild(closeBtn);
+    toolbarEl.appendChild(selectorWarningEl);
 
     // toolbarLabelEl is retained as null — legacy code paths that touched
     // it must check for null. The long "sketch a box on the page..." label
@@ -404,6 +411,7 @@ const Picker = (() => {
       toolbarEl = null;
       toolbarLabelEl = null;
       modeSelectEl = null;
+      selectorWarningEl = null;
     }
   }
 
@@ -679,6 +687,12 @@ const Picker = (() => {
     }
     hoveredElement = target;
     hoveredElement.classList.add((CLS.hover_highlight || 'bl-si-hover-highlight'));
+
+    // Show stability warning if the element has no stable semantic signals
+    if (selectorWarningEl) {
+      const stable = blsi.SelectorUtils.isSelectorStable(target);
+      selectorWarningEl.classList.toggle('bl-si-visible', !stable);
+    }
   }
 
   function onMouseOut(e) {
@@ -697,6 +711,7 @@ const Picker = (() => {
     if (target) {
       target.classList.remove((CLS.hover_highlight || 'bl-si-hover-highlight'));
     }
+    if (selectorWarningEl) selectorWarningEl.classList.remove('bl-si-visible');
     if (hoveredElement === target) {
       hoveredElement = null;
     }

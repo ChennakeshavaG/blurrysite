@@ -4,9 +4,15 @@
  * Generates stable, unique CSS selectors for DOM elements so that blur state
  * can be persisted and restored across page loads.
  *
- * Selector strategy (most-specific first):
- *  1. Unique ID attribute  → #escaped-id
- *  2. Fallback             → stamp a generated data-bl-si-id UUID on the element
+ * Selector strategy — getSelectors() returns an array ordered structural → semantic.
+ * Restore tries each in order; first unique match wins.
+ *
+ *  0. Full body-rooted nth-of-type path  — most precise, breaks on DOM insertions
+ *  1. Nearest stable-ancestor-anchored path — shorter, more resilient
+ *  2. Class combo (tag.c1.c2)           — stable if CSS classes are page-native
+ *  3. [aria-label] + tag                — stable for designed ARIA attributes
+ *  4. Stable data-* attributes          — stable for test/framework attrs
+ *  5. Unique #id                        — most stable (last in the array)
  *
  * Exposed as blsi.SelectorUtils (IIFE — no ES module syntax).
  */
@@ -14,44 +20,29 @@
 const SelectorUtils = (() => {
   'use strict';
 
+  // Stable data-* attributes checked for strategy 4 (in order).
+  var STABLE_DATA_ATTRS = ['data-testid', 'data-cy', 'data-id', 'data-name', 'data-key', 'data-component', 'name'];
+
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
 
-  /**
-   * CSS-escapes an arbitrary string so it is safe to embed in a selector.
-   * Falls back to a manual implementation when CSS.escape is unavailable
-   * (e.g., older Firefox builds, some test environments).
-   * @param {string} value
-   * @returns {string}
-   */
   function cssEscape(value) {
-    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
       return CSS.escape(value);
     }
-
-    // Manual fallback: escape non-word characters with a backslash
-    return String(value).replace(/([^\w-])/g, "\\$1");
+    return String(value).replace(/([^\w-])/g, '\\$1');
   }
 
-  /**
-   * Checks whether a given CSS selector matches exactly one element in the document.
-   * @param {string} selector
-   * @returns {boolean}
-   */
   function isUnique(selector) {
     try {
       return document.querySelectorAll(selector).length === 1;
-    } catch {
+    } catch (_e) {
       return false;
     }
   }
 
-  /**
-   * Build an nth-child path from element up to body.
-   * Example: "body > div:nth-child(2) > main:nth-child(1) > p:nth-child(3)"
-   * Survives page reload but fragile to DOM insertions.
-   */
+  // ── Strategy 0: full body-rooted nth-of-type path ─────────────────────────
   function buildNthChildPath(element) {
     var parts = [];
     var node = element;
@@ -71,113 +62,222 @@ const SelectorUtils = (() => {
     return 'body > ' + parts.join(' > ');
   }
 
+  // ── Strategy 1: anchored path (walk up to nearest stable ancestor) ─────────
+  // Produces '#ancestor-id > tag:nth-of-type(n) > tag:nth-of-type(m)'
+  // which is shorter and more resilient than the full body path.
+  function buildAnchoredPath(element) {
+    var parts = [];
+    var node = element;
+    while (node && node !== document.body && node !== document.documentElement) {
+      var tag = node.tagName.toLowerCase();
+      var parent = node.parentElement;
+      if (!parent) break;
+
+      // Stop if PARENT has a stable anchor (id or stable data-*)
+      var parentId = parent === document.body ? null : parent.getAttribute('id');
+      var hasParentAnchor = parentId && parentId.trim().length > 0;
+      if (!hasParentAnchor) {
+        for (var d = 0; d < STABLE_DATA_ATTRS.length; d++) {
+          var dval = parent.getAttribute(STABLE_DATA_ATTRS[d]);
+          if (dval && dval.trim().length > 0) { hasParentAnchor = true; break; }
+        }
+      }
+
+      var idx = 1;
+      for (var j = 0; j < parent.children.length; j++) {
+        if (parent.children[j] === node) break;
+        if (parent.children[j].tagName === node.tagName) idx++;
+      }
+      parts.unshift(tag + ':nth-of-type(' + idx + ')');
+      node = parent;
+
+      if (hasParentAnchor) {
+        // Build the anchor prefix
+        var anchorAttr = null;
+        if (parentId && parentId.trim().length > 0) {
+          anchorAttr = '#' + cssEscape(parentId.trim());
+        } else {
+          for (var k = 0; k < STABLE_DATA_ATTRS.length; k++) {
+            var av = parent.getAttribute(STABLE_DATA_ATTRS[k]);
+            if (av && av.trim().length > 0) {
+              anchorAttr = '[' + STABLE_DATA_ATTRS[k] + '=' + JSON.stringify(av.trim()) + ']';
+              break;
+            }
+          }
+        }
+        if (!anchorAttr) break;
+        var candidate = anchorAttr + ' > ' + parts.join(' > ');
+        // Only emit if anchor itself is unique and the full path is unique
+        if (!isUnique(anchorAttr)) break;
+        return isUnique(candidate) ? candidate : null;
+      }
+    }
+    return null;
+  }
+
+  // ── Strategy 2: class combo ───────────────────────────────────────────────
+  function buildClassSelector(element) {
+    if (!element.className || typeof element.className !== 'string') return null;
+    var tag = element.tagName.toLowerCase();
+    var classes = element.className.trim().split(/\s+/).filter(function(c) {
+      return c && !c.startsWith('bl-si-');
+    });
+    if (classes.length === 0) return null;
+
+    var classSelector = tag + '.' + classes.map(cssEscape).join('.');
+    if (isUnique(classSelector)) return classSelector;
+
+    // Try with parent #id context
+    var parent = element.parentElement;
+    if (parent && parent.id) {
+      var contextSelector = '#' + cssEscape(parent.id) + ' > ' + classSelector;
+      if (isUnique(contextSelector)) return contextSelector;
+    }
+    return null;
+  }
+
+  // ── Strategy 3: aria-label + tag ─────────────────────────────────────────
+  function buildAriaSelector(element) {
+    var label = element.getAttribute('aria-label');
+    if (!label || label.trim().length === 0 || label.length > 80) return null;
+    var tag = element.tagName.toLowerCase();
+    var candidate = tag + '[aria-label=' + JSON.stringify(label.trim()) + ']';
+    return isUnique(candidate) ? candidate : null;
+  }
+
+  // ── Strategy 4: stable data-* attributes ─────────────────────────────────
+  function buildDataAttrSelector(element) {
+    for (var i = 0; i < STABLE_DATA_ATTRS.length; i++) {
+      var val = element.getAttribute(STABLE_DATA_ATTRS[i]);
+      if (!val || val.trim().length === 0) continue;
+      var candidate = '[' + STABLE_DATA_ATTRS[i] + '=' + JSON.stringify(val.trim()) + ']';
+      if (isUnique(candidate)) return candidate;
+      // Also try scoped with tag
+      var tagged = element.tagName.toLowerCase() + candidate;
+      if (isUnique(tagged)) return tagged;
+    }
+    return null;
+  }
+
+  // ── Strategy 5: unique #id ────────────────────────────────────────────────
+  function buildIdSelector(element) {
+    var id = element.getAttribute('id');
+    if (!id || id.trim().length === 0) return null;
+    var candidate = '#' + cssEscape(id.trim());
+    return isUnique(candidate) ? candidate : null;
+  }
+
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
 
   /**
-   * Generates a specific CSS selector for an element.
-   * The selector is guaranteed to be usable with document.querySelector.
-   * @param {Element} element
-   * @returns {string}
+   * Returns an ordered array of CSS selectors for the element.
+   * Index 0 is most structural (precise, fragile); last index is most semantic (stable).
+   * Restore tries each in order — first unique match wins.
+   * Only selectors confirmed unique via querySelectorAll are included.
+   */
+  function getSelectors(element) {
+    if (!element || !(element instanceof Element)) return [];
+    if (element === document.body || element === document.documentElement) return [];
+
+    var results = [];
+    var seen = new Set ? new Set() : { _m: {}, has: function(v) { return !!this._m[v]; }, add: function(v) { this._m[v] = true; } };
+
+    function push(sel) {
+      if (sel && !seen.has(sel)) { seen.add(sel); results.push(sel); }
+    }
+
+    push(buildNthChildPath(element));   // 0: full structural
+    push(buildAnchoredPath(element));   // 1: anchored structural
+    push(buildClassSelector(element));  // 2: class combo
+    push(buildAriaSelector(element));   // 3: aria-label
+    push(buildDataAttrSelector(element)); // 4: data-* attrs
+    push(buildIdSelector(element));     // 5: #id
+
+    return results;
+  }
+
+  /**
+   * Returns the first (most structural) unique selector for an element, or null.
+   * Backward-compat alias for getSelectors()[0].
    */
   function getSelector(element) {
-    if (!element || !(element instanceof Element)) return null;
-    if (element === document.body || element === document.documentElement) return null;
-
-    // ---- Strategy 1: unique id attribute ----
-    const id = element.getAttribute("id");
-    if (id && id.trim().length > 0) {
-      const idSelector = `#${cssEscape(id.trim())}`;
-      if (isUnique(idSelector)) {
-        return idSelector;
-      }
-      // Non-unique IDs fall through to next strategy
-    }
-
-    // ---- Strategy 2: class-based selector (stable across reloads) ----
-    if (element.className && typeof element.className === 'string' && element.className.trim().length > 0) {
-      const tag = element.tagName.toLowerCase();
-      // Filter out transient extension classes (bl-si-hover-highlight, etc.)
-      const classes = element.className.trim().split(/\s+/).filter(c => !c.startsWith('bl-si-'));
-      if (classes.length > 0) {
-        const classSelector = tag + '.' + classes.map(c => cssEscape(c)).join('.');
-        if (isUnique(classSelector)) {
-          return classSelector;
-        }
-        // Try with parent ID context
-        const parent = element.parentElement;
-        if (parent && parent.id) {
-          const contextSelector = `#${cssEscape(parent.id)} > ${classSelector}`;
-          if (isUnique(contextSelector)) {
-            return contextSelector;
-          }
-        }
-      }
-    }
-
-    // ---- Strategy 3: nth-child path (survives reload, fragile to DOM changes) ----
-    return buildNthChildPath(element);
+    var s = getSelectors(element);
+    return s.length > 0 ? s[0] : null;
   }
 
   /**
-   * Generates a short 8-character hex UUID (32-bit random, sufficient for
-   * identifying individual DOM elements within a single page session).
-   * @returns {string} - e.g. "a3f92c1b"
+   * Fast O(1) heuristic: does this element have any stable semantic signal?
+   * Returns true if the element has an id, aria-label, non-bl-si classes, or
+   * a recognised stable data-* attribute. Used by picker.js to show the
+   * "may not persist on reload" warning without running full querySelectorAll.
+   */
+  function isSelectorStable(element) {
+    if (!element || !(element instanceof Element)) return false;
+    if (element.getAttribute('id')) return true;
+    if (element.getAttribute('aria-label')) return true;
+    var classes = (element.className || '').split(/\s+/).filter(function(c) {
+      return c && !c.startsWith('bl-si-');
+    });
+    if (classes.length > 0) return true;
+    for (var i = 0; i < STABLE_DATA_ATTRS.length; i++) {
+      if (element.getAttribute(STABLE_DATA_ATTRS[i])) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Generates a short 8-character hex UUID.
    */
   function generateId() {
-    // Use crypto.getRandomValues when available for better entropy
-    if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-      const arr = new Uint32Array(1);
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      var arr = new Uint32Array(1);
       crypto.getRandomValues(arr);
-      return arr[0].toString(16).padStart(8, "0");
+      return arr[0].toString(16).padStart(8, '0');
     }
-
-    // Fallback: Math.random (lower entropy but sufficient for our purpose)
-    return Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, "0");
+    return Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
   }
 
   /**
-   * Attempts to find a DOM element from a stored CSS selector.
-   * Returns null if the selector is invalid or no element matches.
-   * @param {string} selector
-   * @returns {Element|null}
+   * Finds a DOM element from a stored selector or array of selectors.
+   * Tries each in order; returns the first element that uniquely matches (length === 1).
+   * Returns null if no selector matches.
    */
-  function restoreSelector(selector) {
-    if (!selector || typeof selector !== "string") return null;
-
-    try {
-      return document.querySelector(selector);
-    } catch {
-      // Invalid selector syntax (e.g., from a different page version)
-      return null;
+  function restoreSelector(selectorOrArray) {
+    if (!selectorOrArray) return null;
+    var list = Array.isArray(selectorOrArray) ? selectorOrArray : [selectorOrArray];
+    for (var i = 0; i < list.length; i++) {
+      var sel = list[i];
+      if (!sel || typeof sel !== 'string') continue;
+      try {
+        var matches = document.querySelectorAll(sel);
+        if (matches.length === 1) return matches[0];
+      } catch (_e) {
+        // Invalid or stale selector — try next
+      }
     }
+    return null;
   }
 
   /**
    * Resolves an array of stored selectors back to DOM elements.
-   * Selectors that no longer match any element are silently skipped.
-   * @param {string[]} selectors
-   * @returns {Element[]} - Array of found elements (no nulls)
+   * Each entry can be a string (legacy) or string[] (new multi-strategy).
+   * Entries that no longer match are silently skipped.
    */
   function restoreAllSelectors(selectors) {
     if (!Array.isArray(selectors)) return [];
-
-    return selectors
-      .map((s) => restoreSelector(s))
-      .filter((el) => el !== null);
+    return selectors.map(function(s) { return restoreSelector(s); }).filter(function(el) { return el !== null; });
   }
 
-  // -------------------------------------------------------------------------
-  // Expose public API
-  // -------------------------------------------------------------------------
   return {
+    getSelectors,
     getSelector,
+    isSelectorStable,
     generateId,
     restoreSelector,
-    restoreAllSelectors
+    restoreAllSelectors,
   };
 })();
 
-// Attach to window so content_script.js and other injected scripts can access it
 blsi.SelectorUtils = SelectorUtils;

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mode Animations Preview</title>
+<style>
+  body { background: #0d0f1c; font-family: system-ui, sans-serif; padding: 40px; margin: 0; }
+  h1 { color: #94a3b8; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; margin: 0 0 32px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 32px; }
+  .card { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .card img { border-radius: 8px; display: block; }
+  .label { color: #64748b; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+  .name  { color: #e2e8f0; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Blur mode animations</h1>
+<div class="grid">
+  <div class="card">
+    <img src="mode_blur.svg" width="184" height="120" alt="Blur">
+    <div class="name">Blur</div>
+    <div class="label">gaussian</div>
+  </div>
+  <div class="card">
+    <img src="mode_frosted.svg" width="184" height="120" alt="Frosted">
+    <div class="name">Frosted</div>
+    <div class="label">glass panel</div>
+  </div>
+  <div class="card">
+    <img src="mode_redacted.svg" width="184" height="120" alt="Redacted">
+    <div class="name">Redacted</div>
+    <div class="label">solid bars</div>
+  </div>
+  <div class="card">
+    <img src="mode_censored.svg" width="184" height="120" alt="Censored">
+    <div class="name">Censored</div>
+    <div class="label">disc replacement</div>
+  </div>
+  <div class="card">
+    <img src="mode_starred.svg" width="184" height="120" alt="Starred">
+    <div class="name">Starred</div>
+    <div class="label">asterisk replacement</div>
+  </div>
+  <div class="card">
+    <img src="mode_color.svg" width="184" height="120" alt="Color">
+    <div class="name">Color</div>
+    <div class="label">solid fill</div>
+  </div>
+</div>
+</body>
+</html>

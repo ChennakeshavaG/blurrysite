@@ -3,7 +3,8 @@
  *
  * Unit tests for src/selector_utils.js
  * Module exposes blsi.SelectorUtils with:
- *   getSelector, generateId, restoreSelector, restoreAllSelectors
+ *   getSelectors, getSelector (alias), isSelectorStable,
+ *   generateId, restoreSelector, restoreAllSelectors
  */
 
 /* === TEST QUALITY ANNOTATIONS ===
@@ -72,25 +73,20 @@ function buildStubSource() {
   (function() {
     'use strict';
 
-    function generateId() {
-      return Math.random().toString(16).slice(2, 10).padEnd(8, '0');
+    var STABLE_DATA_ATTRS = ['data-testid','data-cy','data-id','data-name','data-key','data-component','name'];
+
+    function cssEscape(v) {
+      return typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(v) : String(v).replace(/([^\\w-])/g, '\\\\$1');
     }
 
-    function getSelector(el) {
-      if (!el || el === document.body || el === document.documentElement) return null;
+    function isUnique(sel) {
+      try { return document.querySelectorAll(sel).length === 1; } catch(_) { return false; }
+    }
 
-      // Use existing ID if unique in document.
-      if (el.id) {
-        const matches = document.querySelectorAll('#' + CSS.escape(el.id));
-        if (matches.length === 1) return '#' + CSS.escape(el.id);
-      }
-
-      // Fallback: nth-of-type path
-      var parts = [];
-      var node = el;
+    function buildNthChildPath(el) {
+      var parts = [], node = el;
       while (node && node !== document.body && node !== document.documentElement) {
-        var tag = node.tagName.toLowerCase();
-        var parent = node.parentElement;
+        var tag = node.tagName.toLowerCase(), parent = node.parentElement;
         if (!parent) break;
         var idx = 1;
         for (var i = 0; i < parent.children.length; i++) {
@@ -100,27 +96,55 @@ function buildStubSource() {
         parts.unshift(tag + ':nth-of-type(' + idx + ')');
         node = parent;
       }
-      return parts.length > 0 ? 'body > ' + parts.join(' > ') : null;
+      return parts.length ? 'body > ' + parts.join(' > ') : null;
     }
 
-    function restoreSelector(selector) {
-      if (!selector) return null;
-      try {
-        return document.querySelector(selector);
-      } catch (e) {
-        return null;
+    function generateId() {
+      return Math.random().toString(16).slice(2, 10).padEnd(8, '0');
+    }
+
+    function getSelectors(el) {
+      if (!el || !(el instanceof Element) || el === document.body || el === document.documentElement) return [];
+      var results = [], seen = {};
+      function push(s) { if (s && !seen[s]) { seen[s]=true; results.push(s); } }
+      push(buildNthChildPath(el));
+      if (el.id && el.id.trim()) { var s='#'+cssEscape(el.id.trim()); if(isUnique(s)) push(s); }
+      blsi.SelectorUtils = { getSelectors: getSelectors, getSelector: function(e) { var r=getSelectors(e); return r.length?r[0]:null; }, isSelectorStable: isSelectorStable, generateId: generateId, restoreSelector: restoreSelector, restoreAllSelectors: restoreAllSelectors };
+      return results;
+    }
+
+    function getSelector(el) { var r = getSelectors(el); return r.length ? r[0] : null; }
+
+    function isSelectorStable(el) {
+      if (!el || !(el instanceof Element)) return false;
+      if (el.getAttribute('id')) return true;
+      if (el.getAttribute('aria-label')) return true;
+      var cls = (el.className||'').split(/\\s+/).filter(function(c){return c&&!c.startsWith('bl-si-');});
+      if (cls.length > 0) return true;
+      for (var i=0; i<STABLE_DATA_ATTRS.length; i++) { if (el.getAttribute(STABLE_DATA_ATTRS[i])) return true; }
+      return false;
+    }
+
+    function restoreSelector(selectorOrArray) {
+      if (!selectorOrArray) return null;
+      var list = Array.isArray(selectorOrArray) ? selectorOrArray : [selectorOrArray];
+      for (var i = 0; i < list.length; i++) {
+        var sel = list[i];
+        if (!sel || typeof sel !== 'string') continue;
+        try { var m = document.querySelectorAll(sel); if (m.length === 1) return m[0]; } catch(_) {}
       }
+      return null;
     }
 
     function restoreAllSelectors(selectors) {
       if (!Array.isArray(selectors)) return [];
-      return selectors
-        .map(function(s) { return restoreSelector(s); })
-        .filter(function(el) { return el !== null; });
+      return selectors.map(function(s) { return restoreSelector(s); }).filter(function(el) { return el !== null; });
     }
 
     blsi.SelectorUtils = {
+      getSelectors: getSelectors,
       getSelector: getSelector,
+      isSelectorStable: isSelectorStable,
       generateId: generateId,
       restoreSelector: restoreSelector,
       restoreAllSelectors: restoreAllSelectors,
@@ -144,14 +168,17 @@ describe('blsi.SelectorUtils', () => {
 
   // USER IMPACT: user blurs an element — a stable CSS selector is generated so the blur survives page reload and SPA re-renders
   describe('getSelector', () => {
-    test('returns #id selector when element has a unique ID', () => {
+    test('returns structural selector first even when element has a unique ID', () => {
+      // getSelector is an alias for getSelectors()[0] — structural path is always index 0.
+      // The #id is still in the selectors array (tested in getSelectors suite), just not first.
       const div = document.createElement('div');
       div.id = 'uniqueTarget';
       document.body.appendChild(div);
 
       const selector = blsi.SelectorUtils.getSelector(div);
 
-      expect(selector).toBe('#uniqueTarget');
+      expect(selector).toMatch(/nth-of-type/);
+      expect(selector).toMatch(/^body > /);
     });
 
     test('does not use ID selector when multiple elements share the same ID', () => {
@@ -223,6 +250,211 @@ describe('blsi.SelectorUtils', () => {
     // MISSING: no test for class-based selector strategy (unique className, no ID)
     // MISSING: no test for parent-ID context selector (#parentId > tag.className path)
     // MISSING: no test for getSelector on a detached element (not in document.body)
+  });
+
+  // ── getSelectors ───────────────────────────────────────────────────────────
+
+  // USER IMPACT: picker saves multiple selector strategies so blur survives page reload even when structural paths change on SPA re-renders
+  describe('getSelectors', () => {
+    test('returns an array', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      expect(Array.isArray(blsi.SelectorUtils.getSelectors(div))).toBe(true);
+    });
+
+    test('returns empty array for body element', () => {
+      expect(blsi.SelectorUtils.getSelectors(document.body)).toEqual([]);
+    });
+
+    test('returns empty array for documentElement', () => {
+      expect(blsi.SelectorUtils.getSelectors(document.documentElement)).toEqual([]);
+    });
+
+    test('returns empty array for null', () => {
+      expect(blsi.SelectorUtils.getSelectors(null)).toEqual([]);
+    });
+
+    test('first selector in array is structural (nth-of-type path)', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      const selectors = blsi.SelectorUtils.getSelectors(div);
+      expect(selectors.length).toBeGreaterThan(0);
+      expect(selectors[0]).toMatch(/nth-of-type/);
+    });
+
+    test('includes #id selector when element has unique id', () => {
+      const div = document.createElement('div');
+      div.id = 'uniqueEl';
+      document.body.appendChild(div);
+      const selectors = blsi.SelectorUtils.getSelectors(div);
+      expect(selectors.some(s => s === '#uniqueEl')).toBe(true);
+    });
+
+    test('#id selector is not first when element also has structural path', () => {
+      const div = document.createElement('div');
+      div.id = 'stableEl';
+      document.body.appendChild(div);
+      const selectors = blsi.SelectorUtils.getSelectors(div);
+      // structural (nth-of-type) should come before #id
+      const nthIdx = selectors.findIndex(s => s.includes('nth-of-type'));
+      const idIdx = selectors.findIndex(s => s === '#stableEl');
+      if (nthIdx !== -1 && idIdx !== -1) {
+        expect(nthIdx).toBeLessThan(idIdx);
+      }
+    });
+
+    test('every selector in the array uniquely matches the element', () => {
+      const div = document.createElement('div');
+      div.id = 'roundTrip';
+      document.body.appendChild(div);
+      const selectors = blsi.SelectorUtils.getSelectors(div);
+      for (const sel of selectors) {
+        const matches = document.querySelectorAll(sel);
+        expect(matches.length).toBe(1);
+        expect(matches[0]).toBe(div);
+      }
+    });
+
+    test('different elements produce different selector arrays', () => {
+      const div1 = document.createElement('div');
+      const div2 = document.createElement('div');
+      document.body.appendChild(div1);
+      document.body.appendChild(div2);
+      const s1 = blsi.SelectorUtils.getSelectors(div1)[0];
+      const s2 = blsi.SelectorUtils.getSelectors(div2)[0];
+      expect(s1).not.toBe(s2);
+    });
+
+    test('no duplicate selectors within the returned array', () => {
+      const div = document.createElement('div');
+      div.id = 'noDupe';
+      document.body.appendChild(div);
+      const selectors = blsi.SelectorUtils.getSelectors(div);
+      const unique = [...new Set(selectors)];
+      expect(selectors.length).toBe(unique.length);
+    });
+  });
+
+  // ── getSelector (compat alias) ─────────────────────────────────────────────
+
+  describe('getSelector (compat alias)', () => {
+    test('returns a string or null (not an array)', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      const result = blsi.SelectorUtils.getSelector(div);
+      expect(typeof result === 'string' || result === null).toBe(true);
+    });
+
+    test('returns first selector from getSelectors', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      const first = blsi.SelectorUtils.getSelectors(div)[0] ?? null;
+      expect(blsi.SelectorUtils.getSelector(div)).toBe(first);
+    });
+
+    test('returns null for body', () => {
+      expect(blsi.SelectorUtils.getSelector(document.body)).toBeFalsy();
+    });
+  });
+
+  // ── isSelectorStable ───────────────────────────────────────────────────────
+
+  // USER IMPACT: picker shows "may not persist" warning on hover when element has no stable signals, preventing user confusion after reload
+  describe('isSelectorStable', () => {
+    test('returns true for element with unique id', () => {
+      const div = document.createElement('div');
+      div.id = 'stableId';
+      document.body.appendChild(div);
+      expect(blsi.SelectorUtils.isSelectorStable(div)).toBe(true);
+    });
+
+    test('returns true for element with non-bl-si class', () => {
+      const div = document.createElement('div');
+      div.className = 'card-body featured';
+      document.body.appendChild(div);
+      expect(blsi.SelectorUtils.isSelectorStable(div)).toBe(true);
+    });
+
+    test('returns false for element with only bl-si-* classes', () => {
+      const div = document.createElement('div');
+      div.className = 'bl-si-blurred bl-si-frosted';
+      document.body.appendChild(div);
+      expect(blsi.SelectorUtils.isSelectorStable(div)).toBe(false);
+    });
+
+    test('returns true for element with aria-label', () => {
+      const btn = document.createElement('button');
+      btn.setAttribute('aria-label', 'Close dialog');
+      document.body.appendChild(btn);
+      expect(blsi.SelectorUtils.isSelectorStable(btn)).toBe(true);
+    });
+
+    test('returns true for element with data-testid', () => {
+      const div = document.createElement('div');
+      div.setAttribute('data-testid', 'submit-button');
+      document.body.appendChild(div);
+      expect(blsi.SelectorUtils.isSelectorStable(div)).toBe(true);
+    });
+
+    test('returns false for bare element with no stable signals', () => {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      expect(blsi.SelectorUtils.isSelectorStable(div)).toBe(false);
+    });
+
+    test('returns false for null', () => {
+      expect(blsi.SelectorUtils.isSelectorStable(null)).toBe(false);
+    });
+
+    test('returns false for non-element', () => {
+      expect(blsi.SelectorUtils.isSelectorStable('div')).toBe(false);
+    });
+  });
+
+  // ── restoreSelector — array input ─────────────────────────────────────────
+
+  // USER IMPACT: blur items now store selectors[] array; restore tries each entry so blur survives when structural selectors become stale
+  describe('restoreSelector — array input', () => {
+    test('returns element when first selector matches', () => {
+      const div = document.createElement('div');
+      div.id = 'first';
+      document.body.appendChild(div);
+      const found = blsi.SelectorUtils.restoreSelector(['#first', '#missing']);
+      expect(found).toBe(div);
+    });
+
+    test('falls back to second selector when first does not match', () => {
+      const div = document.createElement('div');
+      div.id = 'second';
+      document.body.appendChild(div);
+      const found = blsi.SelectorUtils.restoreSelector(['#staleFirst', '#second']);
+      expect(found).toBe(div);
+    });
+
+    test('returns null for empty array', () => {
+      expect(blsi.SelectorUtils.restoreSelector([])).toBeNull();
+    });
+
+    test('returns null when no selector in array matches', () => {
+      const found = blsi.SelectorUtils.restoreSelector(['#ghost1', '#ghost2']);
+      expect(found).toBeNull();
+    });
+
+    test('skips invalid CSS selectors without throwing', () => {
+      const div = document.createElement('div');
+      div.id = 'afterInvalid';
+      document.body.appendChild(div);
+      expect(() => {
+        const found = blsi.SelectorUtils.restoreSelector(['##invalid!', '#afterInvalid']);
+        expect(found).toBe(div);
+      }).not.toThrow();
+    });
+
+    test('does not return element when selector matches multiple elements (non-unique)', () => {
+      document.body.innerHTML = '<p class="dup">A</p><p class="dup">B</p>';
+      const found = blsi.SelectorUtils.restoreSelector(['.dup']);
+      expect(found).toBeNull();
+    });
   });
 
   // ── generateId ─────────────────────────────────────────────────────────────

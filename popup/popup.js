@@ -172,11 +172,11 @@
       }, 80);
     }
 
-    document.getElementById('bl-modes').addEventListener('mouseover', (e) => {
+    document.body.addEventListener('mouseover', (e) => {
       const chip = e.target.closest('[data-tooltip-media]');
       if (chip) _showTip(chip);
     });
-    document.getElementById('bl-modes').addEventListener('mouseout', (e) => {
+    document.body.addEventListener('mouseout', (e) => {
       const chip = e.target.closest('[data-tooltip-media]');
       if (chip) _hideTip();
     });
@@ -230,7 +230,7 @@
         return;
       }
 
-      // Picker mode chip — save mode and open picker
+      // Picker mode chip — save mode and activate picker; popup stays open
       const pickerModeChip = e.target.closest('[data-picker-mode]');
       if (pickerModeChip) {
         const mode = pickerModeChip.dataset.pickerMode;
@@ -244,13 +244,12 @@
                 () => { void chrome.runtime.lastError; }
               );
             }
-            window.close();
           });
         }
         return;
       }
 
-      // Open Picker button — launch picker with currently saved mode and close popup
+      // Open Picker button — toggle picker; popup stays open
       const openPickerBtn = e.target.closest('[data-action="open-picker"]');
       if (openPickerBtn) {
         const { settings } = State.get();
@@ -262,7 +261,6 @@
               () => { void chrome.runtime.lastError; }
             );
           }
-          window.close();
         });
         return;
       }

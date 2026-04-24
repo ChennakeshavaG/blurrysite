@@ -6,18 +6,18 @@ const BlurrySitePopupRender = (() => {
   }
 
   const _TYPE_KEY = {
-    gaussian: 'htb_chip_gaussian',
+    blur:     'htb_chip_blur',
     frosted:  'htb_chip_frosted',
     redacted: 'htb_chip_redacted',
-    masked:   'htb_chip_masked',
+    censored: 'htb_chip_censored',
     color:    'htb_chip_color',
   };
 
   const _PII_KEY = {
-    gaussian:   'pii_chip_gaussian',
-    frosted:    'pii_chip_frosted',
-    redacted:   'pii_chip_redacted',
-    asterisked: 'pii_chip_asterisked',
+    blur:     'pii_chip_blur',
+    frosted:  'pii_chip_frosted',
+    redacted: 'pii_chip_redacted',
+    starred:  'pii_chip_starred',
   };
 
   const _CAT_KEY = {
@@ -46,6 +46,15 @@ const BlurrySitePopupRender = (() => {
     'dynamic':       chrome.runtime.getURL('popup/assets/tooltip_dynamic.svg'),
     'sticky-page':   chrome.runtime.getURL('popup/assets/tooltip_sticky_page.svg'),
     'sticky-screen': chrome.runtime.getURL('popup/assets/tooltip_sticky_screen.svg'),
+  };
+
+  const _MODE_ASSET = {
+    blur:     chrome.runtime.getURL('popup/assets/mode_blur.svg'),
+    frosted:  chrome.runtime.getURL('popup/assets/mode_frosted.svg'),
+    redacted: chrome.runtime.getURL('popup/assets/mode_redacted.svg'),
+    censored: chrome.runtime.getURL('popup/assets/mode_censored.svg'),
+    starred:  chrome.runtime.getURL('popup/assets/mode_starred.svg'),
+    color:    chrome.runtime.getURL('popup/assets/mode_color.svg'),
   };
 
   const _PICKER_MODE_DESC = {
@@ -81,8 +90,8 @@ const BlurrySitePopupRender = (() => {
 
     const activeType = isBlurAll ? settings.blur_mode : settings.pick_blur_type;
     const types      = isBlurAll
-      ? ['gaussian', 'frosted', 'redacted', 'masked']
-      : ['gaussian', 'frosted', 'color'];
+      ? ['blur', 'frosted', 'redacted', 'censored']
+      : ['blur', 'frosted', 'color'];
 
     chipsEl.innerHTML = '';
     for (const t of types) {
@@ -90,6 +99,7 @@ const BlurrySitePopupRender = (() => {
       btn.className = 'bl-chip' + (t === activeType ? ' bl-chip--active' : '');
       btn.dataset.type = t;
       btn.textContent = _t(_TYPE_KEY[t]);
+      if (_MODE_ASSET[t]) btn.dataset.tooltipMedia = _MODE_ASSET[t];
       chipsEl.appendChild(btn);
     }
 
@@ -106,7 +116,7 @@ const BlurrySitePopupRender = (() => {
       ));
     }
 
-    if (activeType !== 'color' && activeType !== 'redacted' && activeType !== 'masked') {
+    if (activeType !== 'color' && activeType !== 'redacted' && activeType !== 'censored') {
       const r = settings.blur_radius;
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
       summaryEl.appendChild(_summaryRow(
@@ -143,12 +153,13 @@ const BlurrySitePopupRender = (() => {
     toggleEl.checked = !!(settings.pii_email || settings.pii_numeric);
 
     chipsEl.innerHTML = '';
-    for (const t of ['gaussian', 'frosted', 'redacted', 'asterisked']) {
+    for (const t of ['blur', 'frosted', 'redacted', 'starred']) {
       const btn = document.createElement('button');
       const isActive = t === settings.pii_mode;
       btn.className = 'bl-chip' + (isActive ? ' bl-chip--active bl-glow-active' : '');
       btn.dataset.piiMode = t;
       btn.textContent = _t(_PII_KEY[t]);
+      if (_MODE_ASSET[t]) btn.dataset.tooltipMedia = _MODE_ASSET[t];
       chipsEl.appendChild(btn);
     }
 
@@ -322,6 +333,12 @@ const BlurrySitePopupRender = (() => {
     const wrap = document.createElement('div');
     wrap.className = 'bl-mode-table';
 
+    const revealKeyMap = { hover: 'reveal_hover', click: 'reveal_click', none: 'reveal_none' };
+    wrap.appendChild(_summaryRow(
+      _t('htb_label_reveal'),
+      _t(revealKeyMap[settings.reveal_mode] || 'reveal_none'),
+    ));
+
     let modeValue;
     if (settings.blur_mode === 'redacted') {
       modeValue = document.createElement('span');
@@ -333,25 +350,19 @@ const BlurrySitePopupRender = (() => {
       modeValue.appendChild(text);
       modeValue.appendChild(swatch);
     } else {
-      modeValue = _t(_TYPE_KEY[settings.blur_mode] || _TYPE_KEY.gaussian);
+      modeValue = _t(_TYPE_KEY[settings.blur_mode] || _TYPE_KEY.blur);
     }
     wrap.appendChild(_summaryRow(_t('htb_label_mode'), modeValue));
+
+    const r = settings.blur_radius;
+    const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
+    wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
 
     const cats = settings.blur_categories || {};
     const catLabels = Object.keys(_CAT_KEY).filter(k => cats[k]).map(k => _t(_CAT_KEY[k]));
     wrap.appendChild(_summaryRow(
       _t('htb_label_covers'),
       catLabels.length ? catLabels.join(', ') : _t('automate_off'),
-    ));
-
-    const r = settings.blur_radius;
-    const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
-    wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
-
-    const revealKeyMap = { hover: 'reveal_hover', click: 'reveal_click', none: 'reveal_none' };
-    wrap.appendChild(_summaryRow(
-      _t('htb_label_reveal'),
-      _t(revealKeyMap[settings.reveal_mode] || 'reveal_none'),
     ));
 
     return wrap;
@@ -426,7 +437,7 @@ const BlurrySitePopupRender = (() => {
 
     if (pickBlurEnabled && blurItems.length > 0) {
       wrap.appendChild(_renderPickItemList(blurItems));
-      wrap.appendChild(_summaryRow(_t('htb_label_mode'), _t(_TYPE_KEY[settings.pick_blur_type || 'gaussian'])));
+      wrap.appendChild(_summaryRow(_t('htb_label_mode'), _t(_TYPE_KEY[settings.pick_blur_type || 'blur'])));
       const r = settings.blur_radius;
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
       wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
@@ -438,7 +449,7 @@ const BlurrySitePopupRender = (() => {
           ? (chrome.i18n.getMessage('mode_pick_off_paused', [String(blurItems.length)]) || blurItems.length + ' items · paused')
           : _t('mode_pick_off_hint');
       } else {
-        countEl.textContent = _t('mode_pick_on_empty');
+        countEl.textContent = _t('mode_pick_blur_empty');
       }
       wrap.appendChild(countEl);
     }

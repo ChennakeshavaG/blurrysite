@@ -131,6 +131,33 @@ A module may only depend on modules loaded before it.
 - `isBlurAllActive()` — stateless DOM check (`document.head.querySelector('#bl-si-blur-styles')`). `get isPageBlurred` is the state-based getter — callers should prefer it.
 - `handleSite` is pure w.r.t. storage. Tests call it directly with inline settings — no storage stubs needed. See `tests/unit/blur_engine.test.js`.
 
+#### CSS Specificity Model — invariants (do not break)
+
+Three CSS systems can co-exist on one element: blur-all, pick-blur, PII. Each system **owns its elements exclusively**. Two mechanisms enforce this:
+
+**1. EXCLUDE contract**
+`EXCLUDE` is the `:not(...)` chain appended to every tag in `alwaysBlurSelector`. It must include every independently-managed blur attribute so blur-all's tag-based CSS never matches those elements. Current entries relevant to blur ownership:
+- `:not([data-bl-si-pick-blur])` — pick-blur owns those elements
+- `:not([data-bl-si-pii])` — PII detection owns those elements
+
+Root cause of past bugs: tag selectors (e.g. `p:not(...)`) have specificity `(0,7,1)` while attribute selectors (`[data-bl-si-pick-blur]`) have `(0,3,0)`. Without exclusion, the tag rule wins regardless of source order.
+
+**2. Stamp ownership guard**
+`stampElements` and `tryBlurTextCheck` must skip any element already carrying a competing blur attribute. Current guard (must stay in sync):
+```js
+if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return;
+```
+Same check applies in the custom-element (`tag.includes('-')`) path.
+
+**Cascade priority (high → low)**: reveal > pick-blur / PII > blur-all
+
+**Adding a new blur-all mode** — update `injectRules` + `blurDecl` only. No EXCLUDE changes needed; existing exclusions already cover all competing systems.
+
+**Adding a new competing blur system (new attribute)** — checklist:
+1. Add `:not([data-attr])` to `EXCLUDE`
+2. Add `el.dataset.blSiNewAttr` guard to `stampElements` (both tag paths) and `tryBlurTextCheck`
+3. Add reveal override for the new attribute in both `injectRules` reveal block and `content.css`
+
 ### url_matcher.js
 - `matchesPattern(url, pattern, patternType)` — wildcard mode uses parse-then-match (scheme / hostname / port / path) with domain-boundary awareness. Regex mode rejects nested quantifiers (`(a+)+`, `a**`) to prevent ReDoS.
 - `resolveSettings(url, globalSettings, rules)` — deep-merge over `blsi.DEFAULT_MODEL`, apply first matching rule. Non-array / null `rules` is tolerated.
@@ -143,13 +170,16 @@ A module may only depend on modules loaded before it.
 - `destroy()` removes all document listeners + `clearAll()`. Only used on disable paths.
 - Listeners are registered at capture phase on `document` for mouseover/mouseout, bubble phase for click/keydown. Input / textarea / select / button / contenteditable targets are skipped inside `onRevealClick` — do not move that guard.
 - Hover mode has a 50ms mouseout debounce via `setTimeout`; reset on any mouseover to avoid flicker on element boundaries.
-- **Reveal is attribute-driven, not inline-style.** `_revealElement` stamps `data-bl-si-reveal="1"`; CSS rules in `styles/content.css` + injected `<style>` override all four blur modes (gaussian, frosted, redacted, masked) simultaneously — including `font-family: revert` to undo the font-replacement masking. Zone overlays are the exception — they use inline `backdrop-filter` since they have no injected CSS. Trade-off: `background-color: transparent` may strip legitimate element backgrounds during reveal; acceptable since reveal is temporary.
+- **Reveal is attribute-driven, not inline-style.** `_revealElement` stamps `data-bl-si-reveal="1"` on every element — zone overlays included. CSS rules in `styles/content.css` + injected `<style>` handle all modes: `[data-bl-si-pick-blur][data-bl-si-reveal]` clears filter/background/color; `.bl-si-zone-overlay[data-bl-si-reveal]` additionally clears `backdrop-filter` and `background` (covers blur, frosted, and color zone modes). No inline styles used for reveal. Trade-off: `background-color: transparent` may strip legitimate element backgrounds during reveal; acceptable since reveal is temporary.
 - No JS mode branching needed. The CSS overrides are no-ops for properties the active blur mode doesn't set.
 
 ### selector_utils.js
-- `getSelector(body)` and `getSelector(documentElement)` must return `null` — tests assert this.
-- `getSelector(null)` must return `null` (not empty string).
-- Strategy: unique id → stamp `data-bl-si-id`. No nth-child path (removed — breaks tests).
+- `getSelectors(el)` returns `string[]` ordered structural→semantic (index 0 = most structural). Use for saving — call sites store `item.selectors = getSelectors(el)`.
+- `getSelector(el)` is a compat alias → `getSelectors(el)[0] ?? null`. Returns a string or null (never an array).
+- `getSelectors(body)` / `getSelectors(documentElement)` / `getSelectors(null)` must return `[]`.
+- `restoreSelector(string | string[])` — accepts either. Tries each entry until `querySelectorAll().length === 1`; returns that element. Returns `null` if nothing matches.
+- `isSelectorStable(el)` — fast O(1) heuristic: returns `true` if element has id, aria-label, non-bl-si classes, or a stable data-* attr. Does NOT run querySelectorAll. Used by picker hover to show the "may not persist" warning.
+- Strategy order in `getSelectors`: 0=full-structural 1=anchored-structural 2=class-combo 3=aria-label 4=data-attrs 5=#id. Only emits a selector if `querySelectorAll().length===1` (uniqueness gate).
 - `generateId()` returns an 8-char lowercase hex string.
 
 ### storage_model.js

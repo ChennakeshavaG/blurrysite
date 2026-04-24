@@ -185,6 +185,8 @@ function setupGlobalMocks() {
 
   blsi.SelectorUtils = {
     getSelector: jest.fn().mockReturnValue('#mock-selector'),
+    getSelectors: jest.fn().mockReturnValue(['body > div:nth-of-type(1)', '#mock-selector']),
+    isSelectorStable: jest.fn().mockReturnValue(true),
     generateId: jest.fn().mockReturnValue('abcd1234'),
   };
 }

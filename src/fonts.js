@@ -3,12 +3,12 @@
  *
  * DISC font (text-security-disc, noppa/text-security — OFL-1.1):
  *   Maps every Unicode codepoint to a filled disc glyph (●) via cmap format 13.
- *   Used as "bl-si-redact-disc" for blur-all `masked` mode.
+ *   Used as "bl-si-censored-disc" for blur-all `censored` mode.
  *   784 bytes WOFF2.
  *
  * ASTERISK font (generated with fontTools — OFL-1.1):
  *   Maps every BMP codepoint to a 6-arm asterisk (*) glyph via cmap format 4.
- *   Used as "bl-si-redact-asterisk" for PII `asterisked` mode.
+ *   Used as "bl-si-starred-asterisk" for PII `starred` mode.
  *   372 bytes WOFF2.
  *
  * Both are base64-encoded inline to avoid cross-origin issues in injected stylesheets.
@@ -27,14 +27,14 @@ const BlurrySiteFonts = (() => {
 
   const DISC_FONT_FACE =
     `@font-face {` +
-    ` font-family: "bl-si-redact-disc";` +
+    ` font-family: "bl-si-censored-disc";` +
     ` src: url("data:font/woff2;base64,${DISC_B64}") format("woff2");` +
     ` font-display: block;` +
     `}`;
 
   const ASTERISK_FONT_FACE =
     `@font-face {` +
-    ` font-family: "bl-si-redact-asterisk";` +
+    ` font-family: "bl-si-starred-asterisk";` +
     ` src: url("data:font/woff2;base64,${ASTERISK_B64}") format("woff2");` +
     ` font-display: block;` +
     `}`;
