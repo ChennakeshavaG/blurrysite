@@ -115,6 +115,15 @@ HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
   getImageData: jest.fn(() => ({ data: new Uint8ClampedArray(4) })),
 }));
 
+// ─── requestIdleCallback stub ─────────────────────────────────────────────────
+
+// jsdom does not implement requestIdleCallback. Provide a synchronous stub so
+// tests that call handleSite / handleDocument flush idle work immediately and
+// don't need to advance fake timers. The deadline.timeRemaining() value of 50
+// is enough to drain any realistic _stampQueue in one idle slice.
+global.requestIdleCallback = (fn) => { fn({ timeRemaining: () => 50 }); return 0; };
+global.cancelIdleCallback  = () => {};
+
 // ─── requestAnimationFrame stub ───────────────────────────────────────────────
 
 // jsdom does not implement rAF. Provide a stub that records calls and returns

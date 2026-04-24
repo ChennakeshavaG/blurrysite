@@ -416,7 +416,7 @@ const BlurEngine = (() => {
     // For shadow roots, these overrides are equally required so that reveal works
     // on elements inside the shadow tree.
     // visibility:hidden is used for media in redacted mode — must be reset on reveal.
-    rules.push(`[data-bl-si-reveal] { filter: none !important; visibility: visible !important; font-family: revert !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
+    rules.push(`[data-bl-si-reveal] { filter: none !important; visibility: visible !important; font-family: unset !important; transition: filter var(--bl-si-transition-duration, 150ms) ease !important; user-select: auto !important; }`);
     // Cascade reveal to blurred children of a revealed ancestor.
     // When revealAncestorChain stamps data-bl-si-reveal on a parent (e.g. <p>),
     // sibling [data-bl-si-blur] children inside it would still paint their own
@@ -425,7 +425,7 @@ const BlurEngine = (() => {
     // a revealed ancestor. Also declared in content.css for the static (blur-all
     // OFF) case; both copies are needed for source-order correctness.
     rules.push(`[data-bl-si-reveal] [data-bl-si-blur] { filter: none !important; user-select: auto !important; }`);
-    rules.push(`[data-bl-si-reveal] [data-bl-si-pick-blur] { filter: none !important; background-color: transparent !important; color: inherit !important; font-family: revert !important; user-select: auto !important; }`);
+    rules.push(`[data-bl-si-reveal] [data-bl-si-pick-blur] { filter: none !important; background-color: transparent !important; color: inherit !important; font-family: unset !important; user-select: auto !important; }`);
     rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; user-select: auto !important; }`);
 
     if (rules.length === 0) return;
@@ -493,7 +493,7 @@ const BlurEngine = (() => {
     rules.push(`${piiSel} { ${blurDecl} }`);
 
     // Reveal overrides — must come after blur rules (source-order wins for !important at equal specificity).
-    rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; font-family: revert !important; color: revert !important; background-color: revert !important; user-select: auto !important; }`);
+    rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; font-family: unset !important; color: unset !important; background-color: unset !important; user-select: auto !important; }`);
 
     const styleEl = document.createElement("style");
     styleEl.id = PII_STYLE_ID;
@@ -525,6 +525,10 @@ const BlurEngine = (() => {
     const shadowRoots = [];
 
     root.querySelectorAll('*').forEach((el) => {
+      // Inline stale-clear — avoids a separate querySelectorAll('[data-bl-si-blur]')
+      // pre-pass. PII-stamped elements keep their stamp (they own their blur lifecycle).
+      if (el.dataset.blSiBlur && !el.dataset.blSiPii) delete el.dataset.blSiBlur;
+
       // Shadow root discovery: collect for post-stamp dispatch by caller.
       // CSS injected into each shadow root handles alwaysBlur declaratively;
       // text-check stamping happens when caller recurses via handleDocument.
@@ -887,6 +891,60 @@ const BlurEngine = (() => {
   // heuristic layer) rather than MO gating.
   let _currentSettings = null;
 
+  // ── Idle-stamp queue ────────────────────────────────────────────────────────
+  // CSS injection (injectRules) is synchronous and covers alwaysBlur tags
+  // immediately. The expensive querySelectorAll('*') for textCheck stamping
+  // and shadow-root discovery is deferred to requestIdleCallback so it never
+  // competes with layout / paint.
+  //
+  // One idle callback runs at a time (_stampIdlePending flag).
+  // _stampQueue is replaced (not appended) on every new reconcile — the
+  // pending idle picks up the latest queue when it fires.
+  // teardown() clears the queue for its root, preventing stale idle work from
+  // re-stamping elements after they've been cleaned up.
+  let _stampIdlePending = false;
+  let _stampQueue = [];           // [{root, cats, thorough, mode, settings}]
+  const _pendingMoNodes = [];     // nodes collected by MO; drained by a single idle
+  let _moIdlePending = false;
+
+  function _scheduleIdle(fn) {
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(fn, { timeout: 300 });
+    } else {
+      setTimeout(fn, 0);
+    }
+  }
+
+  function _scheduleStampIdle() {
+    if (_stampIdlePending) return;
+    _stampIdlePending = true;
+    _scheduleIdle(_flushStampQueue);
+  }
+
+  function _flushStampQueue(deadline) {
+    _stampIdlePending = false;
+    while (_stampQueue.length > 0) {
+      if (deadline && deadline.timeRemaining() < 1) {
+        _scheduleStampIdle();
+        return;
+      }
+      // teardown() clears the queue for the inactive path — no extra guard needed.
+      const { root, cats, thorough, mode, settings } = _stampQueue.shift();
+
+      const shadowRoots = stampElements(root, cats, thorough, mode);
+
+      // observeRoot and CSS injection for discovered shadow roots happen
+      // immediately (eager), before the SR is queued for stamp work, so
+      // content added to the SR before the idle processes it is captured.
+      for (const sr of shadowRoots) {
+        injectRules(sr, cats, mode);
+        observeRoot(sr);
+        _stampQueue.push({ root: sr, cats, thorough, mode, settings });
+      }
+    }
+  }
+  // ── End idle-stamp queue ───────────────────────────────────────────────────
+
   // Tracks items currently applied to the DOM, keyed by item id
   // (dynamic → selector, sticky → id). Diffed against storage on every
   // blurAll() call to reconcile add/remove.
@@ -1013,33 +1071,52 @@ const BlurEngine = (() => {
 
     const obs = new MutationObserver((mutations) => {
       if (_pickerActive || !_isPageBlurred) return;
-      const thorough = _currentSettings ? !!_currentSettings.thorough_blur : false;
+
+      // Synchronous part: collect added nodes only — no DOM queries here.
+      // querySelectorAll('*') for subtrees is deferred to the idle callback
+      // so it never competes with layout / paint.
+      let collected = false;
       for (const mutation of mutations) {
         if (mutation.type !== 'childList') continue;
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
           if (node.dataset && node.dataset.blSiZone !== undefined) continue;
-          // Single pass: stamp text-check AND activate new shadow roots.
-          // Guard: skip shadow roots that already have an observer — they were
-          // activated by a prior handleDocument call and don't need re-processing.
-          tryBlurTextCheck(node, thorough);
-          if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
-            handleShadowRoot(_currentSettings, node.shadowRoot); // fire-and-forget (async)
-          }
-          if (node.tagName === 'IFRAME' && _currentSettings) {
-            handleIframe(_currentSettings, node);
-          }
-          const children = node.querySelectorAll('*');
-          for (let i = 0; i < children.length; i++) {
-            tryBlurTextCheck(children[i], thorough);
-            if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
-              handleShadowRoot(_currentSettings, children[i].shadowRoot); // fire-and-forget (async)
-            }
-            if (children[i].tagName === 'IFRAME' && _currentSettings) {
-              handleIframe(_currentSettings, children[i]);
-            }
-          }
+          _pendingMoNodes.push(node);
+          collected = true;
         }
+      }
+      if (!collected) return;
+
+      // One idle per batch. Flag prevents duplicate scheduling when the MO
+      // fires multiple times before the idle runs (e.g. async SPA inserts).
+      if (!_moIdlePending) {
+        _moIdlePending = true;
+        _scheduleIdle(() => {
+          _moIdlePending = false;
+          if (!_isPageBlurred) { _pendingMoNodes.length = 0; return; }
+          const thorough = _currentSettings ? !!_currentSettings.thorough_blur : false;
+          const nodes = _pendingMoNodes.splice(0);
+          for (let n = 0; n < nodes.length; n++) {
+            const node = nodes[n];
+            tryBlurTextCheck(node, thorough);
+            if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
+              handleShadowRoot(_currentSettings, node.shadowRoot);
+            }
+            if (node.tagName === 'IFRAME' && _currentSettings) {
+              handleIframe(_currentSettings, node);
+            }
+            const children = node.querySelectorAll('*');
+            for (let i = 0; i < children.length; i++) {
+              tryBlurTextCheck(children[i], thorough);
+              if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
+                handleShadowRoot(_currentSettings, children[i].shadowRoot);
+              }
+              if (children[i].tagName === 'IFRAME' && _currentSettings) {
+                handleIframe(_currentSettings, children[i]);
+              }
+            }
+          }
+        });
       }
     });
     obs.observe(target, { childList: true, subtree: true });
@@ -1063,6 +1140,10 @@ const BlurEngine = (() => {
    * turns off (matches the original _disablePageWide behaviour).
    */
   function teardown(root) {
+    // Cancel any pending idle work for this root — prevents stampElements
+    // re-stamping elements after teardown has cleared all attributes.
+    _stampQueue = _stampQueue.filter(item => item.root !== root);
+
     disconnectObserver(root);
     removeRules(root);
     removePickBlurRules(root);
@@ -1091,34 +1172,40 @@ const BlurEngine = (() => {
 
   /**
    * Apply or remove blur for the main document only.
-   * Returns discovered ShadowRoot[] so handleSite can dispatch them.
+   * CSS injection is synchronous (alwaysBlur tags covered immediately).
+   * The querySelectorAll('*') stamp pass is deferred to requestIdleCallback
+   * via _flushStampQueue — never competes with layout / paint.
    * _isPageBlurred is NOT set here — handleSite's responsibility.
    */
-  async function handleMainDocument(settings) {
+  function handleMainDocument(settings) {
     const active = settings.enabled !== false && !!settings.blur_all_active;
     if (!active) {
       teardown(document);
-      return [];
+      return;
     }
 
     const cats = settings.blur_categories || DEFAULT_CATS;
     const mode = settings.blur_mode || null;
     const thorough = !!settings.thorough_blur;
 
-    injectRules(document, cats, mode);
-    document.querySelectorAll('[data-bl-si-blur]').forEach(el => {
-      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; }
-    });
-    const shadowRoots = stampElements(document, cats, thorough, mode);
-    observeRoot(document);
-    return shadowRoots;
+    injectRules(document, cats, mode);   // synchronous — alwaysBlur tags blurred now
+    observeRoot(document);               // synchronous — MO live before idle fires
+
+    // Replace queue (not append). Pending idle, if any, will use this new queue.
+    _stampQueue = [{ root: document, cats, thorough, mode, settings }];
+    _scheduleStampIdle();  // no-op if already pending — existing idle uses new queue
   }
 
   /**
-   * Apply or remove blur for one shadow root. Recurses into nested shadow roots.
+   * Apply or remove blur for one shadow root.
+   * Active path: CSS + MO are immediate; stamp work is queued for idle.
+   * The active path is called from the MO callback for dynamically attached
+   * shadow roots. Initial shadow roots discovered at page load are handled
+   * entirely by _flushStampQueue (which calls injectRules + observeRoot eagerly
+   * before pushing to the queue, then stampElements when the item is dequeued).
    * _isPageBlurred is NOT set here — handleSite's responsibility.
    */
-  async function handleShadowRoot(settings, shadowRoot) {
+  function handleShadowRoot(settings, shadowRoot) {
     const active = settings.enabled !== false && !!settings.blur_all_active;
     if (!active) {
       teardown(shadowRoot);
@@ -1130,14 +1217,9 @@ const BlurEngine = (() => {
     const thorough = !!settings.thorough_blur;
 
     injectRules(shadowRoot, cats, mode);
-    shadowRoot.querySelectorAll('[data-bl-si-blur]').forEach(el => {
-      if (!el.dataset.blSiPii) { delete el.dataset.blSiBlur; }
-    });
-    const nested = stampElements(shadowRoot, cats, thorough, mode);
     observeRoot(shadowRoot);
-    if (nested.length) {
-      await Promise.all(nested.map(sr => handleShadowRoot(settings, sr)));
-    }
+    _stampQueue.push({ root: shadowRoot, cats, thorough, mode, settings });
+    _scheduleStampIdle();
   }
 
   /**
@@ -1163,8 +1245,9 @@ const BlurEngine = (() => {
   /**
    * Thin router — routes to handleMainDocument or handleShadowRoot.
    * Kept on the public API for backward compatibility and unit tests.
+   * Both are now synchronous; stamp work runs in requestIdleCallback.
    */
-  async function handleDocument(settings, root) {
+  function handleDocument(settings, root) {
     if (!root || root === document) return handleMainDocument(settings);
     if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot)
       return handleShadowRoot(settings, root);
@@ -1238,10 +1321,7 @@ const BlurEngine = (() => {
       _lastReconcileKey = reconcileKey;
 
       if (pageWideChanged) {
-        const shadowRoots = await handleMainDocument(settings);
-        if (shadowRoots.length) {
-          await Promise.all(shadowRoots.map(sr => handleShadowRoot(settings, sr)));
-        }
+        handleMainDocument(settings);  // sync — schedules idle for stamp work
       }
       _isPageBlurred = isActive;
 

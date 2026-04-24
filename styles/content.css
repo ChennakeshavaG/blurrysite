@@ -64,7 +64,7 @@
 [data-bl-si-reveal] {
   filter: none !important;
   visibility: visible !important;
-  font-family: revert !important;
+  font-family: unset !important;
   transition: filter var(--bl-si-transition-duration, 150ms) ease !important;
   user-select: auto !important;
 }
@@ -90,7 +90,7 @@
   background-color: transparent !important;
   color: inherit !important;
   visibility: visible !important;
-  font-family: revert !important;
+  font-family: unset !important;
   user-select: auto !important;
 }
 
