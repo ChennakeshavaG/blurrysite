@@ -56,11 +56,54 @@ function createContextMenus() {
   });
 }
 
-// Clear stale screen-share session flag on every SW start. _sharePorts is always
-// empty on restart (in-memory Map). If a share is actually in progress, screen_share.js
-// will reconnect the port and re-set the flag. Without this, a flag left true after a
-// mid-share SW restart would cause every new tab to apply automate blur indefinitely.
-chrome.storage.session.set({ blsi_screen_share_active: false });
+// ── Screen-share session record (background-owned) ────────────────────────
+// Single source of truth for live-share state. Content scripts read via
+// chrome.storage.session.onChanged + storage_model session caches.
+const SCREEN_SHARE_SESSION_KEY = 'blsi_screen_share';
+const SUPPRESSED_TABS_SESSION_KEY = 'blsi_automate_suppressed_tabs';
+
+function _emptyScreenShareState() {
+  return { active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [] };
+}
+
+async function _setScreenShareActive(sharing_tab_id) {
+  // Each new share starts with cleared suppression maps so stale per-site or
+  // per-tab suppress entries from a prior share never silently carry over.
+  const next = {
+    active: true,
+    sharing_tab_id: typeof sharing_tab_id === 'number' ? sharing_tab_id : null,
+    started_at: Date.now(),
+    suppressed_sites: [],
+  };
+  await chrome.storage.session.set({
+    [SCREEN_SHARE_SESSION_KEY]: next,
+    [SUPPRESSED_TABS_SESSION_KEY]: [],
+  });
+}
+
+async function _setScreenShareInactive() {
+  await chrome.storage.session.set({ [SCREEN_SHARE_SESSION_KEY]: _emptyScreenShareState() });
+}
+
+function _broadcastScreenShareNotify(excludeTabId) {
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      if (!tab.id) continue;
+      if (excludeTabId !== undefined && tab.id === excludeTabId) continue;
+      chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_notify }).catch(() => {});
+    }
+  });
+}
+
+// Clear stale screen-share session record on every SW start. _sharePorts is
+// always empty on restart (in-memory Map). If a share is actually in progress,
+// screen_share.js will reconnect the port and the onConnect handler restores
+// active state. Suppressed-tabs list also resets — tab ids from a prior
+// session may have been reused by Chrome by now.
+chrome.storage.session.set({
+  [SCREEN_SHARE_SESSION_KEY]: _emptyScreenShareState(),
+  [SUPPRESSED_TABS_SESSION_KEY]: [],
+});
 
 chrome.runtime.onInstalled.addListener((details) => {
   log.flow('onInstalled', { reason: details && details.reason });
@@ -146,24 +189,17 @@ chrome.runtime.onConnect.addListener((port) => {
 
   _sharePorts.set(tabId, port);
   log.flow('screenShare.portOpen', { tabId });
-  // Re-set the flag here too: if the SW restarted mid-share, the top-level
-  // clear ran first; the reconnecting port restores the live-share state.
-  chrome.storage.session.set({ blsi_screen_share_active: true });
+  // Reconcile session record — covers SW restart mid-share where the top-level
+  // clear ran first and the reconnecting port restores live-share state.
+  _setScreenShareActive(tabId);
 
-  port.onDisconnect.addListener(() => {
+  port.onDisconnect.addListener(async () => {
     _sharePorts.delete(tabId);
     log.flow('screenShare.portClose', { tabId });
-    // Clear the session flag so tabs opened after the share ends don't
-    // incorrectly apply automate blur on init.
-    chrome.storage.session.set({ blsi_screen_share_active: false });
-    // Fan-out UNBLUR to all tabs — same as SCREEN_SHARE_ENDED path.
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        if (tab.id) {
-          chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_unblur }).catch(() => {});
-        }
-      }
-    });
+    await _setScreenShareInactive();
+    // Storage onChanged handles re-resolve in every tab. Send NOTIFY so the
+    // toast can clear in-flight if any tab is showing one.
+    _broadcastScreenShareNotify();
   });
 });
 
@@ -180,37 +216,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async sendResponse
   }
 
-  // ── Screen share relay — fan out to other tabs ─────────────────────────
-  // Stateless: no module-level Set (service worker can sleep between events).
-  // On STARTED: persist active flag to session storage (survives SW sleep/restart),
-  //   then blur all tabs except the one sharing.
-  // On ENDED: clear session flag, unblur every tab.
-  // Tabs opened mid-share miss the fan-out but read blsi_screen_share_active on
-  // init and apply automate blur themselves.
+  // ── Screen share relay ────────────────────────────────────────────────
+  // Background owns blsi_screen_share session record. On state change, content
+  // tabs auto-react via chrome.storage.session.onChanged in storage_model.
+  // SCREEN_SHARE_NOTIFY is a UI ping (toast trigger on transition into blur).
+  // Tabs opened mid-share read the session record on init via storage_model.
   if (message && message.type === blsi.command.screen_share_started) {
     const senderTabId = sender.tab && sender.tab.id;
-    chrome.storage.session.set({ blsi_screen_share_active: true });
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        if (tab.id && tab.id !== senderTabId) {
-          chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_blur }).catch(() => {});
-        }
-      }
-    });
-    sendResponse({ ok: true });
+    (async () => {
+      await _setScreenShareActive(senderTabId);
+      _broadcastScreenShareNotify(senderTabId);
+      sendResponse({ ok: true });
+    })();
     return true;
   }
 
   if (message && message.type === blsi.command.screen_share_ended) {
-    chrome.storage.session.set({ blsi_screen_share_active: false });
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        if (tab.id) {
-          chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_unblur }).catch(() => {});
-        }
-      }
-    });
-    sendResponse({ ok: true });
+    (async () => {
+      await _setScreenShareInactive();
+      _broadcastScreenShareNotify();
+      sendResponse({ ok: true });
+    })();
     return true;
   }
+
+  // ── WHO_AM_I — content scripts query their own tab id ─────────────────
+  if (message && message.type === blsi.command.who_am_i) {
+    const tabId = sender && sender.tab && sender.tab.id;
+    sendResponse({ tab_id: typeof tabId === 'number' ? tabId : null });
+    return false;
+  }
+});
+
+// ── Tab close cleanup — drop tab id from suppressed list ──────────────────
+// Without this, Chrome's tab-id reuse could let a stale entry silence a
+// brand-new tab that gets the same id. Storage onChanged → content tabs
+// re-resolve automatically.
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const r = await chrome.storage.session.get(SUPPRESSED_TABS_SESSION_KEY);
+    const list = Array.isArray(r[SUPPRESSED_TABS_SESSION_KEY]) ? r[SUPPRESSED_TABS_SESSION_KEY] : [];
+    if (list.indexOf(tabId) < 0) return;
+    const next = list.filter((t) => t !== tabId);
+    await chrome.storage.session.set({ [SUPPRESSED_TABS_SESSION_KEY]: next });
+  } catch (_) { /* ignore */ }
 });

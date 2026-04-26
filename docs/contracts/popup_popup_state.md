@@ -20,13 +20,18 @@ Window global: `BlurrySitePopupState`.
 
 ## Public API
 
-### `load(hostname, url) → Promise<void>`
-Initializes hostname/url, calls `blsi.Model.init_cache()`, then `refreshFromStorage()`.
+### `load(hostname, url, tabId) → Promise<void>`
+Initializes hostname/url/tabId, calls `blsi.Model.init_cache()`, then `refreshFromStorage()`. `tabId` is the active tab id from `chrome.tabs.query({ active: true })` — passed into every `blsi.Model.resolve()` call so per-tab automate suppression and the sharing-tab self-skip stay coherent. Pass `null` when no tab id is available; resolve will treat the popup as a non-suppressible non-sharing tab.
 
-### `get() → { settings, blurItems, hostname, isPageBlurred, neutralAfterClear, activeRule }`
-Returns current snapshot. `settings` is the model object plus two runtime extras:
-- `automate_blur_active` — boolean, any trigger active
+### `get() → { settings, resolved, ruleOverrides, ruleMatch, blurItems, hostname, tabId, isPageBlurred, neutralAfterClear, activeRule }`
+Returns current snapshot. `settings` is the model object plus runtime extras derived from `Store.resolve(_hostname, _url, _tabId)`:
+- `automate_blur_active` — boolean, any trigger active (after suppression filters)
 - `automate_blur_triggers` — `{ idle, tab_switch, screen_share }`
+- `automate_blur_skipped` — boolean
+- `automate_blur_skip_reason` — `'site_rule' | 'manual' | 'pick_blur' | null`
+- `screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }`
+- `screen_share_suppressed_for_host` — boolean
+- `screen_share_suppressed_for_tab` — boolean
 
 When `_model` is null, falls back to `blsi.build_default_model()`.
 
@@ -51,10 +56,13 @@ Removes one pick-blur item. No-op when `_hostname` or `itemId` falsy.
 Clears all per-host state for `_hostname`. No-op when empty.
 
 ### `clearAutomateBlur() → Promise<void>`
-Clears all automate triggers for `_hostname`.
+Clears all automate triggers (idle + tab_switch) for `_hostname` AND removes the active tab id from the global per-tab automate suppression list — keeps the "Turn off" button predictable. Screen-share is global and is left alone.
 
-### `clearScreenShareBlur() → Promise<void>`
-Clears only the `screen_share` automate trigger for `_hostname`.
+### `suppressScreenShare(scope) → Promise<void>`
+`scope ∈ 'tab' | 'site_session' | 'feature'`. Wraps `blsi.Model.suppress_screen_share(scope, { hostname: _hostname, tab_id: _tabId })` then refreshes.
+
+### `unsuppressScreenShare(scope) → Promise<void>`
+Inverse of `suppressScreenShare`. Used by the popup notif card's Undo affordance.
 
 ### `saveRules(newRules) → Promise<void>`
 Replaces full site_rules array via `blsi.Model.save_rules`. Does not auto-refresh — caller decides (rules don't change derived popup state directly).
@@ -78,9 +86,10 @@ Sequentially patches every top-level key of `model` via `patch_section`, then re
 Subscribes `cb(newModel, oldModel)` to `blsi.Model.on_change` — fires when storage mutates from another context (content script, other popup).
 
 ## Edge cases
-- `_hostname === ''` (e.g. `chrome://newtab`): `refreshFromStorage()` derives `_isPageBlurred` from `_model.blur_all.status` only; per-host writes (`saveBlurState`, `removeBlurItem`, `clearHost`, `clearAutomateBlur`, `clearScreenShareBlur`) all no-op.
+- `_hostname === ''` (e.g. `chrome://newtab`): `refreshFromStorage()` derives `_isPageBlurred` from `_model.blur_all.status` only; per-host writes (`saveBlurState`, `removeBlurItem`, `clearHost`, `clearAutomateBlur`) all no-op.
+- `_tabId == null`: `Store.resolve` treats the popup as a non-suppressible non-sharing tab — per-tab Undo state in the notif card silently won't fire (popup just always reads as "not suppressed").
 - `_model` null before `load()`: `get()` returns default model so renderers can run during boot.
 - Active rule precedence: regex/wildcard rules win over exact-host snapshot. Exact-host entries with empty snapshot don't count as "rules" — they're just per-host blur state.
 
 ## Side effects
-All writes go to `chrome.storage.local` (model) or `chrome.storage.session` (automate_blur) via `blsi.Model`. No direct `chrome.storage.*` access in this module.
+All writes go to `chrome.storage.local` (model) or `chrome.storage.session` (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) via `blsi.Model`. No direct `chrome.storage.*` access in this module.

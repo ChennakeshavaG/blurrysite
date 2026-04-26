@@ -57,9 +57,16 @@
     const { settings, blurItems, isPageBlurred, activeRule } = st;
     BlurrySitePopupRender.renderAll(
       settings, blurItems, isPageBlurred,
-      _onSave, _onClearAutomate, _onClearScreenShareBlur,
+      _onSave, _onClearAutomate,
       activeRule, _openSiteRulesPage,
-      { resolved: st.resolved, ruleOverrides: st.ruleOverrides, ruleMatch: st.ruleMatch, onOpenManagingRule: _onOpenManagingRule },
+      {
+        resolved: st.resolved,
+        ruleOverrides: st.ruleOverrides,
+        ruleMatch: st.ruleMatch,
+        onOpenManagingRule: _onOpenManagingRule,
+        onSuppressScreenShare: _onSuppressScreenShare,
+        onUnsuppressScreenShare: _onUnsuppressScreenShare,
+      },
     );
     UI.updateClearAll(settings, blurItems, isPageBlurred);
     _updateScrollArrows();
@@ -88,8 +95,14 @@
     _renderCurrent();
   }
 
-  async function _onClearScreenShareBlur() {
-    await State.clearScreenShareBlur();
+  // scope ∈ 'tab' | 'site_session' | 'feature'
+  async function _onSuppressScreenShare(scope) {
+    await State.suppressScreenShare(scope);
+    _renderCurrent();
+  }
+
+  async function _onUnsuppressScreenShare(scope) {
+    await State.unsuppressScreenShare(scope);
     _renderCurrent();
   }
 
@@ -183,7 +196,7 @@
       } catch (_) {}
     }
 
-    await State.load(hostname, tab && tab.url ? tab.url : '');
+    await State.load(hostname, tab && tab.url ? tab.url : '', tab && tab.id);
     await blsi.ContentI18n.init(State.get().settings.global_default_settings.language);
     UI.applyI18n();
 

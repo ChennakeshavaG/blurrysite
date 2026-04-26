@@ -6,6 +6,9 @@ const BlurrySitePopupState = (() => {
   let _blurItems         = [];
   let _hostname          = '';
   let _url               = '';
+  let _tabId             = null;   // active tab id — passed to Store.resolve so
+                                   // per-tab automate suppression and the
+                                   // sharing-tab self-skip are honored.
   let _activeRule        = null;
   let _isPageBlurred     = false;
   let _neutralAfterClear = false;
@@ -13,26 +16,30 @@ const BlurrySitePopupState = (() => {
   // ── Public getters ────────────────────────────────────────────────────────
   function get() {
     const m = _model || blsi.build_default_model();
-    const auto_entry = _hostname
-      ? blsi.Model.get_automate_blur(_hostname)
-      : { idle: false, tab_switch: false, screen_share: false };
     // Resolve once per get() so renders can show rule-merged values + know
     // which fields a site rule is overriding for the current tab.
     const resolved = (_hostname || _url)
-      ? blsi.Model.resolve(_hostname || '', _url || '')
+      ? blsi.Model.resolve(_hostname || '', _url || '', _tabId)
       : null;
     const ruleOverrides = (resolved && resolved._rule_overrides) || {};
     const ruleMatch     = (resolved && resolved._rule_match) || null;
+    const triggers = (resolved && resolved.automate_blur_triggers) || { idle: false, tab_switch: false, screen_share: false };
     return {
       settings: Object.assign({}, m, {
-        automate_blur_active:   !!(auto_entry.idle || auto_entry.tab_switch || auto_entry.screen_share),
-        automate_blur_triggers: auto_entry,
+        automate_blur_active:   !!(resolved && resolved.automate_blur_active),
+        automate_blur_triggers: triggers,
+        automate_blur_skipped:  !!(resolved && resolved.automate_blur_skipped),
+        automate_blur_skip_reason: resolved ? resolved.automate_blur_skip_reason : null,
+        screen_share_state:        resolved ? resolved.screen_share_state : null,
+        screen_share_suppressed_for_host: !!(resolved && resolved.screen_share_suppressed_for_host),
+        screen_share_suppressed_for_tab:  !!(resolved && resolved.screen_share_suppressed_for_tab),
       }),
       resolved,
       ruleOverrides,
       ruleMatch,
       blurItems:         _blurItems,
       hostname:          _hostname,
+      tabId:             _tabId,
       isPageBlurred:     _isPageBlurred,
       neutralAfterClear: _neutralAfterClear,
       activeRule:        _activeRule,
@@ -84,9 +91,10 @@ const BlurrySitePopupState = (() => {
       const manualBlur = (entry && entry.blur_all !== null)
         ? !!entry.blur_all
         : _model.blur_all.status;
-      const automateEntry = blsi.Model.get_automate_blur(_hostname);
-      const automateBlur = !!(automateEntry.idle || automateEntry.tab_switch || automateEntry.screen_share);
-      _isPageBlurred = manualBlur || automateBlur;
+      // Derive automate-blur state via resolve() so per-tab + per-site
+      // suppression and the screen-share session record are factored in.
+      const resolved = blsi.Model.resolve(_hostname, _url || '', _tabId);
+      _isPageBlurred = manualBlur || !!(resolved && resolved.automate_blur_active);
     } else {
       // No hostname (e.g. chrome://newtab): derive blur state from global default only.
       _isPageBlurred = _model ? _model.blur_all.status : false;
@@ -94,16 +102,27 @@ const BlurrySitePopupState = (() => {
   }
 
   // ── Clear automate blur for current hostname ──────────────────────────────
+  // Clears idle + tab_switch entries for this hostname AND removes per-tab
+  // suppression for the active tab so a "Turn off" click doesn't leave
+  // hidden state. Screen-share is global — leave that record alone.
   async function clearAutomateBlur() {
     if (!_hostname) return;
     await blsi.Model.clear_automate_blur(_hostname);
+    if (typeof _tabId === 'number') {
+      await blsi.Model.remove_suppressed_tab(_tabId);
+    }
     refreshFromStorage();
   }
 
-  // ── Clear screen share blur trigger only for current hostname ─────────────
-  async function clearScreenShareBlur() {
-    if (!_hostname) return;
-    await blsi.Model.save_automate_blur(_hostname, 'screen_share', false);
+  // ── Suppress/unsuppress screen-share blur ────────────────────────────────
+  // scope ∈ 'tab' | 'site_session' | 'feature'
+  async function suppressScreenShare(scope) {
+    await blsi.Model.suppress_screen_share(scope, { hostname: _hostname, tab_id: _tabId });
+    refreshFromStorage();
+  }
+
+  async function unsuppressScreenShare(scope) {
+    await blsi.Model.unsuppress_screen_share(scope, { hostname: _hostname, tab_id: _tabId });
     refreshFromStorage();
   }
 
@@ -117,9 +136,10 @@ const BlurrySitePopupState = (() => {
   }
 
   // ── Storage init ──────────────────────────────────────────────────────────
-  async function load(hostname, url) {
+  async function load(hostname, url, tabId) {
     _hostname = hostname || '';
     _url = url || '';
+    _tabId = (typeof tabId === 'number' && Number.isFinite(tabId)) ? tabId : null;
     await blsi.Model.init_cache();
     refreshFromStorage();
   }
@@ -178,7 +198,8 @@ const BlurrySitePopupState = (() => {
     load,
     saveSettings, saveBlurState, removeBlurItem, clearHost,
     saveRules, captureSnapshot, saveSiteSnapshot, getRules,
-    clearAutomateBlur, clearScreenShareBlur, onExternalChange, refreshFromStorage,
+    clearAutomateBlur, suppressScreenShare, unsuppressScreenShare,
+    onExternalChange, refreshFromStorage,
     exportModel, importSettings,
   };
 })();

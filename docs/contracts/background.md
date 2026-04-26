@@ -2,12 +2,12 @@
 
 ## Overview
 
-MV3 service worker. Stateless between wake cycles — no module-level mutable state except `_sharePorts` (which is empty on every SW restart by design). Handles: keyboard command relay, context menu management, screenshot capture relay, and screen share port tracking + fan-out. All storage I/O is handled by `storage_model.js` in content script and popup contexts — no storage reads/writes in background except for `blsi_screen_share_active` session flag.
+MV3 service worker. Stateless between wake cycles — no module-level mutable state except `_sharePorts` (which is empty on every SW restart by design). Handles: keyboard command relay, context menu management, screenshot capture relay, screen-share session record ownership + tab broadcast, and `WHO_AM_I` tab-id discovery. All other storage I/O is handled by `storage_model.js` in content script and popup contexts. Background owns the screen-share session record (`blsi_screen_share`) and the per-tab automate suppression list (`blsi_automate_suppressed_tabs`).
 
 ## Initialization (Top-Level SW Start)
 
 On every SW start:
-1. Clears `blsi_screen_share_active` in `chrome.storage.session` — prevents stale flag after mid-share SW restart. If a share is actually in progress, `screen_share.js` will reconnect the port and re-set the flag.
+1. Resets `blsi_screen_share` to its empty default `{ active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [] }` and clears `blsi_automate_suppressed_tabs`. Prevents stale state after mid-share SW restart; tab ids from a prior session may have been recycled by Chrome, so the per-tab list is safest to drop. If a share is actually in progress, the port reconnect immediately re-stamps the record via `_setScreenShareActive`.
 2. Imports `src/constants.js`, `src/logger.js`, `src/action_registry.js` via `importScripts`.
 3. Builds `COMMAND_TO_MESSAGE` map from `blsi.Actions.list()`.
 
@@ -73,18 +73,24 @@ Routes context menu clicks:
 ### `chrome.runtime.onConnect`
 
 **What**: Tracks `'blsi-screen-share'` ports; each port's lifetime equals a screen share session.  
-**On connect**: Records port in `_sharePorts[tabId]`; sets `blsi_screen_share_active: true` in session storage (handles SW-restart-mid-share reconnect).  
-**On disconnect**: Removes port from `_sharePorts`; clears `blsi_screen_share_active`; fans out `SCREEN_SHARE_UNBLUR` to ALL tabs — this is the crash-safety net for when the sharing tab crashes/closes/navigates.
+**On connect**: Records port in `_sharePorts[tabId]`; calls `_setScreenShareActive(tabId)` (also handles SW-restart-mid-share reconnect).  
+**On disconnect**: Removes port from `_sharePorts`; calls `_setScreenShareInactive()` and broadcasts `SCREEN_SHARE_NOTIFY` to ALL tabs — crash-safety for when the sharing tab crashes/closes/navigates. Storage `onChanged` re-resolves tabs even if the broadcast misses them.
 
 ### `chrome.runtime.onMessage`
 
-Handles 3 message types:
+Handles 4 message types:
 
 **`CAPTURE_VIEWPORT`**: Calls `chrome.tabs.captureVisibleTab(null, { format: 'png' })` → responds `{ dataUrl }` or `{ error }`. Returns `true` (async sendResponse).
 
-**`SCREEN_SHARE_STARTED`**: Sets `blsi_screen_share_active: true` in session; fans out `SCREEN_SHARE_BLUR` to all tabs EXCEPT sender. Returns `true`.
+**`SCREEN_SHARE_STARTED`**: Calls `_setScreenShareActive(senderTabId)` (writes session record + clears suppression maps); broadcasts `SCREEN_SHARE_NOTIFY` to all tabs EXCEPT the sender (toast trigger).
 
-**`SCREEN_SHARE_ENDED`**: Clears `blsi_screen_share_active`; fans out `SCREEN_SHARE_UNBLUR` to ALL tabs. Returns `true`.
+**`SCREEN_SHARE_ENDED`**: Calls `_setScreenShareInactive()`; broadcasts `SCREEN_SHARE_NOTIFY` to ALL tabs.
+
+**`WHO_AM_I`**: Synchronous `sendResponse({ tab_id: sender.tab.id })`. Used by `screen_share.js` so content tabs can self-identify for `Store.resolve(..., tab_id)`.
+
+### `chrome.tabs.onRemoved`
+
+**What**: When a tab closes, removes its id from `blsi_automate_suppressed_tabs` so a recycled tab id can't inherit a stale suppression.
 
 ## Screen Share Architecture
 
@@ -96,18 +102,22 @@ Handles 3 message types:
 [isolated]  → opens port 'blsi-screen-share'
               → sendMessage(SCREEN_SHARE_STARTED)
               ↓
-[background] → sets blsi_screen_share_active = true
-              → fans out SCREEN_SHARE_BLUR to other tabs
+[background] → writes blsi_screen_share = { active:true, sharing_tab_id, started_at, suppressed_sites:[] }
+              → clears blsi_automate_suppressed_tabs
+              → broadcasts SCREEN_SHARE_NOTIFY (toast ping; excludes sharing tab)
+              ↓ (storage onChanged re-resolves all tabs)
               ↓ (port disconnect = crash-safety)
-[background] → onDisconnect fans out SCREEN_SHARE_UNBLUR to ALL tabs
+[background] → resets blsi_screen_share to empty + broadcasts NOTIFY
 ```
 
-**Mid-share SW restart**: Top-level `session.set({ blsi_screen_share_active: false })` runs; port reconnect immediately sets it back to `true`. New tabs opening between these two calls see `false` — a brief race window but self-healing within milliseconds.
+Content tabs read the live record via `chrome.storage.session.onChanged` in `storage_model.js` — no `_BLUR`/`_UNBLUR` per-tab fan-out needed.
+
+**Mid-share SW restart**: Top-level reset clears the record; the reconnecting port re-stamps it via `_setScreenShareActive` within milliseconds. Any tab that loads in the gap reads the record on `init_cache` once it stabilizes.
 
 ## Invariants
 
 - Service worker MUST be stateless between wake cycles — `_sharePorts` is the only module-level mutable state, and it starts empty on every restart (by design).
-- No storage reads/writes except `blsi_screen_share_active` session flag.
+- Background writes only `blsi_screen_share` and `blsi_automate_suppressed_tabs` session keys. The model (`blsi_model`) is owned by `storage_model.js` in content + popup contexts.
 - `sendMessage` calls always use `.catch(() => {})` — tab may have no content script (chrome:// pages, etc.).
 - `COMMAND_TO_MESSAGE` auto-builds from action registry — never hardcode command→message mappings in background.js.
-- The sharing tab is excluded from `SCREEN_SHARE_BLUR` fan-out (filtered by `tab.id !== senderTabId`).
+- The sharing tab is excluded from `SCREEN_SHARE_NOTIFY` broadcast on STARTED. Resolve-side check (`tab_id === sharing_tab_id`) is the authoritative blur gate.

@@ -29,8 +29,11 @@ Alias for `_saveAndApply`. Passed as callback into all render files.
 ### `_onClearAutomate()`
 `State.clearAutomateBlur()` then `_renderCurrent()`.
 
-### `_onClearScreenShareBlur()`
-`State.clearScreenShareBlur()` then `_renderCurrent()`.
+### `_onSuppressScreenShare(scope)`
+`State.suppressScreenShare(scope)` then `_renderCurrent()`. `scope ∈ 'tab' | 'site_session' | 'feature'`.
+
+### `_onUnsuppressScreenShare(scope)`
+`State.unsuppressScreenShare(scope)` then `_renderCurrent()`. Used by the notif card's Undo affordance.
 
 ### `_openHtbModify(isBlurAll: boolean)`
 Renders HTB sub-page body and calls `UI.showView('bl-view-htb-modify', true)`.

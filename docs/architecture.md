@@ -311,6 +311,15 @@ All inter-component communication uses typed message objects.
 | `CONTEXT_BLUR` | `{ elementSelector }` | Blur element by selector (context menu) |
 | `CONTEXT_UNBLUR` | `{ elementSelector }` | Unblur element by selector (context menu) |
 | `UNBLUR_ITEM` | `{ selector }` | Unblur a specific blur item (popup remove button) |
+| `SCREEN_SHARE_NOTIFY` | — | Broadcast on screen-share state transitions. Toast ping; tabs re-resolve from `chrome.storage.session['blsi_screen_share']`. Replaces the legacy `SCREEN_SHARE_BLUR` / `SCREEN_SHARE_UNBLUR` per-tab fan-out. |
+
+### content_script → background
+
+| Type | Payload | Description |
+|------|---------|-------------|
+| `SCREEN_SHARE_STARTED` | — | `getDisplayMedia()` call succeeded in page. Background writes the global session record. |
+| `SCREEN_SHARE_ENDED` | — | All display tracks ended. Background resets the record. |
+| `WHO_AM_I` | — | Reply: `{ tab_id }`. Used by `screen_share.js` so content can self-identify for `Store.resolve(..., tab_id)` (sharing-tab self-skip + per-tab automate suppression). |
 
 ### storage_manager → background
 

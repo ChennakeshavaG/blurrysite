@@ -37,8 +37,8 @@ const Constants = (() => {
     toggle_panel:          'TOGGLE_PANEL',           // background → content (PWA settings panel)
     screen_share_started:  'SCREEN_SHARE_STARTED',  // content → background
     screen_share_ended:    'SCREEN_SHARE_ENDED',    // content → background
-    screen_share_blur:     'SCREEN_SHARE_BLUR',     // background → content (other tabs)
-    screen_share_unblur:   'SCREEN_SHARE_UNBLUR',   // background → content (all tabs)
+    screen_share_notify:   'SCREEN_SHARE_NOTIFY',   // background → content (broadcast — toast trigger; tabs re-resolve from session storage)
+    who_am_i:              'WHO_AM_I',              // content → background (returns sender.tab.id)
   });
 
   /** Popup → content script */

@@ -22,8 +22,7 @@ paths:
 | Context menu blur | `CONTEXT_BLUR` |
 | Context menu unblur | `CONTEXT_UNBLUR` |
 | Context menu "Open Settings Panel" (PWA) | `TOGGLE_PANEL` |
-| Screen share active (fan-out to other tabs) | `SCREEN_SHARE_BLUR` |
-| Screen share ended (fan-out to all tabs) | `SCREEN_SHARE_UNBLUR` |
+| Screen share state changed (broadcast — toast ping; tabs re-resolve from session storage) | `SCREEN_SHARE_NOTIFY` |
 
 ## content_script.js → background.js
 
@@ -31,6 +30,7 @@ paths:
 |---|---|
 | `getDisplayMedia()` call succeeded in page | `SCREEN_SHARE_STARTED` |
 | All display tracks ended | `SCREEN_SHARE_ENDED` |
+| Content asks background for its own tab id (so resolve can identify sharing tab + per-tab suppression) | `WHO_AM_I` |
 
 ## popup.js → content_script.js
 

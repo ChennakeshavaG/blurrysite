@@ -63,7 +63,16 @@ function buildStubSource() {
       save_automate_blur:     jest.fn(),
       patch_automate_blur:    jest.fn(),
       clear_automate_blur:    jest.fn(),
-      get_automate_blur:      jest.fn(() => ({ idle: false, tab_switch: false, screen_share: false })),
+      get_automate_blur:      jest.fn(() => ({ idle: false, tab_switch: false })),
+      get_screen_share_state:    jest.fn(() => ({ active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [] })),
+      set_screen_share_active:   jest.fn(),
+      set_screen_share_inactive: jest.fn(),
+      suppress_screen_share:     jest.fn(),
+      unsuppress_screen_share:   jest.fn(),
+      get_suppressed_tabs:       jest.fn(() => []),
+      add_suppressed_tab:        jest.fn(),
+      remove_suppressed_tab:     jest.fn(),
+      clear_suppressed_tabs:     jest.fn(),
       _reset_cache:           jest.fn(),
     };
   })();`;
@@ -883,7 +892,6 @@ describe('automate_blur', () => {
     const entry = blsi.Model.get_automate_blur('example.com');
     expect(entry.idle).toBe(true);
     expect(entry.tab_switch).toBe(false);
-    expect(entry.screen_share).toBe(false);
   });
 
   test('save_automate_blur rejects unknown trigger', async () => {
@@ -891,7 +899,15 @@ describe('automate_blur', () => {
     const entry = blsi.Model.get_automate_blur('example.com');
     expect(entry.idle).toBe(false);
     expect(entry.tab_switch).toBe(false);
-    expect(entry.screen_share).toBe(false);
+  });
+
+  test('save_automate_blur rejects screen_share (now a global record)', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'screen_share', true);
+    const entry = blsi.Model.get_automate_blur('example.com');
+    expect(entry.idle).toBe(false);
+    expect(entry.tab_switch).toBe(false);
+    // Screen-share state lives in the screen_share session record, not here.
+    expect(entry.screen_share).toBeUndefined();
   });
 
   test('save_automate_blur rejects invalid hostname', async () => {
@@ -902,11 +918,10 @@ describe('automate_blur', () => {
 
   test('patch_automate_blur updates multiple triggers atomically', async () => {
     await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    await blsi.Model.patch_automate_blur('example.com', { idle: false, screen_share: true });
+    await blsi.Model.patch_automate_blur('example.com', { idle: false, tab_switch: true });
     const entry = blsi.Model.get_automate_blur('example.com');
     expect(entry.idle).toBe(false);
-    expect(entry.screen_share).toBe(true);
-    expect(entry.tab_switch).toBe(false);
+    expect(entry.tab_switch).toBe(true);
   });
 
   test('clear_automate_blur removes the hostname entry', async () => {
@@ -915,7 +930,6 @@ describe('automate_blur', () => {
     const entry = blsi.Model.get_automate_blur('example.com');
     expect(entry.idle).toBe(false);
     expect(entry.tab_switch).toBe(false);
-    expect(entry.screen_share).toBe(false);
   });
 
   test('resolve includes automate_blur_active and automate_blur_triggers', async () => {
@@ -929,8 +943,11 @@ describe('automate_blur', () => {
 
   test('resolve: blur_all_active is true when only automate fires (manual = false)', async () => {
     await blsi.Model.save_blur_state('example.com', false);
-    await blsi.Model.save_automate_blur('example.com', 'screen_share', true);
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    // Screen-share trigger comes from the global record, not per-hostname automate_blur.
+    // The feature must be enabled in model.automate.settings.screen_share for ss to fire.
+    await blsi.Model.patch_section('automate', { settings: { screen_share: { enabled: true } } });
+    await blsi.Model.set_screen_share_active(99);
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/', 1);
     expect(resolved.blur_all_active).toBe(true);
     expect(resolved.automate_blur_only).toBe(true);
     expect(resolved.automate_blur_skipped).toBe(false);
@@ -993,13 +1010,16 @@ describe('automate_blur', () => {
   test('resolve: automate_blur_skipped = true when pick_and_blur is enabled', async () => {
     const m = blsi.build_default_model();
     m.pick_and_blur.status = true;
+    m.automate.settings.screen_share.enabled = true; // feature on so ss can fire
     blsi.Model._reset_cache();
     mockGet(m);
     await blsi.Model.init_cache();
 
-    await blsi.Model.save_automate_blur('example.com', 'screen_share', true);
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    // Screen-share fires via the global session record.
+    await blsi.Model.set_screen_share_active(99);
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/', 1);
     expect(resolved.automate_blur_skipped).toBe(true);
+    expect(resolved.automate_blur_skip_reason).toBe('pick_blur');
     expect(resolved.automate_blur_only).toBe(false);
     expect(resolved.blur_all_active).toBe(false); // blur-all stays off; pick-blur handles it
   });
@@ -1026,6 +1046,141 @@ describe('automate_blur', () => {
     expect(entry.idle).toBe(false);
   });
 
+});
+
+// ── screen_share session record + suppression ───────────────────────────────
+//
+// USER IMPACT: when a user starts a screen share, all *other* tabs blur. The
+// sharing tab and per-scope suppressed tabs/sites must NOT blur. The popup
+// notif card and content-script toast both read from the same global session
+// record so user actions stay coherent across UI surfaces.
+describe('screen_share session record', () => {
+  beforeEach(async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    m.automate.settings.screen_share.enabled = true;
+    mockGet(m);
+    await blsi.Model.init_cache();
+  });
+
+  test('set_screen_share_active stamps active flag, sharing tab id, and started_at', async () => {
+    const before = Date.now() - 1;
+    await blsi.Model.set_screen_share_active(42);
+    const ss = blsi.Model.get_screen_share_state();
+    expect(ss.active).toBe(true);
+    expect(ss.sharing_tab_id).toBe(42);
+    expect(ss.started_at).toBeGreaterThanOrEqual(before);
+    expect(ss.suppressed_sites).toEqual([]);
+  });
+
+  test('set_screen_share_inactive clears the record', async () => {
+    await blsi.Model.set_screen_share_active(42);
+    await blsi.Model.set_screen_share_inactive();
+    const ss = blsi.Model.get_screen_share_state();
+    expect(ss.active).toBe(false);
+    expect(ss.sharing_tab_id).toBeNull();
+    expect(ss.started_at).toBeNull();
+  });
+
+  test('resolve: sharing tab itself does NOT receive screen-share blur', async () => {
+    await blsi.Model.set_screen_share_active(7);
+    const sharing = blsi.Model.resolve('example.com', 'https://example.com/', 7);
+    expect(sharing.automate_blur_triggers.screen_share).toBe(false);
+    const other = blsi.Model.resolve('example.com', 'https://example.com/', 8);
+    expect(other.automate_blur_triggers.screen_share).toBe(true);
+  });
+
+  test('resolve: feature disabled silences screen-share blur even when record is active', async () => {
+    await blsi.Model.patch_section('automate', { settings: { screen_share: { enabled: false } } });
+    await blsi.Model.set_screen_share_active(7);
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 8);
+    expect(r.automate_blur_triggers.screen_share).toBe(false);
+    expect(r.automate_blur_active).toBe(false);
+  });
+
+  test('suppress_screen_share("site_session") silences screen-share for that hostname only', async () => {
+    await blsi.Model.set_screen_share_active(7);
+    await blsi.Model.suppress_screen_share('site_session', { hostname: 'example.com' });
+    const a = blsi.Model.resolve('example.com', 'https://example.com/', 8);
+    const b = blsi.Model.resolve('other.test',  'https://other.test/',   8);
+    expect(a.automate_blur_triggers.screen_share).toBe(false);
+    expect(a.screen_share_suppressed_for_host).toBe(true);
+    expect(b.automate_blur_triggers.screen_share).toBe(true);
+  });
+
+  test('suppress_screen_share("tab") silences ALL automate triggers for that tab', async () => {
+    await blsi.Model.set_screen_share_active(7);
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    await blsi.Model.suppress_screen_share('tab', { tab_id: 8 });
+    const me = blsi.Model.resolve('example.com', 'https://example.com/', 8);
+    expect(me.automate_blur_triggers.screen_share).toBe(false);
+    expect(me.automate_blur_triggers.idle).toBe(false);
+    expect(me.screen_share_suppressed_for_tab).toBe(true);
+    // Other tab still affected.
+    const other = blsi.Model.resolve('example.com', 'https://example.com/', 9);
+    expect(other.automate_blur_triggers.screen_share).toBe(true);
+    expect(other.automate_blur_triggers.idle).toBe(true);
+  });
+
+  test('suppress_screen_share("feature") flips enabled flag AND clears the session record', async () => {
+    await blsi.Model.set_screen_share_active(7);
+    await blsi.Model.suppress_screen_share('feature', {});
+    const m = blsi.Model.get();
+    expect(m.automate.settings.screen_share.enabled).toBe(false);
+    const ss = blsi.Model.get_screen_share_state();
+    expect(ss.active).toBe(false);
+  });
+
+  test('unsuppress_screen_share reverses tab + site_session suppressions', async () => {
+    await blsi.Model.set_screen_share_active(7);
+    await blsi.Model.suppress_screen_share('site_session', { hostname: 'example.com' });
+    await blsi.Model.suppress_screen_share('tab', { tab_id: 8 });
+    await blsi.Model.unsuppress_screen_share('site_session', { hostname: 'example.com' });
+    await blsi.Model.unsuppress_screen_share('tab', { tab_id: 8 });
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 8);
+    expect(r.automate_blur_triggers.screen_share).toBe(true);
+    expect(r.screen_share_suppressed_for_host).toBe(false);
+    expect(r.screen_share_suppressed_for_tab).toBe(false);
+  });
+
+  test('set_screen_share_active resets per-tab suppression list (mitigates tab-id reuse)', async () => {
+    await blsi.Model.set_screen_share_active(7);
+    await blsi.Model.suppress_screen_share('tab', { tab_id: 8 });
+    expect(blsi.Model.get_suppressed_tabs()).toContain(8);
+    // New share starts — stale entries cleared so a recycled tab id can't carry over.
+    await blsi.Model.set_screen_share_active(99);
+    expect(blsi.Model.get_suppressed_tabs()).toEqual([]);
+  });
+
+  test('resolve: skip_reason is "site_rule" when an exact rule blurs and ss is also live', async () => {
+    await blsi.Model.set_site_entry('example.com', { blur_all: true, snapshot: { blur_all: { settings: { blur_mode: 'redacted' } } } });
+    await blsi.Model.set_screen_share_active(7);
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 8);
+    expect(r.automate_blur_skipped).toBe(true);
+    expect(r.automate_blur_skip_reason).toBe('site_rule');
+  });
+});
+
+// ── automate_blur shape migration (legacy screen_share sub-key strip) ────────
+describe('automate_blur shape migration', () => {
+  test('init_cache strips legacy screen_share sub-key from existing session entries', async () => {
+    mockSet();
+    blsi.Model._reset_cache();
+    const m = blsi.build_default_model();
+    mockGet(m);
+    // Seed legacy shape directly into the session mock.
+    const legacy = { 'example.com': { idle: true, tab_switch: false, screen_share: true } };
+    chrome.storage.session.get.mockImplementation((key, cb) => {
+      if (key === 'blsi_automate_blur') return cb({ blsi_automate_blur: legacy });
+      cb({});
+    });
+    await blsi.Model.init_cache();
+    const entry = blsi.Model.get_automate_blur('example.com');
+    expect(entry.idle).toBe(true);
+    expect(entry.tab_switch).toBe(false);
+    expect(entry).not.toHaveProperty('screen_share');
+  });
 });
 
 // ── capture_snapshot ──────────────────────────────────────────────────────────

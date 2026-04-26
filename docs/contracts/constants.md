@@ -31,8 +31,8 @@ Background → content script (command relay + context menu) **and** content →
 | `toggle_panel` | `'TOGGLE_PANEL'` | bg → content (PWA) |
 | `screen_share_started` | `'SCREEN_SHARE_STARTED'` | content → bg |
 | `screen_share_ended` | `'SCREEN_SHARE_ENDED'` | content → bg |
-| `screen_share_blur` | `'SCREEN_SHARE_BLUR'` | bg → content (other tabs) |
-| `screen_share_unblur` | `'SCREEN_SHARE_UNBLUR'` | bg → content (all tabs) |
+| `screen_share_notify` | `'SCREEN_SHARE_NOTIFY'` | bg → content (broadcast — toast ping; tabs re-resolve from session storage) |
+| `who_am_i` | `'WHO_AM_I'` | content → bg (replies with `sender.tab.id` so content can self-identify) |
 
 ### `popup` (Object, frozen)
 

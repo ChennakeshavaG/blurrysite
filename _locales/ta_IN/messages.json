@@ -903,17 +903,14 @@
   "automate_turn_off": {
     "message": "முடக்கு"
   },
-  "automate_stop_screen_share": {
-    "message": "திரை பகிர்வு மங்கலை நிறுத்து"
-  },
   "automate_stop_per_tab": {
     "message": "இந்த தாவல்"
   },
-  "automate_stop_per_domain": {
-    "message": "இந்த தளம்"
+  "automate_stop_site_session": {
+    "message": "இந்த தளம் (அமர்வு)"
   },
   "automate_disable_feature": {
-    "message": "முடக்கு"
+    "message": "அம்சத்தை முடக்கு"
   },
   "automate_toast_screen_share": {
     "message": "மங்கல் பயன்படுத்தப்பட்டது — திரை பகிர்வு செயலில்"
@@ -926,5 +923,29 @@
   },
   "automate_toast_skipped": {
     "message": "மங்கல் ஏற்கனவே செயலில் — தானியங்கு தவிர்க்கப்பட்டது"
+  },
+  "notif_screen_share_active": {
+    "message": "திரை பகிர்வு செயலில்"
+  },
+  "notif_sharing_for": {
+    "message": "பகிர்ந்து"
+  },
+  "notif_skipped_reason_site_rule": {
+    "message": "மங்கல் ஏற்கனவே செயலில் (தள விதி)"
+  },
+  "notif_skipped_reason_manual": {
+    "message": "மங்கல் ஏற்கனவே செயலில்"
+  },
+  "notif_skipped_reason_pick_blur": {
+    "message": "தேர்ந்தெடு மற்றும் மங்கல் ஏற்கனவே செயலில்"
+  },
+  "notif_suppressed_for_tab": {
+    "message": "இந்த தாவலுக்கு அடக்கப்பட்டது"
+  },
+  "notif_suppressed_for_site": {
+    "message": "இந்த தளத்திற்கு அடக்கப்பட்டது"
+  },
+  "notif_suppressed_undo": {
+    "message": "மீளமை"
   }
 }

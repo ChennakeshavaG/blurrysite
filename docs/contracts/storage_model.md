@@ -2,17 +2,21 @@
 
 ## Overview
 
-Single source of truth for extension persistent state. Accesses `chrome.storage.local` (key: `blsi_model`) and `chrome.storage.session` (key: `blsi_automate_blur`) directly — no background relay. Maintains in-memory caches (`_cache`, `_automate_cache`) that mirror storage. `_write()` validates before persisting and rolls back the cache on failure. `resolve()` computes derived settings including `blur_all_active`. Single pub-sub subscriber via `on_change`.
+Single source of truth for extension persistent state. Accesses `chrome.storage.local` (key: `blsi_model`) and `chrome.storage.session` (keys: `blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly — no background relay. Maintains in-memory caches (`_cache`, `_automate_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`) that mirror storage. `_write()` validates before persisting and rolls back the cache on failure. `resolve(hostname, url, tab_id?)` computes derived settings including `blur_all_active`, screen-share trigger state, and suppression flags. Single pub-sub subscriber via `on_change`.
 
 ## Module State
 
 | Variable | Description |
 |---|---|
 | `_cache` | `Object\|null` — full `blsi_model` in-memory; null before `init_cache()` |
-| `_automate_cache` | `Object` — mirrors `blsi_automate_blur` session storage |
+| `_automate_cache` | `Object` — mirrors `blsi_automate_blur` session storage; per-hostname `{ idle, tab_switch }` only |
+| `_screen_share_cache` | `Object` — mirrors `blsi_screen_share` session storage; single global record `{ active, sharing_tab_id, started_at, suppressed_sites }` |
+| `_suppressed_tabs_cache` | `number[]` — mirrors `blsi_automate_suppressed_tabs` session storage; tab ids silenced for ALL automate triggers |
 | `_on_change` | `Function\|null` — single storage-change subscriber |
 | `STORAGE_KEY` | `'blsi_model'` |
 | `AUTOMATE_SESSION_KEY` | `'blsi_automate_blur'` |
+| `SCREEN_SHARE_SESSION_KEY` | `'blsi_screen_share'` |
+| `SUPPRESSED_TABS_SESSION_KEY` | `'blsi_automate_suppressed_tabs'` |
 | `ITEM_LIMIT` | `10` — max blur items per hostname |
 | `RULES_LIMIT` | `200` — max non-exact site rules |
 
@@ -20,10 +24,10 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 
 ### init_cache()
 
-**What**: Loads `blsi_model` from local storage and `blsi_automate_blur` from session into caches. Must be called once before any `get()` or `patch_section()`.  
+**What**: Loads `blsi_model` from local storage and the three session-storage keys (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) into caches. Must be called once before any `get()` or `patch_section()`.  
 **Returns**: `Promise<void>`  
-**Side effects**: Populates `_cache` (validates + migrates via `blsi.validate_model`); populates `_automate_cache`; writes back if migration changed the model.  
-**Handles**: Empty storage → seeds from `blsi.build_default_model()`.
+**Side effects**: Populates `_cache` (validates + migrates via `blsi.validate_model`); populates `_automate_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`; writes back if migration changed the model. **Migration**: strips legacy `screen_share` sub-key (and any resulting empty entries) from `_automate_cache` and writes back once — that state now lives in the screen-share session record.  
+**Handles**: Empty storage → seeds from `blsi.build_default_model()`. Missing session keys default to `{}` / `_default_screen_share_state()` / `[]`.
 
 ### on_change(listener)
 
@@ -37,26 +41,39 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 **What**: Returns the full cached model (no I/O).  
 **Returns**: `Object` — the current `_cache`; returns `blsi.build_default_model()` if `_cache` is null (before init).
 
-### resolve(hostname, url)
+### resolve(hostname, url, tab_id?)
 
-**What**: Computes effective resolved settings for a hostname/URL via 9-step ordered merge.  
-**Params**: `hostname` (string), `url` (string)  
-**Returns**: Flat resolved settings object — all settings keys flattened, plus derived keys  
+**What**: Computes effective resolved settings for a hostname/URL/tab via ordered merge.  
+**Params**: `hostname` (string), `url` (string), `tab_id` (number|null|undefined — optional). When `tab_id` is provided, per-tab automate suppression and the sharing-tab self-skip are applied. Popup callers should pass the active tab id; popup paths that don't have one pass `null` and accept hostname-level state only.  
+**Returns**: Flat resolved settings object — all settings keys flattened, plus derived keys.  
 **Merge order** (later entries override earlier):
 1. `blsi.DEFAULT_MODEL` values
 2. `global_default_settings`
 3. Feature section settings (blur_all, pick_and_blur, auto_detect_pii, automate)
 4. Wildcard/regex site rule match (first match wins)
 5. Exact hostname site rule
-6. Automate blur state from `_automate_cache`
+6. Automate blur state — `_automate_cache[hostname]` (idle/tab_switch) and `_screen_share_cache` (single global record) with per-tab and per-site suppression applied
 7. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
 8. Snapshot application (if site rule has a snapshot)
 9. Derived key computation
 
-**Derived keys on output**: `blur_all_active`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `_rule_overrides`, `_rule_match`  
-**`blur_all_active`**: `manual_blur || automate_any` where `automate_any = idle || tab_switch || screen_share`  
-**`_rule_overrides`**: `{ [flat_key]: true }` map listing every resolved field that came from a site rule snapshot (e.g. `{ pii_email: true, automate_screen_share: true, blur_mode: true }`). Used by popup to render "Managed by site rule" badges + read-only controls; used by content_script to append `(site rule)` to toasts. Empty `{}` when no rule matched.  
-**`_rule_match`**: `{ hostname_value, hostname_type } | null` — the rule whose snapshot fed `_rule_overrides`. Exact-rule match wins over wildcard/regex when both apply. Used to deep-link from the popup badge to the matching rule card.
+**Screen-share trigger** (`automate_blur_triggers.screen_share`):
+
+```
+ss_blur_for_me_raw = ss.active
+                     && tab_id !== ss.sharing_tab_id
+                     && !ss.suppressed_sites.includes(hostname)
+                     && model.automate.settings.screen_share.enabled
+ss_blur_for_me     = !suppressed_tabs.includes(tab_id) && ss_blur_for_me_raw
+```
+
+Per-tab suppression silences all three triggers for that tab; per-site suppression silences screen-share only.
+
+**Derived keys on output**: `blur_all_active`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab`, `_rule_overrides`, `_rule_match`.  
+**`blur_all_active`**: `manual_blur || (automate_blur_active && !blur_present)`.  
+**`automate_blur_skip_reason`**: `'site_rule' | 'manual' | 'pick_blur' | null`. Set when `automate_blur_skipped === true`; ordered priority site_rule > manual > pick_blur.  
+**`screen_share_state`**: `{ active, sharing_tab_id, started_at, is_sharing_tab }` — passed to popup notif card for the "sharing for Xm" label.  
+**`_rule_overrides`** / **`_rule_match`**: same as before; used by popup for "Managed by site rule" badges and deep-linking.
 
 ### patch_section(section, delta)
 
@@ -157,29 +174,90 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 
 ### get_automate_blur(hostname)
 
-**What**: Returns the current automate trigger state for a hostname.  
+**What**: Returns the current per-hostname automate trigger state (idle + tab_switch only).  
 **Params**: `hostname` (string)  
-**Returns**: `{ idle: bool, tab_switch: bool, screen_share: bool }` from `_automate_cache`  
+**Returns**: `{ idle: bool, tab_switch: bool }` from `_automate_cache`. **No `screen_share` key** — that state lives in the global session record (see `get_screen_share_state`).  
 **Synchronous** — no I/O.
 
 ### save_automate_blur(hostname, trigger, bool)
 
 **What**: Writes one automate trigger to session storage.  
-**Params**: `hostname` (string), `trigger` (`'idle'|'tab_switch'|'screen_share'`), `bool` (boolean)  
+**Params**: `hostname` (string), `trigger` (`'idle'|'tab_switch'`), `bool` (boolean)  
 **Returns**: `Promise<void>`  
-**Handles**: Invalid trigger → logged warning, no-op; merges into existing entry (preserves other triggers).
+**Handles**: `'screen_share'` and any other unknown trigger → no-op (rejected). Use `set_screen_share_active` / `set_screen_share_inactive` for screen-share state.
 
 ### patch_automate_blur(hostname, patch)
 
 **What**: Batch-writes multiple triggers in one session storage write.  
-**Params**: `hostname` (string), `patch` (`{idle?, tab_switch?, screen_share?}`)  
+**Params**: `hostname` (string), `patch` (`{idle?, tab_switch?}`)  
 **Returns**: `Promise<void>`  
-**Handles**: Silently ignores invalid keys in patch.
+**Handles**: Silently ignores invalid keys in patch (including `screen_share`).
 
 ### clear_automate_blur(hostname)
 
 **What**: Removes all automate_blur state for a hostname from session storage.  
 **Returns**: `Promise<void>`
+
+### get_screen_share_state()
+
+**What**: Returns the global screen-share session record (single source of truth).  
+**Returns**: `{ active, sharing_tab_id, started_at, suppressed_sites }` — copy of `_screen_share_cache` (suppressed_sites array cloned).  
+**Synchronous** — no I/O.
+
+### set_screen_share_active(sharing_tab_id)
+
+**What**: Mark a screen share as active. Each new share starts with cleared suppression maps so a stale per-site suppression from a prior share never silently carries over. Also clears the global per-tab suppression list to mitigate Chrome tab-id reuse on closed tabs.  
+**Params**: `sharing_tab_id` (number|null)  
+**Returns**: `Promise<void>`  
+**Side effects**: Writes both `blsi_screen_share` and `blsi_automate_suppressed_tabs` session keys.
+
+### set_screen_share_inactive()
+
+**What**: Reset the screen-share record to its empty default.  
+**Returns**: `Promise<void>`
+
+### suppress_screen_share(scope, ctx)
+
+**What**: Suppress screen-share blur at a chosen scope.  
+**Params**:  
+- `scope`: `'tab' | 'site_session' | 'feature'`  
+- `ctx`: `{ hostname?, tab_id? }`  
+
+**Routing**:
+- `'tab'` — push `tab_id` to `blsi_automate_suppressed_tabs` (silences ALL automate triggers for that tab, not just screen-share).  
+- `'site_session'` — push `hostname` to `blsi_screen_share.suppressed_sites[]` (screen-share only; session-scoped).  
+- `'feature'` — set `automate.settings.screen_share.enabled = false` in the model AND clear the screen-share session record.  
+
+**Returns**: `Promise<void>`  
+**Handles**: No-op if the value is already suppressed at that scope; invalid hostnames / tab ids → no-op.
+
+### unsuppress_screen_share(scope, ctx)
+
+**What**: Reverse a prior `suppress_screen_share` at the same scope.  
+**Params**: same shape as `suppress_screen_share`.  
+**Returns**: `Promise<void>`.
+
+### get_suppressed_tabs()
+
+**What**: Returns the current list of tab ids silenced for ALL automate triggers.  
+**Returns**: `number[]` (copy of cache).  
+**Synchronous**.
+
+### add_suppressed_tab(tab_id)
+
+**What**: Low-level write — push a tab id into the global suppression list.  
+**Params**: `tab_id` (number).  
+**Returns**: `Promise<void>` (no-op for non-numbers / already-suppressed ids).
+
+### remove_suppressed_tab(tab_id)
+
+**What**: Inverse of `add_suppressed_tab`. Used by `chrome.tabs.onRemoved` cleanup in `background.js` and by popup Undo affordance.  
+**Returns**: `Promise<void>`.
+
+### clear_suppressed_tabs()
+
+**What**: Empty the per-tab suppression list.  
+**Returns**: `Promise<void>` — no-op when already empty.
 
 ### clear_host(hostname)
 

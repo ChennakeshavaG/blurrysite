@@ -18,12 +18,25 @@ const StorageModel = (() => {
 
   const STORAGE_KEY = "blsi_model";
   const AUTOMATE_SESSION_KEY = "blsi_automate_blur";
+  const SCREEN_SHARE_SESSION_KEY = "blsi_screen_share";
+  const SUPPRESSED_TABS_SESSION_KEY = "blsi_automate_suppressed_tabs";
   const ITEM_LIMIT = 10;
   const RULES_LIMIT = 200;
 
+  function _default_screen_share_state() {
+    return {
+      active: false,
+      sharing_tab_id: null,
+      started_at: null,
+      suppressed_sites: [],
+    };
+  }
+
   // ── Private state ──────────────────────────────────────────────────────────
   var _cache = null; // null = not yet initialised
-  var _automate_cache = {}; // mirrors chrome.storage.session blsi_automate_blur
+  var _automate_cache = {}; // mirrors chrome.storage.session blsi_automate_blur — { idle, tab_switch } only
+  var _screen_share_cache = _default_screen_share_state();
+  var _suppressed_tabs_cache = []; // array of tab ids — silences ALL automate triggers per tab
   var _on_change = null; // function(newModel, oldModel) | null
 
   // ── Storage I/O ────────────────────────────────────────────────────────────
@@ -50,23 +63,23 @@ const StorageModel = (() => {
   }
 
   // automate_blur lives in session storage — auto-cleared on browser close/crash
-  function _session_get() {
+  function _session_get_key(key, fallback) {
     return new Promise(function (resolve) {
       if (chrome.storage && chrome.storage.session) {
-        chrome.storage.session.get(AUTOMATE_SESSION_KEY, function (r) {
-          resolve((r && r[AUTOMATE_SESSION_KEY]) || {});
+        chrome.storage.session.get(key, function (r) {
+          resolve(r && r[key] !== undefined ? r[key] : fallback);
         });
       } else {
-        resolve({});
+        resolve(fallback);
       }
     });
   }
 
-  function _session_set(data) {
+  function _session_set_key(key, value) {
     return new Promise(function (resolve, reject) {
       if (chrome.storage && chrome.storage.session) {
         var payload = {};
-        payload[AUTOMATE_SESSION_KEY] = data;
+        payload[key] = value;
         chrome.storage.session.set(payload, function () {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
@@ -119,14 +132,79 @@ const StorageModel = (() => {
   }
 
   // Writes automate session data; rolls back _automate_cache on failure.
-  async function _session_write(data) {
+  async function _session_write_automate(data) {
     var prev = _automate_cache;
     try {
-      await _session_set(data);
+      await _session_set_key(AUTOMATE_SESSION_KEY, data);
     } catch (e) {
       _automate_cache = prev;
       console.warn("[blsi] session write failed:", e.message);
     }
+  }
+
+  async function _session_write_screen_share(data) {
+    var prev = _screen_share_cache;
+    try {
+      await _session_set_key(SCREEN_SHARE_SESSION_KEY, data);
+    } catch (e) {
+      _screen_share_cache = prev;
+      console.warn("[blsi] screen-share session write failed:", e.message);
+    }
+  }
+
+  async function _session_write_suppressed_tabs(data) {
+    var prev = _suppressed_tabs_cache;
+    try {
+      await _session_set_key(SUPPRESSED_TABS_SESSION_KEY, data);
+    } catch (e) {
+      _suppressed_tabs_cache = prev;
+      console.warn("[blsi] suppressed-tabs session write failed:", e.message);
+    }
+  }
+
+  function _normalize_automate_entry(raw) {
+    var src = raw && typeof raw === "object" ? raw : {};
+    // Strip legacy `screen_share` sub-key — screen-share state lives in
+    // SCREEN_SHARE_SESSION_KEY now. Preserve only idle + tab_switch.
+    return { idle: !!src.idle, tab_switch: !!src.tab_switch };
+  }
+
+  function _normalize_automate_map(raw) {
+    var src = raw && typeof raw === "object" ? raw : {};
+    var out = {};
+    var dirty = false;
+    for (var host in src) {
+      if (!Object.prototype.hasOwnProperty.call(src, host)) continue;
+      var entry = src[host];
+      var norm = _normalize_automate_entry(entry);
+      // Drop entries that became empty after stripping screen_share.
+      if (!norm.idle && !norm.tab_switch) { dirty = true; continue; }
+      // Detect any shape change (extra keys, screen_share sub-key, etc.).
+      if (entry && (entry.screen_share !== undefined ||
+          Object.keys(entry).length !== 2 ||
+          entry.idle !== norm.idle || entry.tab_switch !== norm.tab_switch)) {
+        dirty = true;
+      }
+      out[host] = norm;
+    }
+    return { map: out, dirty: dirty };
+  }
+
+  function _normalize_screen_share(raw) {
+    var src = raw && typeof raw === "object" ? raw : {};
+    return {
+      active: !!src.active,
+      sharing_tab_id: typeof src.sharing_tab_id === "number" ? src.sharing_tab_id : null,
+      started_at: typeof src.started_at === "number" ? src.started_at : null,
+      suppressed_sites: Array.isArray(src.suppressed_sites)
+        ? src.suppressed_sites.filter(function (s) { return typeof s === "string" && s; })
+        : [],
+    };
+  }
+
+  function _normalize_suppressed_tabs(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(function (n) { return typeof n === "number" && Number.isFinite(n); });
   }
 
   // ── Storage listener ───────────────────────────────────────────────────────
@@ -139,12 +217,30 @@ const StorageModel = (() => {
       if (_on_change) _on_change(_cache, old_model);
     }
 
-    if (area === "session" && AUTOMATE_SESSION_KEY in changes) {
-      var new_automate = changes[AUTOMATE_SESSION_KEY].newValue || {};
-      if (_deep_equal(_automate_cache, new_automate)) return; // self-echo
-      _automate_cache = new_automate;
-      // Model unchanged — pass (cache, cache) so subscriber re-resolves automate state
-      if (_on_change) _on_change(_cache, _cache);
+    if (area === "session") {
+      var fired = false;
+      if (AUTOMATE_SESSION_KEY in changes) {
+        var na = _normalize_automate_map(changes[AUTOMATE_SESSION_KEY].newValue || {}).map;
+        if (!_deep_equal(_automate_cache, na)) {
+          _automate_cache = na;
+          fired = true;
+        }
+      }
+      if (SCREEN_SHARE_SESSION_KEY in changes) {
+        var nss = _normalize_screen_share(changes[SCREEN_SHARE_SESSION_KEY].newValue || _default_screen_share_state());
+        if (!_deep_equal(_screen_share_cache, nss)) {
+          _screen_share_cache = nss;
+          fired = true;
+        }
+      }
+      if (SUPPRESSED_TABS_SESSION_KEY in changes) {
+        var nst = _normalize_suppressed_tabs(changes[SUPPRESSED_TABS_SESSION_KEY].newValue || []);
+        if (!_deep_equal(_suppressed_tabs_cache, nst)) {
+          _suppressed_tabs_cache = nst;
+          fired = true;
+        }
+      }
+      if (fired && _on_change) _on_change(_cache, _cache);
     }
   });
 
@@ -159,7 +255,19 @@ const StorageModel = (() => {
     } else {
       await _write(blsi.build_default_model()); // seed write
     }
-    _automate_cache = await _session_get();
+    var raw_automate = await _session_get_key(AUTOMATE_SESSION_KEY, {});
+    var norm_automate = _normalize_automate_map(raw_automate);
+    _automate_cache = norm_automate.map;
+    if (norm_automate.dirty) {
+      // One-time migration write: strip legacy `screen_share` sub-keys + empty entries.
+      await _session_write_automate(_automate_cache);
+    }
+    _screen_share_cache = _normalize_screen_share(
+      await _session_get_key(SCREEN_SHARE_SESSION_KEY, _default_screen_share_state())
+    );
+    _suppressed_tabs_cache = _normalize_suppressed_tabs(
+      await _session_get_key(SUPPRESSED_TABS_SESSION_KEY, [])
+    );
   }
 
   /**
@@ -480,9 +588,12 @@ const StorageModel = (() => {
    *
    * @param {string} hostname  e.g. 'example.com'
    * @param {string} url       Full URL for wildcard/regex rule matching
+   * @param {number|null} [tab_id]  Optional. When provided, per-tab automate
+   *   suppression and per-tab sharing-tab identity are honored. Pass null
+   *   from popup callers if active tab id is unknown.
    * @returns {object} Flat resolved settings object
    */
-  function resolve(hostname, url) {
+  function resolve(hostname, url, tab_id) {
     var m = get();
     var resolved = {};
 
@@ -570,33 +681,63 @@ const StorageModel = (() => {
 
     // ── 10. automate active state (session cache) ─────────────────────────
     var automate_entry = (_automate_cache || {})[hostname] || {};
-    resolved.automate_blur_active = !!(
-      automate_entry.idle ||
-      automate_entry.tab_switch ||
-      automate_entry.screen_share
-    );
+    var has_tab_id = typeof tab_id === "number" && Number.isFinite(tab_id);
+    var tab_suppressed = has_tab_id && _suppressed_tabs_cache.indexOf(tab_id) >= 0;
+
+    var idle_raw = !!automate_entry.idle;
+    var tab_switch_raw = !!automate_entry.tab_switch;
+
+    // Screen-share: derived from single global record + suppression maps.
+    var ss = _screen_share_cache || _default_screen_share_state();
+    var ss_feature_enabled = !!(resolved.automate_screen_share && resolved.automate_screen_share.enabled);
+    var ss_site_suppressed = ss.suppressed_sites.indexOf(hostname) >= 0;
+    var ss_is_sharing_tab = has_tab_id && ss.sharing_tab_id === tab_id;
+    var ss_blur_raw =
+      ss.active &&
+      ss_feature_enabled &&
+      !ss_site_suppressed &&
+      !ss_is_sharing_tab;
+
+    var idle_eff = !tab_suppressed && idle_raw;
+    var tab_switch_eff = !tab_suppressed && tab_switch_raw;
+    var ss_eff = !tab_suppressed && ss_blur_raw;
+
+    resolved.automate_blur_active = !!(idle_eff || tab_switch_eff || ss_eff);
     resolved.automate_blur_triggers = {
-      idle: !!automate_entry.idle,
-      tab_switch: !!automate_entry.tab_switch,
-      screen_share: !!automate_entry.screen_share,
+      idle: idle_eff,
+      tab_switch: tab_switch_eff,
+      screen_share: ss_eff,
+    };
+    resolved.screen_share_suppressed_for_host = ss_site_suppressed;
+    resolved.screen_share_suppressed_for_tab = tab_suppressed;
+    resolved.screen_share_state = {
+      active: ss.active,
+      sharing_tab_id: ss.sharing_tab_id,
+      started_at: ss.started_at,
+      is_sharing_tab: ss_is_sharing_tab,
     };
 
     // blur_all_active — exact.blur_all overrides global; null = inherit global.
-    // Automate applies blur only when neither blur-all nor pick-and-blur is
-    // already active. When it does apply, default settings are used so it
-    // never overwrites the user's intentional blur configuration.
     var manual_blur = exact
       ? exact.blur_all !== null
         ? !!exact.blur_all
         : m.blur_all.status
       : m.blur_all.status;
-    var blur_present = manual_blur || m.pick_and_blur.status;
+    var pick_blur_present = m.pick_and_blur.status;
+    var blur_present = manual_blur || pick_blur_present;
     var automate_needs_blur = resolved.automate_blur_active && !blur_present;
 
     resolved.blur_all_active = manual_blur || automate_needs_blur;
     resolved.automate_blur_only = !!automate_needs_blur;
     resolved.automate_blur_skipped =
       resolved.automate_blur_active && !!blur_present;
+    resolved.automate_blur_skip_reason = !resolved.automate_blur_skipped
+      ? null
+      : resolved._rule_match
+      ? "site_rule"
+      : manual_blur
+      ? "manual"
+      : "pick_blur";
 
     if (automate_needs_blur) {
       var def = blsi.DEFAULT_MODEL;
@@ -740,36 +881,32 @@ const StorageModel = (() => {
   }
 
   // ── Automate blur ──────────────────────────────────────────────────────────
+  // Hostname-keyed { idle, tab_switch } only. Screen-share state lives in
+  // SCREEN_SHARE_SESSION_KEY (single global record) — see methods below.
 
   async function save_automate_blur(hostname, trigger, is_active) {
     if (!_is_valid_hostname(hostname)) return;
-    var valid = { idle: true, tab_switch: true, screen_share: true };
+    var valid = { idle: true, tab_switch: true };
     if (!valid[trigger]) return;
     var ab = Object.assign({}, _automate_cache || {});
-    var entry = Object.assign(
-      { idle: false, tab_switch: false, screen_share: false },
-      ab[hostname] || {},
-    );
+    var entry = Object.assign({ idle: false, tab_switch: false }, ab[hostname] || {});
     entry[trigger] = !!is_active;
     ab[hostname] = entry;
     _automate_cache = ab; // update in-memory cache immediately (self-echo guard in onChanged)
-    await _session_write(ab);
+    await _session_write_automate(ab);
   }
 
   async function patch_automate_blur(hostname, patch) {
     if (!_is_valid_hostname(hostname)) return;
     var ab = Object.assign({}, _automate_cache || {});
-    var entry = Object.assign(
-      { idle: false, tab_switch: false, screen_share: false },
-      ab[hostname] || {},
-    );
-    var valid = { idle: true, tab_switch: true, screen_share: true };
+    var entry = Object.assign({ idle: false, tab_switch: false }, ab[hostname] || {});
+    var valid = { idle: true, tab_switch: true };
     for (var k in patch) {
       if (valid[k]) entry[k] = !!patch[k];
     }
     ab[hostname] = entry;
     _automate_cache = ab;
-    await _session_write(ab);
+    await _session_write_automate(ab);
   }
 
   async function clear_automate_blur(hostname) {
@@ -777,16 +914,135 @@ const StorageModel = (() => {
     var ab = Object.assign({}, _automate_cache || {});
     delete ab[hostname];
     _automate_cache = ab;
-    await _session_write(ab);
+    await _session_write_automate(ab);
   }
 
   function get_automate_blur(hostname) {
     var entry = (_automate_cache || {})[hostname] || {};
+    return { idle: !!entry.idle, tab_switch: !!entry.tab_switch };
+  }
+
+  // ── Screen-share session state (single global record) ─────────────────────
+
+  function get_screen_share_state() {
+    var s = _screen_share_cache || _default_screen_share_state();
     return {
-      idle: !!entry.idle,
-      tab_switch: !!entry.tab_switch,
-      screen_share: !!entry.screen_share,
+      active: !!s.active,
+      sharing_tab_id: typeof s.sharing_tab_id === "number" ? s.sharing_tab_id : null,
+      started_at: typeof s.started_at === "number" ? s.started_at : null,
+      suppressed_sites: s.suppressed_sites.slice(),
     };
+  }
+
+  /**
+   * Mark a screen share as active. Each new share starts with cleared
+   * suppression maps so a stale per-site suppress from a previous share never
+   * silently carries over. Also clears the global per-tab suppression list to
+   * mitigate Chrome tab-id reuse on closed tabs.
+   */
+  async function set_screen_share_active(sharing_tab_id) {
+    var next = {
+      active: true,
+      sharing_tab_id: typeof sharing_tab_id === "number" ? sharing_tab_id : null,
+      started_at: Date.now(),
+      suppressed_sites: [],
+    };
+    _screen_share_cache = next;
+    _suppressed_tabs_cache = [];
+    await Promise.all([
+      _session_write_screen_share(next),
+      _session_write_suppressed_tabs([]),
+    ]);
+  }
+
+  async function set_screen_share_inactive() {
+    var next = _default_screen_share_state();
+    _screen_share_cache = next;
+    await _session_write_screen_share(next);
+  }
+
+  function get_suppressed_tabs() {
+    return _suppressed_tabs_cache.slice();
+  }
+
+  /**
+   * Add a tab id to the global per-tab automate suppression list. Affects
+   * ALL automate triggers (idle, tab_switch, screen_share) for that tab.
+   * No-op if tab_id is already suppressed or not a number.
+   */
+  async function add_suppressed_tab(tab_id) {
+    if (typeof tab_id !== "number" || !Number.isFinite(tab_id)) return;
+    if (_suppressed_tabs_cache.indexOf(tab_id) >= 0) return;
+    var next = _suppressed_tabs_cache.concat([tab_id]);
+    _suppressed_tabs_cache = next;
+    await _session_write_suppressed_tabs(next);
+  }
+
+  async function remove_suppressed_tab(tab_id) {
+    if (typeof tab_id !== "number") return;
+    if (_suppressed_tabs_cache.indexOf(tab_id) < 0) return;
+    var next = _suppressed_tabs_cache.filter(function (t) { return t !== tab_id; });
+    _suppressed_tabs_cache = next;
+    await _session_write_suppressed_tabs(next);
+  }
+
+  async function clear_suppressed_tabs() {
+    if (!_suppressed_tabs_cache.length) return;
+    _suppressed_tabs_cache = [];
+    await _session_write_suppressed_tabs([]);
+  }
+
+  /**
+   * Suppress screen-share blur at a chosen scope.
+   *
+   * @param {'tab'|'site_session'|'feature'} scope
+   * @param {object} ctx — { hostname, tab_id }
+   */
+  async function suppress_screen_share(scope, ctx) {
+    ctx = ctx || {};
+    if (scope === "tab") {
+      await add_suppressed_tab(ctx.tab_id);
+      return;
+    }
+    if (scope === "site_session") {
+      if (!_is_valid_hostname(ctx.hostname)) return;
+      var ss = _screen_share_cache || _default_screen_share_state();
+      if (ss.suppressed_sites.indexOf(ctx.hostname) >= 0) return;
+      var next = Object.assign({}, ss, {
+        suppressed_sites: ss.suppressed_sites.concat([ctx.hostname]),
+      });
+      _screen_share_cache = next;
+      await _session_write_screen_share(next);
+      return;
+    }
+    if (scope === "feature") {
+      await patch_section("automate", { settings: { screen_share: { enabled: false } } });
+      await set_screen_share_inactive();
+      return;
+    }
+  }
+
+  async function unsuppress_screen_share(scope, ctx) {
+    ctx = ctx || {};
+    if (scope === "tab") {
+      await remove_suppressed_tab(ctx.tab_id);
+      return;
+    }
+    if (scope === "site_session") {
+      if (!_is_valid_hostname(ctx.hostname)) return;
+      var ss = _screen_share_cache || _default_screen_share_state();
+      if (ss.suppressed_sites.indexOf(ctx.hostname) < 0) return;
+      var next = Object.assign({}, ss, {
+        suppressed_sites: ss.suppressed_sites.filter(function (h) { return h !== ctx.hostname; }),
+      });
+      _screen_share_cache = next;
+      await _session_write_screen_share(next);
+      return;
+    }
+    if (scope === "feature") {
+      await patch_section("automate", { settings: { screen_share: { enabled: true } } });
+      return;
+    }
   }
 
   // ── URL rules ──────────────────────────────────────────────────────────────
@@ -843,6 +1099,8 @@ const StorageModel = (() => {
   function _reset_cache() {
     _cache = null;
     _automate_cache = {};
+    _screen_share_cache = _default_screen_share_state();
+    _suppressed_tabs_cache = [];
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -876,6 +1134,16 @@ const StorageModel = (() => {
     patch_automate_blur,
     clear_automate_blur,
     get_automate_blur,
+    // Screen-share session record + suppression APIs
+    get_screen_share_state,
+    set_screen_share_active,
+    set_screen_share_inactive,
+    suppress_screen_share,
+    unsuppress_screen_share,
+    get_suppressed_tabs,
+    add_suppressed_tab,
+    remove_suppressed_tab,
+    clear_suppressed_tabs,
     // URL rules
     get_rules,
     save_rules,

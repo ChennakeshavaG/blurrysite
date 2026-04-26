@@ -10,29 +10,27 @@ Depends on: `BlurrySitePopupShared.t` (i18n), `chrome.runtime.getURL` (asset URL
 
 ## Public API
 
-### renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, onClearScreenShareBlur)
+### renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, activeRule, onOpenSiteRules, ctx)
 
 **What:** Renders the complete main popup view into the fixed DOM skeleton in `popup.html`. Called after every state change. Idempotent — safe to call with identical args (re-renders in place).
 
 **Params:**
-- `settings` (object) — full resolved settings snapshot in `blsi.DEFAULT_MODEL` shape. Key paths used:
-  - `settings.global_default_settings.enabled` — extension on/off
-  - `settings.blur_all.settings.blur_mode` — active blur-all mode
-  - `settings.blur_all.settings.blur_categories` — `{ text, media, form, table, structure }` booleans
-  - `settings.pick_and_blur.settings.picker_mode` — `'dynamic'|'sticky-page'|'sticky-screen'`
-  - `settings.pick_and_blur.settings.blur_type` — `'blur'|'frosted'|'color'`
-  - `settings.pick_and_blur.settings.blur_color` — `{ hex, opacity }`
-  - `settings.auto_detect_pii.status` — master PII toggle
-  - `settings.auto_detect_pii.settings.email`, `.numeric`, `.pii_mode`, `.pii_redaction_color`
-  - `settings.automate.settings.idle`, `.tab_switch`, `.screen_share`
-  - `settings.automate_blur_active` — runtime: any automate trigger active
-  - `settings.automate_blur_triggers` — runtime: `{ idle, tab_switch, screen_share }` booleans
-  - `settings.automate_blur_skipped` — runtime: automate fired but deferred
-- `blurItems` (Array) — array of pick-and-blur items for current hostname. Each item: `{ type: 'dynamic'|'sticky', name, selectors?, selector?, id?, anchor? }`.
+- `settings` (object) — full resolved settings snapshot in `blsi.DEFAULT_MODEL` shape, plus runtime extras:
+  - `settings.automate_blur_active`, `automate_blur_triggers`, `automate_blur_skipped`
+  - `settings.automate_blur_skip_reason` — `'site_rule' | 'manual' | 'pick_blur' | null`
+  - `settings.screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }`
+  - `settings.screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab` — booleans
+- `blurItems` (Array) — array of pick-and-blur items for current hostname.
 - `isPageBlurred` (boolean) — whether blur-all is on for current hostname.
-- `onSave` (function) — `(patch) => void` — called when user changes a setting. `patch` is a model-shaped object (top-level keys matching `blsi.DEFAULT_MODEL` sections).
-- `onClearAutomate` (function) — `() => void` — called when user clicks "Clear" on the automate active indicator.
-- `onClearScreenShareBlur` (function) — `() => void` — called when user clicks "Clear" on the screen-share stop indicator.
+- `onSave` (function) — `(patch) => void` — called when user changes a setting.
+- `onClearAutomate` (function) — `() => void` — clears idle + tab_switch automate triggers.
+- `activeRule` (object|null) — site rule currently matching this URL (drives the top pill).
+- `onOpenSiteRules` (function) — `() => void` — opens the site-rules sub-page when user clicks the rule pill's "View" button.
+- `ctx` (object) — extra callbacks + resolved data:
+  - `ctx.resolved`, `ctx.ruleOverrides`, `ctx.ruleMatch` — for "Managed by site rule" badges in PII section.
+  - `ctx.onOpenManagingRule` — deep-link from PII badge to rule.
+  - `ctx.onSuppressScreenShare(scope)` — `scope ∈ 'tab' | 'site_session' | 'feature'`. Wired to the 3-action row in the notif card.
+  - `ctx.onUnsuppressScreenShare(scope)` — wired to the Undo button shown when current scope is suppressed.
 
 **Returns:** `void`
 
@@ -63,8 +61,14 @@ Renders the list of saved pick-and-blur items into `#bl-pick-items`. Each row: c
 ### renderPiiSection(settings, onSave)
 Renders the PII detection sub-section into `#bl-pii-section` when master toggle is on.
 
-### renderAutomateIndicator(settings, onClearAutomate, onClearScreenShareBlur)
-Renders the active automate indicator banners (`#bl-automate-indicator`, `#bl-automate-indicator-screen-share`) when triggers are active.
+### renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, ctx)
+Renders into `#bl-notif-area`: site-rule pill on top (when `activeRule` truthy) and an automate **card** below. Card has three states:
+
+1. **Active + actions** — when `automate_blur_active === true`. Lists active triggers; if `triggers.screen_share`, shows a 3-button row `[This tab]`, `[This site (session)]`, `[Disable feature]`, each calling `ctx.onSuppressScreenShare(scope)`. If idle/tab_switch are active, also shows a `[Turn off]` button calling `onClearAutomate`.
+2. **Skipped + info-only** — when `automate_blur_skipped === true`. Shows "Screen share active — blur already on (reason: site rule | manual | pick_blur)". No actions; user is supposed to act on the upstream blur source.
+3. **Suppressed + Undo** — when `screen_share_suppressed_for_tab` or `screen_share_suppressed_for_host` is true. Prepends an info row with an Undo button calling `ctx.onUnsuppressScreenShare(scope)`. Per-tab suppression label takes precedence.
+
+The card hides entirely when none of `automate_blur_active`, `automate_blur_skipped`, or active suppression are true.
 
 ---
 

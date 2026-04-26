@@ -111,8 +111,9 @@ async saveSiteSnapshot(hostname_value, hostname_type, snapshot)
 async getRules()               // → rules array from storage
 
 // Automate
-async clearAutomateBlur()
-async clearScreenShareBlur()
+async clearAutomateBlur()                              // clears idle + tab_switch for current host + per-tab suppression for active tab
+async suppressScreenShare(scope)                       // scope ∈ 'tab' | 'site_session' | 'feature'
+async unsuppressScreenShare(scope)                     // inverse — used by notif card Undo
 
 // Export / Import
 exportModel()                  // returns raw blsi.Model snapshot (no runtime extras) — for JSON export
@@ -168,8 +169,10 @@ updateClearAll(settings, blurItems, isPageBlurred)
 ### BlurrySitePopupRender (renders/main.js)
 
 ```js
-renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, onClearScreenShareBlur)
-  // Renders modes block, PII section, automate section. Called after every state change.
+renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, activeRule, onOpenSiteRules, ctx)
+  // Renders modes block, PII section, notif area (site-rule pill + automate card),
+  // and automate section. ctx provides resolved/ruleOverrides/ruleMatch +
+  // onSuppressScreenShare(scope) / onUnsuppressScreenShare(scope) callbacks.
 ```
 
 ### Sub-page renderers (renders/*.js)

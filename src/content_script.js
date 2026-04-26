@@ -47,13 +47,11 @@
   let _urlChangeTimer = null;
 
   /**
-   * Per-tab screen-share blur suppression flag. Set to true when the user
-   * chooses "This tab" from the screen-share toast. Prevents future
-   * SCREEN_SHARE_BLUR messages from re-blurring this specific tab for the
-   * remainder of its lifetime. Cleared on full page navigation (content
-   * script re-runs). Not persisted to storage.
+   * Tracks whether this tab is currently rendering screen-share automate blur
+   * (per the resolved state). Used to gate toast firing — only show on the
+   * non-blurred → blurred transition, not on every NOTIFY ping.
    */
-  let _ssBlurSuppressed = false;
+  let _ssCurrentlyBlurring = false;
 
   /**
    * Top-level page hostname — used exclusively for blur_all_hosts lookup so
@@ -106,21 +104,28 @@
   /**
    * Returns the 3 screen-share-blur stop actions for the automate toast.
    * Built at call time so i18n strings are resolved after init.
+   *
+   * Scope semantics (mirrored in popup notif card):
+   *   - 'tab'           → suppress ALL automate triggers for this tab (broad).
+   *   - 'site_session'  → suppress screen-share for this hostname (session).
+   *   - 'feature'       → flip automate.settings.screen_share.enabled = false.
    */
-  function _ssBlurStopActions() {
+  async function _ssBlurStopActions() {
+    const myTabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
+      ? blsi.ScreenShare.getTabId()
+      : null;
     return [
       {
         label: chrome.i18n.getMessage('automate_stop_per_tab'),
         onClick: async () => {
-          _ssBlurSuppressed = true;
-          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await Store.suppress_screen_share('tab', { tab_id: myTabId, hostname });
           await _sync();
         },
       },
       {
-        label: chrome.i18n.getMessage('automate_stop_per_domain'),
+        label: chrome.i18n.getMessage('automate_stop_site_session'),
         onClick: async () => {
-          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await Store.suppress_screen_share('site_session', { hostname, tab_id: myTabId });
           await _sync();
         },
       },
@@ -128,8 +133,7 @@
         label: chrome.i18n.getMessage('automate_disable_feature'),
         variant: 'warn',
         onClick: async () => {
-          await Store.patch_section('automate', { settings: { screen_share: { enabled: false } } });
-          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await Store.suppress_screen_share('feature', { hostname, tab_id: myTabId });
           await _sync();
         },
       },
@@ -144,8 +148,12 @@
    * from storage when called directly (picker callbacks, message handlers).
    */
   async function _sync(preResolved) {
-    const resolved = preResolved || Store.resolve(_topHostname, location.href);
+    const tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
+      ? blsi.ScreenShare.getTabId()
+      : null;
+    const resolved = preResolved || Store.resolve(_topHostname, location.href, tabId);
     settings = resolved;
+    _ssCurrentlyBlurring = !!(resolved.automate_blur_triggers && resolved.automate_blur_triggers.screen_share);
     await Engine.handleSite(resolved);
   }
 
@@ -320,7 +328,8 @@
 
       // ── Toggle element picker ───────────────────────────────────────────
       case blsi.command.toggle_picker: {
-        const resolved = Store.resolve(_topHostname, location.href);
+        const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+        const resolved = Store.resolve(_topHostname, location.href, _tabId);
         const pickerMode = message.picker_mode || resolved.picker_mode;
         log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: pickerMode });
         if (isPickerActive) {
@@ -443,33 +452,24 @@
         break;
       }
 
-      // ── Screen share blur (from background fan-out) ─────────────────────
-      case blsi.command.screen_share_blur: {
-        if (_ssBlurSuppressed) { if (sendResponse) sendResponse({ ok: false, reason: 'tab-suppressed' }); break; }
-        const am_s = (Store.get().automate || {}).settings || {};
-        // Read trigger-enabled from resolved settings so a site rule that
-        // toggles screen_share for this host is honored.
-        const ssResolved = (settings && settings.automate_screen_share) || (am_s.screen_share || {});
-        if (ssResolved.enabled) {
-          log.flow('trigger.screenShareBlur');
-          (async () => {
-            await Store.save_automate_blur(hostname, 'screen_share', true);
-            await _sync();
-            if (settings.automate_blur_only)    Shortcuts.showToast(_toastMsg('automate_toast_screen_share', 'automate_screen_share'), 15000, _ssBlurStopActions());
-            if (settings.automate_blur_skipped) Shortcuts.showToast(_toastMsg('automate_toast_skipped', 'automate_screen_share'), 2500);
-            if (sendResponse) sendResponse({ ok: true });
-          })();
-          return true;
-        }
-        if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
-        break;
-      }
-
-      case blsi.command.screen_share_unblur: {
-        log.flow('trigger.screenShareUnblur');
+      // ── Screen share notify (background broadcast) ─────────────────────
+      // Toast trigger only — actual blur state comes from Store.resolve()
+      // which reads the session record. Storage onChanged also re-syncs in
+      // tabs that miss this message; this handler ensures the toast fires
+      // exactly once per non-blurred → blurred transition.
+      case blsi.command.screen_share_notify: {
+        log.flow('trigger.screenShareNotify');
         (async () => {
-          await Store.save_automate_blur(hostname, 'screen_share', false);
+          const wasBlurring = _ssCurrentlyBlurring;
           await _sync();
+          const nowBlurring = _ssCurrentlyBlurring;
+          if (!wasBlurring && nowBlurring) {
+            const actions = await _ssBlurStopActions();
+            Shortcuts.showToast(_toastMsg('automate_toast_screen_share', 'automate_screen_share'), 15000, actions);
+          } else if (!nowBlurring && settings && settings.automate_blur_skipped &&
+                     settings.automate_blur_skip_reason && !wasBlurring) {
+            Shortcuts.showToast(_toastMsg('automate_toast_skipped', 'automate_screen_share'), 2500);
+          }
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -664,7 +664,8 @@
   async function handleStorageChange(newModel, _oldModel) {
     if (!Engine) return;
 
-    const resolved = Store.resolve(_topHostname, location.href);
+    const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+    const resolved = Store.resolve(_topHostname, location.href, _tabId);
     const prev = { ...settings };
 
     // Detect language change for i18n re-init.
@@ -697,7 +698,8 @@
       lastUrl = currentUrl;
       try {
         const prev = { ...settings };
-        const resolved = Store.resolve(_topHostname, currentUrl);
+        const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+        const resolved = Store.resolve(_topHostname, currentUrl, _tabId);
         await applyState(resolved, prev);
       } catch (err) {
         console.warn('[BlurrySite] URL change handler error:', err.message, err.stack);
@@ -733,12 +735,21 @@
     document.dispatchEvent(new CustomEvent('bl-si-init-start'));
 
     // 1. Populate storage cache (single read of all tracked keys).
+    //    Concurrently resolve our own tab id via background WHO_AM_I so
+    //    Store.resolve() can apply per-tab automate suppression and identify
+    //    the sharing tab on initial load (mid-share catch-up).
     try {
-      await Store.init_cache();
+      await Promise.all([
+        Store.init_cache(),
+        IS_MAIN_FRAME && blsi.ScreenShare && blsi.ScreenShare.whoAmI
+          ? blsi.ScreenShare.whoAmI()
+          : Promise.resolve(),
+      ]);
     } catch (_e) { /* fall through with empty cache */ }
 
     // 2. Resolve settings for the current URL from cached model.
-    const resolved = Store.resolve(_topHostname, location.href);
+    const _initTabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+    const resolved = Store.resolve(_topHostname, location.href, _initTabId);
     settings = resolved;
 
     // 2b. Initialize the content-script i18n helper — main frame only because
@@ -786,22 +797,12 @@
     Engine.resetCounters();
     await applyState(resolved, null);
 
-    // 9b. Catch-up for tabs opened while a screen share is already active.
-    //     The fan-out on SCREEN_SHARE_STARTED only reaches tabs open at that
-    //     moment. Check the session flag background persists so we don't miss it.
-    if (IS_MAIN_FRAME) {
-      try {
-        const ss = await chrome.storage.session.get('blsi_screen_share_active');
-        const screen_share_cfg = (resolved.automate_screen_share) || {};
-        if (ss.blsi_screen_share_active && screen_share_cfg.enabled) {
-          await Store.save_automate_blur(hostname, 'screen_share', true);
-          await _sync();
-          if (settings.automate_blur_only)
-            Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _ssBlurStopActions());
-          if (settings.automate_blur_skipped)
-            Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
-        }
-      } catch (_e) {}
+    // 9b. Catch-up toast for tabs opened mid-share. resolve() already factored
+    //     the live session record during applyState; just fire the toast if
+    //     this tab landed in screen-share-blur on initial load.
+    if (IS_MAIN_FRAME && _ssCurrentlyBlurring && settings.automate_blur_only) {
+      const _initActions = await _ssBlurStopActions();
+      Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions);
     }
 
     // 9c. Show one-time PWA hint after Shortcuts is initialized (applyState

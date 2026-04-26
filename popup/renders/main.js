@@ -218,12 +218,16 @@ const BlurrySitePopupRender = (() => {
 
   // ── Notification area (site-rule + automate active pills) ─────────────────
 
-  function renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, onClearScreenShareBlur) {
+  function renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, ctx) {
     const el = document.getElementById('bl-notif-area');
     if (!el) return;
     el.replaceChildren();
 
-    // ── Site rule pill ───────────────────────────────────────────────────
+    ctx = ctx || {};
+    const onSuppressSS   = ctx.onSuppressScreenShare;
+    const onUnsuppressSS = ctx.onUnsuppressScreenShare;
+
+    // ── Site rule pill (top of stack) ────────────────────────────────────
     if (activeRule) {
       const pill = document.createElement('div');
       pill.className = 'bl-notif-pill';
@@ -246,47 +250,130 @@ const BlurrySitePopupRender = (() => {
       el.appendChild(pill);
     }
 
-    // ── Automate pill ────────────────────────────────────────────────────
-    const triggers = settings.automate_blur_triggers || {};
+    // ── Automate card (below pill) ───────────────────────────────────────
+    const triggers     = settings.automate_blur_triggers || {};
+    const skipReason   = settings.automate_blur_skip_reason || null;
+    const ssState      = settings.screen_share_state || null;
+    const ssSuppressedHost = !!settings.screen_share_suppressed_for_host;
+    const ssSuppressedTab  = !!settings.screen_share_suppressed_for_tab;
+    const ssShareLive  = !!(ssState && ssState.active);
+
+    // Surface current suppression state even when no triggers fire — user
+    // needs the Undo affordance after dismissing a toast.
+    const showCard = !!(settings.automate_blur_active || settings.automate_blur_skipped
+      || ssSuppressedHost || ssSuppressedTab);
+    if (!showCard) return;
+
+    const card = document.createElement('div');
+    card.className = 'bl-notif-card';
+
+    // Suppression status row (Undo affordance)
+    if (ssSuppressedTab && ssShareLive) {
+      card.appendChild(_suppressionRow(_t('notif_suppressed_for_tab'), function () {
+        if (onUnsuppressSS) onUnsuppressSS('tab');
+      }));
+    } else if (ssSuppressedHost && ssShareLive) {
+      card.appendChild(_suppressionRow(_t('notif_suppressed_for_site'), function () {
+        if (onUnsuppressSS) onUnsuppressSS('site_session');
+      }));
+    }
+
+    // Active triggers list
     if (settings.automate_blur_active) {
-      const pill = document.createElement('div');
-      pill.className = 'bl-notif-pill';
+      const list = document.createElement('div');
+      list.className = 'bl-notif-card__triggers';
+      if (triggers.screen_share)
+        list.appendChild(_triggerRow(_t('notif_screen_share_active'), _shareElapsed(ssState)));
+      if (triggers.idle)
+        list.appendChild(_triggerRow(_t('automate_idle'), null));
+      if (triggers.tab_switch)
+        list.appendChild(_triggerRow(_t('automate_tab_switch'), null));
+      card.appendChild(list);
+    } else if (settings.automate_blur_skipped) {
+      // Skipped (info-only — no actions).
+      const reasonKey = skipReason === 'site_rule' ? 'notif_skipped_reason_site_rule'
+        : skipReason === 'manual'    ? 'notif_skipped_reason_manual'
+        : skipReason === 'pick_blur' ? 'notif_skipped_reason_pick_blur'
+        : null;
+      const info = document.createElement('div');
+      info.className = 'bl-notif-card__info';
+      info.textContent = _t('notif_screen_share_active') +
+        (reasonKey ? ' — ' + _t(reasonKey) : '');
+      card.appendChild(info);
+    }
 
-      const dot = document.createElement('span');
-      dot.className = 'bl-notif-dot';
-      pill.appendChild(dot);
+    // Stop-screen-share action row (only when a screen-share trigger is
+    // currently active and there's no upstream skip — mirrors toast).
+    if (triggers.screen_share && onSuppressSS && !ssSuppressedTab) {
+      const actions = document.createElement('div');
+      actions.className = 'bl-notif-card__actions';
+      actions.appendChild(_cardBtn(_t('automate_stop_per_tab'),         function () { onSuppressSS('tab'); }));
+      actions.appendChild(_cardBtn(_t('automate_stop_site_session'),    function () { onSuppressSS('site_session'); }));
+      actions.appendChild(_cardBtn(_t('automate_disable_feature'),      function () { onSuppressSS('feature'); }, 'warn'));
+      card.appendChild(actions);
+    }
 
-      const activeNames = [];
-      if (triggers.idle)         activeNames.push(_t('automate_idle'));
-      if (triggers.tab_switch)   activeNames.push(_t('automate_tab_switch'));
-      if (triggers.screen_share) activeNames.push(_t('automate_screen_share'));
-
-      const text = document.createElement('span');
-      text.className = 'bl-notif-text';
-      text.textContent = _t('automate_triggered_by') + ' ' + activeNames.join(', ');
-      pill.appendChild(text);
-
-      if (triggers.screen_share && onClearScreenShareBlur) {
-        const ssBtn = document.createElement('button');
-        ssBtn.className = 'bl-notif-btn';
-        ssBtn.textContent = _t('automate_stop_screen_share');
-        ssBtn.addEventListener('click', function() { onClearScreenShareBlur(); });
-        pill.appendChild(ssBtn);
-      }
-
+    // Stop idle / tab-switch action row.
+    if ((triggers.idle || triggers.tab_switch) && onClearAutomate) {
+      const off = document.createElement('div');
+      off.className = 'bl-notif-card__off';
       const offBtn = document.createElement('button');
       offBtn.className = 'bl-notif-btn';
       offBtn.textContent = _t('automate_turn_off');
-      offBtn.addEventListener('click', function() { if (onClearAutomate) onClearAutomate(); });
-      pill.appendChild(offBtn);
-
-      el.appendChild(pill);
+      offBtn.addEventListener('click', function () { onClearAutomate(); });
+      off.appendChild(offBtn);
+      card.appendChild(off);
     }
+
+    el.appendChild(card);
+  }
+
+  function _triggerRow(name, detail) {
+    const row = document.createElement('div');
+    row.className = 'bl-notif-card__trigger';
+    const dot = document.createElement('span');
+    dot.className = 'bl-notif-dot';
+    row.appendChild(dot);
+    const label = document.createElement('span');
+    label.className = 'bl-notif-text';
+    label.textContent = detail ? (name + ' — ' + detail) : name;
+    row.appendChild(label);
+    return row;
+  }
+
+  function _suppressionRow(text, onUndo) {
+    const row = document.createElement('div');
+    row.className = 'bl-notif-card__suppress';
+    const label = document.createElement('span');
+    label.className = 'bl-notif-text';
+    label.textContent = text;
+    row.appendChild(label);
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'bl-notif-btn';
+    undoBtn.textContent = _t('notif_suppressed_undo');
+    undoBtn.addEventListener('click', function () { onUndo(); });
+    row.appendChild(undoBtn);
+    return row;
+  }
+
+  function _cardBtn(text, onClick, variant) {
+    const b = document.createElement('button');
+    b.className = 'bl-notif-btn' + (variant === 'warn' ? ' bl-notif-btn--warn' : '');
+    b.textContent = text;
+    b.addEventListener('click', function () { onClick(); });
+    return b;
+  }
+
+  function _shareElapsed(ssState) {
+    if (!ssState || typeof ssState.started_at !== 'number') return null;
+    const sec = Math.max(0, Math.floor((Date.now() - ssState.started_at) / 1000));
+    if (sec < 60) return _t('notif_sharing_for') + ' ' + sec + 's';
+    return _t('notif_sharing_for') + ' ' + Math.floor(sec / 60) + 'm';
   }
 
   // ── Automate section ───────────────────────────────────────────────────────
 
-  function renderAutomateSection(settings, onClearAutomate, onClearScreenShareBlur) {
+  function renderAutomateSection(settings, onClearAutomate) {
     const summaryEl = document.getElementById('bl-automate-summary');
     if (!summaryEl) return;
     summaryEl.replaceChildren();
@@ -594,11 +681,11 @@ const BlurrySitePopupRender = (() => {
 
   // ── Render all sections ────────────────────────────────────────────────────
 
-  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, onClearScreenShareBlur, activeRule, onOpenSiteRules, ctx) {
-    renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, onClearScreenShareBlur);
+  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, activeRule, onOpenSiteRules, ctx) {
+    renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, ctx);
     renderModesSection(settings, blurItems, isPageBlurred);
     renderPiiSection(settings, onSave, ctx);
-    renderAutomateSection(settings, onClearAutomate, onClearScreenShareBlur);
+    renderAutomateSection(settings, onClearAutomate);
   }
 
   return { renderAll, renderHtbSection, renderPiiSection, renderAutomateSection, renderModesSection, renderNotifArea };

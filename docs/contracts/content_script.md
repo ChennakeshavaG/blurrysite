@@ -15,8 +15,8 @@
 `init()` is called once, either immediately (if `document.readyState !== 'loading'`) or on `DOMContentLoaded`. Steps in order:
 
 1. Dispatch `'bl-si-init-start'` CustomEvent on `document` (anchors perf-test timers).
-2. `Store.init_cache()` — loads `blsi_model` from local storage and `blsi_automate_blur` from session storage into in-memory caches.
-3. `Store.resolve(_topHostname, location.href)` — resolves effective settings for the current URL from the cache.
+2. `Store.init_cache()` — loads `blsi_model` from local storage and the three session-storage keys (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) into in-memory caches. Concurrently fires `blsi.ScreenShare.whoAmI()` so the resolve below can identify the sharing tab on initial load.
+3. `Store.resolve(_topHostname, location.href, _myTabId)` — resolves effective settings for the current URL + tab from the cache.
 4. `blsi.ContentI18n.init(resolved.language)` — initializes i18n strings (main frame only).
 5. If `IS_PWA`: call `_injectPwaPanel()`, store result in `_pwaPanelHost`.
 6. `chrome.runtime.onMessage.addListener(handleMessage)` — registers the message handler.
@@ -25,7 +25,7 @@
 9. If `resolved.enabled === false`: subscribe `Store.on_change(handleStorageChange)` and dispatch `'bl-si-ready'`; return early.
 10. `Engine.resetCounters()` — clears dynamic/sticky name counters before applying stored items.
 11. `applyState(resolved, null)` — applies full settings: shortcuts, picker, tab privacy, reveal, engine sync, AutoBlur, PII scan.
-12. Screen-share catch-up: reads `chrome.storage.session['blsi_screen_share_active']`; if true and screen-share automate enabled, saves automate_blur and re-syncs (main frame only).
+12. Screen-share catch-up: if the resolved snapshot already carries `automate_blur_triggers.screen_share === true` (i.e. tab opened mid-share), shows the 3-action toast — no separate session-storage read; `Store.resolve()` already factors in the global session record.
 13. `_checkPwaHint()` — shows one-time PWA tip (IS_PWA only).
 14. `Store.on_change(handleStorageChange)` — subscribes to storage changes AFTER initial restore to avoid cold-start race conditions.
 15. If not main frame: register `window.message` listener to receive `BLSI_SETTINGS_CHANGED` from parent frame.
@@ -46,7 +46,7 @@
 | `lastContextMenuTarget` | `Element\|null` | Last right-clicked element; set by `contextmenu` listener, consumed and cleared by `CONTEXT_BLUR`/`CONTEXT_UNBLUR` handlers |
 | `_pwaPanelHost` | `Element\|null` | Shadow DOM host for the in-page settings panel (PWA only) |
 | `_urlChangeTimer` | `number\|null` | Debounce timer id for SPA URL-change detection |
-| `_ssBlurSuppressed` | `boolean` | Per-tab flag: when true, future `SCREEN_SHARE_BLUR` messages are ignored for this tab's lifetime. Set via "This tab" stop action. Not persisted. |
+| `_ssCurrentlyBlurring` | `boolean` | Tracks whether this tab is currently rendering screen-share automate blur (per the resolved state). Used by the `SCREEN_SHARE_NOTIFY` handler to gate toast firing — only show on the non-blurred → blurred transition. Not persisted. |
 | `_topHostname` | `string` | Top-level page hostname used for blur_all lookup. Equals `location.hostname` in main frame; derived from `document.referrer` in iframes. Updated via postMessage. |
 | `lastUrl` | `string` | Last observed `location.href` for SPA navigation change detection |
 
@@ -99,7 +99,7 @@ Module aliases (set at top of IIFE, not re-assigned):
 4. Tab privacy (main frame only): enables/disables `blsi.TabPrivacy` based on `resolved.tab_privacy && resolved.enabled`.
 5. Reveal: calls `Reveal.clearAll()` if `reveal_mode` changed or extension is disabled.
 6. Calls `await _sync(resolved)` — passes the snapshot through so engine does not re-resolve.
-7. AutoBlur (main frame only): manages `blsi.ScreenShare.init()`/`destroy()` for screen-share detection. Manages `blsi.AutoBlur.init(...)`/`destroy()` for idle and tab-switch triggers. AutoBlur callbacks write to `Store.save_automate_blur` and call `_sync()`.
+7. AutoBlur (main frame only): manages `blsi.ScreenShare.init()`/`destroy()` for screen-share detection. Manages `blsi.AutoBlur.init(...)`/`destroy()` for idle and tab-switch triggers. AutoBlur callbacks write idle/tab_switch to `Store.save_automate_blur` and call `_sync()`. Screen-share state never goes through `save_automate_blur` — it lives in the global session record owned by background.
 8. PII detection: if any PII type enabled and extension enabled, calls `BlurEngine.injectPiiRules()`, `PiiDetector.scan()`, `PiiDetector.observeMutations()`. Otherwise, calls `BlurEngine.removePiiRules()`, `PiiDetector.stopObserving()`, `PiiDetector.clear()`.
 
 **Handles:**
@@ -296,36 +296,22 @@ Handlers that do async work (storage write + `_sync()`) return `true` from `hand
 
 ---
 
-### `SCREEN_SHARE_BLUR` (`blsi.command.screen_share_blur`)
+### `SCREEN_SHARE_NOTIFY` (`blsi.command.screen_share_notify`)
 
-**Trigger:** Background fan-out when another tab starts screen sharing.
+**Trigger:** Background broadcast on every transition of the screen-share session record (started, ended, port disconnect).
 
-**What:** Activates automate blur for screen-share trigger on this tab.
+**What:** Re-syncs from the cached session record and toasts on the non-blurred → blurred transition.
 
 **Side effects:**
-- Short-circuits if `_ssBlurSuppressed` is true; responds `{ ok: false, reason: 'tab-suppressed' }`.
-- Reads `automate.settings.screen_share.enabled` from cached model; if false, responds `{ ok: false, reason: 'disabled' }`.
-- If enabled: calls `Store.save_automate_blur(hostname, 'screen_share', true)`, then `_sync()`.
-- Shows toast (15s) if `settings.automate_blur_only`, with 3 stop-action buttons: per-tab suppress (`_ssBlurSuppressed = true`), per-domain stop (`save_automate_blur false`), disable feature (`patch_section + save_automate_blur false`).
-- Shows skipped toast (2.5s) if `settings.automate_blur_skipped`.
-- Responds with `{ ok: true }`.
+- Captures `wasBlurring = _ssCurrentlyBlurring`.
+- Calls `_sync()` — `Store.resolve()` factors the global record + per-site/per-tab suppression + sharing-tab skip; `_ssCurrentlyBlurring` is then re-stamped from `resolved.automate_blur_triggers.screen_share`.
+- If `!wasBlurring && nowBlurring`: shows the 3-action stop-toast (15s) — `[This tab]`, `[This site (session)]`, `[Disable feature]`. Each action calls `Store.suppress_screen_share(scope, { hostname, tab_id })`.
+- If a transition into "skipped" (blur already on for another reason): shows the 2.5s skipped toast.
+- Responds `{ ok: true }`.
 
 **Returns:** `true` (async).
 
----
-
-### `SCREEN_SHARE_UNBLUR` (`blsi.command.screen_share_unblur`)
-
-**Trigger:** Background fan-out when screen sharing ends or sharing tab crashes/closes.
-
-**What:** Clears screen-share automate blur trigger for this tab.
-
-**Side effects:**
-- Calls `Store.save_automate_blur(hostname, 'screen_share', false)`.
-- Calls `_sync()`.
-- Responds with `{ ok: true }`.
-
-**Returns:** `true` (async).
+**Note:** Storage `onChanged` ALSO triggers `_sync()` via `handleStorageChange` — the NOTIFY message exists purely to disambiguate the share-start moment from incremental session-record edits (e.g. a suppression list change), so the toast fires exactly once per share.
 
 ---
 

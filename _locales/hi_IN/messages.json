@@ -903,17 +903,14 @@
   "automate_turn_off": {
     "message": "बंद करें"
   },
-  "automate_stop_screen_share": {
-    "message": "स्क्रीन शेयर ब्लर रोकें"
-  },
   "automate_stop_per_tab": {
     "message": "यह टैब"
   },
-  "automate_stop_per_domain": {
-    "message": "यह साइट"
+  "automate_stop_site_session": {
+    "message": "यह साइट (सत्र)"
   },
   "automate_disable_feature": {
-    "message": "अक्षम करें"
+    "message": "सुविधा अक्षम करें"
   },
   "automate_toast_screen_share": {
     "message": "ब्लर लागू — स्क्रीन शेयर सक्रिय"
@@ -926,5 +923,29 @@
   },
   "automate_toast_skipped": {
     "message": "ब्लर पहले से सक्रिय — स्वचालन छोड़ा"
+  },
+  "notif_screen_share_active": {
+    "message": "स्क्रीन शेयर सक्रिय"
+  },
+  "notif_sharing_for": {
+    "message": "साझा कर रहा है"
+  },
+  "notif_skipped_reason_site_rule": {
+    "message": "ब्लर पहले से सक्रिय (साइट नियम)"
+  },
+  "notif_skipped_reason_manual": {
+    "message": "ब्लर पहले से सक्रिय"
+  },
+  "notif_skipped_reason_pick_blur": {
+    "message": "पिक एंड ब्लर पहले से सक्रिय"
+  },
+  "notif_suppressed_for_tab": {
+    "message": "इस टैब के लिए दबाया गया"
+  },
+  "notif_suppressed_for_site": {
+    "message": "इस साइट के लिए दबाया गया"
+  },
+  "notif_suppressed_undo": {
+    "message": "पूर्ववत करें"
   }
 }

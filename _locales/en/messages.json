@@ -903,17 +903,14 @@
   "automate_turn_off": {
     "message": "Turn Off"
   },
-  "automate_stop_screen_share": {
-    "message": "Stop Screen Share Blur"
-  },
   "automate_stop_per_tab": {
     "message": "This tab"
   },
-  "automate_stop_per_domain": {
-    "message": "This site"
+  "automate_stop_site_session": {
+    "message": "This site (session)"
   },
   "automate_disable_feature": {
-    "message": "Disable"
+    "message": "Disable feature"
   },
   "automate_toast_screen_share": {
     "message": "Blur applied — screen share active"
@@ -926,5 +923,29 @@
   },
   "automate_toast_skipped": {
     "message": "Blur already active — automate skipped"
+  },
+  "notif_screen_share_active": {
+    "message": "Screen share active"
+  },
+  "notif_sharing_for": {
+    "message": "sharing for"
+  },
+  "notif_skipped_reason_site_rule": {
+    "message": "blur already on (site rule)"
+  },
+  "notif_skipped_reason_manual": {
+    "message": "blur already on"
+  },
+  "notif_skipped_reason_pick_blur": {
+    "message": "pick & blur already on"
+  },
+  "notif_suppressed_for_tab": {
+    "message": "Suppressed for this tab"
+  },
+  "notif_suppressed_for_site": {
+    "message": "Suppressed for this site"
+  },
+  "notif_suppressed_undo": {
+    "message": "Undo"
   }
 }

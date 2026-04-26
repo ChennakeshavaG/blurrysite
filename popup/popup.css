@@ -298,6 +298,52 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-notif-btn:hover {
   background: color-mix(in srgb, var(--bl-green) 26%, transparent);
 }
+.bl-notif-btn--warn {
+  background: color-mix(in srgb, var(--bl-danger, #ef4444) 14%, transparent);
+  border-color: color-mix(in srgb, var(--bl-danger, #ef4444) 38%, transparent);
+  color: var(--bl-danger, #ef4444);
+}
+.bl-notif-btn--warn:hover {
+  background: color-mix(in srgb, var(--bl-danger, #ef4444) 26%, transparent);
+}
+
+/* ── Notif card (live automate state + per-scope dismiss) ─────────────── */
+.bl-notif-card {
+  background: color-mix(in srgb, var(--bl-amber, #f59e0b) 10%, var(--bl-surface));
+  border: 1px solid color-mix(in srgb, var(--bl-amber, #f59e0b) 30%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.bl-notif-card__triggers,
+.bl-notif-card__actions,
+.bl-notif-card__off,
+.bl-notif-card__suppress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.bl-notif-card__trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 100%;
+}
+.bl-notif-card__suppress {
+  background: color-mix(in srgb, var(--bl-text-muted, #777) 8%, transparent);
+  border-radius: 4px;
+  padding: 4px 6px;
+  justify-content: space-between;
+}
+.bl-notif-card__info {
+  font-size: var(--bl-text-xs);
+  color: var(--bl-text-muted);
+  font-style: italic;
+}
 
 .bl-mode-block__title {
   font-size: var(--bl-text-md);
