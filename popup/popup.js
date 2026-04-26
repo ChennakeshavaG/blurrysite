@@ -27,7 +27,10 @@
   }
 
   // ── Open Site Rules sub-page ──────────────────────────────────────────────
-  function _openSiteRulesPage() {
+  // `opts.focusRule` (optional): { hostname_value, hostname_type } — auto-expand
+  // the matching rule card after render. Used by the "Managed by site rule"
+  // badges in the Automate / PII sub-pages.
+  function _openSiteRulesPage(opts) {
     const bodyEl = document.getElementById('bl-site-rules-body');
     UI.showView('bl-view-site-rules', true);
     BlurrySitePopupRenderSiteRules.renderBody(bodyEl, State.get().settings, {
@@ -36,14 +39,28 @@
       captureSnapshot:  () => State.captureSnapshot(),
       saveSiteSnapshot: (hv, ht, snap) => State.saveSiteSnapshot(hv, ht, snap),
       getRules:         () => State.getRules(),
-    });
+    }, opts);
     _updateSubpageArrows(bodyEl);
+  }
+
+  // Build a click handler the renders can attach to "Managed by site rule"
+  // badges. Pulls ruleMatch from state at click time.
+  function _onOpenManagingRule() {
+    const { ruleMatch } = State.get();
+    if (!ruleMatch) return;
+    _openSiteRulesPage({ focusRule: ruleMatch });
   }
 
   // ── Render coordinator ────────────────────────────────────────────────────
   function _renderCurrent() {
-    const { settings, blurItems, isPageBlurred, activeRule } = State.get();
-    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _onSave, _onClearAutomate, _onClearScreenShareBlur, activeRule, _openSiteRulesPage);
+    const st = State.get();
+    const { settings, blurItems, isPageBlurred, activeRule } = st;
+    BlurrySitePopupRender.renderAll(
+      settings, blurItems, isPageBlurred,
+      _onSave, _onClearAutomate, _onClearScreenShareBlur,
+      activeRule, _openSiteRulesPage,
+      { resolved: st.resolved, ruleOverrides: st.ruleOverrides, ruleMatch: st.ruleMatch, onOpenManagingRule: _onOpenManagingRule },
+    );
     UI.updateClearAll(settings, blurItems, isPageBlurred);
     _updateScrollArrows();
   }
@@ -442,6 +459,7 @@
     // ── PII master toggle ─────────────────────────────────────────────────
     document.getElementById('bl-pii').addEventListener('change', async (e) => {
       if (e.target.id !== 'bl-pii-master') return;
+      if (e.target.disabled) { e.preventDefault(); return; }
       const on = e.target.checked;
       await _saveAndApply({ auto_detect_pii: { settings: { email: on, numeric: on } } });
     });
@@ -449,14 +467,20 @@
     // ── PII mode chip click ───────────────────────────────────────────────
     document.getElementById('bl-pii-chips').addEventListener('click', async (e) => {
       const chip = e.target.closest('[data-pii-mode]');
-      if (!chip) return;
+      if (!chip || chip.disabled) return;
       await _saveAndApply({ auto_detect_pii: { settings: { pii_mode: chip.dataset.piiMode } } });
     });
 
     // ── Automate modify sub-page ──────────────────────────────────────────
     document.getElementById('bl-automate-modify').addEventListener('click', () => {
       const bodyEl = document.getElementById('bl-automate-modify-body');
-      BlurrySitePopupRenderAutomate.renderBody(bodyEl, State.get().settings, _onSave);
+      const st = State.get();
+      BlurrySitePopupRenderAutomate.renderBody(bodyEl, st.settings, _onSave, {
+        resolved:        st.resolved,
+        ruleOverrides:   st.ruleOverrides,
+        ruleMatch:       st.ruleMatch,
+        onOpenManagingRule: _onOpenManagingRule,
+      });
       UI.showView('bl-view-automate-modify', true);
       _updateSubpageArrows(bodyEl);
     });

@@ -543,6 +543,42 @@
   "rule_snap_val_none": {
     "message": "எதுவுமில்லை"
   },
+  "rule_snap_section_blur": {
+    "message": "மறை"
+  },
+  "rule_snap_section_pii": {
+    "message": "PII"
+  },
+  "rule_snap_section_automate": {
+    "message": "தானியக்கம்"
+  },
+  "rule_snap_label_pii_email": {
+    "message": "PII: மின்னஞ்சல்"
+  },
+  "rule_snap_label_pii_numeric": {
+    "message": "PII: எண்"
+  },
+  "rule_snap_label_pii_mode": {
+    "message": "PII முறை"
+  },
+  "rule_snap_label_pii_redaction_color": {
+    "message": "PII நிறம்"
+  },
+  "rule_snap_label_automate_idle": {
+    "message": "செயலற்ற தூண்டுதல்"
+  },
+  "rule_snap_label_automate_tab_switch": {
+    "message": "தாவல்-மாற்று தூண்டுதல்"
+  },
+  "rule_snap_label_automate_screen_share": {
+    "message": "திரைப்பகிர்வு தூண்டுதல்"
+  },
+  "popup_badge_managed_by_rule": {
+    "message": "தள விதியால் நிர்வகிக்கப்படுகிறது"
+  },
+  "toast_suffix_site_rule": {
+    "message": "(தள விதி)"
+  },
   "rule_active_banner": {
     "message": "தள விதி செயல்பாட்டில்"
   },

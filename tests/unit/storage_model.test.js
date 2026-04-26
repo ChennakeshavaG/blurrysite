@@ -1049,15 +1049,34 @@ describe('capture_snapshot', () => {
     expect(snap).toHaveProperty('blur_all.settings');
     expect(snap).toHaveProperty('pick_and_blur');
     expect(snap).toHaveProperty('pick_and_blur.settings');
+    expect(snap).toHaveProperty('auto_detect_pii.settings');
+    expect(snap).toHaveProperty('automate.settings');
   });
 
-  test('returns exactly 3 top-level sections — no extra keys', () => {
+  test('returns exactly 5 top-level sections — no extra keys', () => {
     const snap = blsi.Model.capture_snapshot();
-    const TOP_KEYS = new Set(['settings', 'blur_all', 'pick_and_blur']);
+    const TOP_KEYS = new Set(['settings', 'blur_all', 'pick_and_blur', 'auto_detect_pii', 'automate']);
     for (const k of Object.keys(snap)) {
       expect(TOP_KEYS.has(k)).toBe(true);
     }
     expect(Object.keys(snap).length).toBe(TOP_KEYS.size);
+  });
+
+  test('PII section captures email/numeric/pii_mode/pii_redaction_color', () => {
+    const snap = blsi.Model.capture_snapshot();
+    const d = blsi.build_default_model();
+    expect(snap.auto_detect_pii.settings.email).toBe(d.auto_detect_pii.settings.email);
+    expect(snap.auto_detect_pii.settings.numeric).toBe(d.auto_detect_pii.settings.numeric);
+    expect(snap.auto_detect_pii.settings.pii_mode).toBe(d.auto_detect_pii.settings.pii_mode);
+    expect(snap.auto_detect_pii.settings.pii_redaction_color).toBe(d.auto_detect_pii.settings.pii_redaction_color);
+  });
+
+  test('automate section captures only trigger.enabled (no value/unit)', () => {
+    const snap = blsi.Model.capture_snapshot();
+    const d = blsi.build_default_model();
+    expect(snap.automate.settings.idle).toEqual({ enabled: d.automate.settings.idle.enabled });
+    expect(snap.automate.settings.tab_switch).toEqual({ enabled: d.automate.settings.tab_switch.enabled });
+    expect(snap.automate.settings.screen_share).toEqual({ enabled: d.automate.settings.screen_share.enabled });
   });
 
   test('snapshot values match default model values', async () => {
@@ -1420,5 +1439,86 @@ describe('resolve with full snapshot overrides', () => {
     expect(typeof resolved.blur_all_active).toBe('boolean');
     // blur_items comes from pick_and_blur.status gating (not snapshot)
     expect(Array.isArray(resolved.blur_items)).toBe(true);
+  });
+
+  test('PII fields in snapshot override global PII settings', async () => {
+    const snapshot = {
+      auto_detect_pii: {
+        settings: {
+          email: false,
+          numeric: true,
+          pii_mode: 'starred',
+          pii_redaction_color: '#ff00ff',
+        },
+      },
+    };
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
+
+    const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
+    expect(resolved.pii_email).toBe(false);
+    expect(resolved.pii_numeric).toBe(true);
+    expect(resolved.pii_mode).toBe('starred');
+    expect(resolved.pii_redaction_color).toBe('#ff00ff');
+    expect(resolved._rule_overrides.pii_email).toBe(true);
+    expect(resolved._rule_overrides.pii_numeric).toBe(true);
+    expect(resolved._rule_overrides.pii_mode).toBe(true);
+    expect(resolved._rule_overrides.pii_redaction_color).toBe(true);
+  });
+
+  test('automate trigger.enabled in snapshot overrides global, preserves idle.value/unit', async () => {
+    const snapshot = {
+      automate: {
+        settings: {
+          idle: { enabled: true },
+          tab_switch: { enabled: true },
+          screen_share: { enabled: true },
+        },
+      },
+    };
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
+
+    const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
+    expect(resolved.automate_idle.enabled).toBe(true);
+    expect(resolved.automate_tab_switch.enabled).toBe(true);
+    expect(resolved.automate_screen_share.enabled).toBe(true);
+    // idle.value/unit untouched (global default — value=5, unit='min')
+    expect(resolved.automate_idle.value).toBe(5);
+    expect(resolved.automate_idle.unit).toBe('min');
+    expect(resolved._rule_overrides.automate_idle).toBe(true);
+    expect(resolved._rule_overrides.automate_tab_switch).toBe(true);
+    expect(resolved._rule_overrides.automate_screen_share).toBe(true);
+  });
+
+  test('_rule_match exposes the matching rule for popup deep-link', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: '*.github.com',
+      hostname_type:  blsi.pattern_types.wildcard,
+      snapshot:       { settings: { blur_radius: 12 } },
+    }]);
+    const resolved = blsi.Model.resolve('a.github.com', 'https://a.github.com/x');
+    expect(resolved._rule_match).toEqual({
+      hostname_value: '*.github.com',
+      hostname_type:  blsi.pattern_types.wildcard,
+    });
+  });
+
+  test('exact rule snapshot wins over wildcard for _rule_match', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: '*.github.com',
+      hostname_type:  blsi.pattern_types.wildcard,
+      snapshot:       { settings: { blur_radius: 12 } },
+    }]);
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, { settings: { blur_radius: 30 } });
+    const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
+    expect(resolved._rule_match).toEqual({
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+    });
+  });
+
+  test('_rule_overrides empty when no rule matches', () => {
+    const resolved = blsi.Model.resolve('nope.test', 'https://nope.test/');
+    expect(resolved._rule_overrides).toEqual({});
+    expect(resolved._rule_match).toBe(null);
   });
 });

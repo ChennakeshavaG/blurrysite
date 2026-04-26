@@ -16,11 +16,21 @@ const BlurrySitePopupState = (() => {
     const auto_entry = _hostname
       ? blsi.Model.get_automate_blur(_hostname)
       : { idle: false, tab_switch: false, screen_share: false };
+    // Resolve once per get() so renders can show rule-merged values + know
+    // which fields a site rule is overriding for the current tab.
+    const resolved = (_hostname || _url)
+      ? blsi.Model.resolve(_hostname || '', _url || '')
+      : null;
+    const ruleOverrides = (resolved && resolved._rule_overrides) || {};
+    const ruleMatch     = (resolved && resolved._rule_match) || null;
     return {
       settings: Object.assign({}, m, {
         automate_blur_active:   !!(auto_entry.idle || auto_entry.tab_switch || auto_entry.screen_share),
         automate_blur_triggers: auto_entry,
       }),
+      resolved,
+      ruleOverrides,
+      ruleMatch,
       blurItems:         _blurItems,
       hostname:          _hostname,
       isPageBlurred:     _isPageBlurred,

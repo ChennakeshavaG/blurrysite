@@ -535,6 +535,42 @@ const Constants = (() => {
               if (Object.keys(ba_out).length) out.blur_all = ba_out;
             }
 
+            // auto_detect_pii section
+            if (raw.auto_detect_pii && typeof raw.auto_detect_pii === 'object') {
+              const ap = raw.auto_detect_pii;
+              const ap_out = {};
+              if (ap.settings && typeof ap.settings === 'object') {
+                const ap_s = ap.settings;
+                const ap_s_out = {};
+                if (typeof ap_s.email === 'boolean')   ap_s_out.email   = ap_s.email;
+                if (typeof ap_s.numeric === 'boolean') ap_s_out.numeric = ap_s.numeric;
+                if (Object.values(pii_modes).includes(ap_s.pii_mode))
+                  ap_s_out.pii_mode = ap_s.pii_mode;
+                if (typeof ap_s.pii_redaction_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(ap_s.pii_redaction_color))
+                  ap_s_out.pii_redaction_color = ap_s.pii_redaction_color;
+                if (Object.keys(ap_s_out).length) ap_out.settings = ap_s_out;
+              }
+              if (Object.keys(ap_out).length) out.auto_detect_pii = ap_out;
+            }
+
+            // automate section — only trigger.enabled fields are snapshot-overridable
+            if (raw.automate && typeof raw.automate === 'object') {
+              const am = raw.automate;
+              const am_out = {};
+              if (am.settings && typeof am.settings === 'object') {
+                const am_s = am.settings;
+                const am_s_out = {};
+                for (const trig of ['idle', 'tab_switch', 'screen_share']) {
+                  const t = am_s[trig];
+                  if (t && typeof t === 'object' && typeof t.enabled === 'boolean') {
+                    am_s_out[trig] = { enabled: t.enabled };
+                  }
+                }
+                if (Object.keys(am_s_out).length) am_out.settings = am_s_out;
+              }
+              if (Object.keys(am_out).length) out.automate = am_out;
+            }
+
             // pick_and_blur section
             if (raw.pick_and_blur && typeof raw.pick_and_blur === 'object') {
               const pb = raw.pick_and_blur;

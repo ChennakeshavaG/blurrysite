@@ -253,9 +253,10 @@ const StorageModel = (() => {
 
   /**
    * Capture a settings snapshot from the current cached global model.
-   * Returns { settings, blur_all, pick_and_blur } mirroring the global model
-   * structure with deep copies of blur_categories and blur_color.
-   * Excludes: automate, site_rules, auto_detect_pii, shortcuts, enabled, language.
+   * Returns { settings, blur_all, pick_and_blur, auto_detect_pii, automate }
+   * mirroring the global model structure with deep copies of nested objects.
+   * Excludes: site_rules, shortcuts, enabled, language, idle.value/unit,
+   * pick_and_blur.items.
    */
   function capture_snapshot() {
     var m = get();
@@ -285,6 +286,21 @@ const StorageModel = (() => {
             JSON.stringify(m.pick_and_blur.settings.blur_color),
           ),
           picker_mode: m.pick_and_blur.settings.picker_mode,
+        },
+      },
+      auto_detect_pii: {
+        settings: {
+          email: m.auto_detect_pii.settings.email,
+          numeric: m.auto_detect_pii.settings.numeric,
+          pii_mode: m.auto_detect_pii.settings.pii_mode,
+          pii_redaction_color: m.auto_detect_pii.settings.pii_redaction_color,
+        },
+      },
+      automate: {
+        settings: {
+          idle: { enabled: m.automate.settings.idle.enabled },
+          tab_switch: { enabled: m.automate.settings.tab_switch.enabled },
+          screen_share: { enabled: m.automate.settings.screen_share.enabled },
         },
       },
     };
@@ -340,11 +356,37 @@ const StorageModel = (() => {
 
   // ── Resolve ────────────────────────────────────────────────────────────────
 
+  // Allowlist of keys permitted under snapshot.settings. Mirrors the keys
+  // produced by capture_snapshot() / accepted by validate_model snapshot
+  // validation. Keeps _rule_overrides honest — only fields the user can
+  // actually manage per-site land in the map.
+  var _SNAPSHOT_SETTINGS_KEYS = [
+    "blur_radius",
+    "reveal_mode",
+    "thorough_blur",
+    "highlight_color",
+    "redaction_color",
+    "tab_privacy",
+    "transition_duration",
+  ];
+
   // Merges a stored snapshot into a resolved settings object in-place.
+  // Stamps resolved._rule_overrides[<flat-key>] = true for each key written
+  // so downstream UI can detect rule-driven fields without re-walking storage.
   function _apply_snapshot(snapshot, resolved) {
     if (!snapshot || typeof snapshot !== "object") return;
+    if (!resolved._rule_overrides) resolved._rule_overrides = {};
+    var ov = resolved._rule_overrides;
+
     if (snapshot.settings && typeof snapshot.settings === "object") {
-      Object.assign(resolved, snapshot.settings);
+      var ss = snapshot.settings;
+      for (var ki = 0; ki < _SNAPSHOT_SETTINGS_KEYS.length; ki++) {
+        var sk = _SNAPSHOT_SETTINGS_KEYS[ki];
+        if (Object.prototype.hasOwnProperty.call(ss, sk) && ss[sk] !== undefined) {
+          resolved[sk] = ss[sk];
+          ov[sk] = true;
+        }
+      }
     }
     if (
       snapshot.blur_all &&
@@ -352,21 +394,78 @@ const StorageModel = (() => {
       typeof snapshot.blur_all.settings === "object"
     ) {
       var ba = snapshot.blur_all.settings;
-      if (ba.blur_mode !== undefined) resolved.blur_mode = ba.blur_mode;
-      if (ba.blur_categories !== undefined)
+      if (ba.blur_mode !== undefined) {
+        resolved.blur_mode = ba.blur_mode;
+        ov.blur_mode = true;
+      }
+      if (ba.blur_categories !== undefined) {
         resolved.blur_categories = ba.blur_categories;
+        ov.blur_categories = true;
+      }
     }
     if (snapshot.pick_and_blur) {
       var pb = snapshot.pick_and_blur;
-      if (typeof pb.status === "boolean")
+      if (typeof pb.status === "boolean") {
         resolved.pick_blur_enabled = pb.status;
+        ov.pick_blur_enabled = true;
+      }
       if (pb.settings && typeof pb.settings === "object") {
-        if (pb.settings.blur_type !== undefined)
+        if (pb.settings.blur_type !== undefined) {
           resolved.pick_blur_type = pb.settings.blur_type;
-        if (pb.settings.blur_color !== undefined)
+          ov.pick_blur_type = true;
+        }
+        if (pb.settings.blur_color !== undefined) {
           resolved.pick_blur_color = pb.settings.blur_color;
-        if (pb.settings.picker_mode !== undefined)
+          ov.pick_blur_color = true;
+        }
+        if (pb.settings.picker_mode !== undefined) {
           resolved.picker_mode = pb.settings.picker_mode;
+          ov.picker_mode = true;
+        }
+      }
+    }
+    if (snapshot.auto_detect_pii && snapshot.auto_detect_pii.settings) {
+      var p = snapshot.auto_detect_pii.settings;
+      if (p.email !== undefined) {
+        resolved.pii_email = p.email;
+        ov.pii_email = true;
+      }
+      if (p.numeric !== undefined) {
+        resolved.pii_numeric = p.numeric;
+        ov.pii_numeric = true;
+      }
+      if (p.pii_mode !== undefined) {
+        resolved.pii_mode = p.pii_mode;
+        ov.pii_mode = true;
+      }
+      if (p.pii_redaction_color !== undefined) {
+        resolved.pii_redaction_color = p.pii_redaction_color;
+        ov.pii_redaction_color = true;
+      }
+    }
+    if (snapshot.automate && snapshot.automate.settings) {
+      var a = snapshot.automate.settings;
+      if (a.idle && a.idle.enabled !== undefined) {
+        resolved.automate_idle = Object.assign({}, resolved.automate_idle, {
+          enabled: !!a.idle.enabled,
+        });
+        ov.automate_idle = true;
+      }
+      if (a.tab_switch && a.tab_switch.enabled !== undefined) {
+        resolved.automate_tab_switch = Object.assign(
+          {},
+          resolved.automate_tab_switch,
+          { enabled: !!a.tab_switch.enabled },
+        );
+        ov.automate_tab_switch = true;
+      }
+      if (a.screen_share && a.screen_share.enabled !== undefined) {
+        resolved.automate_screen_share = Object.assign(
+          {},
+          resolved.automate_screen_share,
+          { enabled: !!a.screen_share.enabled },
+        );
+        ov.automate_screen_share = true;
       }
     }
   }
@@ -386,6 +485,10 @@ const StorageModel = (() => {
   function resolve(hostname, url) {
     var m = get();
     var resolved = {};
+
+    // ── 0. Rule-tracking maps (consumed by popup + content_script UX) ─────
+    resolved._rule_overrides = {};
+    resolved._rule_match = null;
 
     // ── 1. Global settings ─────────────────────────────────────────────────
     Object.assign(resolved, m.global_default_settings);
@@ -407,10 +510,16 @@ const StorageModel = (() => {
     resolved.pii_redaction_color =
       m.auto_detect_pii.settings.pii_redaction_color;
 
-    // ── 5. shortcuts ───────────────────────────────────────────────────────
+    // ── 5. automate trigger settings (must be on resolved before snapshot
+    //      apply so a rule can override .enabled while preserving value/unit)
+    resolved.automate_screen_share = m.automate.settings.screen_share;
+    resolved.automate_idle = m.automate.settings.idle;
+    resolved.automate_tab_switch = m.automate.settings.tab_switch;
+
+    // ── 6. shortcuts ───────────────────────────────────────────────────────
     resolved.shortcuts = m.shortcuts || {};
 
-    // ── 6. wildcard / regex site_rule override (first match wins) ─────────
+    // ── 7. wildcard / regex site_rule override (first match wins) ─────────
     var site_rules = m.site_rules || [];
     if (url && globalThis.blsi && blsi.UrlMatcher) {
       for (var i = 0; i < site_rules.length; i++) {
@@ -424,12 +533,16 @@ const StorageModel = (() => {
           )
         ) {
           _apply_snapshot(rule.snapshot, resolved);
+          resolved._rule_match = {
+            hostname_value: rule.hostname_value,
+            hostname_type: rule.hostname_type,
+          };
           break;
         }
       }
     }
 
-    // ── 7. exact hostname site_rule ────────────────────────────────────────
+    // ── 8. exact hostname site_rule ────────────────────────────────────────
     var exact = null;
     for (var j = 0; j < site_rules.length; j++) {
       if (
@@ -440,19 +553,22 @@ const StorageModel = (() => {
         break;
       }
     }
-    _apply_snapshot(exact && exact.snapshot, resolved);
+    if (exact && exact.snapshot && Object.keys(exact.snapshot).length) {
+      _apply_snapshot(exact.snapshot, resolved);
+      // Exact snapshot trumps wildcard for the deep-link target.
+      resolved._rule_match = {
+        hostname_value: exact.hostname_value,
+        hostname_type: exact.hostname_type,
+      };
+    }
 
-    // ── 8. blur items for this hostname ────────────────────────────────────
+    // ── 9. blur items for this hostname ────────────────────────────────────
     // Gated on pick_and_blur.status — items are "paused" (not applied) when off.
     resolved.blur_items = m.pick_and_blur.status
       ? (m.pick_and_blur.items || {})[hostname] || []
       : [];
 
-    // ── 9. automate ────────────────────────────────────────────────────────
-    resolved.automate_screen_share = m.automate.settings.screen_share;
-    resolved.automate_idle = m.automate.settings.idle;
-    resolved.automate_tab_switch = m.automate.settings.tab_switch;
-
+    // ── 10. automate active state (session cache) ─────────────────────────
     var automate_entry = (_automate_cache || {})[hostname] || {};
     resolved.automate_blur_active = !!(
       automate_entry.idle ||

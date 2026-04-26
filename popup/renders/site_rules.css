@@ -129,6 +129,20 @@
   gap: 3px;
 }
 
+.bl-rule-snap-section {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bl-text-dim);
+  margin-top: 8px;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.bl-rule-snap-section:first-child {
+  margin-top: 0;
+}
+
 .bl-rule-snapshot-row {
   display: flex;
   align-items: baseline;

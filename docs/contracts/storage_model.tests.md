@@ -163,8 +163,10 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 This group uses its own `beforeEach` that seeds and inits a default model.
 
-- `returns an object with nested sections present` — snapshot has `settings`, `blur_all`, `blur_all.settings`, `pick_and_blur`, `pick_and_blur.settings`.
-- `returns exactly 3 top-level sections — no extra keys` — only `settings`, `blur_all`, `pick_and_blur` are present (no leakage of other model keys).
+- `returns an object with nested sections present` — snapshot has `settings`, `blur_all.settings`, `pick_and_blur.settings`, `auto_detect_pii.settings`, `automate.settings`.
+- `returns exactly 5 top-level sections — no extra keys` — only `settings`, `blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate` are present.
+- `PII section captures email/numeric/pii_mode/pii_redaction_color` — all four PII fields read from `auto_detect_pii.settings.*` match defaults.
+- `automate section captures only trigger.enabled (no value/unit)` — each trigger contains `{ enabled }` only; idle.value/unit are not in the snapshot.
 - `snapshot values match default model values` — `blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `blur_categories`, `blur_type`, `blur_color`, and `pick_and_blur.status` match the defaults from `blsi.build_default_model()`.
 - `capture reflects in-flight settings changes` — after `patch_section` calls, the next `capture_snapshot()` reflects those changes.
 - `blur_categories is a deep copy — mutating snapshot does not affect cache` — mutating the returned snapshot's `blur_categories` does not alter the in-memory model.
@@ -205,6 +207,11 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `snapshot in wildcard site_rule overrides global snapshot keys` — a wildcard rule snapshot with `blur_radius: 18` and `blur_mode: 'redacted'` overrides global defaults for a matching subdomain.
 - `exact rule snapshot wins over wildcard snapshot (exact has higher priority)` — when both an exact rule (radius 30) and a wildcard rule (radius 10) match, the exact rule's value wins.
 - `non-snapshot keys in resolved output come from global/feature settings when no override` — keys not present in the snapshot (e.g. `blur_all_active`, `blur_items`) continue to be derived from the global model state.
+- `PII fields in snapshot override global PII settings` — `pii_email`, `pii_numeric`, `pii_mode`, `pii_redaction_color` flow from snapshot into resolved + are flagged in `_rule_overrides`.
+- `automate trigger.enabled in snapshot overrides global, preserves idle.value/unit` — rule's `automate.settings.idle.enabled = true` flips the resolved enable while `value`/`unit` keep their global values; same for tab_switch / screen_share. `_rule_overrides.automate_*` set.
+- `_rule_match exposes the matching rule for popup deep-link` — wildcard match returns `{ hostname_value: '*.github.com', hostname_type: 'wildcard' }`.
+- `exact rule snapshot wins over wildcard for _rule_match` — when both match, `_rule_match` reports the exact rule.
+- `_rule_overrides empty when no rule matches` — for an unmatched host, `_rule_overrides` is `{}` and `_rule_match` is `null`.
 
 ---
 

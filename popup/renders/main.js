@@ -134,27 +134,58 @@ const BlurrySitePopupRender = (() => {
 
   // ── PII section ────────────────────────────────────────────────────────────
 
-  function renderPiiSection(settings, onSave) {
+  function renderPiiSection(settings, onSave, ctx) {
     const toggleEl   = document.getElementById('bl-pii-master');
     const chipsEl    = document.getElementById('bl-pii-chips');
     const colorRowEl = document.getElementById('bl-pii-color-row');
     if (!toggleEl || !chipsEl) return;
 
-    toggleEl.checked = !!(settings.auto_detect_pii.settings.email || settings.auto_detect_pii.settings.numeric);
+    const ov = (ctx && ctx.ruleOverrides) || {};
+    const resolved = ctx && ctx.resolved;
+    // For the master toggle, if any of the four PII fields is rule-overridden,
+    // gate the whole section to read-only. Display value uses resolved when available.
+    const piiManaged = !!(ov.pii_email || ov.pii_numeric || ov.pii_mode || ov.pii_redaction_color);
+    const emailVal   = resolved && typeof resolved.pii_email === 'boolean' ? resolved.pii_email : settings.auto_detect_pii.settings.email;
+    const numericVal = resolved && typeof resolved.pii_numeric === 'boolean' ? resolved.pii_numeric : settings.auto_detect_pii.settings.numeric;
+    const modeVal    = (resolved && resolved.pii_mode) || settings.auto_detect_pii.settings.pii_mode;
+    const colorVal   = (resolved && resolved.pii_redaction_color) || settings.auto_detect_pii.settings.pii_redaction_color || '#000000';
+
+    toggleEl.checked = !!(emailVal || numericVal);
+    toggleEl.disabled = piiManaged;
 
     chipsEl.replaceChildren();
     for (const t of ['blur', 'frosted', 'redacted', 'starred']) {
       const btn = document.createElement('button');
-      const isActive = t === settings.auto_detect_pii.settings.pii_mode;
+      const isActive = t === modeVal;
       btn.className = 'bl-chip' + (isActive ? ' bl-chip--active bl-glow-active' : '');
       btn.dataset.piiMode = t;
       btn.textContent = _t(_PII_KEY[t]);
       if (_MODE_ASSET[t]) btn.dataset.tooltipMedia = _MODE_ASSET[t];
+      if (ov.pii_mode) btn.disabled = true;
       chipsEl.appendChild(btn);
     }
 
+    // Render / clear the "Managed by site rule" badge on the PII section.
+    let pii = document.getElementById('bl-pii');
+    if (pii) {
+      let badge = pii.querySelector('.bl-managed-badge');
+      if (piiManaged) {
+        if (!badge) {
+          badge = document.createElement('button');
+          badge.type = 'button';
+          badge.className = 'bl-managed-badge';
+          badge.textContent = _t('popup_badge_managed_by_rule') || 'Managed by site rule';
+          badge.title = badge.textContent;
+          if (ctx && ctx.onOpenManagingRule) badge.addEventListener('click', ctx.onOpenManagingRule);
+          pii.appendChild(badge);
+        }
+      } else if (badge) {
+        badge.remove();
+      }
+    }
+
     if (colorRowEl) {
-      const isRedacted = settings.auto_detect_pii.settings.pii_mode === 'redacted';
+      const isRedacted = modeVal === 'redacted';
       colorRowEl.hidden = !isRedacted;
       if (isRedacted && onSave) {
         let colorInput = colorRowEl.querySelector('input[type="color"]');
@@ -163,7 +194,9 @@ const BlurrySitePopupRender = (() => {
           colorInput.type = 'color';
           colorInput.className = 'bl-color-input';
           colorInput.addEventListener('input', function () {
-            onSave({ auto_detect_pii: { settings: { pii_redaction_color: colorInput.value } } });
+            if (!colorInput.disabled) {
+              onSave({ auto_detect_pii: { settings: { pii_redaction_color: colorInput.value } } });
+            }
           });
           const colorLabel = document.createElement('span');
           colorLabel.className = 'bl-form-row__label';
@@ -175,7 +208,8 @@ const BlurrySitePopupRender = (() => {
           colorRowEl.appendChild(row);
         }
         // Update value without recreating the element — keeps picker open during drag.
-        colorInput.value = settings.auto_detect_pii.settings.pii_redaction_color || '#000000';
+        colorInput.value = colorVal;
+        colorInput.disabled = !!ov.pii_redaction_color;
       } else {
         colorRowEl.replaceChildren();
       }
@@ -560,10 +594,10 @@ const BlurrySitePopupRender = (() => {
 
   // ── Render all sections ────────────────────────────────────────────────────
 
-  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, onClearScreenShareBlur, activeRule, onOpenSiteRules) {
+  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, onClearScreenShareBlur, activeRule, onOpenSiteRules, ctx) {
     renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, onClearScreenShareBlur);
     renderModesSection(settings, blurItems, isPageBlurred);
-    renderPiiSection(settings, onSave);
+    renderPiiSection(settings, onSave, ctx);
     renderAutomateSection(settings, onClearAutomate, onClearScreenShareBlur);
   }
 

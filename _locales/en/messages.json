@@ -543,6 +543,42 @@
   "rule_snap_val_none": {
     "message": "None"
   },
+  "rule_snap_section_blur": {
+    "message": "Blur"
+  },
+  "rule_snap_section_pii": {
+    "message": "PII"
+  },
+  "rule_snap_section_automate": {
+    "message": "Automate"
+  },
+  "rule_snap_label_pii_email": {
+    "message": "PII: Email"
+  },
+  "rule_snap_label_pii_numeric": {
+    "message": "PII: Numeric"
+  },
+  "rule_snap_label_pii_mode": {
+    "message": "PII mode"
+  },
+  "rule_snap_label_pii_redaction_color": {
+    "message": "PII redaction color"
+  },
+  "rule_snap_label_automate_idle": {
+    "message": "Idle trigger"
+  },
+  "rule_snap_label_automate_tab_switch": {
+    "message": "Tab-switch trigger"
+  },
+  "rule_snap_label_automate_screen_share": {
+    "message": "Screen-share trigger"
+  },
+  "popup_badge_managed_by_rule": {
+    "message": "Managed by site rule"
+  },
+  "toast_suffix_site_rule": {
+    "message": "(site rule)"
+  },
   "rule_active_banner": {
     "message": "Site rule active"
   },

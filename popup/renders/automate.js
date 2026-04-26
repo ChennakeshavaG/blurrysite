@@ -112,14 +112,36 @@ const BlurrySitePopupRenderAutomate = (() => {
     return { section: section, slider: slider };
   }
 
+  // ── Managed-by-site-rule badge ─────────────────────────────────────────────
+
+  function _makeManagedBadge(onClick) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'bl-managed-badge';
+    btn.textContent = _t('popup_badge_managed_by_rule') || 'Managed by site rule';
+    btn.title = btn.textContent;
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  function _isOverridden(ctx, key) {
+    return !!(ctx && ctx.ruleOverrides && ctx.ruleOverrides[key]);
+  }
+
   // ── Block builders ──────────────────────────────────────────────────────────
 
-  function _buildScreenShareBlock(settings, onSave) {
+  function _buildScreenShareBlock(settings, onSave, ctx) {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var ss = (settings.automate && settings.automate.settings && settings.automate.settings.screen_share) || { enabled: false };
-    var tog = _makeToggleInput('bl-auto-screen-share-toggle', ss.enabled, _t('automate_screen_share'));
+    // Read enabled value: prefer resolved (rule-merged) when available.
+    var modelSs = (settings.automate && settings.automate.settings && settings.automate.settings.screen_share) || { enabled: false };
+    var resolvedSs = ctx && ctx.resolved && ctx.resolved.automate_screen_share;
+    var enabledVal = resolvedSs && typeof resolvedSs.enabled === 'boolean' ? resolvedSs.enabled : !!modelSs.enabled;
+    var managed = _isOverridden(ctx, 'automate_screen_share');
+
+    var tog = _makeToggleInput('bl-auto-screen-share-toggle', enabledVal, _t('automate_screen_share'));
+    if (managed) tog.input.disabled = true;
 
     block.appendChild(_makeBlockHeader(
       _svgIcon([
@@ -131,25 +153,32 @@ const BlurrySitePopupRenderAutomate = (() => {
       tog
     ));
     block.appendChild(_makeDesc(_t('automate_screen_share_desc')));
+    if (managed) block.appendChild(_makeManagedBadge(ctx && ctx.onOpenManagingRule));
 
-    if (!ss.enabled) {
-      block.classList.add('bl-auto-block--inactive');
+    if (!enabledVal) block.classList.add('bl-auto-block--inactive');
+    if (managed)    block.classList.add('bl-auto-block--managed');
+
+    if (!managed) {
+      tog.input.addEventListener('change', function () {
+        block.classList.toggle('bl-auto-block--inactive', !tog.input.checked);
+        onSave({ automate: { settings: { screen_share: { enabled: tog.input.checked } } } });
+      });
     }
-
-    tog.input.addEventListener('change', function () {
-      block.classList.toggle('bl-auto-block--inactive', !tog.input.checked);
-      onSave({ automate: { settings: { screen_share: { enabled: tog.input.checked } } } });
-    });
 
     return block;
   }
 
-  function _buildTabSwitchBlock(settings, onSave) {
+  function _buildTabSwitchBlock(settings, onSave, ctx) {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var tabSwitch = (settings.automate && settings.automate.settings && settings.automate.settings.tab_switch) || { enabled: false };
-    var tog = _makeToggleInput('bl-auto-tab-switch-toggle', tabSwitch.enabled, _t('setting_auto_blur_tab'));
+    var modelTs = (settings.automate && settings.automate.settings && settings.automate.settings.tab_switch) || { enabled: false };
+    var resolvedTs = ctx && ctx.resolved && ctx.resolved.automate_tab_switch;
+    var enabledVal = resolvedTs && typeof resolvedTs.enabled === 'boolean' ? resolvedTs.enabled : !!modelTs.enabled;
+    var managed = _isOverridden(ctx, 'automate_tab_switch');
+
+    var tog = _makeToggleInput('bl-auto-tab-switch-toggle', enabledVal, _t('setting_auto_blur_tab'));
+    if (managed) tog.input.disabled = true;
 
     block.appendChild(_makeBlockHeader(
       _svgIcon([
@@ -160,21 +189,31 @@ const BlurrySitePopupRenderAutomate = (() => {
       tog
     ));
     block.appendChild(_makeDesc(_t('setting_auto_blur_tab_hint')));
+    if (managed) block.appendChild(_makeManagedBadge(ctx && ctx.onOpenManagingRule));
+    if (managed) block.classList.add('bl-auto-block--managed');
 
-    tog.input.addEventListener('change', function () {
-      onSave({ automate: { settings: { tab_switch: { enabled: tog.input.checked } } } });
-    });
+    if (!managed) {
+      tog.input.addEventListener('change', function () {
+        onSave({ automate: { settings: { tab_switch: { enabled: tog.input.checked } } } });
+      });
+    }
 
     return block;
   }
 
-  function _buildIdleBlock(settings, onSave) {
+  function _buildIdleBlock(settings, onSave, ctx) {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var idle = (settings.automate && settings.automate.settings && settings.automate.settings.idle) || { value: 5, unit: 'min', enabled: false };
+    var modelIdle = (settings.automate && settings.automate.settings && settings.automate.settings.idle) || { value: 5, unit: 'min', enabled: false };
+    // Idle .value/.unit always come from globals (snapshot only carries .enabled).
+    var resolvedIdle = ctx && ctx.resolved && ctx.resolved.automate_idle;
+    var enabledVal = resolvedIdle && typeof resolvedIdle.enabled === 'boolean' ? resolvedIdle.enabled : !!modelIdle.enabled;
+    var managed = _isOverridden(ctx, 'automate_idle');
+    var idle = { value: modelIdle.value, unit: modelIdle.unit, enabled: enabledVal };
     var initialSecs = Math.max(15, Math.min(3600, _toSecs(idle.value, idle.unit)));
     var tog = _makeToggleInput('bl-auto-idle-toggle', idle.enabled, _t('automate_idle'));
+    if (managed) tog.input.disabled = true;
 
     // Hourglass icon
     block.appendChild(_makeBlockHeader(
@@ -187,38 +226,40 @@ const BlurrySitePopupRenderAutomate = (() => {
       tog
     ));
     block.appendChild(_makeDesc(_t('setting_auto_blur_idle_hint')));
+    if (managed) block.appendChild(_makeManagedBadge(ctx && ctx.onOpenManagingRule));
+    if (managed) block.classList.add('bl-auto-block--managed');
 
     var sliderEl = _makeSliderSection('bl-auto-idle', initialSecs, 15, 3600, 'idle', '15 s', '60 min');
     block.appendChild(sliderEl.section);
 
-    if (!idle.enabled) {
-      block.classList.add('bl-auto-block--inactive');
-      sliderEl.slider.disabled = true;
+    if (!idle.enabled) block.classList.add('bl-auto-block--inactive');
+    if (!idle.enabled || managed) sliderEl.slider.disabled = true;
+
+    if (!managed) {
+      tog.input.addEventListener('change', function () {
+        var active = tog.input.checked;
+        block.classList.toggle('bl-auto-block--inactive', !active);
+        sliderEl.slider.disabled = !active;
+        var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
+        onSave({ automate: { settings: { idle: { value: vu.value, unit: vu.unit, enabled: active } } } });
+      });
+
+      sliderEl.slider.addEventListener('change', function () {
+        var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
+        onSave({ automate: { settings: { idle: { value: vu.value, unit: vu.unit, enabled: tog.input.checked } } } });
+      });
     }
-
-    tog.input.addEventListener('change', function () {
-      var active = tog.input.checked;
-      block.classList.toggle('bl-auto-block--inactive', !active);
-      sliderEl.slider.disabled = !active;
-      var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
-      onSave({ automate: { settings: { idle: { value: vu.value, unit: vu.unit, enabled: active } } } });
-    });
-
-    sliderEl.slider.addEventListener('change', function () {
-      var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
-      onSave({ automate: { settings: { idle: { value: vu.value, unit: vu.unit, enabled: tog.input.checked } } } });
-    });
 
     return block;
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  function renderBody(containerEl, settings, onSave) {
+  function renderBody(containerEl, settings, onSave, ctx) {
     containerEl.replaceChildren();
-    containerEl.appendChild(_buildScreenShareBlock(settings, onSave));
-    containerEl.appendChild(_buildTabSwitchBlock(settings, onSave));
-    containerEl.appendChild(_buildIdleBlock(settings, onSave));
+    containerEl.appendChild(_buildScreenShareBlock(settings, onSave, ctx));
+    containerEl.appendChild(_buildTabSwitchBlock(settings, onSave, ctx));
+    containerEl.appendChild(_buildIdleBlock(settings, onSave, ctx));
     var footer = document.createElement('p');
     footer.className = 'bl-section__hint';
     footer.textContent = _t('automate_footer');

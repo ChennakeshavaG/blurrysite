@@ -53,8 +53,10 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 8. Snapshot application (if site rule has a snapshot)
 9. Derived key computation
 
-**Derived keys on output**: `blur_all_active`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`  
-**`blur_all_active`**: `manual_blur || automate_any` where `automate_any = idle || tab_switch || screen_share`
+**Derived keys on output**: `blur_all_active`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `_rule_overrides`, `_rule_match`  
+**`blur_all_active`**: `manual_blur || automate_any` where `automate_any = idle || tab_switch || screen_share`  
+**`_rule_overrides`**: `{ [flat_key]: true }` map listing every resolved field that came from a site rule snapshot (e.g. `{ pii_email: true, automate_screen_share: true, blur_mode: true }`). Used by popup to render "Managed by site rule" badges + read-only controls; used by content_script to append `(site rule)` to toasts. Empty `{}` when no rule matched.  
+**`_rule_match`**: `{ hostname_value, hostname_type } | null` — the rule whose snapshot fed `_rule_overrides`. Exact-rule match wins over wildcard/regex when both apply. Used to deep-link from the popup badge to the matching rule card.
 
 ### patch_section(section, delta)
 
@@ -132,8 +134,8 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 ### capture_snapshot()
 
 **What**: Reads current global settings from cache and returns a nested snapshot object.  
-**Returns**: `{ settings, blur_all, pick_and_blur }` — deep-copies `blur_categories`, `blur_color`  
-**Excludes**: automate, site_rules, auto_detect_pii, shortcuts, enabled, language
+**Returns**: `{ settings, blur_all, pick_and_blur, auto_detect_pii, automate }` — deep-copies `blur_categories`, `blur_color`. The `automate` section captures only `{ idle, tab_switch, screen_share }.enabled` — NOT idle `value` / `unit` (those remain global-only).  
+**Excludes**: site_rules, shortcuts, enabled, language, automate idle.value/unit, pick_and_blur.items
 
 ### save_site_snapshot(hostname_value, hostname_type, snapshot)
 
@@ -237,7 +239,7 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 
 ### _apply_snapshot(snapshot, resolved)
 
-**What**: In-place merge of snapshot into the resolved object; maps nested snapshot shape to flat resolved keys.
+**What**: In-place merge of snapshot into the resolved object; maps nested snapshot shape to flat resolved keys. Stamps `resolved._rule_overrides[flat_key] = true` for every key it writes so downstream UI can detect rule-driven fields without re-walking storage. Handles the new `auto_detect_pii.settings.*` and `automate.settings.{idle,tab_switch,screen_share}.enabled` sections; the automate spread preserves global `value`/`unit` while the rule flips `enabled`.
 
 ## Storage Schema
 

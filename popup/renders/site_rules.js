@@ -6,13 +6,35 @@ const BlurrySitePopupRenderSiteRules = (() => {
   // ── Snapshot key label map ────────────────────────────────────────────────
 
   var SNAPSHOT_LABELS = {
-    blur_radius:       'rule_snap_blur_radius',
-    blur_mode:         'rule_snap_blur_mode',
-    reveal_mode:       'rule_snap_reveal_mode',
-    thorough_blur:     'rule_snap_thorough_blur',
-    blur_categories:   'rule_snap_blur_categories',
-    pick_blur_enabled: 'rule_snap_pick_blur_enabled',
-    pick_blur_type:    'rule_snap_pick_blur_type',
+    blur_radius:           'rule_snap_blur_radius',
+    blur_mode:             'rule_snap_blur_mode',
+    reveal_mode:           'rule_snap_reveal_mode',
+    thorough_blur:         'rule_snap_thorough_blur',
+    blur_categories:       'rule_snap_blur_categories',
+    pick_blur_enabled:     'rule_snap_pick_blur_enabled',
+    pick_blur_type:        'rule_snap_pick_blur_type',
+    // PII
+    pii_email:             'rule_snap_label_pii_email',
+    pii_numeric:           'rule_snap_label_pii_numeric',
+    pii_mode:              'rule_snap_label_pii_mode',
+    pii_redaction_color:   'rule_snap_label_pii_redaction_color',
+    // Automate
+    automate_idle:         'rule_snap_label_automate_idle',
+    automate_tab_switch:   'rule_snap_label_automate_tab_switch',
+    automate_screen_share: 'rule_snap_label_automate_screen_share',
+  };
+
+  var SECTION_KEYS = {
+    blur:     ['blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
+               'blur_categories', 'pick_blur_enabled', 'pick_blur_type'],
+    pii:      ['pii_email', 'pii_numeric', 'pii_mode', 'pii_redaction_color'],
+    automate: ['automate_idle', 'automate_tab_switch', 'automate_screen_share'],
+  };
+
+  var SECTION_TITLES = {
+    blur:     'rule_snap_section_blur',
+    pii:      'rule_snap_section_pii',
+    automate: 'rule_snap_section_automate',
   };
 
   var BLUR_MODE_I18N = {
@@ -43,8 +65,19 @@ const BlurrySitePopupRenderSiteRules = (() => {
     if (key === 'reveal_mode') {
       return _t(REVEAL_MODE_I18N[value]) || value;
     }
-    if (key === 'thorough_blur' || key === 'pick_blur_enabled') {
+    if (
+      key === 'thorough_blur' ||
+      key === 'pick_blur_enabled' ||
+      key === 'pii_email' ||
+      key === 'pii_numeric' ||
+      key === 'automate_idle' ||
+      key === 'automate_tab_switch' ||
+      key === 'automate_screen_share'
+    ) {
       return value ? _t('rule_snap_val_on') : _t('rule_snap_val_off');
+    }
+    if (key === 'pii_redaction_color' && typeof value === 'string') {
+      return value;
     }
     if (key === 'blur_categories' && typeof value === 'object' && value !== null) {
       var enabled = Object.keys(value).filter(function(k) { return value[k]; });
@@ -56,12 +89,12 @@ const BlurrySitePopupRenderSiteRules = (() => {
 
   // ── Snapshot summary rows (read-only key-value list) ────────────────────
 
-  function _makeSnapshotRows(snapshot) {
-    // Flatten nested snapshot to the display key set used by SNAPSHOT_LABELS.
+  function _flattenSnapshot(snapshot) {
     var flat = {};
-    if (snapshot && snapshot.settings) Object.assign(flat, snapshot.settings);
-    if (snapshot && snapshot.blur_all && snapshot.blur_all.settings) Object.assign(flat, snapshot.blur_all.settings);
-    if (snapshot && snapshot.pick_and_blur) {
+    if (!snapshot) return flat;
+    if (snapshot.settings) Object.assign(flat, snapshot.settings);
+    if (snapshot.blur_all && snapshot.blur_all.settings) Object.assign(flat, snapshot.blur_all.settings);
+    if (snapshot.pick_and_blur) {
       var pb = snapshot.pick_and_blur;
       if (typeof pb.status === 'boolean') flat.pick_blur_enabled = pb.status;
       if (pb.settings) {
@@ -70,36 +103,69 @@ const BlurrySitePopupRenderSiteRules = (() => {
         if (pb.settings.picker_mode !== undefined) flat.picker_mode     = pb.settings.picker_mode;
       }
     }
+    if (snapshot.auto_detect_pii && snapshot.auto_detect_pii.settings) {
+      var ap = snapshot.auto_detect_pii.settings;
+      if (typeof ap.email === 'boolean')               flat.pii_email = ap.email;
+      if (typeof ap.numeric === 'boolean')             flat.pii_numeric = ap.numeric;
+      if (ap.pii_mode !== undefined)                   flat.pii_mode = ap.pii_mode;
+      if (typeof ap.pii_redaction_color === 'string')  flat.pii_redaction_color = ap.pii_redaction_color;
+    }
+    if (snapshot.automate && snapshot.automate.settings) {
+      var am = snapshot.automate.settings;
+      if (am.idle && typeof am.idle.enabled === 'boolean')               flat.automate_idle = am.idle.enabled;
+      if (am.tab_switch && typeof am.tab_switch.enabled === 'boolean')   flat.automate_tab_switch = am.tab_switch.enabled;
+      if (am.screen_share && typeof am.screen_share.enabled === 'boolean') flat.automate_screen_share = am.screen_share.enabled;
+    }
+    return flat;
+  }
+
+  function _makeSnapshotRows(snapshot) {
+    var flat = _flattenSnapshot(snapshot);
 
     var wrap = document.createElement('div');
     wrap.className = 'bl-rule-snapshot';
 
-    var hasAny = false;
-    var keys = Object.keys(SNAPSHOT_LABELS);
-    for (var i = 0; i < keys.length; i++) {
-      var key = keys[i];
-      if (!(key in flat)) continue;
-      var formatted = _formatSnapshotValue(key, flat[key]);
-      if (formatted === null) continue;
-      hasAny = true;
+    var anyRendered = false;
+    var sectionOrder = ['blur', 'pii', 'automate'];
 
-      var row = document.createElement('div');
-      row.className = 'bl-rule-snapshot-row';
+    for (var s = 0; s < sectionOrder.length; s++) {
+      var sec = sectionOrder[s];
+      var sectionKeys = SECTION_KEYS[sec];
+      var rendered = [];
 
-      var keyEl = document.createElement('span');
-      keyEl.className = 'bl-rule-snapshot-key';
-      keyEl.textContent = _t(SNAPSHOT_LABELS[key]);
-      row.appendChild(keyEl);
+      for (var i = 0; i < sectionKeys.length; i++) {
+        var key = sectionKeys[i];
+        if (!(key in flat)) continue;
+        var formatted = _formatSnapshotValue(key, flat[key]);
+        if (formatted === null) continue;
 
-      var valEl = document.createElement('span');
-      valEl.className = 'bl-rule-snapshot-val';
-      valEl.textContent = formatted;
-      row.appendChild(valEl);
+        var row = document.createElement('div');
+        row.className = 'bl-rule-snapshot-row';
 
-      wrap.appendChild(row);
+        var keyEl = document.createElement('span');
+        keyEl.className = 'bl-rule-snapshot-key';
+        keyEl.textContent = _t(SNAPSHOT_LABELS[key]);
+        row.appendChild(keyEl);
+
+        var valEl = document.createElement('span');
+        valEl.className = 'bl-rule-snapshot-val';
+        valEl.textContent = formatted;
+        row.appendChild(valEl);
+
+        rendered.push(row);
+      }
+
+      if (!rendered.length) continue;
+
+      anyRendered = true;
+      var hdr = document.createElement('div');
+      hdr.className = 'bl-rule-snap-section';
+      hdr.textContent = _t(SECTION_TITLES[sec]);
+      wrap.appendChild(hdr);
+      for (var r = 0; r < rendered.length; r++) wrap.appendChild(rendered[r]);
     }
 
-    if (!hasAny) {
+    if (!anyRendered) {
       var empty = document.createElement('p');
       empty.className = 'bl-rule-snapshot-empty';
       empty.textContent = _t('rule_snapshot_empty');
@@ -111,7 +177,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
 
   // ── Collapsible card ──────────────────────────────────────────────────────
 
-  function _makeCard(rule, rules, settings, callbacks, containerEl) {
+  function _makeCard(rule, rules, settings, callbacks, containerEl, autoExpand) {
     var card = document.createElement('div');
     card.className = 'bl-rule-card';
 
@@ -235,6 +301,14 @@ const BlurrySitePopupRenderSiteRules = (() => {
         _toggle();
       }
     });
+
+    if (autoExpand) {
+      _toggle();
+      // Defer scrollIntoView until after the card is in the DOM.
+      setTimeout(function() {
+        try { card.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_e) {}
+      }, 0);
+    }
 
     return card;
   }
@@ -466,7 +540,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
 
   // ── Main render ───────────────────────────────────────────────────────────
 
-  function _render(containerEl, rules, settings, callbacks, editingKey) {
+  function _render(containerEl, rules, settings, callbacks, editingKey, focusKey) {
     containerEl.replaceChildren();
 
     // Hint
@@ -488,10 +562,10 @@ const BlurrySitePopupRenderSiteRules = (() => {
       rules.forEach(function(rule) {
         var ruleKey = rule.hostname_value + '::' + rule.hostname_type;
         if (editingKey && ruleKey === editingKey) {
-          // Render edit form inline in place of the card
           list.appendChild(_makeForm(rule, rules, settings, callbacks, containerEl));
         } else {
-          list.appendChild(_makeCard(rule, rules, settings, callbacks, containerEl));
+          var autoExpand = !!(focusKey && ruleKey === focusKey);
+          list.appendChild(_makeCard(rule, rules, settings, callbacks, containerEl, autoExpand));
         }
       });
 
@@ -514,10 +588,14 @@ const BlurrySitePopupRenderSiteRules = (() => {
 
   // ── Public API ────────────────────────────────────────────────────────────
 
-  async function renderBody(containerEl, settings, callbacks) {
+  async function renderBody(containerEl, settings, callbacks, opts) {
     containerEl.replaceChildren();
     var rules = await callbacks.getRules();
-    _render(containerEl, rules, settings, callbacks);
+    var focusKey = null;
+    if (opts && opts.focusRule && opts.focusRule.hostname_value) {
+      focusKey = opts.focusRule.hostname_value + '::' + (opts.focusRule.hostname_type || '');
+    }
+    _render(containerEl, rules, settings, callbacks, null, focusKey);
   }
 
   return { renderBody };

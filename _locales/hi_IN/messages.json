@@ -543,6 +543,42 @@
   "rule_snap_val_none": {
     "message": "कोई नहीं"
   },
+  "rule_snap_section_blur": {
+    "message": "ब्लर"
+  },
+  "rule_snap_section_pii": {
+    "message": "PII"
+  },
+  "rule_snap_section_automate": {
+    "message": "स्वचालित"
+  },
+  "rule_snap_label_pii_email": {
+    "message": "PII: ईमेल"
+  },
+  "rule_snap_label_pii_numeric": {
+    "message": "PII: संख्या"
+  },
+  "rule_snap_label_pii_mode": {
+    "message": "PII मोड"
+  },
+  "rule_snap_label_pii_redaction_color": {
+    "message": "PII रंग"
+  },
+  "rule_snap_label_automate_idle": {
+    "message": "निष्क्रिय ट्रिगर"
+  },
+  "rule_snap_label_automate_tab_switch": {
+    "message": "टैब-स्विच ट्रिगर"
+  },
+  "rule_snap_label_automate_screen_share": {
+    "message": "स्क्रीन-शेयर ट्रिगर"
+  },
+  "popup_badge_managed_by_rule": {
+    "message": "साइट नियम द्वारा प्रबंधित"
+  },
+  "toast_suffix_site_rule": {
+    "message": "(साइट नियम)"
+  },
   "rule_active_banner": {
     "message": "साइट नियम सक्रिय"
   },

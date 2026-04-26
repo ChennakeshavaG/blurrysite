@@ -89,6 +89,18 @@
     return value; // sec
   }
 
+  // Builds an i18n toast string and appends "(site rule)" when the relevant
+  // resolved field came from a site rule snapshot (per resolved._rule_overrides).
+  function _toastMsg(toastKey, overrideKey) {
+    const base = chrome.i18n.getMessage(toastKey) || toastKey;
+    const ov = settings && settings._rule_overrides;
+    if (overrideKey && ov && ov[overrideKey]) {
+      const suffix = chrome.i18n.getMessage('toast_suffix_site_rule') || '(site rule)';
+      return base + ' ' + suffix;
+    }
+    return base;
+  }
+
   // ── Screen share helpers ───────────────────────────────────────────────────
 
   /**
@@ -435,13 +447,16 @@
       case blsi.command.screen_share_blur: {
         if (_ssBlurSuppressed) { if (sendResponse) sendResponse({ ok: false, reason: 'tab-suppressed' }); break; }
         const am_s = (Store.get().automate || {}).settings || {};
-        if ((am_s.screen_share || {}).enabled) {
+        // Read trigger-enabled from resolved settings so a site rule that
+        // toggles screen_share for this host is honored.
+        const ssResolved = (settings && settings.automate_screen_share) || (am_s.screen_share || {});
+        if (ssResolved.enabled) {
           log.flow('trigger.screenShareBlur');
           (async () => {
             await Store.save_automate_blur(hostname, 'screen_share', true);
             await _sync();
-            if (settings.automate_blur_only)    Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _ssBlurStopActions());
-            if (settings.automate_blur_skipped) Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
+            if (settings.automate_blur_only)    Shortcuts.showToast(_toastMsg('automate_toast_screen_share', 'automate_screen_share'), 15000, _ssBlurStopActions());
+            if (settings.automate_blur_skipped) Shortcuts.showToast(_toastMsg('automate_toast_skipped', 'automate_screen_share'), 2500);
             if (sendResponse) sendResponse({ ok: true });
           })();
           return true;
@@ -545,8 +560,9 @@
             const toastKey = trigger === 'tab_switch'
               ? 'automate_toast_tab_switch'
               : 'automate_toast_idle';
-            if (settings.automate_blur_only)    Shortcuts.showToast(chrome.i18n.getMessage(toastKey), 2500);
-            if (settings.automate_blur_skipped) Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
+            const ovKey = trigger === 'tab_switch' ? 'automate_tab_switch' : 'automate_idle';
+            if (settings.automate_blur_only)    Shortcuts.showToast(_toastMsg(toastKey, ovKey), 2500);
+            if (settings.automate_blur_skipped) Shortcuts.showToast(_toastMsg('automate_toast_skipped', ovKey), 2500);
           },
           onActive: async () => {
             await Store.patch_automate_blur(hostname, { idle: false, tab_switch: false });
