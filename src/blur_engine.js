@@ -701,7 +701,7 @@ const BlurEngine = (() => {
    * matching the active categories, and collect any open shadow roots found
    * during the traversal — all in ONE querySelectorAll('*') pass.
    *
-   * Returns the discovered ShadowRoot[] so the caller (handleDocument) can
+   * Returns the discovered ShadowRoot[] so the caller (_flushStampQueue) can
    * dispatch into them after this root is fully processed. No shadowCb param —
    * the caller owns dispatch so shadow roots are never processed mid-loop.
    */
@@ -719,7 +719,7 @@ const BlurEngine = (() => {
 
       // Shadow root discovery: collect for post-stamp dispatch by caller.
       // CSS injected into each shadow root handles alwaysBlur declaratively;
-      // text-check stamping happens when caller recurses via handleDocument.
+      // text-check stamping happens when caller recurses via _flushStampQueue.
       if (el.shadowRoot) shadowRoots.push(el.shadowRoot);
 
       const tag = el.tagName.toLowerCase();
@@ -728,7 +728,7 @@ const BlurEngine = (() => {
       // _textCheckSet (which only contains known HTML elements). Stamp the
       // host itself so light-DOM-only custom elements (e.g. <shreddit-foo>)
       // aren't invisible to blur. Shadow root content is handled separately
-      // via handleDocument recursion. Gated on STRUCTURE or TEXT active.
+      // via _flushStampQueue recursion. Gated on STRUCTURE or TEXT active.
       if (tag.includes('-')) {
         if (!el.dataset.blSiBlur && !el.dataset.blSiPickBlur && !el.dataset.blSiPii && !_isExtensionUI(el) &&
             (cats.structure !== false || cats.text !== false) &&
@@ -804,15 +804,6 @@ const BlurEngine = (() => {
     if (element.dataset.blSiBlur) _blurredCount--;
     delete element.dataset.blSiBlur;
     delete element.dataset.blSiPickBlur;
-  }
-
-  function toggleBlur(element) {
-    if (!element || !(element instanceof Element)) return;
-    if (isBlurred(element)) {
-      removeBlur(element);
-    } else {
-      applyBlur(element);
-    }
   }
 
   function isBlurred(element) {
@@ -982,7 +973,9 @@ const BlurEngine = (() => {
         }
       }
     } else if (!blurAllOn && !pickBlurOn) {
-      // Engine inactive — discard any buffered nodes from a stale tick.
+      // Engine inactive — discard the engine-only node buffer from a stale tick.
+      // _pendingMutations are NOT discarded here; subscribers (PII / future)
+      // are dispatched in step 2 below regardless of engine state.
       _pendingMoNodes.length = 0;
     }
 
@@ -1628,17 +1621,6 @@ const BlurEngine = (() => {
     } else {
       if (iframeEl.dataset.blSiBlur) { delete iframeEl.dataset.blSiBlur; _blurredCount--; }
     }
-  }
-
-  /**
-   * Thin router — routes to handleMainDocument or handleShadowRoot.
-   * Kept on the public API for backward compatibility and unit tests.
-   * Both are now synchronous; stamp work runs in requestIdleCallback.
-   */
-  function handleDocument(settings, root) {
-    if (!root || root === document) return handleMainDocument(settings);
-    if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot)
-      return handleShadowRoot(settings, root);
   }
 
   /**

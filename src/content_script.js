@@ -609,7 +609,10 @@
     } else {
       blsi.BlurEngine.unsubscribeMutations('pii');
       blsi.BlurEngine.removePiiRules();
-      blsi.PiiDetector.clear(document.body);
+      // document.body can be momentarily null in early-disable paths during
+      // teardown — guard so a throw here doesn't leak the unsubscribe state
+      // (already done above) and leave stale [data-bl-si-pii] spans on screen.
+      try { blsi.PiiDetector.clear(document.body); } catch (_) {}
     }
   }
 
