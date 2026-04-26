@@ -510,11 +510,17 @@
 }
 
 .bl-si-toast__logo {
-  width: 16px !important;
-  height: 16px !important;
+  all: initial;
+  width: 20px !important;
+  height: 20px !important;
   flex-shrink: 0 !important;
   display: block !important;
-  opacity: 0.85 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+  background: none !important;
+  object-fit: contain !important;
 }
 
 .bl-si-toast__actions {

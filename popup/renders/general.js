@@ -198,7 +198,11 @@ const BlurrySitePopupRenderGeneral = (() => {
 
     containerEl.replaceChildren();
     containerEl.appendChild(_buildLanguageRow(settings, onSave));
-    containerEl.appendChild(_buildTabPrivacyRow(settings, onSave));
+    // Hide tab_privacy when current host is rule-managed — the rule snapshot
+    // owns that field; editing it from General would be a no-op for this host.
+    if (!BlurrySitePopupShared.isRuleManaged(settings)) {
+      containerEl.appendChild(_buildTabPrivacyRow(settings, onSave));
+    }
     containerEl.appendChild(_buildDebugRow(debugEnabled, onToggleDebug));
     containerEl.appendChild(_buildBackupRow(onExport, onImport));
   }

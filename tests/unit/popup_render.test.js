@@ -568,3 +568,67 @@ describe('renderModesSection', () => {
     });
   });
 });
+
+// ── renderAll rule-managed branch ────────────────────────────────────────────
+
+describe('renderAll rule-managed branch', () => {
+  function setupFullDom() {
+    document.body.innerHTML = `
+      <section id="bl-modes" class="bl-section bl-modes">
+        <div id="bl-notif-area"></div>
+        <div id="bl-mode-blur-all" class="bl-mode-block"><span>old-content</span></div>
+        <div id="bl-mode-pick-blur" class="bl-mode-block"><span>old-content</span></div>
+      </section>
+      <section id="bl-pii"><div id="bl-pii-chips"></div><div id="bl-pii-color-row"></div></section>
+      <section id="bl-automate"><div id="bl-automate-summary"></div></section>
+    `;
+  }
+
+  beforeEach(() => {
+    setupFullDom();
+    document.body.classList.remove('bl-rule-managed');
+  });
+
+  test('rule-managed: stamps body class, renders banner, clears mode blocks', () => {
+    const ruleMatch = { hostname_value: '*.example.com', hostname_type: 'wildcard' };
+    const settings = makeSettings();
+    BlurrySitePopupRender.renderAll(
+      settings, [], false,
+      () => {}, () => {},
+      null, () => {},
+      { ruleMatch, ruleOverrides: { blur_mode: true, blur_categories: true } },
+    );
+    expect(document.body.classList.contains('bl-rule-managed')).toBe(true);
+    expect(document.querySelector('#bl-notif-area .bl-rule-banner')).not.toBeNull();
+    expect(document.getElementById('bl-mode-blur-all').children.length).toBe(0);
+    expect(document.getElementById('bl-mode-pick-blur').children.length).toBe(0);
+  });
+
+  test('non-rule-managed: removes body class, renders modes normally', () => {
+    document.body.classList.add('bl-rule-managed'); // start dirty
+    const settings = makeSettings();
+    BlurrySitePopupRender.renderAll(
+      settings, [], false,
+      () => {}, () => {},
+      null, () => {},
+      { ruleMatch: null, ruleOverrides: {} },
+    );
+    expect(document.body.classList.contains('bl-rule-managed')).toBe(false);
+    expect(document.querySelector('#bl-notif-area .bl-rule-banner')).toBeNull();
+  });
+
+  test('rule-managed: banner CTA invokes onOpenManagingRule with focusRule', () => {
+    const ruleMatch = { hostname_value: 'github.com', hostname_type: 'exact' };
+    const onOpen = jest.fn();
+    BlurrySitePopupRender.renderAll(
+      makeSettings(), [], false,
+      () => {}, () => {},
+      null, () => {},
+      { ruleMatch, ruleOverrides: { blur_mode: true }, onOpenManagingRule: onOpen },
+    );
+    const cta = document.querySelector('.bl-rule-banner__cta');
+    expect(cta).not.toBeNull();
+    cta.click();
+    expect(onOpen).toHaveBeenCalledWith({ focusRule: ruleMatch });
+  });
+});

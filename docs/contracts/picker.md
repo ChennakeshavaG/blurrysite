@@ -452,7 +452,6 @@ The `onStickyBlur` callback receives an object shaped as follows. `content_scrip
   name:        string,  // from Engine.allocateStickyName()
   id:          string,  // from _generateZoneId() — 's_' + 8 chars
   xPct, yPct, widthPct, heightPct: number,  // percentages for re-projection
-  path:        string | undefined,  // location.pathname for 'page'; undefined for 'screen'
 }
 ```
 

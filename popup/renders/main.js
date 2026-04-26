@@ -682,10 +682,52 @@ const BlurrySitePopupRender = (() => {
   // ── Render all sections ────────────────────────────────────────────────────
 
   function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, activeRule, onOpenSiteRules, ctx) {
+    ctx = ctx || {};
+    // Compose a settings view that includes resolve-only rule metadata so
+    // BlurrySitePopupShared.isRuleManaged() can read it from one place.
+    var ruleSettings = Object.assign({}, settings, {
+      _rule_match: ctx.ruleMatch || null,
+      _rule_overrides: ctx.ruleOverrides || {},
+    });
+    var ruleManaged = BlurrySitePopupShared.isRuleManaged(ruleSettings);
+    document.body.classList.toggle('bl-rule-managed', ruleManaged);
+
+    if (ruleManaged) {
+      // Banner replaces the modes/PII/automate UI on rule-managed hosts.
+      _renderRuleManagedBanner(ctx.ruleMatch, ctx.onOpenManagingRule || onOpenSiteRules);
+      _clearRuleManagedSections();
+      return;
+    }
+
     renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, ctx);
     renderModesSection(settings, blurItems, isPageBlurred);
     renderPiiSection(settings, onSave, ctx);
     renderAutomateSection(settings, onClearAutomate);
+  }
+
+  function _renderRuleManagedBanner(ruleMatch, onOpen) {
+    var notif = document.getElementById('bl-notif-area');
+    if (notif) notif.replaceChildren();
+    var blurAllEl  = document.getElementById('bl-mode-blur-all');
+    if (blurAllEl) blurAllEl.replaceChildren();
+    var pickBlurEl = document.getElementById('bl-mode-pick-blur');
+    if (pickBlurEl) pickBlurEl.replaceChildren();
+    if (!notif || !ruleMatch) return;
+
+    var banner = BlurrySitePopupShared.makeBanner({
+      hostname_value: ruleMatch.hostname_value,
+      hostname_type:  ruleMatch.hostname_type,
+      onEdit: function () { if (onOpen) onOpen({ focusRule: ruleMatch }); },
+    });
+    notif.appendChild(banner);
+  }
+
+  function _clearRuleManagedSections() {
+    var ids = ['bl-pii-chips', 'bl-pii-color-row', 'bl-automate-summary'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el) el.replaceChildren();
+    }
   }
 
   return { renderAll, renderHtbSection, renderPiiSection, renderAutomateSection, renderModesSection, renderNotifArea };

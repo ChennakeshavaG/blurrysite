@@ -35,9 +35,18 @@
     UI.showView('bl-view-site-rules', true);
     BlurrySitePopupRenderSiteRules.renderBody(bodyEl, State.get().settings, {
       onSaveSettings:   _onSave,
-      onSaveRules:      (newRules) => State.saveRules(newRules),
+      // Reload after every site_rules write so the entire popup state — main
+      // view banner, hidden sections, sub-page arrows, etc. — reflects the
+      // updated rules without manual re-render plumbing across every screen.
+      onSaveRules:      async (newRules) => {
+        await State.saveRules(newRules);
+        location.reload();
+      },
       captureSnapshot:  () => State.captureSnapshot(),
-      saveSiteSnapshot: (hv, ht, snap) => State.saveSiteSnapshot(hv, ht, snap),
+      saveSiteSnapshot: async (hv, ht, snap) => {
+        await State.saveSiteSnapshot(hv, ht, snap);
+        location.reload();
+      },
       getRules:         () => State.getRules(),
     }, opts);
     _updateSubpageArrows(bodyEl);
@@ -455,7 +464,7 @@
       });
     });
 
-    window.addEventListener('unload', () => {
+    window.addEventListener('pagehide', () => {
       if (!_highlightedRowKey) return;
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) {

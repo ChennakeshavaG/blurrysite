@@ -44,9 +44,9 @@ The rule card shows the saved snapshot in three labeled sections:
 
 | Section | Fields rendered |
 |---|---|
-| **Blur** | `blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `blur_categories`, `pick_blur_enabled`, `pick_blur_type` |
+| **Blur** | `blur_mode`, `blur_categories`, `pick_blur_enabled`, `pick_blur_type`, `pick_blur_items` (count) |
 | **PII** | `pii_email`, `pii_numeric`, `pii_mode`, `pii_redaction_color` |
-| **Automate** | `automate_idle`, `automate_tab_switch`, `automate_screen_share` (each shows trigger `enabled` only) |
+| **Automate** | `automate_idle` (enabled), `automate_idle_threshold` (value + unit), `automate_tab_switch`, `automate_screen_share` |
 
 A section is omitted when none of its fields are present in the snapshot.
 "No custom settings" copy renders only when ALL three sections are empty.
@@ -56,8 +56,13 @@ click **Recapture** to refresh the rule's snapshot wholesale.
 
 ## Internal Helpers (private)
 
-- `_makeCard(rule, rules, settings, callbacks, containerEl)` — collapsible
+- `_makeCard(rule, rules, settings, callbacks, containerEl, autoExpand)` — collapsible
   card rendering one rule. Buttons: Recapture, Edit pattern, Delete.
+  When the rule matches the active tab (`settings._rule_match.hostname_value` +
+  `hostname_type` equal to this rule's), Recapture and Edit pattern are
+  omitted — the rule's snapshot is the user's effective configuration on this
+  tab, so a recapture would no-op and pattern editing from the managed host is
+  confusing. Delete remains available so users can always escape the rule.
 - `_makeForm(existingRule|null, ...)` — pattern + type radios + snapshot
   preview + Save/Cancel. Reused for both add and edit flows.
 - `_makeSnapshotRows(snapshot)` — three-section group of read-only key/value

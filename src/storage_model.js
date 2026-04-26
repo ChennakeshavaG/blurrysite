@@ -361,23 +361,24 @@ const StorageModel = (() => {
 
   /**
    * Capture a settings snapshot from the current cached global model.
-   * Returns { settings, blur_all, pick_and_blur, auto_detect_pii, automate }
-   * mirroring the global model structure with deep copies of nested objects.
-   * Excludes: site_rules, shortcuts, enabled, language, idle.value/unit,
-   * pick_and_blur.items.
+   * Returns { blur_all, pick_and_blur, auto_detect_pii, automate } mirroring
+   * the feature-grouped model sections with deep copies of nested objects.
+   * Includes pick_and_blur.items for the supplied hostname (deep-copied) and
+   * the full automate.settings.idle shape (value + unit + enabled).
+   * Excludes: site_rules, shortcuts, global_default_settings.
+   *
+   * @param {string} [hostname]  When provided, captures the host's pick-blur
+   *   items into snapshot.pick_and_blur.items. Omitted/empty → items: [].
    */
-  function capture_snapshot() {
+  function capture_snapshot(hostname) {
     var m = get();
+    var items = [];
+    if (typeof hostname === "string" && hostname) {
+      items = JSON.parse(
+        JSON.stringify((m.pick_and_blur.items || {})[hostname] || []),
+      );
+    }
     return {
-      settings: {
-        blur_radius: m.global_default_settings.blur_radius,
-        reveal_mode: m.global_default_settings.reveal_mode,
-        thorough_blur: m.global_default_settings.thorough_blur,
-        highlight_color: m.global_default_settings.highlight_color,
-        redaction_color: m.global_default_settings.redaction_color,
-        tab_privacy: m.global_default_settings.tab_privacy,
-        transition_duration: m.global_default_settings.transition_duration,
-      },
       blur_all: {
         settings: {
           blur_mode: m.blur_all.settings.blur_mode,
@@ -395,6 +396,7 @@ const StorageModel = (() => {
           ),
           picker_mode: m.pick_and_blur.settings.picker_mode,
         },
+        items: items,
       },
       auto_detect_pii: {
         settings: {
@@ -406,7 +408,11 @@ const StorageModel = (() => {
       },
       automate: {
         settings: {
-          idle: { enabled: m.automate.settings.idle.enabled },
+          idle: {
+            value: m.automate.settings.idle.value,
+            unit: m.automate.settings.idle.unit,
+            enabled: m.automate.settings.idle.enabled,
+          },
           tab_switch: { enabled: m.automate.settings.tab_switch.enabled },
           screen_share: { enabled: m.automate.settings.screen_share.enabled },
         },
@@ -414,23 +420,43 @@ const StorageModel = (() => {
     };
   }
 
+  // Fill any missing keys/sections from the current global so the persisted
+  // snapshot mirrors capture_snapshot()'s full shape. Used by save_site_snapshot
+  // to enforce the full-snapshot contract regardless of caller payload.
+  function _fill_snapshot_to_full(partial) {
+    var full = capture_snapshot();
+    var out = blsi.deep_merge(full, partial);
+    return out;
+  }
+
   /**
    * Save a settings snapshot for a rule (hostname_value + hostname_type).
    * For wildcard/regex rules, ensure the rule exists via save_rules() first.
    *
+   * Non-empty snapshots are auto-filled to the full capture_snapshot() shape;
+   * partial inputs are merged over the current global so rule-managed UX has
+   * a complete field set. Empty {} stays empty (sentinel for "rule pins
+   * blur_all toggle only — no setting overrides").
+   *
    * @param {string} hostname_value  e.g. 'github.com' or '*.example.com'
    * @param {string} hostname_type   blsi.pattern_types value
-   * @param {object} snapshot        { settings, blur_all, pick_and_blur }
+   * @param {object} snapshot        { blur_all, pick_and_blur, auto_detect_pii, automate } | {}
    */
   async function save_site_snapshot(hostname_value, hostname_type, snapshot) {
     if (!hostname_value || typeof hostname_value !== "string") return;
     if (!snapshot || typeof snapshot !== "object") return;
+    // Full-snapshot enforcement: non-empty snapshots auto-fill from current
+    // global via capture_snapshot() so rule-managed UX has a complete contract.
+    // Empty {} stays empty (sentinel for "rule pins blur_all toggle only").
+    var snap_to_write = Object.keys(snapshot).length === 0
+      ? {}
+      : _fill_snapshot_to_full(snapshot);
     var current = get();
     var rules = current.site_rules.slice();
     var idx = _find_rule_idx(hostname_value, hostname_type);
     if (idx >= 0) {
       var updated = Object.assign({}, rules[idx], {
-        snapshot: Object.assign({}, snapshot),
+        snapshot: snap_to_write,
       });
       var next_rules = rules.map(function (r, i) {
         return i === idx ? updated : r;
@@ -443,7 +469,7 @@ const StorageModel = (() => {
         hostname_value: hostname_value,
         hostname_type: hostname_type || blsi.pattern_types.exact,
         blur_all: null,
-        snapshot: Object.assign({}, snapshot),
+        snapshot: snap_to_write,
       };
       await _write(
         Object.assign({}, current, { site_rules: rules.concat([new_entry]) }),
@@ -464,20 +490,6 @@ const StorageModel = (() => {
 
   // ── Resolve ────────────────────────────────────────────────────────────────
 
-  // Allowlist of keys permitted under snapshot.settings. Mirrors the keys
-  // produced by capture_snapshot() / accepted by validate_model snapshot
-  // validation. Keeps _rule_overrides honest — only fields the user can
-  // actually manage per-site land in the map.
-  var _SNAPSHOT_SETTINGS_KEYS = [
-    "blur_radius",
-    "reveal_mode",
-    "thorough_blur",
-    "highlight_color",
-    "redaction_color",
-    "tab_privacy",
-    "transition_duration",
-  ];
-
   // Merges a stored snapshot into a resolved settings object in-place.
   // Stamps resolved._rule_overrides[<flat-key>] = true for each key written
   // so downstream UI can detect rule-driven fields without re-walking storage.
@@ -486,16 +498,6 @@ const StorageModel = (() => {
     if (!resolved._rule_overrides) resolved._rule_overrides = {};
     var ov = resolved._rule_overrides;
 
-    if (snapshot.settings && typeof snapshot.settings === "object") {
-      var ss = snapshot.settings;
-      for (var ki = 0; ki < _SNAPSHOT_SETTINGS_KEYS.length; ki++) {
-        var sk = _SNAPSHOT_SETTINGS_KEYS[ki];
-        if (Object.prototype.hasOwnProperty.call(ss, sk) && ss[sk] !== undefined) {
-          resolved[sk] = ss[sk];
-          ov[sk] = true;
-        }
-      }
-    }
     if (
       snapshot.blur_all &&
       snapshot.blur_all.settings &&
@@ -531,6 +533,12 @@ const StorageModel = (() => {
           ov.picker_mode = true;
         }
       }
+      // Items REPLACE host-keyed items when present. Empty array still wins —
+      // sentinel for "rule pins this host to no pick-blur items".
+      if (Array.isArray(pb.items)) {
+        resolved.blur_items = resolved.pick_blur_enabled ? pb.items.slice() : [];
+        ov.blur_items = true;
+      }
     }
     if (snapshot.auto_detect_pii && snapshot.auto_detect_pii.settings) {
       var p = snapshot.auto_detect_pii.settings;
@@ -553,11 +561,19 @@ const StorageModel = (() => {
     }
     if (snapshot.automate && snapshot.automate.settings) {
       var a = snapshot.automate.settings;
-      if (a.idle && a.idle.enabled !== undefined) {
-        resolved.automate_idle = Object.assign({}, resolved.automate_idle, {
-          enabled: !!a.idle.enabled,
-        });
-        ov.automate_idle = true;
+      if (a.idle && typeof a.idle === "object") {
+        var idle_patch = {};
+        if (a.idle.enabled !== undefined) idle_patch.enabled = !!a.idle.enabled;
+        if (typeof a.idle.value === "number") idle_patch.value = a.idle.value;
+        if (typeof a.idle.unit === "string") idle_patch.unit = a.idle.unit;
+        if (Object.keys(idle_patch).length) {
+          resolved.automate_idle = Object.assign(
+            {},
+            resolved.automate_idle,
+            idle_patch,
+          );
+          ov.automate_idle = true;
+        }
       }
       if (a.tab_switch && a.tab_switch.enabled !== undefined) {
         resolved.automate_tab_switch = Object.assign(
@@ -627,6 +643,12 @@ const StorageModel = (() => {
     resolved.automate_idle = m.automate.settings.idle;
     resolved.automate_tab_switch = m.automate.settings.tab_switch;
 
+    // ── 5b. blur items (must be on resolved before snapshot apply so a rule
+    //       can REPLACE the host-keyed items with its own snapshot.items)
+    resolved.blur_items = m.pick_and_blur.status
+      ? (m.pick_and_blur.items || {})[hostname] || []
+      : [];
+
     // ── 6. shortcuts ───────────────────────────────────────────────────────
     resolved.shortcuts = m.shortcuts || {};
 
@@ -673,13 +695,7 @@ const StorageModel = (() => {
       };
     }
 
-    // ── 9. blur items for this hostname ────────────────────────────────────
-    // Gated on pick_and_blur.status — items are "paused" (not applied) when off.
-    resolved.blur_items = m.pick_and_blur.status
-      ? (m.pick_and_blur.items || {})[hostname] || []
-      : [];
-
-    // ── 10. automate active state (session cache) ─────────────────────────
+    // ── 9. automate active state (session cache) ──────────────────────────
     var automate_entry = (_automate_cache || {})[hostname] || {};
     var has_tab_id = typeof tab_id === "number" && Number.isFinite(tab_id);
     var tab_suppressed = has_tab_id && _suppressed_tabs_cache.indexOf(tab_id) >= 0;

@@ -255,7 +255,7 @@ Single source of truth for the `blsi_model` storage shape. Feature-grouped. **Sh
 - Filters: non-object rules, empty `hostname_value`, prototype-polluting names rejected
 - Sliced to 200 entries
 - Each rule: `hostname_value` trimmed + sliced to 500 chars; `hostname_type` validated against `pattern_types`; `blur_all`: boolean or null; `items`: filtered (dynamic needs selectors or legacy selector; sticky needs id/x/y/width/height) + sliced to 10
-- `snapshot`: nested validation — `settings.*` keys whitelist-filtered; `blur_all.settings.blur_categories` validated; `pick_and_blur.settings.blur_color` validated
+- `snapshot`: nested validation — `blur_all.settings.blur_categories` validated; `pick_and_blur.settings.blur_color` validated; `pick_and_blur.items` filtered via `_is_valid_snapshot_item` + capped at 10; `automate.settings.idle` accepts `{ value (1–99), unit (idle_units), enabled }` — `tab_switch` / `screen_share` accept `enabled` only. **Legacy `settings` block dropped silently.** **Full-snapshot fill**: empty `{}` stays empty (sentinel for "rule pins blur_all toggle only"); non-empty snapshots are filled to the complete `capture_snapshot()` shape — every missing key is populated from `DEFAULT_MODEL` so resolve never sees a partial. `pick_and_blur.items` defaults to `[]`; `automate.settings.idle` defaults to the full `{ value, unit, enabled }` from `DEFAULT_MODEL`.
 
 ## Invariants
 

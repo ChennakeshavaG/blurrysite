@@ -44,7 +44,18 @@ Re-reads `_model`, `_activeRule`, `_blurItems`, `_isPageBlurred` from `blsi.Mode
 ### `saveSettings(patch) → Promise<void>`
 Top-level keys of `patch` must be model sections (`global_default_settings`, `blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate`, `shortcuts`, `site_rules`). Calls `patch_section` per key in parallel, then `refreshFromStorage()`.
 
+**Rule-managed guard**: when the current host has a non-empty site-rule snapshot (detected via `blsi.Model.resolve()` → `_rule_match` truthy + `_rule_overrides` non-empty), snapshot-managed sections are stripped from the patch before write:
+- `blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate` — dropped entirely
+- `global_default_settings`, `shortcuts`, `site_rules` pass through unchanged (the snapshot no longer captures any global_default_settings keys, so all per-user display knobs remain editable)
+
+If everything was filtered, the call no-ops with a logger warning. Defence-in-depth — the popup UI hides controls that would generate these patches, but a stale render or external storage event could still trigger them.
+
 Edge: `patch` falsy or non-object → no-op.
+
+### `get().settings` rule metadata
+The settings object returned by `get()` is extended with two fields read from `resolve()` so render files can call `BlurrySitePopupShared.isRuleManaged(settings)` directly:
+- `settings._rule_match` — `{ hostname_value, hostname_type } | null` — the rule (wildcard/regex/exact) governing the current URL, or null.
+- `settings._rule_overrides` — `{ [flat_key]: true }` — every resolved field set by a snapshot. Empty when no snapshot applies.
 
 ### `saveBlurState(checked) → Promise<void>`
 Writes blur-all status for `_hostname`. No-op when `_hostname` empty.

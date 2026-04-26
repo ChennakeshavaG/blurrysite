@@ -286,6 +286,30 @@ const Constants = (() => {
     return true;
   }
 
+  // Snapshot item shape check — mirrors storage_model._is_valid_item but kept
+  // here so validate_model can scrub site_rule snapshot items without a
+  // cross-module call. Accepts both the new (selectors[]) and legacy (selector)
+  // dynamic shape, plus the sticky shape.
+  function _is_valid_snapshot_item(item) {
+    if (!item || typeof item !== 'object') return false;
+    if (item.type === 'dynamic') {
+      const name_ok = typeof item.name === 'string' && item.name.length <= 100;
+      if (Array.isArray(item.selectors)) {
+        return name_ok && item.selectors.length > 0 && item.selectors.length <= 6 &&
+          item.selectors.every(s => typeof s === 'string' && s.length > 0 && s.length <= 2000);
+      }
+      return name_ok &&
+        typeof item.selector === 'string' && item.selector.length > 0 && item.selector.length <= 2000;
+    }
+    if (item.type === 'sticky') {
+      return typeof item.id === 'string' && item.id.length > 0 &&
+        typeof item.name === 'string' && item.name.length <= 100 &&
+        typeof item.x === 'number' && typeof item.y === 'number' &&
+        typeof item.width === 'number' && typeof item.height === 'number';
+    }
+    return false;
+  }
+
   // ── Validate model ─────────────────────────────────────────────────────────
   // Validates and repairs every section of a stored blsi_model object.
   // Missing or invalid values fall back to build_default_model() defaults.
@@ -498,18 +522,9 @@ const Constants = (() => {
           snapshot: (() => {
             const raw = (rule.snapshot && typeof rule.snapshot === 'object' && !Array.isArray(rule.snapshot))
               ? rule.snapshot : {};
+            // Empty {} stays empty — sentinel for "rule pins blur_all toggle only".
+            if (Object.keys(raw).length === 0) return {};
             const out = {};
-
-            // settings section
-            if (raw.settings && typeof raw.settings === 'object') {
-              const ss = raw.settings;
-              const ss_out = {};
-              for (const k of ['blur_radius', 'reveal_mode', 'thorough_blur', 'highlight_color',
-                               'redaction_color', 'tab_privacy', 'transition_duration']) {
-                if (k in ss) ss_out[k] = ss[k];
-              }
-              if (Object.keys(ss_out).length) out.settings = ss_out;
-            }
 
             // blur_all section
             if (raw.blur_all && typeof raw.blur_all === 'object') {
@@ -553,14 +568,26 @@ const Constants = (() => {
               if (Object.keys(ap_out).length) out.auto_detect_pii = ap_out;
             }
 
-            // automate section — only trigger.enabled fields are snapshot-overridable
+            // automate section — trigger.enabled for all three triggers,
+            // plus idle.value / idle.unit (full idle shape is snapshot-overridable).
             if (raw.automate && typeof raw.automate === 'object') {
               const am = raw.automate;
               const am_out = {};
               if (am.settings && typeof am.settings === 'object') {
                 const am_s = am.settings;
                 const am_s_out = {};
-                for (const trig of ['idle', 'tab_switch', 'screen_share']) {
+                if (am_s.idle && typeof am_s.idle === 'object') {
+                  const idle_out = {};
+                  if (typeof am_s.idle.enabled === 'boolean') idle_out.enabled = am_s.idle.enabled;
+                  if (typeof am_s.idle.value === 'number' && am_s.idle.value >= 1 && am_s.idle.value <= 99) {
+                    idle_out.value = am_s.idle.value;
+                  }
+                  if (Object.values(idle_units).includes(am_s.idle.unit)) {
+                    idle_out.unit = am_s.idle.unit;
+                  }
+                  if (Object.keys(idle_out).length) am_s_out.idle = idle_out;
+                }
+                for (const trig of ['tab_switch', 'screen_share']) {
                   const t = am_s[trig];
                   if (t && typeof t === 'object' && typeof t.enabled === 'boolean') {
                     am_s_out[trig] = { enabled: t.enabled };
@@ -571,7 +598,8 @@ const Constants = (() => {
               if (Object.keys(am_out).length) out.automate = am_out;
             }
 
-            // pick_and_blur section
+            // pick_and_blur section — settings + items array (host-bound items
+            // pinned by the rule; replace host-keyed items at resolve time).
             if (raw.pick_and_blur && typeof raw.pick_and_blur === 'object') {
               const pb = raw.pick_and_blur;
               const pb_out = {};
@@ -592,7 +620,63 @@ const Constants = (() => {
                 }
                 if (Object.keys(pb_s_out).length) pb_out.settings = pb_s_out;
               }
+              if (Array.isArray(pb.items)) {
+                pb_out.items = pb.items
+                  .filter(_is_valid_snapshot_item)
+                  .slice(0, 10);
+              }
               if (Object.keys(pb_out).length) out.pick_and_blur = pb_out;
+            }
+
+            // Full-snapshot enforcement: a non-empty snapshot must mirror
+            // capture_snapshot()'s full shape. Fill any missing keys/sections
+            // from DEFAULT_MODEL so resolve() never sees a partial.
+            // Empty {} would have already returned above.
+            if (!out.blur_all) out.blur_all = {};
+            if (!out.blur_all.settings) out.blur_all.settings = {};
+            if (!('blur_mode' in out.blur_all.settings))
+              out.blur_all.settings.blur_mode = d.blur_all.settings.blur_mode;
+            if (!('blur_categories' in out.blur_all.settings)) {
+              const cats_full = {};
+              for (const ck of Object.keys(d.blur_all.settings.blur_categories)) {
+                cats_full[ck] = d.blur_all.settings.blur_categories[ck];
+              }
+              out.blur_all.settings.blur_categories = cats_full;
+            }
+            if (!out.pick_and_blur) out.pick_and_blur = {};
+            if (typeof out.pick_and_blur.status !== 'boolean')
+              out.pick_and_blur.status = d.pick_and_blur.status;
+            if (!out.pick_and_blur.settings) out.pick_and_blur.settings = {};
+            if (!('blur_type' in out.pick_and_blur.settings))
+              out.pick_and_blur.settings.blur_type = d.pick_and_blur.settings.blur_type;
+            if (!('picker_mode' in out.pick_and_blur.settings))
+              out.pick_and_blur.settings.picker_mode = d.pick_and_blur.settings.picker_mode;
+            if (!('blur_color' in out.pick_and_blur.settings)) {
+              out.pick_and_blur.settings.blur_color = {
+                hex: d.pick_and_blur.settings.blur_color.hex,
+                opacity: d.pick_and_blur.settings.blur_color.opacity,
+              };
+            }
+            if (!Array.isArray(out.pick_and_blur.items)) out.pick_and_blur.items = [];
+            if (!out.auto_detect_pii) out.auto_detect_pii = {};
+            if (!out.auto_detect_pii.settings) out.auto_detect_pii.settings = {};
+            for (const k of ['email', 'numeric', 'pii_mode', 'pii_redaction_color']) {
+              if (!(k in out.auto_detect_pii.settings))
+                out.auto_detect_pii.settings[k] = d.auto_detect_pii.settings[k];
+            }
+            if (!out.automate) out.automate = {};
+            if (!out.automate.settings) out.automate.settings = {};
+            // idle: full shape (value + unit + enabled). tab_switch / screen_share: enabled only.
+            if (!out.automate.settings.idle) out.automate.settings.idle = {};
+            if (typeof out.automate.settings.idle.value !== 'number')
+              out.automate.settings.idle.value = d.automate.settings.idle.value;
+            if (!Object.values(idle_units).includes(out.automate.settings.idle.unit))
+              out.automate.settings.idle.unit = d.automate.settings.idle.unit;
+            if (typeof out.automate.settings.idle.enabled !== 'boolean')
+              out.automate.settings.idle.enabled = d.automate.settings.idle.enabled;
+            for (const trig of ['tab_switch', 'screen_share']) {
+              if (!out.automate.settings[trig])
+                out.automate.settings[trig] = { enabled: d.automate.settings[trig].enabled };
             }
 
             return out;

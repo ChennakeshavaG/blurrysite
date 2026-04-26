@@ -34,8 +34,11 @@ Depends on: `BlurrySitePopupShared.t` (i18n), `chrome.runtime.getURL` (asset URL
 
 **Returns:** `void`
 
+**Rule-managed branch:** When `BlurrySitePopupShared.isRuleManaged(settings)` is true (computed against `_rule_match` + `_rule_overrides` merged from `ctx`), `renderAll` short-circuits: stamps `body.bl-rule-managed`, renders the `makeBanner(...)` element into `#bl-notif-area`, clears `#bl-mode-blur-all`, `#bl-mode-pick-blur`, `#bl-pii-chips`, `#bl-pii-color-row`, `#bl-automate-summary`, and skips the regular section renders. CSS hides `#bl-pii` and `#bl-automate` while the body class is set. Banner CTA calls `ctx.onOpenManagingRule(...)` (or falls back to `onOpenSiteRules`) with `{ focusRule }` so the deep-link auto-expands the matching rule.
+
 **Side effects:**
 - Writes to DOM elements with fixed ids/classes defined in `popup.html`: `#bl-blur-all-toggle`, `#bl-pick-blur-toggle`, `#bl-htb-chips`, `#bl-htb-summary`, `#bl-pick-mode-chips`, `#bl-pick-items`, `#bl-pii-toggle`, `#bl-pii-section`, `#bl-automate-indicator`, `#bl-automate-indicator-screen-share`.
+- Toggles `body.bl-rule-managed` class (CSS-driven section hide).
 - Attaches event listeners to the rendered controls (chip buttons, toggle switches, remove buttons).
 - Previous event listeners are replaced on each render via `replaceChildren()`.
 

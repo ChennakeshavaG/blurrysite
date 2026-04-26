@@ -317,6 +317,19 @@ New file with `"v"` version prefix or toast key string triggering linter: add en
 ### Mode switching clears items
 `_doModeSwitch(newMode)` wipes `_blurItems`, calls `_renderCurrent()`. Before switch, `_showSwitchDialog` confirms with user if items exist.
 
+### Rule-managed UX
+When the current host is governed by a non-empty site-rule snapshot, the popup hides every snapshot-managed control and shows a single banner instead. Detection helper: `BlurrySitePopupShared.isRuleManaged(settings)` — returns `true` when `settings._rule_match` is set AND `settings._rule_overrides` is non-empty.
+
+`BlurrySitePopupState.get().settings` includes `_rule_match` + `_rule_overrides` so renders can call `isRuleManaged(settings)` directly without ctx plumbing.
+
+When rule-managed:
+- `renders/main.js` renders a `BlurrySitePopupShared.makeBanner(...)` into `#bl-notif-area` and clears `#bl-mode-blur-all`, `#bl-mode-pick-blur`. Body class `bl-rule-managed` hides `#bl-pii` and `#bl-automate` via CSS.
+- `renders/general.js` omits the tab-privacy row (`tab_privacy` is in the snapshot).
+- `renders/howtoblur.js` and `renders/automate.js` are unreachable — their nav buttons live inside cleared mode blocks / hidden sections.
+- Banner CTA invokes `popup.js → _openSiteRulesPage({ focusRule })` which scrolls + auto-expands the matching rule card.
+
+Defence-in-depth: `BlurrySitePopupState.saveSettings(patch)` strips snapshot-managed sections (`blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate`) when current host is rule-managed. `global_default_settings` is never snapshot-captured — every display knob (blur_radius, reveal_mode, etc.) stays editable globally; the strip leaves global_default_settings, shortcuts, and site_rules untouched.
+
 ---
 
 ## Tests

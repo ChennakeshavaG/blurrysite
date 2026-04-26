@@ -6,29 +6,27 @@ const BlurrySitePopupRenderSiteRules = (() => {
   // ── Snapshot key label map ────────────────────────────────────────────────
 
   var SNAPSHOT_LABELS = {
-    blur_radius:           'rule_snap_blur_radius',
-    blur_mode:             'rule_snap_blur_mode',
-    reveal_mode:           'rule_snap_reveal_mode',
-    thorough_blur:         'rule_snap_thorough_blur',
-    blur_categories:       'rule_snap_blur_categories',
-    pick_blur_enabled:     'rule_snap_pick_blur_enabled',
-    pick_blur_type:        'rule_snap_pick_blur_type',
+    blur_mode:                'rule_snap_blur_mode',
+    blur_categories:          'rule_snap_blur_categories',
+    pick_blur_enabled:        'rule_snap_pick_blur_enabled',
+    pick_blur_type:           'rule_snap_pick_blur_type',
+    pick_blur_items:          'rule_snap_label_pick_blur_items',
     // PII
-    pii_email:             'rule_snap_label_pii_email',
-    pii_numeric:           'rule_snap_label_pii_numeric',
-    pii_mode:              'rule_snap_label_pii_mode',
-    pii_redaction_color:   'rule_snap_label_pii_redaction_color',
+    pii_email:                'rule_snap_label_pii_email',
+    pii_numeric:              'rule_snap_label_pii_numeric',
+    pii_mode:                 'rule_snap_label_pii_mode',
+    pii_redaction_color:      'rule_snap_label_pii_redaction_color',
     // Automate
-    automate_idle:         'rule_snap_label_automate_idle',
-    automate_tab_switch:   'rule_snap_label_automate_tab_switch',
-    automate_screen_share: 'rule_snap_label_automate_screen_share',
+    automate_idle:            'rule_snap_label_automate_idle',
+    automate_idle_threshold:  'rule_snap_label_automate_idle_threshold',
+    automate_tab_switch:      'rule_snap_label_automate_tab_switch',
+    automate_screen_share:    'rule_snap_label_automate_screen_share',
   };
 
   var SECTION_KEYS = {
-    blur:     ['blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
-               'blur_categories', 'pick_blur_enabled', 'pick_blur_type'],
+    blur:     ['blur_mode', 'blur_categories', 'pick_blur_enabled', 'pick_blur_type', 'pick_blur_items'],
     pii:      ['pii_email', 'pii_numeric', 'pii_mode', 'pii_redaction_color'],
-    automate: ['automate_idle', 'automate_tab_switch', 'automate_screen_share'],
+    automate: ['automate_idle', 'automate_idle_threshold', 'automate_tab_switch', 'automate_screen_share'],
   };
 
   var SECTION_TITLES = {
@@ -46,27 +44,14 @@ const BlurrySitePopupRenderSiteRules = (() => {
     starred:  'rule_snap_val_starred',
   };
 
-  var REVEAL_MODE_I18N = {
-    hover: 'rule_snap_val_reveal_hover',
-    click: 'rule_snap_val_reveal_click',
-    none:  'rule_snap_val_reveal_none',
-  };
-
   // ── Snapshot value formatter ──────────────────────────────────────────────
 
   function _formatSnapshotValue(key, value) {
     if (value === undefined || value === null) return null;
-    if (key === 'blur_radius') {
-      return value + 'px';
-    }
     if (key === 'blur_mode' || key === 'pick_blur_type' || key === 'pii_mode') {
       return _t(BLUR_MODE_I18N[value]) || value;
     }
-    if (key === 'reveal_mode') {
-      return _t(REVEAL_MODE_I18N[value]) || value;
-    }
     if (
-      key === 'thorough_blur' ||
       key === 'pick_blur_enabled' ||
       key === 'pii_email' ||
       key === 'pii_numeric' ||
@@ -84,6 +69,12 @@ const BlurrySitePopupRenderSiteRules = (() => {
       if (enabled.length === 0) return _t('rule_snap_val_none');
       return enabled.map(function(k) { return _t('cat_' + k) || k; }).join(', ');
     }
+    if (key === 'pick_blur_items') {
+      return String(value);
+    }
+    if (key === 'automate_idle_threshold' && value && typeof value === 'object') {
+      return value.value + ' ' + value.unit;
+    }
     return String(value);
   }
 
@@ -92,7 +83,6 @@ const BlurrySitePopupRenderSiteRules = (() => {
   function _flattenSnapshot(snapshot) {
     var flat = {};
     if (!snapshot) return flat;
-    if (snapshot.settings) Object.assign(flat, snapshot.settings);
     if (snapshot.blur_all && snapshot.blur_all.settings) Object.assign(flat, snapshot.blur_all.settings);
     if (snapshot.pick_and_blur) {
       var pb = snapshot.pick_and_blur;
@@ -102,6 +92,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
         if (pb.settings.blur_color  !== undefined) flat.pick_blur_color = pb.settings.blur_color;
         if (pb.settings.picker_mode !== undefined) flat.picker_mode     = pb.settings.picker_mode;
       }
+      if (Array.isArray(pb.items)) flat.pick_blur_items = pb.items.length;
     }
     if (snapshot.auto_detect_pii && snapshot.auto_detect_pii.settings) {
       var ap = snapshot.auto_detect_pii.settings;
@@ -113,6 +104,9 @@ const BlurrySitePopupRenderSiteRules = (() => {
     if (snapshot.automate && snapshot.automate.settings) {
       var am = snapshot.automate.settings;
       if (am.idle && typeof am.idle.enabled === 'boolean')               flat.automate_idle = am.idle.enabled;
+      if (am.idle && typeof am.idle.value === 'number' && typeof am.idle.unit === 'string') {
+        flat.automate_idle_threshold = { value: am.idle.value, unit: am.idle.unit };
+      }
       if (am.tab_switch && typeof am.tab_switch.enabled === 'boolean')   flat.automate_tab_switch = am.tab_switch.enabled;
       if (am.screen_share && typeof am.screen_share.enabled === 'boolean') flat.automate_screen_share = am.screen_share.enabled;
     }
@@ -238,39 +232,57 @@ const BlurrySitePopupRenderSiteRules = (() => {
     var actRow = document.createElement('div');
     actRow.className = 'bl-rule-card__actions';
 
-    // Recapture button
-    var recaptureBtn = document.createElement('button');
-    recaptureBtn.type = 'button';
-    recaptureBtn.className = 'bl-rule-recapture-btn';
-    recaptureBtn.textContent = _t('rule_snapshot_recapture');
-    recaptureBtn.addEventListener('click', function() {
-      var snapshot = callbacks.captureSnapshot();
-      callbacks.saveSiteSnapshot(rule.hostname_value, rule.hostname_type, snapshot).then(function() {
-        rule.snapshot = snapshot;
-        body.removeChild(snapshotWrap);
-        snapshotWrap = _makeSnapshotRows(snapshot);
-        body.insertBefore(snapshotWrap, actRow);
-        return callbacks.onSaveRules(rules);
-      });
-    });
-    actRow.appendChild(recaptureBtn);
+    // Recapture + Edit are hidden for the rule currently governing the active
+    // tab — the user's global settings reflect the rule's snapshot, so a
+    // recapture would no-op and editing the pattern from the managed host is
+    // confusing. Delete stays available so users can always escape.
+    var isCurrentMatch = !!(settings && settings._rule_match
+      && settings._rule_match.hostname_value === rule.hostname_value
+      && settings._rule_match.hostname_type === rule.hostname_type);
 
-    // Edit pattern button
-    var editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'bl-rule-edit-btn';
-    editBtn.textContent = _t('rule_edit_pattern');
-    editBtn.addEventListener('click', function() {
-      _render(containerEl, rules, settings, callbacks, rule.hostname_value + '::' + rule.hostname_type);
-    });
-    actRow.appendChild(editBtn);
+    if (!isCurrentMatch) {
+      // Recapture button
+      var recaptureBtn = document.createElement('button');
+      recaptureBtn.type = 'button';
+      recaptureBtn.className = 'bl-rule-recapture-btn';
+      recaptureBtn.textContent = _t('rule_snapshot_recapture');
+      recaptureBtn.addEventListener('click', function() {
+        var snapshot = callbacks.captureSnapshot();
+        callbacks.saveSiteSnapshot(rule.hostname_value, rule.hostname_type, snapshot).then(function() {
+          rule.snapshot = snapshot;
+          body.removeChild(snapshotWrap);
+          snapshotWrap = _makeSnapshotRows(snapshot);
+          body.insertBefore(snapshotWrap, actRow);
+          return callbacks.onSaveRules(rules);
+        });
+      });
+      actRow.appendChild(recaptureBtn);
+
+      // Edit pattern button
+      var editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'bl-rule-edit-btn';
+      editBtn.textContent = _t('rule_edit_pattern');
+      editBtn.addEventListener('click', function() {
+        _render(containerEl, rules, settings, callbacks, rule.hostname_value + '::' + rule.hostname_type);
+      });
+      actRow.appendChild(editBtn);
+    }
 
     // Delete button
     var delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'bl-rule-delete-btn';
     delBtn.title = _t('rule_delete_btn');
-    delBtn.textContent = '×'; // ×
+    delBtn.setAttribute('aria-label', _t('rule_delete_btn'));
+    var delSvgDoc = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
+        '<path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>' +
+        '<path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>' +
+      '</svg>',
+      'image/svg+xml'
+    );
+    delBtn.appendChild(document.adoptNode(delSvgDoc.documentElement));
     delBtn.addEventListener('click', function() {
       var updated = rules.filter(function(r) {
         return !(r.hostname_value === rule.hostname_value && r.hostname_type === rule.hostname_type);

@@ -127,7 +127,7 @@ const Shortcuts = (() => {
 
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
       const logo = document.createElement('img');
-      logo.src = chrome.runtime.getURL('icons/icon16.png');
+      logo.src = chrome.runtime.getURL('icons/icon32.png');
       logo.className = 'bl-si-toast__logo';
       logo.setAttribute('aria-hidden', 'true');
       logo.alt = '';

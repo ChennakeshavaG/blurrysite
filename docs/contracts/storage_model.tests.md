@@ -127,10 +127,10 @@ call-count (via explicit `jest.clearAllMocks(); mockSet();` pair inside the test
 - `returns flat object with all expected keys` — flat resolved object includes `blur_radius`, `enabled`, `reveal_mode`, `blur_categories`, `blur_mode`, `blur_all_active`, `blur_items`, `pick_blur_enabled`, `picker_mode`, `shortcuts`.
 - `exact site_rule overrides global blur_all_active` — per-host `blur_all: true` overrides global `blur_all.status: false`.
 - `global blur_all_active used when no per-host entry` — global `blur_all.status: true` propagates to `blur_all_active`.
-- `exact hostname site_rule settings override global` — a site entry with `snapshot.settings.blur_radius: 25` overrides the global `blur_radius`.
+- `exact hostname site_rule snapshot overrides global blur_mode` — a site entry with `snapshot.blur_all.settings.blur_mode: 'frosted'` overrides the global `blur_mode`.
 - `blur_items returns items for the exact hostname` — items saved under a hostname appear in `resolved.blur_items` when `pick_and_blur.status` is `true`.
 - `blur_items is empty when pick_and_blur.status is false` — items are gated on feature status; `pick_blur_enabled` is also `false`.
-- `wildcard site_rule settings override global (first match wins)` — a wildcard rule with `blur_radius: 18` overrides the global default.
+- `wildcard site_rule snapshot overrides global blur_mode (first match wins)` — a wildcard rule snapshot with `blur_mode: 'redacted'` overrides the global default.
 
 ### `on_change`
 
@@ -163,12 +163,13 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 This group uses its own `beforeEach` that seeds and inits a default model.
 
-- `returns an object with nested sections present` — snapshot has `settings`, `blur_all.settings`, `pick_and_blur.settings`, `auto_detect_pii.settings`, `automate.settings`.
-- `returns exactly 5 top-level sections — no extra keys` — only `settings`, `blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate` are present.
+- `returns an object with nested sections present` — snapshot has `blur_all.settings`, `pick_and_blur.settings`, `pick_and_blur.items`, `auto_detect_pii.settings`, `automate.settings`. No `settings` block (global_default_settings dropped).
+- `returns exactly 4 top-level sections — no extra keys` — only `blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate` are present.
 - `PII section captures email/numeric/pii_mode/pii_redaction_color` — all four PII fields read from `auto_detect_pii.settings.*` match defaults.
-- `automate section captures only trigger.enabled (no value/unit)` — each trigger contains `{ enabled }` only; idle.value/unit are not in the snapshot.
-- `snapshot values match default model values` — `blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `blur_categories`, `blur_type`, `blur_color`, and `pick_and_blur.status` match the defaults from `blsi.build_default_model()`.
-- `capture reflects in-flight settings changes` — after `patch_section` calls, the next `capture_snapshot()` reflects those changes.
+- `automate idle captures full shape (value + unit + enabled); tab_switch/screen_share enabled only` — `idle: { value, unit, enabled }`; the other two triggers carry only `enabled`.
+- `snapshot values match default model values` — `blur_mode`, `blur_categories`, `blur_type`, `blur_color`, `pick_and_blur.status` match defaults; `pick_and_blur.items` defaults to `[]`.
+- `capture reflects in-flight settings changes` — after `patch_section` calls (e.g. `blur_all.settings.blur_mode = 'frosted'`, `automate.settings.idle = { value: 24, unit: 'min', enabled: true }`), the next `capture_snapshot()` reflects those changes.
+- `captures pick_and_blur.items for the supplied hostname` — `capture_snapshot('example.com')` returns the host's items array; no hostname / unknown hostname → `items: []`.
 - `blur_categories is a deep copy — mutating snapshot does not affect cache` — mutating the returned snapshot's `blur_categories` does not alter the in-memory model.
 - `pick_blur_color is a deep copy — mutating snapshot does not affect cache` — mutating `blur_color.hex` on the returned snapshot does not alter the in-memory model.
 
@@ -176,10 +177,11 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 This group uses its own `beforeEach` that seeds and inits a default model.
 
-- `creates a new exact rule with the snapshot in .snapshot` — `save_site_snapshot('github.com', exact, snap)` creates a rule; `get_site_snapshot` returns the stored snapshot with correct `settings.blur_radius` and `blur_all.settings.blur_mode`.
-- `updates .snapshot on an existing exact rule` — saves snapshot onto a rule that already has `blur_all: true`; `blur_all` is preserved and `snapshot.settings.blur_radius` is set.
-- `replaces previous snapshot on a second save` — a second `save_site_snapshot` with a different radius replaces the old snapshot; only the new radius survives.
+- `creates a new exact rule with the snapshot in .snapshot` — `save_site_snapshot('github.com', exact, snap)` creates a rule; `get_site_snapshot` returns the stored snapshot with correct `blur_all.settings.blur_mode` and `pick_and_blur.items: []`.
+- `updates .snapshot on an existing exact rule` — saves snapshot onto a rule that already has `blur_all: true`; `blur_all` is preserved and `snapshot.blur_all.settings.blur_mode` is set.
+- `replaces previous snapshot on a second save` — a second `save_site_snapshot` with a different `blur_mode` replaces the old snapshot; only the new value survives.
 - `works for wildcard rules created via save_rules` — wildcard rules created by `save_rules` can have snapshots saved and retrieved via `get_site_snapshot`.
+- `partial snapshot is auto-filled from current global before write` — caller-provided fields preserved; missing fields filled from current global (`automate.idle.value`/`unit`); all four sections present; no `settings` block.
 - `is a no-op for invalid hostname_value` — empty string hostname suppresses the storage write.
 - `is a no-op for invalid (null) snapshot` — `null` snapshot suppresses the storage write.
 
@@ -189,12 +191,13 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 - `returns null when rule does not exist` — unknown hostname returns `null`.
 - `returns null when rule exists but settings is empty` — rule created by `set_site_entry` without a snapshot returns `null`.
-- `returns snapshot object after save_site_snapshot` — after save, the snapshot contains correct `settings.blur_radius` and `blur_all.settings.blur_categories`.
+- `returns snapshot object after save_site_snapshot` — after save, the snapshot contains correct `blur_all.settings.blur_mode` and `blur_all.settings.blur_categories`.
 
 ### `validate_model snapshot passthrough`
 
-- `passes through all snapshot sections in site_rules[i].snapshot` — `validate_model` preserves all three snapshot sections (`settings`, `blur_all`, `pick_and_blur`) with all their nested keys intact.
-- `validate_model strips unknown keys from site_rules[i].snapshot.settings` — keys not in the allowed set (e.g. `some_unknown_key`) are removed; known keys (`blur_radius`) survive.
+- `passes through all snapshot sections in site_rules[i].snapshot` — `validate_model` preserves `blur_all`, `pick_and_blur` (settings + items), and `automate` sections with all nested keys intact (no `settings` block).
+- `validate_model fills partial snapshots to capture_snapshot full shape (DEFAULT_MODEL values)` — caller-provided field preserved; every missing key is populated from `DEFAULT_MODEL`; `pick_and_blur.items` defaults to `[]`; `automate.settings.idle` carries full `{ value, unit, enabled }`; tab_switch / screen_share take `enabled` only.
+- `validate_model drops legacy snapshot.settings block entirely` — a stale `settings` block from the previous schema is silently removed; `blur_all` validation continues to work.
 - `validate_model repairs invalid blur_categories values with defaults` — non-boolean values (`'yes'`, `null`) are coerced to their `DEFAULT_MODEL` defaults; valid booleans are preserved as-is.
 - `validate_model repairs invalid pick_blur_color values with defaults` — invalid `hex` (`'not-a-hex'`) and out-of-range `opacity` (`5.0`) are both coerced to `DEFAULT_MODEL` defaults.
 - `empty snapshot {} survives validate_model as empty {}` — a rule with `snapshot: {}` is not modified by validation.
@@ -203,10 +206,12 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 This group uses its own `beforeEach` that seeds and inits a default model.
 
-- `snapshot in exact site_rule overrides all snapshot sections in resolved output` — a full three-section snapshot stored via `save_site_snapshot` causes `resolve` to return the saved `blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `blur_categories`, `pick_blur_type`, `pick_blur_color`, and `pick_blur_enabled`.
-- `snapshot in wildcard site_rule overrides global snapshot keys` — a wildcard rule snapshot with `blur_radius: 18` and `blur_mode: 'redacted'` overrides global defaults for a matching subdomain.
-- `exact rule snapshot wins over wildcard snapshot (exact has higher priority)` — when both an exact rule (radius 30) and a wildcard rule (radius 10) match, the exact rule's value wins.
+- `snapshot in exact site_rule overrides all snapshot sections in resolved output` — a full snapshot (`blur_all` + `pick_and_blur`) stored via `save_site_snapshot` causes `resolve` to return the saved `blur_mode`, `blur_categories`, `pick_blur_type`, `pick_blur_color`, and `pick_blur_enabled`.
+- `snapshot in wildcard site_rule overrides global snapshot keys` — a wildcard rule snapshot with `blur_mode: 'redacted'` overrides the global default for a matching subdomain.
+- `exact rule snapshot wins over wildcard snapshot (exact has higher priority)` — when both an exact rule (`blur_mode: 'redacted'`) and a wildcard rule (`blur_mode: 'frosted'`) match, the exact rule's value wins.
 - `non-snapshot keys in resolved output come from global/feature settings when no override` — keys not present in the snapshot (e.g. `blur_all_active`, `blur_items`) continue to be derived from the global model state.
+- `snapshot.pick_and_blur.items REPLACE host-keyed items at resolve` — when the snapshot pins an items array, it overrides `pick_and_blur.items[hostname]` and stamps `_rule_overrides.blur_items`.
+- `snapshot.automate.idle.value/unit override global at resolve` — full idle shape (value + unit + enabled) flows from snapshot into `resolved.automate_idle`.
 - `PII fields in snapshot override global PII settings` — `pii_email`, `pii_numeric`, `pii_mode`, `pii_redaction_color` flow from snapshot into resolved + are flagged in `_rule_overrides`.
 - `automate trigger.enabled in snapshot overrides global, preserves idle.value/unit` — rule's `automate.settings.idle.enabled = true` flips the resolved enable while `value`/`unit` keep their global values; same for tab_switch / screen_share. `_rule_overrides.automate_*` set.
 - `_rule_match exposes the matching rule for popup deep-link` — wildcard match returns `{ hostname_value: '*.github.com', hostname_type: 'wildcard' }`.

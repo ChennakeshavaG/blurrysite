@@ -1097,16 +1097,10 @@ const BlurEngine = (() => {
   function _applyStickyItem(item) {
     // Anchor determines coordinate system:
     //   'page'   — document coordinates, scrolls with content. Supports
-    //              path-scoping and xPct/yPct re-projection on layout changes.
-    //   'screen' — viewport coordinates, position: fixed. Applies on every
-    //              page regardless of path; raw x/y are stable across pages.
+    //              xPct/yPct re-projection on layout changes.
+    //   'screen' — viewport coordinates, position: fixed. Raw x/y stable
+    //              across pages.
     const anchor = item.anchor === "screen" ? "screen" : "page";
-
-    if (anchor === "page" && item.path) {
-      const stored = item.path.replace(/\/+$/, "") || "/";
-      const current = location.pathname.replace(/\/+$/, "") || "/";
-      if (stored !== current) return;
-    }
 
     let x, y, w, h;
     if (anchor === "page") {

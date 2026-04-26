@@ -38,8 +38,10 @@ Alias for `_saveAndApply`. Passed as callback into all render files.
 ### `_openHtbModify(isBlurAll: boolean)`
 Renders HTB sub-page body and calls `UI.showView('bl-view-htb-modify', true)`.
 
-### `_openSiteRulesPage()`
-Renders Site Rules sub-page body and calls `UI.showView('bl-view-site-rules', true)`.
+### `_openSiteRulesPage(opts?)`
+Renders Site Rules sub-page body and calls `UI.showView('bl-view-site-rules', true)`. Accepts `opts.focusRule = { hostname_value, hostname_type }` to scroll + auto-expand a target rule (used by the rule-managed banner CTA).
+
+The `onSaveRules` and `saveSiteSnapshot` callbacks wrap `State.saveRules` / `State.saveSiteSnapshot` with `await` + `location.reload()`. Rationale: rule writes change the popup's "rule-managed" verdict, which cascades through main view (banner / hidden sections), every sub-page (HTB nav, automate nav, general tab-privacy row), and `_renderCurrent`'s render branch. Reloading is simpler and safer than threading a fan-out re-render across every screen.
 
 ### `_generalCallbacks()`
 Returns callback object for General sub-page: `{ onSave, debugEnabled, onToggleDebug, onExport, onImport }`.  
@@ -69,7 +71,7 @@ All sent via `chrome.tabs.sendMessage` to the active tab. Errors swallowed via `
 | Blur item row hover | `blsi.popup.highlight_item` | `item_type, selectors, id` |
 | Blur item row mouseout | `blsi.popup.clear_highlight` | — |
 | Blur item remove button click | `blsi.popup.clear_highlight` | — |
-| Popup `unload` (with active highlight) | `blsi.popup.clear_highlight` | — |
+| Popup `pagehide` (with active highlight) | `blsi.popup.clear_highlight` | — |
 
 ## Side Effects
 

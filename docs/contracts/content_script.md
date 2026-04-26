@@ -358,7 +358,6 @@ Handlers that do async work (storage write + `_sync()`) return `true` from `hand
 - Calls `Engine.allocateStickyName(anchor)` for a unique name matching the picker UI label.
 - Generates a zone id via `_generateZoneId()` (format: `'s_' + 8 random alphanumeric chars`).
 - Constructs full zone item including `xPct`, `yPct`, `widthPct`, `heightPct` (percentages relative to scroll dimensions, for re-projection on layout changes).
-- Sets `path = location.pathname` for page-anchored zones; `path = undefined` for screen-anchored zones.
 - Calls `Store.save_blur_item(hostname, item)`.
 - Calls `_sync()`.
 - Calls `Shortcuts.showToast(name)` — briefly shows the zone name.

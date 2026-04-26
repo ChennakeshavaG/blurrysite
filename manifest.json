@@ -103,7 +103,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["_locales/*/*.json", "popup/popup.html", "fonts/*.woff2"],
+      "resources": ["_locales/*/*.json", "popup/popup.html", "fonts/*.woff2", "icons/*.png"],
       "matches": ["<all_urls>"]
     }
   ],

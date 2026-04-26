@@ -103,8 +103,8 @@ A module may only depend on modules loaded before it.
 #### Zone overlay methods
 - `createZoneOverlay(zoneData)` appends an overlay `<div>` to `document.body`. Overlays use the `data-bl-si-zone` attribute (set to `zoneData.id`) for identification.
 - **Anchor**: `zoneData.anchor` is `'page'` (default) or `'screen'`.
-  - `'page'` → `position: absolute`; coordinates are document-space; the zone scrolls with the page content. `_applyStickyItem` re-projects via `xPct`/`yPct` against the current `scrollWidth`/`scrollHeight` to survive layout changes. Also honors `path` scoping.
-  - `'screen'` → `position: fixed`; coordinates are viewport-space; the zone stays on screen during scroll. Raw `x`/`y` are used as-is. No `path` scoping — a screen-anchored zone applies on every page under its host.
+  - `'page'` → `position: absolute`; coordinates are document-space; the zone scrolls with the page content. `_applyStickyItem` re-projects via `xPct`/`yPct` against the current `scrollWidth`/`scrollHeight` to survive layout changes. Applies on every page under its host (no per-path scoping).
+  - `'screen'` → `position: fixed`; coordinates are viewport-space; the zone stays on screen during scroll. Raw `x`/`y` are used as-is. Applies on every page under its host.
 - Overlay stamps `data-bl-si-zone-anchor="page"|"screen"` for debugging/CSS.
 - `removeZoneOverlay(zoneId)` removes the overlay matching `zoneId` from DOM and internal tracking.
 - `getZoneOverlays()` returns an array of all active zone overlay elements.

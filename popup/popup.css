@@ -915,11 +915,11 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-toast[hidden] { display: none; }
 .bl-toast.is-visible { opacity: 1; display: flex; }
 .bl-toast__logo {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   display: block;
-  opacity: 0.85;
+  background: url('../icons/icon32.png') center/contain no-repeat;
 }
 .bl-toast__msg { flex: 1; }
 .bl-toast__close {
@@ -1196,4 +1196,92 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 }
 .bl-auto-block--managed {
   opacity: 0.85;
+}
+
+/* ── Site-rule managed banner + section hides ───────────────── */
+.bl-rule-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin: 0 10px 8px;
+  border: 1px solid color-mix(in srgb, var(--bl-amber) 40%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bl-amber) 10%, var(--bl-surface));
+}
+.bl-rule-banner__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.bl-rule-banner__icon {
+  font-size: 16px;
+  line-height: 1;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.bl-rule-banner__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bl-rule-banner__title {
+  font-size: var(--bl-text-base);
+  font-weight: 600;
+  color: var(--bl-amber);
+  margin-bottom: 3px;
+}
+.bl-rule-banner__desc {
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.bl-rule-banner__cta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--bl-amber);
+  border-radius: 6px;
+  background: var(--bl-amber);
+  color: var(--bl-base);
+  font-size: var(--bl-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.bl-rule-banner__cta:hover {
+  background: color-mix(in srgb, var(--bl-amber) 85%, white);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--bl-amber) 35%, transparent);
+}
+.bl-rule-banner__cta:active {
+  transform: translateY(1px);
+}
+.bl-rule-banner__cta:focus-visible {
+  outline: 2px solid var(--bl-amber);
+  outline-offset: 2px;
+}
+
+/* When body.bl-rule-managed is set, hide modes/PII/automate so only the
+   header, banner (in #bl-notif-area), nav rows, and footer remain.
+   Pin .bl-main height so sub-pages keep their normal modal size when the
+   collapsed main view would otherwise shrink the parent .bl-mid. */
+body.bl-rule-managed #bl-mode-blur-all,
+body.bl-rule-managed #bl-mode-pick-blur,
+body.bl-rule-managed #bl-pii,
+body.bl-rule-managed #bl-automate {
+  display: none;
+}
+/* #bl-modes is a .bl-section — its own padding/border/background would wrap
+   the banner in a redundant chrome ring. Strip it so the banner stands alone. */
+body.bl-rule-managed #bl-modes {
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+}
+body.bl-rule-managed .bl-main {
+  min-height: 490px;
 }

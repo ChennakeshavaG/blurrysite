@@ -50,11 +50,11 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 1. `blsi.DEFAULT_MODEL` values
 2. `global_default_settings`
 3. Feature section settings (blur_all, pick_and_blur, auto_detect_pii, automate)
-4. Wildcard/regex site rule match (first match wins)
-5. Exact hostname site rule
-6. Automate blur state — `_automate_cache[hostname]` (idle/tab_switch) and `_screen_share_cache` (single global record) with per-tab and per-site suppression applied
-7. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
-8. Snapshot application (if site rule has a snapshot)
+4. `blur_items` for hostname (pulled from `pick_and_blur.items[hostname]`, gated on `pick_and_blur.status`)
+5. Wildcard/regex site rule snapshot apply (first match wins) — may REPLACE `blur_items` if the snapshot pins its own `pick_and_blur.items` array
+6. Exact hostname site rule snapshot apply — same items REPLACE semantics
+7. Automate blur state — `_automate_cache[hostname]` (idle/tab_switch) and `_screen_share_cache` (single global record) with per-tab and per-site suppression applied
+8. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
 9. Derived key computation
 
 **Screen-share trigger** (`automate_blur_triggers.screen_share`):
@@ -148,18 +148,20 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 **What**: Removes a site rule entry.  
 **Returns**: `Promise<void>` — no-op if not found.
 
-### capture_snapshot()
+### capture_snapshot(hostname?)
 
 **What**: Reads current global settings from cache and returns a nested snapshot object.  
-**Returns**: `{ settings, blur_all, pick_and_blur, auto_detect_pii, automate }` — deep-copies `blur_categories`, `blur_color`. The `automate` section captures only `{ idle, tab_switch, screen_share }.enabled` — NOT idle `value` / `unit` (those remain global-only).  
-**Excludes**: site_rules, shortcuts, enabled, language, automate idle.value/unit, pick_and_blur.items
+**Params**: `hostname` (string, optional) — when provided, captures the host's pick-blur items into `pick_and_blur.items`. Omitted/empty → `items: []`.  
+**Returns**: `{ blur_all, pick_and_blur, auto_detect_pii, automate }` — deep-copies `blur_categories`, `blur_color`, `pick_and_blur.items`. The `automate.settings.idle` block carries the full `{ value, unit, enabled }` shape; `tab_switch` and `screen_share` carry only `enabled`.  
+**Excludes**: site_rules, shortcuts, global_default_settings (entire section)
 
 ### save_site_snapshot(hostname_value, hostname_type, snapshot)
 
 **What**: Sets the `.snapshot` field on the matching site rule entry.  
-**Params**: `hostname_value`, `hostname_type`, `snapshot` (nested snapshot object)  
+**Params**: `hostname_value`, `hostname_type`, `snapshot` (nested snapshot object — full or `{}`)  
 **Returns**: `Promise<void>`  
-**Handles**: Creates entry if not found; works for all `hostname_type` values.
+**Handles**: Creates entry if not found; works for all `hostname_type` values.  
+**Full-snapshot enforcement**: non-empty `snapshot` is auto-filled to the full `capture_snapshot()` shape — partial inputs are deep-merged over the current global so every snapshot field has a value. Empty `{}` stays empty (sentinel meaning "rule pins blur_all toggle only — no setting overrides"). The auto-fill calls `capture_snapshot()` with no hostname arg, so missing `pick_and_blur.items` defaults to `[]`. Callers that want host items pinned must pass them explicitly in the snapshot payload (typically captured via `capture_snapshot(hostname)`).
 
 ### clear_site_snapshot(hostname_value, hostname_type)
 
@@ -317,7 +319,13 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### _apply_snapshot(snapshot, resolved)
 
-**What**: In-place merge of snapshot into the resolved object; maps nested snapshot shape to flat resolved keys. Stamps `resolved._rule_overrides[flat_key] = true` for every key it writes so downstream UI can detect rule-driven fields without re-walking storage. Handles the new `auto_detect_pii.settings.*` and `automate.settings.{idle,tab_switch,screen_share}.enabled` sections; the automate spread preserves global `value`/`unit` while the rule flips `enabled`.
+**What**: In-place merge of snapshot into the resolved object; maps nested snapshot shape to flat resolved keys. Stamps `resolved._rule_overrides[flat_key] = true` for every key it writes so downstream UI can detect rule-driven fields without re-walking storage. Handles `blur_all.settings.*`, `pick_and_blur.{status, settings.*, items}`, `auto_detect_pii.settings.*`, and `automate.settings.{idle, tab_switch, screen_share}`. For `automate.settings.idle` the snapshot may carry any subset of `{ value, unit, enabled }` — each present field merges into the resolved `automate_idle` shape (`tab_switch` / `screen_share` still take `enabled` only). `pick_and_blur.items` is REPLACE semantics — when present (any array, including `[]`) it overwrites `resolved.blur_items`, gated on the post-snapshot `resolved.pick_blur_enabled`. Stamps `_rule_overrides.blur_items` when applied.
+
+**Snapshot shape**: under the full-snapshot contract (enforced at write-time by `save_site_snapshot` and at load-time by `validate_model`), non-empty snapshots always carry every key produced by `capture_snapshot()` (no `settings` block — that was global_default_settings, dropped). Empty `{}` is the sentinel for "no setting overrides" — `_apply_snapshot` skips silently. Per-key existence checks remain in place for defense-in-depth in case callers bypass the contract.
+
+### _fill_snapshot_to_full(partial)
+
+**What**: Returns a full snapshot by deep-merging `partial` over `capture_snapshot()`'s output (current global, with no hostname → `pick_and_blur.items: []`). Used by `save_site_snapshot` to enforce the full-snapshot contract before write. Private — exposed as a tested behaviour but not part of the public API. Note: callers that need items pinned must include `pick_and_blur.items` in `partial` (typically via `capture_snapshot(hostname)`); otherwise the auto-fill produces `items: []`.
 
 ## Storage Schema
 

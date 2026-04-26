@@ -33,6 +33,10 @@ const BlurrySitePopupState = (() => {
         screen_share_state:        resolved ? resolved.screen_share_state : null,
         screen_share_suppressed_for_host: !!(resolved && resolved.screen_share_suppressed_for_host),
         screen_share_suppressed_for_tab:  !!(resolved && resolved.screen_share_suppressed_for_tab),
+        // Surface resolve-only rule metadata so render files can call
+        // BlurrySitePopupShared.isRuleManaged(settings) without needing ctx.
+        _rule_match:     ruleMatch,
+        _rule_overrides: ruleOverrides,
       }),
       resolved,
       ruleOverrides,
@@ -49,10 +53,38 @@ const BlurrySitePopupState = (() => {
   // ── Setters ───────────────────────────────────────────────────────────────
   function setNeutralAfterClear(b)   { _neutralAfterClear = !!b; }
 
+  // True when current host is governed by a non-empty site-rule snapshot.
+  // Mirrors BlurrySitePopupShared.isRuleManaged but reads internal state
+  // so saveSettings() can guard without depending on render-side helpers.
+  function _ruleManagedHere() {
+    if (!_hostname && !_url) return false;
+    var resolved = blsi.Model.resolve(_hostname || '', _url || '', _tabId);
+    if (!resolved || !resolved._rule_match) return false;
+    var ov = resolved._rule_overrides;
+    return !!(ov && Object.keys(ov).length > 0);
+  }
+
   // ── Save settings (model-shaped patch → patch_section per top-level key) ──
   async function saveSettings(patch) {
     if (!patch || typeof patch !== 'object') return;
-    await Promise.all(Object.keys(patch).map(section => blsi.Model.patch_section(section, patch[section])));
+    var sanitized = patch;
+    if (_ruleManagedHere()) {
+      // Strip snapshot-managed sections — rule owns them. global_default_settings
+      // is never snapshot-captured, so it always passes through.
+      sanitized = {};
+      for (var key of Object.keys(patch)) {
+        if (key === 'blur_all' || key === 'pick_and_blur' ||
+            key === 'auto_detect_pii' || key === 'automate') {
+          continue;
+        }
+        sanitized[key] = patch[key];
+      }
+      if (!Object.keys(sanitized).length) {
+        if (blsi.Logger) blsi.Logger.warn('[popup_state] saveSettings: rule-managed host — patch dropped');
+        return;
+      }
+    }
+    await Promise.all(Object.keys(sanitized).map(section => blsi.Model.patch_section(section, sanitized[section])));
     refreshFromStorage();
   }
 
@@ -169,7 +201,7 @@ const BlurrySitePopupState = (() => {
   }
 
   function captureSnapshot() {
-    return blsi.Model.capture_snapshot();
+    return blsi.Model.capture_snapshot(_hostname || '');
   }
 
   async function saveSiteSnapshot(hostname_value, hostname_type, snapshot) {

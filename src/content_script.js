@@ -198,7 +198,6 @@
         widthPct: scrollW ? zoneRect.width / scrollW : 0,
         heightPct: scrollH ? zoneRect.height / scrollH : 0,
         scrollWidth: scrollW, scrollHeight: scrollH,
-        path: anchor === 'page' ? location.pathname : undefined,
       };
 
       log.flow('picker.stickyBlur', { name, id, anchor, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height }, scrollW, scrollH });

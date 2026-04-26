@@ -149,7 +149,6 @@ Runs before every test in the outer `describe('blsi.BlurEngine', ...)`:
 - `removes items no longer in storage` — a second `handleSite` with empty items removes `data-bl-si-pick-blur`.
 - `creates zone overlay for sticky items` — a sticky item produces one zone overlay in the DOM.
 - `removes zone overlay when sticky drops from storage` — second `handleSite` with empty items removes the overlay.
-- `sticky with path mismatch is skipped` — sticky item with `path` that does not match current pathname produces no overlay.
 - `second call is idempotent when storage unchanged` — two identical `handleSite` calls leave one `data-bl-si-pick-blur`.
 - `applies dynamic item using new selectors[] array shape` — item with `selectors: [...]` array resolves correctly.
 - `falls back to second selector when first does not match` — first selector `#stale-no-match` misses; second `#fallback` applies blur.
@@ -318,7 +317,6 @@ Runs before every test in the outer `describe('blsi.BlurEngine', ...)`:
 
 ## Edge Cases Explicitly Tested
 
-- **Path-scoped sticky items**: sticky items with a `path` field that does not match the current pathname are silently skipped (no overlay created).
 - **Null safety**: `applyBlur(null)`, `removeBlur(null)`, `isBlurred(null)`, `shouldBlurElement(null, ...)` all return safely without throwing.
 - **Double inject is idempotent**: calling `injectRules` twice keeps exactly one style element; the second call replaces the first.
 - **Counter high-water seeding**: new-format names (`'Element 5'`, `'Area on page 9'`, `'Area on screen 3'`) and legacy names (`'Dynamic 5'`, `'Sticky 9'`) all seed the appropriate counter so the next `allocate*Name()` call skips ahead — prevents name collisions after restore. Legacy `'Sticky N'` seeds the page counter.

@@ -458,16 +458,6 @@ describe('blsi.BlurEngine', () => {
       expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(0);
     });
 
-    test('sticky with path mismatch is skipped', async () => {
-      fakeStorage.items = [{
-        type: 'sticky', id: 's_p', name: 'Sticky 1',
-        x: 0, y: 0, width: 10, height: 10,
-        path: '/some/other/page',
-      }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(0);
-    });
-
     test('second call is idempotent when storage unchanged', async () => {
       document.body.innerHTML = '<div id="idem">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#idem' }];

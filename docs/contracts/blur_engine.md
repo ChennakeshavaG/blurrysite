@@ -599,13 +599,12 @@
 ---
 
 ### _applyStickyItem(item)
-**What**: Creates a zone overlay for a sticky item, applying path-scoping for page-anchored zones and xPct/yPct re-projection when viewport width has changed.  
-**Params**: `item` (object) — `{ id, name, anchor, x, y, width, height, xPct, yPct, widthPct, scrollWidth, path }`  
+**What**: Creates a zone overlay for a sticky item, applying xPct/yPct re-projection when viewport width has changed.  
+**Params**: `item` (object) — `{ id, name, anchor, x, y, width, height, xPct, yPct, widthPct, scrollWidth }`  
 **Side effects**: Calls `createZoneOverlay(...)`, updates `_pageAreaCounter` or `_screenAreaCounter` high-water mark based on name prefix. Parses `"Area on page N"`, `"Area on screen N"` (new) and `"Sticky N"` (legacy → page counter).  
 **Handles**:
-- `anchor === 'page'` + `item.path`: skips if `location.pathname` doesn't match stored path (trailing slashes normalized).
 - Width re-projection: if `scrollWidth` changed >1% or 10px, uses `xPct * curW` and `widthPct * curW`. Y/height never re-projected (page height varies during load).
-- `anchor === 'screen'`: raw x/y used directly, no path scoping.
+- `anchor === 'screen'`: raw x/y used directly.
 
 ---
 
