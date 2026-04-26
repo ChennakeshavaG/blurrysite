@@ -102,7 +102,7 @@ Module aliases (set at top of IIFE, not re-assigned):
 5. Reveal: calls `Reveal.clearAll()` if `reveal_mode` changed or extension is disabled.
 6. Calls `await _sync(resolved)` — passes the snapshot through so engine does not re-resolve.
 7. AutoBlur (main frame only): manages `blsi.ScreenShare.init()`/`destroy()` for screen-share detection (always evaluated). Manages `blsi.AutoBlur.init(...)`/`destroy()` for idle and tab-switch triggers — **gated by `_autoBlurCfgKey`** so unrelated storage echoes don't tear down the live idle timer. AutoBlur callbacks write idle/tab_switch to `Store.save_automate_blur` and call `_sync()`. Screen-share state never goes through `save_automate_blur` — it lives in the global session record owned by background.
-8. PII detection: if any PII type enabled and extension enabled, calls `BlurEngine.injectPiiRules()`, `PiiDetector.scan()`, `PiiDetector.observeMutations()`. Otherwise, calls `BlurEngine.removePiiRules()`, `PiiDetector.stopObserving()`, `PiiDetector.clear()`.
+8. PII detection: if any PII type enabled and extension enabled, calls `BlurEngine.injectPiiRules()`, `PiiDetector.scan()`, then `BlurEngine.subscribeMutations('pii', PiiDetector.handleMutations)` so the detector receives raw `MutationRecord[]` (childList + characterData) for every active root via the engine's single mutation dispatcher. Otherwise calls `BlurEngine.unsubscribeMutations('pii')`, `BlurEngine.removePiiRules()`, `PiiDetector.clear()`. PII detector owns no observer of its own.
 
 **Handles:**
 - Language change detection inside `handleStorageChange` (not inside `applyState` itself) triggers `ContentI18n.init(newLang)` and `Picker.rebuildToolbar()` before calling `applyState`.

@@ -596,15 +596,19 @@
     }
 
     // PII auto-detection — scan after blur reconciliation so PII spans don't
-    // conflict with the blur engine's text-check stamping.
+    // conflict with the blur engine's text-check stamping. PII detector owns
+    // no observer; it subscribes to blur_engine's mutation dispatcher to
+    // receive raw MutationRecord[] for every active root (document + shadow
+    // roots), with characterData included so typed text in contenteditable
+    // is detected without a reload.
     const anyDetect = resolved.pii_email || resolved.pii_numeric;
     if (anyDetect && resolved.enabled) {
       blsi.BlurEngine.injectPiiRules(resolved.pii_mode, resolved.pii_redaction_color);
       blsi.PiiDetector.scan(document.body, { email: resolved.pii_email, numeric: resolved.pii_numeric });
-      blsi.PiiDetector.observeMutations(document.body);
+      blsi.BlurEngine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
     } else {
+      blsi.BlurEngine.unsubscribeMutations('pii');
       blsi.BlurEngine.removePiiRules();
-      blsi.PiiDetector.stopObserving();
       blsi.PiiDetector.clear(document.body);
     }
   }

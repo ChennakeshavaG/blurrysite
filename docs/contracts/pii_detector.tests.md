@@ -2,9 +2,9 @@
 
 ## Overview
 
-Unit tests for `src/pii_detector.js`. The module exposes `blsi.PiiDetector` with six public members: `scan(rootEl, types)`, `clear(rootEl)`, `observeMutations(rootEl)`, `stopObserving()`, `getMatchCount()`, `getPatterns()`.
+Unit tests for `src/pii_detector.js`. The module exposes `blsi.PiiDetector` with five public members: `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()`.
 
-Tests verify pattern detection for two PII types (EMAIL and NUMERIC), false-positive suppression chains, DOM wrapping behaviour, multi-type detection, PII independence from the blur-all engine, `clear()` restoration, `getMatchCount()` accumulation, and `getPatterns()` shape.
+Tests verify pattern detection for two PII types (EMAIL and NUMERIC), false-positive suppression chains, DOM wrapping behaviour, multi-type detection, PII independence from the blur-all engine, `clear()` restoration, `getMatchCount()` accumulation, `getPatterns()` shape, and `handleMutations()` subscriber-style routing for both `childList` and `characterData` mutations.
 
 No external module dependencies are mocked — `pii_detector.js` operates purely on DOM text nodes and does not import other `blsi.*` modules.
 
@@ -12,7 +12,7 @@ No external module dependencies are mocked — `pii_detector.js` operates purely
 
 - Module loading uses `freshLoad()` which deletes `blsi.PiiDetector`, calls `jest.resetModules()`, then `require()`s the real source file via `jest.isolateModules()` (or falls back to an inline `buildStubSource()` eval if the file is absent). Called in `beforeEach` so each test gets a clean module instance with zeroed state.
 - `beforeEach` — resets `document.body.innerHTML` to `''` and calls `freshLoad()`.
-- `afterEach` — calls `blsi.PiiDetector.stopObserving()`, `blsi.PiiDetector.clear(document.body)`, resets `document.body.innerHTML` to `''`.
+- `afterEach` — calls `blsi.PiiDetector.clear(document.body)`, resets `document.body.innerHTML` to `''`. (PII detector owns no observer — no `stopObserving` call needed.)
 
 ### Constants
 - `ALL_TYPES = { email: true, numeric: true }` — convenience object used in multi-type and boundary tests.
@@ -81,8 +81,15 @@ No external module dependencies are mocked — `pii_detector.js` operates purely
 - `getPatterns() returns EMAIL and NUMERIC entries` — result has `EMAIL.regex` (RegExp), `EMAIL.label === 'email'`, `NUMERIC.regex` (RegExp), `NUMERIC.label === 'numeric'`; does NOT have `PHONE`, `SSN`, `CREDIT_CARD`, or `FINANCIAL` keys
 - `getMatchCount() accumulates across separate scans` — scanning one email → count 1; scanning a second email in a separate element → count 2
 
-### stopObserving
-- `stopObserving is safe when no observer is active` — calling `stopObserving()` without a prior `observeMutations()` does not throw
+### handleMutations
+- `handleMutations is a no-op when scan() has not been called` — `_activeTypes` is null → no spans created, no throw
+- `handleMutations is a no-op when given empty / nullish input` — `[]`, `null`, `undefined` all return without throwing
+- `handleMutations — childList: new TEXT_NODE wraps email` — synthesised `{ type: 'childList', addedNodes: [textNode] }` produces `[data-bl-si-pii="email"]` span
+- `handleMutations — childList: new ELEMENT_NODE scans subtree` — synthesised record with an `<div>` containing nested email triggers `scan(node, _activeTypes)`
+- `handleMutations — characterData: textContent change wraps new email` — text node mutation in a contenteditable; record `{ type: 'characterData', target: textNode }` results in PII span. **The original-bug regression test** — typed email in contenteditable / dynamic `.textContent` reassignment fires `characterData`, not `childList`.
+- `handleMutations — characterData: skip text node already wrapped` — text node living inside `[data-bl-si-pii]` is skipped; no double-wrap; `getMatchCount()` unchanged
+- `handleMutations — characterData: ignores extension UI node` — text node inside `#bl-si-picker-toolbar` is not wrapped
+- `handleMutations — ignores attributes mutation type` — `{ type: 'attributes' }` is silently dropped
 
 ### Default settings path
 - `all AUTO_DETECT defaults off — scan returns 0` — `scan(root, { email: false, numeric: false })` returns 0 and creates no PII spans
@@ -121,7 +128,8 @@ No external module dependencies are mocked — `pii_detector.js` operates purely
 - Double-scan idempotency — a second scan on already-wrapped nodes produces no additional spans.
 - Multiple matches in a single text node — each match becomes a separate span; surrounding text nodes are preserved.
 - Extension UI elements (`#bl-si-picker-toolbar`, `.bl-si-toast`) are excluded from scanning.
-- `stopObserving()` when no observer is active is a safe no-op.
+- `handleMutations()` is a safe no-op when `_activeTypes` is null (i.e. `scan()` has not run).
+- `handleMutations()` covers both `childList` and `characterData` mutation types — the latter is the fix for typed PII in contenteditable surfaces (Gmail compose, Slack, Notion, etc.) that fired no `childList` records under the old observer.
 - Phone-like sub-pattern fires before 4+ bare digit pattern, preventing space-separated card numbers from splitting into individual 4-digit spans.
 - Two-group digit sequences (`'12 2024'`) do not match the phone-like pattern (minimum 3 groups required).
 - Word-separated digit groups (`'room 12 door 23 window 34'`) return count 0.
@@ -131,7 +139,6 @@ No external module dependencies are mocked — `pii_detector.js` operates purely
 ## Coverage Gaps
 
 - No test for `clear()` when both EMAIL and NUMERIC matches exist simultaneously on the same page.
-- No test for `observeMutations()` correctness — adding a DOM node after scan and verifying the mutation observer rescans it.
 - No test for greedy match with trailing punctuation (`'5000,'`) — whether the comma is captured inside the span is unspecified.
 - No test for embedded number in a word boundary context (`'model2024x'`) — the `\b` guard should prevent a match but is unverified.
 - Currency-prefix variants (dollar, euro, pound, rupee — 4 tests) all verify the same sub-pattern; redundant; candidates for `test.each`.

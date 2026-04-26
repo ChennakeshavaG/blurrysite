@@ -4,8 +4,8 @@
  * Unit tests for src/pii_detector.js
  *
  * Module exposes blsi.PiiDetector:
- *   scan(rootEl, types), clear(rootEl), observeMutations(rootEl),
- *   stopObserving(), getMatchCount(), getPatterns()
+ *   scan(rootEl, types), clear(rootEl), handleMutations(mutations, root),
+ *   getMatchCount(), getPatterns()
  *
  * Pattern contract (2 types only):
  *   EMAIL   — standard local@domain.tld
@@ -14,9 +14,10 @@
 
 /* === TEST QUALITY ANNOTATIONS ===
  * COVERS: scan() for EMAIL and NUMERIC types; clear(); getMatchCount(); getPatterns();
- *         stopObserving() safety; PII independence from blur-all; multi-type detection;
- *         NUMERIC boolean mode; falsePositivesCheck chain (isYear, isVersion, isPublicPrice, isCountNoise); phone-like grouping rule;
- *         extension UI exclusion; double-scan idempotency; null/disabled-type guards.
+ *         handleMutations() childList + characterData paths; PII independence from blur-all;
+ *         multi-type detection; NUMERIC boolean mode; falsePositivesCheck chain (isYear,
+ *         isVersion, isPublicPrice, isCountNoise); phone-like grouping rule; extension UI
+ *         exclusion; double-scan idempotency; null/disabled-type guards.
  *
  * REDUNDANT TESTS:
  *   - "NUMERIC — detects dollar amount", "detects Euro symbol", "detects British Pound",
@@ -41,8 +42,6 @@
  *     no test verifies the word-boundary guard on 4+ digit bare pattern.
  *   - PII clear() when both EMAIL and NUMERIC are active on the same page — only
  *     EMAIL is tested with clear(); no combined-type clear() assertion exists.
- *   - observeMutations() correctness: add a node to the DOM after scan() and verify
- *     the mutation observer rescans and wraps the new match.
  */
 
 'use strict';
@@ -58,8 +57,7 @@ function buildStubSource() {
     blsi.PiiDetector = Object.freeze({
       scan:             function() { return 0; },
       clear:            function() {},
-      observeMutations: function() {},
-      stopObserving:    function() {},
+      handleMutations:  function() {},
       getMatchCount:    function() { return 0; },
       getPatterns:      function() {
         return {
@@ -91,7 +89,6 @@ describe('pii_detector.js', () => {
   });
 
   afterEach(() => {
-    blsi.PiiDetector.stopObserving();
     blsi.PiiDetector.clear(document.body);
     document.body.innerHTML = '';
   });
@@ -299,7 +296,6 @@ describe('pii_detector.js', () => {
   });
 
   // MISSING: no test for clear() when both EMAIL and NUMERIC matches exist on the same page — only EMAIL is tested with clear()
-  // MISSING: no test for observeMutations() — add a node after scan() and verify the mutation observer rescans it
 
   // ── Multi-type + toggling ───────────────────────────────────────────────────
 
@@ -420,10 +416,102 @@ describe('pii_detector.js', () => {
     expect(blsi.PiiDetector.getMatchCount()).toBe(2);
   });
 
-  // ── stopObserving ──────────────────────────────────────────────────────────
+  // ── handleMutations ────────────────────────────────────────────────────────
+  // PII detector is a subscriber to blur_engine's mutation dispatcher.
+  // It never owns an observer; blur_engine fans MutationRecord[] in.
+  //
+  // We synthesise records with the public shape blur_engine would dispatch
+  // ({ type, addedNodes, target }) so tests don't depend on a real MO.
 
-  test('stopObserving is safe when no observer is active', () => {
-    expect(() => blsi.PiiDetector.stopObserving()).not.toThrow();
+  test('handleMutations is a no-op when scan() has not been called', () => {
+    const tn = document.createTextNode('Email user@example.com');
+    document.body.appendChild(tn);
+    const recs = [{ type: 'childList', addedNodes: [tn], target: document.body }];
+    expect(() => blsi.PiiDetector.handleMutations(recs, document)).not.toThrow();
+    expect(document.querySelector('[data-bl-si-pii]')).toBeNull();
+  });
+
+  test('handleMutations is a no-op when given empty / nullish input', () => {
+    blsi.PiiDetector.scan(document.body, { email: true });
+    expect(() => blsi.PiiDetector.handleMutations([], document)).not.toThrow();
+    expect(() => blsi.PiiDetector.handleMutations(null, document)).not.toThrow();
+    expect(() => blsi.PiiDetector.handleMutations(undefined, document)).not.toThrow();
+  });
+
+  test('handleMutations — childList: new TEXT_NODE wraps email', () => {
+    blsi.PiiDetector.scan(document.body, { email: true });
+    const tn = document.createTextNode('Reach me at typed@example.com');
+    document.body.appendChild(tn);
+    const recs = [{ type: 'childList', addedNodes: [tn], target: document.body }];
+    blsi.PiiDetector.handleMutations(recs, document);
+    const span = document.querySelector('[data-bl-si-pii="email"]');
+    expect(span).not.toBeNull();
+    expect(span.textContent).toBe('typed@example.com');
+  });
+
+  test('handleMutations — childList: new ELEMENT_NODE scans subtree', () => {
+    blsi.PiiDetector.scan(document.body, { email: true });
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<p>contact <span>nested@example.com</span> for info</p>';
+    document.body.appendChild(wrap);
+    const recs = [{ type: 'childList', addedNodes: [wrap], target: document.body }];
+    blsi.PiiDetector.handleMutations(recs, document);
+    expect(document.querySelector('[data-bl-si-pii="email"]')).not.toBeNull();
+  });
+
+  // USER IMPACT: typed email in contenteditable / dynamic .textContent reassignment
+  // fires `characterData` mutations, NOT `childList`. Without this branch the email
+  // stays unblurred until reload — the original bug that drove this refactor.
+  test('handleMutations — characterData: textContent change wraps new email', () => {
+    document.body.innerHTML = '<div contenteditable></div>';
+    const editor = document.querySelector('[contenteditable]');
+    const tn = document.createTextNode('placeholder');
+    editor.appendChild(tn);
+    blsi.PiiDetector.scan(document.body, { email: true });
+
+    // Simulate user typing — text node mutates in place.
+    tn.textContent = 'typed live@example.com';
+    const recs = [{ type: 'characterData', target: tn, addedNodes: [], removedNodes: [] }];
+    blsi.PiiDetector.handleMutations(recs, document);
+
+    const span = document.querySelector('[data-bl-si-pii="email"]');
+    expect(span).not.toBeNull();
+    expect(span.textContent).toBe('live@example.com');
+  });
+
+  test('handleMutations — characterData: skip text node already wrapped', () => {
+    document.body.innerHTML = '<p>email user@example.com here</p>';
+    blsi.PiiDetector.scan(document.body, { email: true });
+    const span = document.querySelector('[data-bl-si-pii="email"]');
+    expect(span).not.toBeNull();
+    const innerText = span.firstChild;
+    expect(innerText.nodeType).toBe(Node.TEXT_NODE);
+
+    const before = blsi.PiiDetector.getMatchCount();
+    const recs = [{ type: 'characterData', target: innerText, addedNodes: [], removedNodes: [] }];
+    blsi.PiiDetector.handleMutations(recs, document);
+    // No double-wrap — guard short-circuits.
+    expect(blsi.PiiDetector.getMatchCount()).toBe(before);
+    expect(document.querySelectorAll('[data-bl-si-pii]').length).toBe(1);
+  });
+
+  test('handleMutations — characterData: ignores extension UI node', () => {
+    blsi.PiiDetector.scan(document.body, { email: true });
+    const toolbar = document.createElement('div');
+    toolbar.id = 'bl-si-picker-toolbar';
+    document.body.appendChild(toolbar);
+    const tn = document.createTextNode('hint user@example.com');
+    toolbar.appendChild(tn);
+    const recs = [{ type: 'characterData', target: tn, addedNodes: [], removedNodes: [] }];
+    blsi.PiiDetector.handleMutations(recs, document);
+    expect(document.querySelector('[data-bl-si-pii]')).toBeNull();
+  });
+
+  test('handleMutations — ignores attributes mutation type', () => {
+    blsi.PiiDetector.scan(document.body, { email: true });
+    const recs = [{ type: 'attributes', target: document.body, addedNodes: [], removedNodes: [] }];
+    expect(() => blsi.PiiDetector.handleMutations(recs, document)).not.toThrow();
+    expect(document.querySelector('[data-bl-si-pii]')).toBeNull();
   });
 
   // ── Default settings path ──────────────────────────────────────────────────
@@ -548,5 +636,4 @@ describe('pii_detector.js', () => {
   // MISSING: no test for greedy match trailing punctuation ("5000," — does comma get captured inside span?)
   // MISSING: no test for embedded number in word ("model2024x" — word boundary \b should prevent match)
   // MISSING: no test for clear() with both EMAIL and NUMERIC active simultaneously
-  // MISSING: no test for observeMutations() — new node added after scan should be picked up and rescanned
 });

@@ -1003,6 +1003,12 @@ const BlurEngine = (() => {
   const _pendingMoNodes = [];     // nodes collected by MO; drained by a single idle
   let _moIdlePending = false;
 
+  // Mutation dispatcher — subscribers receive raw MutationRecord[] per root in
+  // the same idle drain. Insertion order is preserved (Map). PII detector and
+  // future modules attach via subscribeMutations(); they never own observers.
+  const _subscribers = new Map();   // name → handler(mutations, root)
+  const _pendingMutations = new Map(); // root → MutationRecord[]
+
   function _scheduleIdle(fn) {
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(fn, { timeout: 300 });
@@ -1015,6 +1021,79 @@ const BlurEngine = (() => {
     if (_stampIdlePending) return;
     _stampIdlePending = true;
     _scheduleIdle(_flushStampQueue);
+  }
+
+  // Drain MO-collected work and dispatch raw mutations to subscribers.
+  // Engine drain runs first (stamp / pick-blur / shadow / iframe), then
+  // subscribers receive their per-root MutationRecord[] in registration order.
+  // Subscriber errors are caught so one bad subscriber can't stall others.
+  function _drainMoIdle() {
+    _moIdlePending = false;
+
+    // 1. Engine drain — element-centric childList work.
+    const blurAllOn = _isPageBlurred;
+    const pickBlurOn = _pickBlurDynamicActive;
+    if ((blurAllOn || pickBlurOn) && _pendingMoNodes.length > 0) {
+      const thorough = _currentSettings ? !!_currentSettings.thorough_blur : false;
+      const raw = _pendingMoNodes.splice(0);
+      // Drop nodes whose subtree is already covered by an ancestor in the
+      // same batch — prevents double-walking when a SPA inserts a container
+      // in one MO tick and its children in another before the idle fires.
+      const nodes = raw.filter(n =>
+        !raw.some(other => other !== n && other.contains && other.contains(n))
+      );
+      for (let n = 0; n < nodes.length; n++) {
+        const node = nodes[n];
+        if (blurAllOn) tryBlurTextCheck(node, thorough);
+        if (pickBlurOn) _tryPickBlurNode(node);
+        if (blurAllOn) {
+          if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
+            handleShadowRoot(_currentSettings, node.shadowRoot);
+          }
+          if (node.tagName === 'IFRAME' && _currentSettings) {
+            handleIframe(_currentSettings, node);
+          }
+        }
+        const children = node.querySelectorAll('*');
+        for (let i = 0; i < children.length; i++) {
+          if (blurAllOn) tryBlurTextCheck(children[i], thorough);
+          if (pickBlurOn) _tryPickBlurNode(children[i]);
+          if (blurAllOn) {
+            if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
+              handleShadowRoot(_currentSettings, children[i].shadowRoot);
+            }
+            if (children[i].tagName === 'IFRAME' && _currentSettings) {
+              handleIframe(_currentSettings, children[i]);
+            }
+          }
+        }
+      }
+    } else if (!blurAllOn && !pickBlurOn) {
+      // Engine inactive — discard any buffered nodes from a stale tick.
+      _pendingMoNodes.length = 0;
+    }
+
+    // 2. Subscriber dispatch — raw MutationRecord[] per root, in registration order.
+    if (_subscribers.size > 0 && _pendingMutations.size > 0) {
+      const buckets = Array.from(_pendingMutations.entries());
+      _pendingMutations.clear();
+      for (let i = 0; i < buckets.length; i++) {
+        const root = buckets[i][0];
+        const recs = buckets[i][1];
+        for (const [name, handler] of _subscribers) {
+          try {
+            handler(recs, root);
+          } catch (err) {
+            if (typeof blsi !== 'undefined' && blsi.Logger) {
+              blsi.Logger.scope('engine').error('subscriber error', name, err);
+            }
+          }
+        }
+      }
+    } else if (_pendingMutations.size > 0) {
+      // No subscribers — drop buffered mutations.
+      _pendingMutations.clear();
+    }
   }
 
   function _flushStampQueue(deadline) {
@@ -1195,70 +1274,52 @@ const BlurEngine = (() => {
     if (!target) return;
 
     const obs = new MutationObserver((mutations) => {
-      if (_pickerActive || (!_isPageBlurred && !_pickBlurDynamicActive)) return;
+      // Two independent buffers per MO tick:
+      //   1. _pendingMoNodes — element-add nodes for engine drain (stamp /
+      //      pick-blur / shadow / iframe). Gated by !_pickerActive and (blur-all
+      //      OR pick-blur-dynamic active). Picker active silences this side
+      //      because the picker owns the cursor and must not race against
+      //      auto-stamping.
+      //   2. _pendingMutations.get(root) — raw MutationRecord[] for subscriber
+      //      dispatch (PII detector, future modules). Always buffered when at
+      //      least one subscriber is registered, regardless of picker state or
+      //      blur-all/pick-blur state. PII is independent of blur-all and must
+      //      keep wrapping typed text while the picker is open.
+      const engineActive = !_pickerActive && (_isPageBlurred || _pickBlurDynamicActive);
+      const hasSubscribers = _subscribers.size > 0;
+      if (!engineActive && !hasSubscribers) return;
 
-      // Synchronous part: collect added nodes only — no DOM queries here.
-      // querySelectorAll('*') for subtrees is deferred to the idle callback
-      // so it never competes with layout / paint.
-      let collected = false;
-      for (const mutation of mutations) {
-        if (mutation.type !== 'childList') continue;
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          if (node.dataset && node.dataset.blSiZone !== undefined) continue;
-          _pendingMoNodes.push(node);
-          collected = true;
+      if (hasSubscribers) {
+        let bucket = _pendingMutations.get(root);
+        if (!bucket) {
+          bucket = [];
+          _pendingMutations.set(root, bucket);
+        }
+        for (let i = 0; i < mutations.length; i++) bucket.push(mutations[i]);
+      }
+
+      let engineCollected = false;
+      if (engineActive) {
+        for (const mutation of mutations) {
+          if (mutation.type !== 'childList') continue;
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            if (node.dataset && node.dataset.blSiZone !== undefined) continue;
+            _pendingMoNodes.push(node);
+            engineCollected = true;
+          }
         }
       }
-      if (!collected) return;
+
+      if (!engineCollected && !hasSubscribers) return;
 
       // One idle per batch. Flag prevents duplicate scheduling when the MO
       // fires multiple times before the idle runs (e.g. async SPA inserts).
-      if (!_moIdlePending) {
-        _moIdlePending = true;
-        _scheduleIdle(() => {
-          _moIdlePending = false;
-          const blurAllOn = _isPageBlurred;
-          const pickBlurOn = _pickBlurDynamicActive;
-          if (!blurAllOn && !pickBlurOn) { _pendingMoNodes.length = 0; return; }
-          const thorough = _currentSettings ? !!_currentSettings.thorough_blur : false;
-          const raw = _pendingMoNodes.splice(0);
-          // Drop nodes whose subtree is already covered by an ancestor in the
-          // same batch — prevents double-walking when a SPA inserts a container
-          // in one MO tick and its children in another before the idle fires.
-          const nodes = raw.filter(n =>
-            !raw.some(other => other !== n && other.contains && other.contains(n))
-          );
-          for (let n = 0; n < nodes.length; n++) {
-            const node = nodes[n];
-            if (blurAllOn) tryBlurTextCheck(node, thorough);
-            if (pickBlurOn) _tryPickBlurNode(node);
-            if (blurAllOn) {
-              if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
-                handleShadowRoot(_currentSettings, node.shadowRoot);
-              }
-              if (node.tagName === 'IFRAME' && _currentSettings) {
-                handleIframe(_currentSettings, node);
-              }
-            }
-            const children = node.querySelectorAll('*');
-            for (let i = 0; i < children.length; i++) {
-              if (blurAllOn) tryBlurTextCheck(children[i], thorough);
-              if (pickBlurOn) _tryPickBlurNode(children[i]);
-              if (blurAllOn) {
-                if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
-                  handleShadowRoot(_currentSettings, children[i].shadowRoot);
-                }
-                if (children[i].tagName === 'IFRAME' && _currentSettings) {
-                  handleIframe(_currentSettings, children[i]);
-                }
-              }
-            }
-          }
-        });
-      }
+      if (_moIdlePending) return;
+      _moIdlePending = true;
+      _scheduleIdle(_drainMoIdle);
     });
-    obs.observe(target, { childList: true, subtree: true });
+    obs.observe(target, { childList: true, subtree: true, characterData: true });
     _observers.set(root, obs);
   }
 
@@ -1315,6 +1376,9 @@ const BlurEngine = (() => {
     // Cancel any pending idle work for this root — prevents stampElements
     // re-stamping elements after teardown has cleared all attributes.
     _stampQueue = _stampQueue.filter(item => item.root !== root);
+    // Drop any buffered mutations for this root — the observer is going away
+    // and subscribers must not receive records for a torn-down root.
+    _pendingMutations.delete(root);
 
     disconnectObserver(root);
     removeRules(root);
@@ -1551,6 +1615,26 @@ const BlurEngine = (() => {
     _pickerActive = !!v;
   }
 
+  // ── Mutation dispatcher public surface ─────────────────────────────────────
+  // Subscribers receive raw MutationRecord[] per root inside the engine's
+  // idle drain. They never own observers themselves.
+  //
+  // Order: invoked AFTER the engine's own stamp / pick-blur / shadow / iframe
+  // pass for that batch, in registration order.
+  //
+  // The picker-active gate suppresses the engine's stamp drain only —
+  // subscribers still fire while the picker is open. PII detector relies on
+  // this to keep wrapping typed text during picker mode.
+  function subscribeMutations(name, handler) {
+    if (typeof name !== 'string' || !name) return;
+    if (typeof handler !== 'function') return;
+    _subscribers.set(name, handler);
+  }
+
+  function unsubscribeMutations(name) {
+    _subscribers.delete(name);
+  }
+
 
   // ── §PUBLIC-API ───────────────────────────────────────────────────────────
   // All exported methods. To add/remove a public method, edit this return block
@@ -1607,6 +1691,10 @@ const BlurEngine = (() => {
     handleShadowRoot,     // one shadow root, recurses into nested
     handleIframe,         // cross-origin iframes only
     observeRoot,
+
+    // Mutation dispatcher — subscribers receive raw MutationRecord[] per root.
+    subscribeMutations,
+    unsubscribeMutations,
     get isPageBlurred() {
       return _isPageBlurred;
     },

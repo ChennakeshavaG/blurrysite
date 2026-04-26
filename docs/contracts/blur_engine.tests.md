@@ -244,6 +244,20 @@ Runs before every test in the outer `describe('blsi.BlurEngine', ...)`:
 - `__blsi_shadow_attached is a no-op when blur-all is inactive` — no rules injected when `blur_all_active` is `false`.
 - `__blsi_shadow_attached is a no-op when shadow root already observed` — firing event a second time for an already-known shadow root does not duplicate the style element.
 
+### `mutation dispatcher — subscribeMutations / unsubscribeMutations`
+
+Subscriber-style fan-out from the single MO per root. Tests use a `flushDispatch()` helper (one microtask + one macrotask) since the MO callback fires in a microtask and the idle drain falls back to `setTimeout(fn, 0)` in jsdom. Inner `afterEach` removes `'test-a'`, `'test-b'`, `'pii'` subscribers and resets picker active.
+
+- `subscribeMutations + unsubscribeMutations are exposed` — both are exported as functions on `blsi.BlurEngine`.
+- `subscriber receives childList MutationRecord[] for added node` — appendChild after `activate()` produces a callback with `(MutationRecord[], root)` whose first record has `type === 'childList'`.
+- `subscriber receives characterData record on textContent change` — mutating an existing text node's `textContent` produces a `'characterData'` record on the subscriber.
+- `unsubscribeMutations stops further dispatch` — handler is not called after unsubscribe.
+- `re-registering same name replaces the handler` — the second handler fires; the first does not.
+- `subscriber error is caught — other subscribers still fire` — a throwing subscriber does not stall the next subscriber registered under a different name.
+- `subscribers still fire when picker is active (engine drain skipped)` — picker active suppresses stamping but subscribers still receive records (PII keeps wrapping typed text during picker mode).
+- `subscribers still fire when blur-all is OFF` — engine drain inactive, but the dispatcher's subscriber path still runs.
+- `subscribeMutations rejects non-string name and non-function handler` — silent rejects on `''`, `null` name and `null` handler.
+
 ### `custom element stamping (RC-1)`
 
 - `stampElements stamps custom element host when text content present` — `<shreddit-foo>text</shreddit-foo>` receives `data-bl-si-blur`.

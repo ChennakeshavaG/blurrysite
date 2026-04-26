@@ -51,7 +51,7 @@ Isolated world (run_at:"document_idle"):
  6. selector_utils.js     → blsi.SelectorUtils
  7. storage_model.js      → blsi.Model (direct chrome.storage access; single blsi_model key; resolve/patch/debounced_patch)
  8. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
- 9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/observeMutations/stopObserving)
+ 9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/handleMutations — subscribes to blur_engine MO dispatcher)
 10. fonts.js              → blsi.Fonts (embedded WOFF2 font assets; FONT_FACE string for "bl-si-redact-asterisk")
 11. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
 12. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
@@ -85,7 +85,7 @@ A module may only depend on modules loaded before it.
 - `scan(rootEl, types)` — `TreeWalker(NodeFilter.SHOW_TEXT)` collects all text nodes first, then processes each. Skips extension UI and already-wrapped nodes.
 - `_wrapTextNode(textNode, matches)` — processes matches right-to-left so earlier offsets stay valid after each `splitText`. Each match: `splitText(end)` then `splitText(start)` then `replaceChild(span, matchNode)`. Spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`.
 - `clear(rootEl)` — removes all `[data-bl-si-pii]` spans, restores text, resets `_matchCount`.
-- `observeMutations(rootEl)` — requires `scan()` first so `_activeTypes` is set.
+- `handleMutations(mutations, root)` — subscriber to `blur_engine`'s mutation dispatcher. Handles `childList` (new TEXT_NODE → wrap; new ELEMENT_NODE → scan subtree) and `characterData` (text node whose `textContent` changed → wrap matches). Skips text nodes already inside a `[data-bl-si-pii]` wrapper. No-op when `_activeTypes` is null — `scan()` must run first to seed it. PII detector owns no observer; `content_script.applyState` calls `Engine.subscribeMutations('pii', handleMutations)` when PII is enabled.
 - `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — reveal_controller can find and reveal PII spans.
 
 ### blur_engine.js

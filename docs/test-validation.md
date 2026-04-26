@@ -4,7 +4,7 @@ This document maps every unit test to the user-facing behavior it protects. **59
 
 ---
 
-## 1. blur_engine.test.js (110 tests) — `tests/unit/blur_engine.test.js`
+## 1. blur_engine.test.js (119 tests) — `tests/unit/blur_engine.test.js`
 
 Source module: `src/blur_engine.js` → `blsi.BlurEngine`
 
@@ -34,6 +34,7 @@ Source module: `src/blur_engine.js` → `blsi.BlurEngine`
 | Custom element stamping RC-1 (5) | Custom elements (`<my-card>`) stamped with `data-bl-si-id`; re-stamp after disconnect/reconnect uses same id | SPA with custom elements | Sticky zone re-blur targets wrong node after SPA re-render |
 | List element placement RC-2 (3) | `<li>` inside `<ul>` inside blurred container correctly identified as STRUCTURE category | Blur-all on page with lists | List items escape blur despite STRUCTURE enabled |
 | Reveal descendant cascade RC-3 (2) | `data-bl-si-reveal` on ancestor causes descendant text to appear revealed; removing attribute restores blur | Hover/click reveal on nested content | Nested content stays blurred even when ancestor is revealed |
+| Mutation dispatcher (9) | `subscribeMutations`/`unsubscribeMutations` exposed; subscriber receives `(MutationRecord[], root)` for childList add and characterData change; unsubscribe stops dispatch; re-registering same name replaces handler; throwing subscriber doesn't stall others; subscribers fire even when picker is active or blur-all is OFF; rejects bad name/handler silently | Any DOM activity (PII detector subscribes here) | Without dispatcher: typed PII unblurred until reload; multiple modules each spinning their own MO is wasteful |
 
 ---
 
@@ -76,7 +77,7 @@ Source module: `src/picker.js` → `blsi.Picker`
 
 ---
 
-## 4. pii_detector.test.js (62 tests) — `tests/unit/pii_detector.test.js`
+## 4. pii_detector.test.js (69 tests) — `tests/unit/pii_detector.test.js`
 
 Source module: `src/pii_detector.js` → `blsi.PiiDetector`
 
@@ -92,7 +93,7 @@ Source module: `src/pii_detector.js` → `blsi.PiiDetector`
 | Scan behavior (8) | `scan` is idempotent (no double-wrapping); handles nested elements; handles empty text nodes; handles text split across siblings; `getMatchCount()` returns total wrapped count; `getPatterns()` returns active pattern map | Any scan invocation | Match count wrong in popup; double-wrapping corrupts DOM |
 | clear() (2) | `clear(root)` unwraps all `[data-bl-si-pii]` spans; restores original text nodes | Disable PII toggle | PII spans linger in DOM after toggle off |
 | getMatchCount / getPatterns (2) | Count increments per match; `getPatterns()` returns object keyed by type with regex | Popup PII count display | Wrong count shown; pattern inspection broken |
-| stopObserving (1) | `stopObserving()` disconnects MutationObserver; new DOM nodes not scanned | Page unload, extension disabled | Memory leak on long-lived pages |
+| handleMutations (8) | Subscriber handler dispatched by `blur_engine`'s mutation dispatcher: childList add (TEXT_NODE / ELEMENT_NODE) wraps matches; **characterData** target (typed email in contenteditable, dynamic `.textContent` reassignment) wraps matches — fixes the bug where PII stayed unblurred until reload; text node already wrapped is skipped (no double-wrap); extension UI nodes skipped; attributes mutation type ignored; no-op when `_activeTypes` null or input empty | Type an email into Gmail compose / Slack DM / Notion page (any contenteditable surface) | Typed PII visible during screenshare even with auto-detect on |
 | Default settings (1) | `AUTO_DETECT.EMAIL = false`, `AUTO_DETECT.NUMERIC = false` by default | Fresh install | PII scanning active without user opting in |
 | Boolean gating (2) | `NUMERIC = true` detects bare 5-digit number; `NUMERIC = false` produces zero numeric spans | Enable / disable numeric PII toggle | Numbers blurred when user disabled numeric detection, or financial numbers escape when enabled |
 | isYear suppression (4) | 4-digit year in 1000–2099 suppressed; 5-digit number not suppressed as year; 4-digit above 2099 detected; 3-digit number below threshold produces no match | Enable numeric PII on pages with dates/years | Copyright years and publication dates blurred unnecessarily |

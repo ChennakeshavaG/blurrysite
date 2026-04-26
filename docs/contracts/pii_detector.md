@@ -10,9 +10,8 @@ Scans text nodes for PII patterns (email, numeric) using `TreeWalker` and wraps 
 |---|---|
 | `NUMERIC_PROFILE` | `'precise'` — developer-only constant; users see only on/off |
 | `PII_ATTR` | `'data-bl-si-pii'` — the only attribute placed on PII wrapping spans |
-| `_observer` | `MutationObserver\|null` — single observer instance (null when inactive) |
 | `_matchCount` | `number` — running total of wrapped spans; incremented by `_wrapTextNode`, reset by `clear()` |
-| `_activeTypes` | `{email: bool, numeric: bool}\|null` — set by `scan()`, reused by observer callback |
+| `_activeTypes` | `{email: bool, numeric: bool}\|null` — set by `scan()`, reused by `handleMutations` |
 
 ## Regex Patterns
 
@@ -44,7 +43,7 @@ Order in `NUMERIC_RE` is critical: alternation 4 must precede alternation 5 so `
 - `types` (`{email: bool, numeric: bool}`) — which PII types to detect  
 **Returns**: `number` — total spans created in this call  
 **Side effects**:
-- Sets `_activeTypes` for use by `observeMutations` callback
+- Sets `_activeTypes` for reuse by `handleMutations`
 - TreeWalker collects ALL text nodes before wrapping — avoids walker invalidation from DOM mutations
 - For each eligible text node: calls `_findMatches` then `_wrapTextNode`
 - Increments `_matchCount`  
@@ -56,22 +55,22 @@ Order in `NUMERIC_RE` is critical: alternation 4 must precede alternation 5 so `
 **Params**: `rootEl` (Element)  
 **Returns**: `void`  
 **Side effects**: Replaces each span with a text node; calls `parent.normalize()` to merge adjacent text; resets `_matchCount = 0`  
-**Handles**: Does NOT stop the observer — `stopObserving()` must be called separately if needed.
+**Handles**: PII detector owns no observer — `clear()` is enough. `content_script.applyState` calls `Engine.unsubscribeMutations('pii')` separately on the disable path.
 
-### observeMutations(rootEl)
+### handleMutations(mutations, root)
 
-**What**: Watches for new DOM nodes and automatically scans them for PII.  
-**Params**: `rootEl` (Element)  
+**What**: Subscriber-style handler invoked by `blur_engine`'s mutation dispatcher with raw `MutationRecord[]` for one root.  
+**Params**:
+- `mutations` (`MutationRecord[]`) — the batch dispatched by the engine for this idle tick
+- `root` (Document | ShadowRoot) — the root the records belong to (currently unused by PII; kept for subscriber signature stability)
+
 **Returns**: `void`  
-**Side effects**: Disconnects any existing observer; creates new `MutationObserver` watching `{ childList: true, subtree: true }`  
-**Handles**: No-op if `_activeTypes` is null — `scan()` must be called first. Handles both TEXT_NODE (direct wrapping) and ELEMENT_NODE (calls `scan(node, _activeTypes)`) additions.
-
-### stopObserving()
-
-**What**: Disconnects the `MutationObserver`.  
-**Params**: none  
-**Returns**: `void`  
-**Side effects**: Disconnects and nulls `_observer`. Does NOT reset `_matchCount`.
+**Side effects**: For each record, may call `_wrapTextNode` (TEXT_NODE / characterData target) or `scan(node, _activeTypes)` (ELEMENT_NODE additions). Increments `_matchCount` indirectly via `_wrapTextNode`.  
+**Handles**:
+- `mutation.type === 'childList'`: iterates `addedNodes`. TEXT_NODE → `_findMatches` + `_wrapTextNode`. ELEMENT_NODE → `scan(node, _activeTypes)`. Skips extension UI and nodes already inside a `[data-bl-si-pii]` wrapper.
+- `mutation.type === 'characterData'`: target is the text node whose `textContent` changed. Wraps fresh matches against the new value. Skips text nodes already inside a `[data-bl-si-pii]` wrapper (existing wrapper covers updated content) and extension UI.
+- Other mutation types (`attributes`, etc.): ignored.
+- No-op when `_activeTypes` is null (caller must `scan()` first), or when `mutations` is null/empty.
 
 ### getMatchCount()
 
@@ -121,7 +120,8 @@ Order in `NUMERIC_RE` is critical: alternation 4 must precede alternation 5 so `
 - `_wrapTextNode` ALWAYS processes right-to-left — violating this corrupts text node offsets.
 - `_findMatches` ALWAYS clones regexes — never uses `EMAIL_RE.exec()` or `NUMERIC_RE.exec()` directly.
 - `scan()` collects all text nodes BEFORE the wrapping loop — prevents TreeWalker invalidation.
-- `observeMutations()` is a no-op if `_activeTypes` is null — `scan()` must be called first.
-- Module is a singleton — one `_observer`, one `_matchCount`, one `_activeTypes` per page.
-- `clear()` resets `_matchCount = 0` but does NOT call `stopObserving()`.
+- `handleMutations()` is a no-op if `_activeTypes` is null — `scan()` must be called first.
+- **PII detector owns no observer.** `blur_engine` runs the single `MutationObserver` per root (document + each shadow root) and dispatches raw `MutationRecord[]` to `handleMutations` via `subscribeMutations('pii', handleMutations)`. The MO config includes `characterData: true` so typed text in contenteditable is detected without a reload.
+- Module is a singleton — one `_matchCount`, one `_activeTypes` per page.
+- `clear()` resets `_matchCount = 0` but does NOT touch the engine subscription — `content_script.applyState` calls `Engine.unsubscribeMutations('pii')` on disable.
 - `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — `reveal_controller` can reveal PII spans.

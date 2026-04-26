@@ -13,7 +13,7 @@
 | `§CATEGORY-SELECTORS` | Frozen `CATEGORY_SELECTORS` constant mapping each of the 5 categories (`text`, `media`, `form`, `table`, `structure`) to `{ alwaysBlur: string[], textCheck: string[], roles?: string[] }`. Edit here when adding/removing HTML elements from a blur category. |
 | `§CSS-INJECTION` | `injectRules`, `removeRules`, `injectPickBlurRules`, `removePickBlurRules`, `ensureSvgFilter`, `isBlurAllActive`, the `EXCLUDE` chain, blur mode CSS declarations. Edit here when adding/changing a blur mode or changing which attributes exclude an element from blur-all. |
 | `§PII` | `injectPiiRules`, `removePiiRules` — PII-specific `<style>` injection only. PII detection logic lives in `src/pii_detector.js`. |
-| `§STAMP-OBSERVER` | `stampElements`, `tryBlurTextCheck`, `_isExtensionUI`, `hasMeaningfulTextContent`, `_rebuildTextCheckSet`, idle-stamp queue (`_stampQueue`, `_scheduleStampIdle`, `_flushStampQueue`), MutationObserver wiring (`observeRoot`, `disconnectObserver`), shadow root event bridge (`_initShadowAttachListener`, `_removeShadowAttachListener`). Edit here when fixing text stamping, MO callback, idle scheduling, or shadow root discovery. |
+| `§STAMP-OBSERVER` | `stampElements`, `tryBlurTextCheck`, `_isExtensionUI`, `hasMeaningfulTextContent`, `_rebuildTextCheckSet`, idle-stamp queue (`_stampQueue`, `_scheduleStampIdle`, `_flushStampQueue`), MutationObserver wiring (`observeRoot`, `disconnectObserver`), MO idle drain + subscriber dispatch (`_drainMoIdle`, `subscribeMutations`, `unsubscribeMutations`, `_subscribers`, `_pendingMutations`), shadow root event bridge (`_initShadowAttachListener`, `_removeShadowAttachListener`). Edit here when fixing text stamping, MO callback, idle scheduling, shadow root discovery, or mutation dispatcher. |
 | `§ITEMS-ZONES` | `createZoneOverlay`, `removeZoneOverlay`, `getZoneOverlays`, `removeAllZoneOverlays`, `_applyDynamicItem`, `_removeDynamicItem`, `_applyStickyItem`, `_removeStickyItem`, `applyItem`, `removeItem`, `_reconcileItems`, `resetCounters`, `allocateElementName`, `allocateStickyName`. Edit here for zone overlay layout/anchor logic or item reconciliation. |
 | `§ORCHESTRATOR` | `handleSite` (mutex entry point), `handleMainDocument`, `handleShadowRoot`, `handleIframe`, `handleDocument` (thin router), `_applyCssVars`, `_setPickerActiveForObserver`, `teardown`, module-level lifecycle state. Edit here for top-level blur init, teardown, SPA/URL change handling, or lifecycle state changes. |
 | `§PUBLIC-API` | The `return { ... }` block — the exported surface of `blsi.BlurEngine`. Edit this when adding or removing a public method; also update `CLAUDE.md` Module Globals table and this contract. |
@@ -37,13 +37,15 @@
 | `_elementCounter` | `number` | High-water mark for element (dynamic) item names (`"Element 1"`, `"Element 2"`, …). | Module lifetime. Reset by `resetCounters()`. |
 | `_pageAreaCounter` | `number` | High-water mark for page-anchored zone names (`"Area on page 1"`, …). Also seeded by legacy `"Sticky N"` names. | Module lifetime. Reset by `resetCounters()`. |
 | `_screenAreaCounter` | `number` | High-water mark for screen-anchored zone names (`"Area on screen 1"`, …). | Module lifetime. Reset by `resetCounters()`. |
-| `_pickerActive` | `boolean` | Whether the picker is active. When `true`, the MO callback is gated off (no stamps). Updated via `_setPickerActiveForObserver`. | Module lifetime. |
+| `_pickerActive` | `boolean` | Whether the picker is active. When `true`, the engine drain inside the MO idle callback is skipped (no stamps), but registered subscribers still receive `MutationRecord[]`. Updated via `_setPickerActiveForObserver`. | Module lifetime. |
 | `_currentSettings` | `object \| null` | Last resolved settings snapshot passed to `handleSite`. Read by the MO idle callback to stamp newly inserted elements with current thorough/mode settings. | Module lifetime. Updated at start of each `handleSite` call. |
 | `_shadowAttachHandler` | `function \| null` | Capture-phase listener for `__blsi_shadow_attached` CustomEvents from `main_world_bridge.js`. `null` until `_initShadowAttachListener()` is called. | Module lifetime. Removed by `_removeShadowAttachListener()` on teardown of `document`. |
 | `_stampIdlePending` | `boolean` | Gate preventing duplicate `requestIdleCallback` scheduling for the stamp queue. | Module lifetime. |
 | `_stampQueue` | `Array<{root, cats, thorough, mode, settings}>` | Queue of stamp work items; replaced (not appended) on each new reconcile so the pending idle always picks up the latest batch. | Module lifetime. Cleared for specific roots by `teardown`. |
 | `_pendingMoNodes` | `Array<Element>` | Nodes collected by the MO callback; drained by a single idle callback. | Module lifetime. Drained to zero by the idle. |
 | `_moIdlePending` | `boolean` | Gate preventing duplicate idle scheduling for the MO drain callback. | Module lifetime. |
+| `_subscribers` | `Map<string, function>` | Registered subscribers receiving raw `MutationRecord[]` per root in the engine's idle drain. Insertion order preserved. Re-registering the same name replaces the prior handler. | Module lifetime. |
+| `_pendingMutations` | `Map<root, MutationRecord[]>` | Per-root buffer of raw `MutationRecord` instances awaiting subscriber dispatch. | Module lifetime. Cleared for a root by `teardown(root)` and after each idle dispatch. |
 | `_activeItems` | `Map<string, object>` | Items currently applied to the DOM (dynamic: selector as key; sticky: `item.id` as key). Diffed against `blur_items` on every `handleSite` call. | Module lifetime. |
 | `_lastReconcileKey` | `string \| null` | Fingerprint of last `handleSite` inputs that drove `handleMainDocument`. Allows `handleSite` to skip the page-wide nuke+rescan when only CSS vars changed. | Module lifetime. |
 | `_highlightedEl` | `HTMLElement \| null` | The element currently highlighted by `highlightItem`. | Module lifetime. Cleared by `clearItemHighlight` and on next `highlightItem` call. |
@@ -338,18 +340,46 @@
 ---
 
 ### observeRoot(root)
-**What**: Attaches a `MutationObserver` to `root` to stamp newly inserted text-check elements and activate newly attached shadow roots and iframes. Idempotent.  
+**What**: Attaches a `MutationObserver` to `root` to stamp newly inserted text-check elements, activate newly attached shadow roots and iframes, and dispatch raw `MutationRecord[]` to registered subscribers. Idempotent.  
 **Params**:  
 - `root` (Document | ShadowRoot) — observation target; observer attaches to `root.body ?? root`  
 
 **Returns**: `void`  
-**Side effects**: Creates and starts a `MutationObserver`; stores it in `_observers` (WeakMap). Observer callback defers work to a single idle callback batch.  
+**Side effects**: Creates and starts a `MutationObserver` with config `{ childList: true, subtree: true, characterData: true }`; stores it in `_observers` (WeakMap). Observer callback defers all work to a single idle callback (`_drainMoIdle`) per batch.  
 **Handles**:
 - Already observed root: no-op (idempotency guard).
 - `root.body` not yet mounted (shadow roots): observes `root` directly.
-- MO callback is gated: returns immediately when `_pickerActive || (!_isPageBlurred && !_pickBlurDynamicActive)`. When blur-all is OFF but dynamic pick-blur items exist, the MO still runs so late-loading elements can be pick-blurred.
-- MO callback deduplicates ancestor/descendant pairs in the same batch before processing.
-- Each idle callback: snapshot captures `blurAllOn = _isPageBlurred` and `pickBlurOn = _pickBlurDynamicActive`. For each node and its children: calls `tryBlurTextCheck` when `blurAllOn`; calls `_tryPickBlurNode` when `pickBlurOn`; calls `handleShadowRoot` / `handleIframe` only when `blurAllOn`.
+- MO callback maintains two independent buffers per tick:
+  1. `_pendingMoNodes` — element-add nodes for the engine drain. Buffered only when `engineActive = !_pickerActive && (_isPageBlurred || _pickBlurDynamicActive)`.
+  2. `_pendingMutations.get(root)` — raw `MutationRecord[]` for subscriber dispatch. Buffered whenever `_subscribers.size > 0`, regardless of picker / blur-all / pick-blur state. PII relies on this to keep wrapping typed text while the picker is open.
+- MO callback returns early only when `!engineActive && !hasSubscribers`.
+- Idle drain (`_drainMoIdle`):
+  1. **Engine drain**: snapshot captures `blurAllOn = _isPageBlurred` and `pickBlurOn = _pickBlurDynamicActive`. For each node and its children: calls `tryBlurTextCheck` when `blurAllOn`; calls `_tryPickBlurNode` when `pickBlurOn`; calls `handleShadowRoot` / `handleIframe` only when `blurAllOn`. Deduplicates ancestor/descendant pairs in the same batch.
+  2. **Subscriber dispatch**: for each `(root, MutationRecord[])` bucket, invokes registered handlers in registration order. Errors are caught per subscriber via `try/catch` and routed through `blsi.Logger.scope('engine').error` so one failing subscriber cannot stall others.
+- `teardown(root)` deletes the root's entry from `_pendingMutations` so subscribers do not receive records for a torn-down root.
+
+---
+
+### subscribeMutations(name, handler)
+**What**: Registers a subscriber to receive raw `MutationRecord[]` per root inside the engine's idle drain. Subscribers never own observers themselves.  
+**Params**:
+- `name` (string) — idempotent registration key (e.g. `'pii'`). Re-registering the same name replaces the prior handler.
+- `handler` (function) — `(mutations: MutationRecord[], root: Document|ShadowRoot) => void`. Invoked AFTER the engine's stamp / pick-blur / shadow / iframe pass for that batch.
+
+**Returns**: `void`  
+**Side effects**: Inserts an entry into `_subscribers` (insertion-ordered `Map`).  
+**Handles**:
+- Non-string / empty `name`: no-op (silent reject).
+- Non-function `handler`: no-op (silent reject).
+- Subscribers are invoked in registration order across all roots' buckets.
+
+---
+
+### unsubscribeMutations(name)
+**What**: Removes a registered subscriber.  
+**Params**: `name` (string)  
+**Returns**: `void`  
+**Side effects**: `_subscribers.delete(name)`. No-op if not present.
 
 ---
 
@@ -729,7 +759,7 @@
 
 10. **Counter seeding happens inside `_applyDynamicItem` / `_applyStickyItem`.** Callers only need `resetCounters()` once at init; counters self-seed from item names during restore so subsequent `allocate*Name` calls never produce collisions. Both new-format (`"Element N"`, `"Area on page N"`, `"Area on screen N"`) and legacy (`"Dynamic N"`, `"Sticky N"`) names are parsed for backward compatibility.
 
-11. **`_pickerActive = true` silences the MutationObserver entirely.** New DOM nodes inserted while the picker is active are not stamped. The picker gate must be toggled via `_setPickerActiveForObserver` through `content_script.setPickerActive`.
+11. **`_pickerActive = true` silences the engine drain only — subscribers still receive mutations.** New DOM nodes inserted while the picker is active are not stamped, but registered subscribers (PII detector, future modules) continue to receive raw `MutationRecord[]` so PII keeps wrapping typed text while the picker is open. The picker gate must be toggled via `_setPickerActiveForObserver` through `content_script.setPickerActive`.
 
 12. **Frosted mode requires a fresh `ensureSvgFilter` call whenever radius or mode changes.** In-place mutation of `feGaussianBlur.stdDeviation` does not reliably invalidate Chrome's filter cache. The reconcile key folds `blur_radius` into itself only when `blur_mode === 'frosted'` to force a filter rebuild on radius change in that mode.
 

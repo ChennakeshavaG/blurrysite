@@ -103,7 +103,6 @@ const BlurrySitePiiDetector = (() => {
 
   const PII_ATTR = "data-bl-si-pii";
 
-  let _observer = null;
   let _matchCount = 0;
   let _activeTypes = null;
 
@@ -267,17 +266,28 @@ const BlurrySitePiiDetector = (() => {
   }
 
   /**
-   * Watch for DOM mutations and scan new content.
-   * Call scan() first so _activeTypes is populated.
-   * @param {Element} rootEl
+   * Handle a batch of MutationRecord[] dispatched by blur_engine.
+   * Subscriber-style: PII detector owns no observer — blur_engine runs the
+   * single MO per root and fans records out via subscribeMutations.
+   *
+   * Covers:
+   *   - childList: new TEXT_NODE → wrap matches; new ELEMENT_NODE → scan subtree
+   *   - characterData: text node whose textContent changed (typed input in
+   *     contenteditable, dynamic .textContent assignment) → wrap matches.
+   *     Skipped if the text node already lives inside a [data-bl-si-pii] wrapper
+   *     (existing wrapper covers the updated content).
+   *   - attributes / other types: ignored.
+   *
+   * Precondition: scan() must have run first to seed _activeTypes; else no-op.
+   *
+   * @param {MutationRecord[]} mutations
+   * @param {Document|ShadowRoot} _root  — unused; kept for subscriber signature
    */
-  function observeMutations(rootEl) {
-    if (_observer) _observer.disconnect();
-    if (!rootEl || !_activeTypes) return;
+  function handleMutations(mutations, _root) {
+    if (!_activeTypes || !mutations || mutations.length === 0) return;
 
-    _observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type !== "childList") continue;
+    for (const mutation of mutations) {
+      if (mutation.type === "childList") {
         for (const node of mutation.addedNodes) {
           if (node.nodeType === Node.TEXT_NODE) {
             if (_isExtensionUI(node) || _isInsidePiiSpan(node)) continue;
@@ -292,16 +302,15 @@ const BlurrySitePiiDetector = (() => {
             }
           }
         }
+      } else if (mutation.type === "characterData") {
+        const node = mutation.target;
+        if (!node || node.nodeType !== Node.TEXT_NODE) continue;
+        if (_isExtensionUI(node) || _isInsidePiiSpan(node)) continue;
+        const text = node.textContent;
+        if (!text || text.trim().length === 0) continue;
+        const matches = _findMatches(text, _activeTypes);
+        if (matches.length > 0) _wrapTextNode(node, matches);
       }
-    });
-
-    _observer.observe(rootEl, { childList: true, subtree: true });
-  }
-
-  function stopObserving() {
-    if (_observer) {
-      _observer.disconnect();
-      _observer = null;
     }
   }
 
@@ -316,8 +325,7 @@ const BlurrySitePiiDetector = (() => {
   return Object.freeze({
     scan,
     clear,
-    observeMutations,
-    stopObserving,
+    handleMutations,
     getMatchCount,
     getPatterns,
   });
