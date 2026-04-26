@@ -12,6 +12,26 @@
  * Exposed as blsi.BlurEngine (IIFE — no ES module syntax).
  */
 
+// ── FUTURE FILE SPLIT (planned, not done yet) ────────────────────────────────
+// This file is staged for a future split into src/blur_engine/*.js. Each §
+// section below maps to one future file. The per-section header comments
+// document Owns / Public / Reads / Writes so the split becomes mechanical:
+// cut at the § marker, drop into the named file, surface shared state via
+// whatever vehicle is chosen at split time.
+//
+//   §CATEGORY-SELECTORS  → src/blur_engine/categories.js
+//   §CSS-INJECTION       → src/blur_engine/css.js  (PII rule injection folded in)
+//   §STAMP-OBSERVER      → src/blur_engine/observer.js
+//                          (element queries — applyBlur, isBlurred, etc.,
+//                          may move to a sibling element.js at split time)
+//   §ITEMS-ZONES         → src/blur_engine/zones.js
+//   §ORCHESTRATOR        → src/blur_engine/orchestrator.js
+//   §PUBLIC-API          → bottom of orchestrator.js
+//
+// Headstart pass goal: each § block self-contained — declares its own state,
+// no cross-section private references that span multiple §s without a header
+// note documenting them. Tests stay green; no behaviour changes.
+//
 // ── AGENT NAVIGATION ─────────────────────────────────────────────────────────
 // Run: grep -n "§" src/blur_engine.js   → get current line of each section
 // Contract: docs/contracts/blur_engine.md
@@ -19,21 +39,23 @@
 // Use case                                          → Section
 // ─────────────────────────────────────────────────────────────────────────────
 // Add/change a blur mode, CSS rules, SVG filters,  → §CSS-INJECTION
-//   alwaysBlur/textCheck selectors, EXCLUDE chain
+//   alwaysBlur/textCheck selectors, EXCLUDE chain,
+//   PII rule injection, pick-blur rule injection
 //
 // Fix text stamping, MutationObserver callback,    → §STAMP-OBSERVER
 //   idle scheduling (requestIdleCallback), shadow
-//   root discovery, attachShadow event bridge
+//   root discovery, attachShadow event bridge,
+//   subscriber dispatch (PII / future modules),
+//   element queries (isBlurred, applyBlur, etc.)
 //
 // Zone overlays, sticky zones, item reconciliation → §ITEMS-ZONES
 //   (dynamic/sticky names, _activeItems Map,
-//   _applyStickyItem, _applyDynamicItem, counters)
+//   _applyStickyItem, _applyDynamicItem, counters,
+//   highlightItem / clearItemHighlight)
 //
 // Top-level blur init: handleSite, handleShadow-   → §ORCHESTRATOR
 //   Root, handleIframe, handleMainDocument, CSS
 //   vars, teardown, lifecycle state
-//
-// PII rule injection and removal                   → §PII
 //
 // Public API surface (blsi.BlurEngine return)      → §PUBLIC-API
 //
@@ -47,8 +69,20 @@ const BlurEngine = (() => {
   const SVG_FILTER_ID = blsi.ids.svg_filters;
   const STYLE_ID      = "bl-si-blur-styles";
   const PICK_STYLE_ID = "bl-si-pick-blur-styles";
+  const PII_STYLE_ID  = "bl-si-pii-styles";
 
   // ── §CATEGORY-SELECTORS ───────────────────────────────────────────────────
+  //
+  // Future file: src/blur_engine/categories.js
+  //
+  // Owns:        CATEGORY_SELECTORS, CATEGORY_ORDER, DEFAULT_CATS — frozen
+  //              constants describing which HTML tags / ARIA roles belong to
+  //              each blur category.
+  // Public:      CATEGORY_SELECTORS (exposed on blsi.BlurEngine for tests)
+  // Reads:       blsi.DEFAULT_MODEL.blur_all.settings.blur_categories (constants.js)
+  // Writes:      —
+  //
+  // ──────────────────────────────────────────────────────────────────────────
 
   const CATEGORY_SELECTORS = Object.freeze({
     text: Object.freeze({
@@ -168,9 +202,22 @@ const BlurEngine = (() => {
   ]);
 
   // ── §CSS-INJECTION ────────────────────────────────────────────────────────
-  // injectRules, removeRules, injectPickBlurRules, removePickBlurRules,
-  // injectPiiRules, removePiiRules, ensureSvgFilter, isBlurAllActive,
-  // EXCLUDE chain, CSS vars, blur mode declarations.
+  //
+  // Future file: src/blur_engine/css.js
+  //
+  // Owns:        selectorCache, EXCLUDE chain, STYLE_ID / PICK_STYLE_ID /
+  //              PII_STYLE_ID / SVG_FILTER_ID style-element ids.
+  // Public:      injectRules, removeRules, injectPickBlurRules,
+  //              removePickBlurRules, injectPiiRules, removePiiRules,
+  //              ensureSvgFilter, isBlurAllActive, buildSelectors, getSelectors
+  // Reads:       CATEGORY_SELECTORS, CATEGORY_ORDER, DEFAULT_CATS (categories);
+  //              blsi.blur_modes, blsi.pii_modes, blsi.pick_blur_modes,
+  //              blsi.Fonts (constants / fonts).
+  // Writes:      selectorCache (cache memo).
+  // Calls fwd:   _rebuildTextCheckSet (defined in §STAMP-OBSERVER) — called
+  //              from injectRules, runs at handleSite time so vars are init.
+  //
+  // ──────────────────────────────────────────────────────────────────────────
 
   let selectorCache = null;
 
@@ -224,47 +271,6 @@ const BlurEngine = (() => {
     if (selectorCache && selectorCache.key === key) return selectorCache;
     selectorCache = buildSelectors(categories);
     return selectorCache;
-  }
-
-  /** Set of text-check tag names for O(1) lookup in MO callback */
-  let _textCheckSet = new Set();
-  let _lastTextCheckKey = null;
-  let _blurredCount = 0;
-
-  function _rebuildTextCheckSet(categories) {
-    const cats = categories || DEFAULT_CATS;
-    const key = CATEGORY_ORDER.filter(n => cats[n]).join(',');
-    if (key === _lastTextCheckKey) return;
-    _lastTextCheckKey = key;
-    _textCheckSet = new Set();
-    for (const name of CATEGORY_ORDER) {
-      if (!cats[name]) continue;
-      const cat = CATEGORY_SELECTORS[name];
-      for (let i = 0; i < cat.textCheck.length; i++)
-        _textCheckSet.add(cat.textCheck[i]);
-    }
-  }
-
-  /**
-   * Structural container tags — wrappers that group content but rarely hold
-   * private text directly. Blurring these creates redundant nested blur that
-   * breaks hover reveal (CSS filter on a parent composites the entire subtree,
-   * so unblurring a parent leaks all siblings). These always require the
-   * hasMeaningfulTextContent gate, even in thorough mode.
-   */
-  const _structuralTags = new Set(CATEGORY_SELECTORS.structure.textCheck);
-  // ── Private helpers ────────────────────────────────────────────────────────
-
-  function hasMeaningfulTextContent(element) {
-    for (const node of element.childNodes) {
-      if (
-        node.nodeType === Node.TEXT_NODE &&
-        node.textContent.trim().length > 0
-      ) {
-        return true;
-      }
-    }
-    return false;
   }
 
   // ── SVG filter injection (frosted glass mode) ──────────────────────────────
@@ -479,11 +485,80 @@ const BlurEngine = (() => {
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
-  // ── §PII ─────────────────────────────────────────────────────────────────
-  // injectPiiRules, removePiiRules — PII-specific CSS injection only.
-  // PII detector logic lives in src/pii_detector.js.
+  function isBlurAllActive() {
+    return !!(document.head && document.head.querySelector('#' + STYLE_ID));
+  }
 
-  const PII_STYLE_ID = "bl-si-pii-styles";
+  // ── Pick & Blur mode injection ─────────────────────────────────────────────
+
+  function _colorToRgba(color) {
+    if (!color || !color.hex) return 'rgba(0,0,0,1)';
+    const hex = color.hex.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const a = typeof color.opacity === 'number' ? color.opacity : 1;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  function removePickBlurRules(root) {
+    const container = root.head ?? root;
+    const el = container.querySelector && container.querySelector('#' + PICK_STYLE_ID);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function injectPickBlurRules(root, type, color) {
+    removePickBlurRules(root);
+    // blur: static content.css rule handles [data-bl-si-pick-blur] already
+    if (!type || type === blsi.pick_blur_modes.blur) return;
+
+    const rules = [];
+    const notRevealed = '[data-bl-si-pick-blur]:not([data-bl-si-reveal])';
+    const revealSel   = '[data-bl-si-pick-blur][data-bl-si-reveal]';
+
+    if (type === blsi.pick_blur_modes.frosted) {
+      ensureSvgFilter(root);
+      rules.push(
+        notRevealed + ' { ' +
+        'filter: url(#bl-si-frosted-filter) !important; ' +
+        'transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ' +
+        'user-select: none !important; }'
+      );
+      rules.push(revealSel + ' { filter: none !important; }');
+
+    } else if (type === blsi.pick_blur_modes.color) {
+      const rgba = _colorToRgba(color);
+      rules.push(
+        '[data-bl-si-pick-blur]:not(.bl-si-zone-overlay):not([data-bl-si-reveal]) { ' +
+        'background-color: ' + rgba + ' !important; ' +
+        'color: transparent !important; ' +
+        'filter: none !important; ' +
+        'user-select: none !important; }'
+      );
+      rules.push(
+        '.bl-si-zone-overlay[data-bl-si-pick-blur]:not([data-bl-si-reveal]) { ' +
+        'backdrop-filter: none !important; ' +
+        '-webkit-backdrop-filter: none !important; ' +
+        'background: ' + rgba + ' !important; ' +
+        'border: none !important; }'
+      );
+      rules.push(
+        revealSel + ' { ' +
+        'background-color: transparent !important; ' +
+        'color: inherit !important; ' +
+        'filter: none !important; ' +
+        'user-select: auto !important; }'
+      );
+    }
+
+    if (!rules.length) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = PICK_STYLE_ID;
+    styleEl.textContent = rules.join('\n');
+    (root.head ?? root).appendChild(styleEl);
+  }
+
+  // ── PII rule injection (CSS-only — detector logic is in src/pii_detector.js) ──
 
   function removePiiRules() {
     const el = document.head && document.head.querySelector('#' + PII_STYLE_ID);
@@ -542,14 +617,82 @@ const BlurEngine = (() => {
     document.head.appendChild(styleEl);
   }
 
-  function isBlurAllActive() {
-    return !!(document.head && document.head.querySelector('#' + STYLE_ID));
+  // ── §STAMP-OBSERVER ──────────────────────────────────────────────────────
+  //
+  // Future file: src/blur_engine/observer.js (element queries may move to a
+  //              sibling element.js at split time)
+  //
+  // Owns:        _blurredCount, _textCheckSet, _lastTextCheckKey,
+  //              _structuralTags. Element-stamp counter + tag-set caches.
+  //              Observer state: _observers (WeakMap), _stampQueue,
+  //              _pendingMoNodes, _moIdlePending, _stampIdlePending,
+  //              _subscribers, _pendingMutations, _shadowAttachHandler.
+  // Public:      stampElements, tryBlurTextCheck, applyBlur, removeBlur,
+  //              isBlurred, isVisuallyBlurred, matchesActiveCategories,
+  //              shouldBlurElement, observeRoot, subscribeMutations,
+  //              unsubscribeMutations.
+  // Reads:       CATEGORY_SELECTORS, CATEGORY_ORDER, DEFAULT_CATS, selectorCache,
+  //              isBlurAllActive (CSS section); _isPageBlurred,
+  //              _pickBlurDynamicActive, _pickerActive, _currentSettings
+  //              (orchestrator); _tryPickBlurNode (zones); handleShadowRoot,
+  //              handleIframe (orchestrator) — all called via hoisted decls
+  //              after IIFE init.
+  // Writes:      _blurredCount, _textCheckSet, _lastTextCheckKey, all observer
+  //              state, _pendingMutations.delete from teardown (orchestrator).
+  //
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /** Set of text-check tag names for O(1) lookup in MO callback */
+  let _textCheckSet = new Set();
+  let _lastTextCheckKey = null;
+  let _blurredCount = 0;
+
+  function _rebuildTextCheckSet(categories) {
+    const cats = categories || DEFAULT_CATS;
+    const key = CATEGORY_ORDER.filter(n => cats[n]).join(',');
+    if (key === _lastTextCheckKey) return;
+    _lastTextCheckKey = key;
+    _textCheckSet = new Set();
+    for (const name of CATEGORY_ORDER) {
+      if (!cats[name]) continue;
+      const cat = CATEGORY_SELECTORS[name];
+      for (let i = 0; i < cat.textCheck.length; i++)
+        _textCheckSet.add(cat.textCheck[i]);
+    }
   }
 
-  // ── §STAMP-OBSERVER ──────────────────────────────────────────────────────
-  // stampElements, tryBlurTextCheck, _isExtensionUI, hasMeaningfulTextContent,
-  // _rebuildTextCheckSet, _textCheckSet. MutationObserver wiring, idle queue,
-  // shadow root discovery, attachShadow event bridge (_initShadowAttachListener).
+  /**
+   * Structural container tags — wrappers that group content but rarely hold
+   * private text directly. Blurring these creates redundant nested blur that
+   * breaks hover reveal (CSS filter on a parent composites the entire subtree,
+   * so unblurring a parent leaks all siblings). These always require the
+   * hasMeaningfulTextContent gate, even in thorough mode.
+   */
+  const _structuralTags = new Set(CATEGORY_SELECTORS.structure.textCheck);
+
+  function hasMeaningfulTextContent(element) {
+    for (const node of element.childNodes) {
+      if (
+        node.nodeType === Node.TEXT_NODE &&
+        node.textContent.trim().length > 0
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function _isExtensionUI(element) {
+    const toolbarId = blsi.ids.picker_toolbar;
+    return (
+      element.id === toolbarId ||
+      element.closest("#" + toolbarId) ||
+      element.classList.contains(blsi.css.toast) ||
+      element.closest("." + blsi.css.toast) ||
+      element.classList.contains(blsi.css.toolbar) ||
+      element.dataset.blSiZone !== undefined
+    );
+  }
 
   // ── Text-check element blur (scan + MO for new nodes) ─────────────────────
 
@@ -646,87 +789,6 @@ const BlurEngine = (() => {
     }
   }
 
-  function _isExtensionUI(element) {
-    const toolbarId = blsi.ids.picker_toolbar;
-    return (
-      element.id === toolbarId ||
-      element.closest("#" + toolbarId) ||
-      element.classList.contains(blsi.css.toast) ||
-      element.closest("." + blsi.css.toast) ||
-      element.classList.contains(blsi.css.toolbar) ||
-      element.dataset.blSiZone !== undefined
-    );
-  }
-
-  // ── Pick & Blur mode injection ─────────────────────────────────────────────
-
-  function _colorToRgba(color) {
-    if (!color || !color.hex) return 'rgba(0,0,0,1)';
-    const hex = color.hex.replace('#', '');
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    const a = typeof color.opacity === 'number' ? color.opacity : 1;
-    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
-  }
-
-  function removePickBlurRules(root) {
-    const container = root.head ?? root;
-    const el = container.querySelector && container.querySelector('#' + PICK_STYLE_ID);
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-  }
-
-  function injectPickBlurRules(root, type, color) {
-    removePickBlurRules(root);
-    // blur: static content.css rule handles [data-bl-si-pick-blur] already
-    if (!type || type === blsi.pick_blur_modes.blur) return;
-
-    const rules = [];
-    const notRevealed = '[data-bl-si-pick-blur]:not([data-bl-si-reveal])';
-    const revealSel   = '[data-bl-si-pick-blur][data-bl-si-reveal]';
-
-    if (type === blsi.pick_blur_modes.frosted) {
-      ensureSvgFilter(root);
-      rules.push(
-        notRevealed + ' { ' +
-        'filter: url(#bl-si-frosted-filter) !important; ' +
-        'transition: filter var(--bl-si-transition-duration, 150ms) ease !important; ' +
-        'user-select: none !important; }'
-      );
-      rules.push(revealSel + ' { filter: none !important; }');
-
-    } else if (type === blsi.pick_blur_modes.color) {
-      const rgba = _colorToRgba(color);
-      rules.push(
-        '[data-bl-si-pick-blur]:not(.bl-si-zone-overlay):not([data-bl-si-reveal]) { ' +
-        'background-color: ' + rgba + ' !important; ' +
-        'color: transparent !important; ' +
-        'filter: none !important; ' +
-        'user-select: none !important; }'
-      );
-      rules.push(
-        '.bl-si-zone-overlay[data-bl-si-pick-blur]:not([data-bl-si-reveal]) { ' +
-        'backdrop-filter: none !important; ' +
-        '-webkit-backdrop-filter: none !important; ' +
-        'background: ' + rgba + ' !important; ' +
-        'border: none !important; }'
-      );
-      rules.push(
-        revealSel + ' { ' +
-        'background-color: transparent !important; ' +
-        'color: inherit !important; ' +
-        'filter: none !important; ' +
-        'user-select: auto !important; }'
-      );
-    }
-
-    if (!rules.length) return;
-    const styleEl = document.createElement('style');
-    styleEl.id = PICK_STYLE_ID;
-    styleEl.textContent = rules.join('\n');
-    (root.head ?? root).appendChild(styleEl);
-  }
-
   // ── Individual element blur (picker / context menu) ────────────────────────
 
   function applyBlur(element) {
@@ -798,53 +860,6 @@ const BlurEngine = (() => {
     return false;
   }
 
-  // Public alias — used by picker callbacks and tests.
-  // Delegates to teardown(document) once teardown is defined below.
-  function unblurAll() {
-    teardown(document);
-    removeAllZoneOverlays();
-  }
-
-  function highlightItem(item) {
-    if (_highlightedEl) {
-      _highlightedEl.classList.remove("bl-si-hover-highlight");
-      _highlightedEl = null;
-    }
-    var el = null;
-    if (item && item.item_type === "dynamic") {
-      el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector || []);
-      // Fallback: SPA position shifts make structural selectors non-unique or stale.
-      // Class combo (now always stored) lets us find the right element among hits.
-      if (!el) {
-        var sels = Array.isArray(item.selectors) ? item.selectors
-          : (item.selector ? [item.selector] : []);
-        outer: for (var i = 0; i < sels.length; i++) {
-          try {
-            var hits = document.querySelectorAll(sels[i]);
-            for (var j = 0; j < hits.length; j++) {
-              if (hits[j].dataset && hits[j].dataset.blSiPickBlur) { el = hits[j]; break outer; }
-            }
-          } catch (_e2) {}
-        }
-      }
-    } else if (item && item.item_type === "sticky") {
-      el = _zoneOverlays.get(item.id) || null;
-    }
-    if (!el) return;
-    el.classList.add("bl-si-hover-highlight");
-    if (typeof el.scrollIntoView === "function") {
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-    _highlightedEl = el;
-  }
-
-  function clearItemHighlight() {
-    if (_highlightedEl) {
-      _highlightedEl.classList.remove("bl-si-hover-highlight");
-      _highlightedEl = null;
-    }
-  }
-
   function matchesActiveCategories(element, categories) {
     if (!element || !(element instanceof Element)) return false;
     const cats = categories || DEFAULT_CATS;
@@ -879,115 +894,7 @@ const BlurEngine = (() => {
     return false;
   }
 
-  // ── §ITEMS-ZONES ─────────────────────────────────────────────────────────
-  // createZoneOverlay, removeZoneOverlay, getZoneOverlays, removeAllZoneOverlays,
-  // _applyDynamicItem, _removeDynamicItem, _applyStickyItem, _removeStickyItem,
-  // applyItem, removeItem, resetCounters, allocateDynamicName, allocateStickyName,
-  // _reconcileItems, _activeItems Map, _dynamicCounter, _stickyCounter.
-
-  // ── Sticky zone overlays ───────────────────────────────────────────────────
-
-  /** Map of active zone overlays: zoneId → DOM element */
-  const _zoneOverlays = new Map();
-
-  /**
-   * Create and inject a sticky zone overlay div into document.body.
-   * @param {object} zoneData - { id, name, x, y, width, height, ... }
-   * @returns {HTMLElement} The created overlay element
-   */
-  function createZoneOverlay(zoneData) {
-    if (!zoneData || !zoneData.id) return null;
-
-    if (!document.body) return null;
-
-    // Remove existing overlay with same id (idempotent)
-    if (_zoneOverlays.has(zoneData.id)) {
-      removeZoneOverlay(zoneData.id);
-    }
-
-    const el = document.createElement("div");
-    el.className = blsi.css.zone_overlay;
-    el.dataset.blSiZone = zoneData.id;
-    el.dataset.blSiZoneName = zoneData.name || "";
-
-    // Anchor: 'page' (default, absolute positioning in document coordinates
-    // — zone scrolls with content) vs 'screen' (position: fixed in viewport
-    // coordinates — zone stays put during scroll, ideal for always-on
-    // screen-share privacy overlays).
-    const anchor = zoneData.anchor === "screen" ? "screen" : "page";
-    el.dataset.blSiZoneAnchor = anchor;
-    el.dataset.blSiPickBlur = '1';
-
-    const position = anchor === "screen" ? "fixed" : "absolute";
-    el.style.cssText =
-      [
-        "position: " + position,
-        "left: " + zoneData.x + "px",
-        "top: " + zoneData.y + "px",
-        "width: " + zoneData.width + "px",
-        "height: " + zoneData.height + "px",
-      ].join("; ") + ";";
-
-    document.body.appendChild(el);
-    _zoneOverlays.set(zoneData.id, el);
-    return el;
-  }
-
-  /**
-   * Remove a sticky zone overlay by id.
-   * @param {string} zoneId
-   */
-  function removeZoneOverlay(zoneId) {
-    const el = _zoneOverlays.get(zoneId);
-    if (el && el.parentNode) {
-      el.parentNode.removeChild(el);
-    }
-    _zoneOverlays.delete(zoneId);
-  }
-
-  /**
-   * Get all active zone overlay elements.
-   * @returns {Array<HTMLElement>}
-   */
-  function getZoneOverlays() {
-    return Array.from(_zoneOverlays.values());
-  }
-
-  /**
-   * Remove all zone overlays from the DOM.
-   */
-  function removeAllZoneOverlays() {
-    for (const [id, el] of _zoneOverlays) {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    }
-    _zoneOverlays.clear();
-  }
-
-  // ── §ORCHESTRATOR ────────────────────────────────────────────────────────
-  // handleSite (mutex entry point), handleMainDocument, handleShadowRoot,
-  // handleIframe, handleDocument, _applyCssVars, _setPickerActiveForObserver,
-  // observeRoot, disconnectObserver, teardown, lifecycle state variables.
-
-  // ── High-level controller state (blur-all + item dispatch) ────────────────
-  // Consolidated from the former content_script orchestrator so the engine
-  // owns the full blur lifecycle — low-level primitives above are now the
-  // private utilities of the wrappers below.
-
-  let _isPageBlurred = false;
-  let _pickBlurDynamicActive = false; // true when ≥1 active dynamic pick-blur item exists
-  // WeakMap<root, MutationObserver> — one observer per active root (document + shadow roots).
-  // WeakMap auto-GCs entries when a shadow root is GC'd (host removed from DOM).
-  const _observers = new WeakMap();
-  // Mutex — prevents concurrent handleSite() calls from interleaving DOM mutations.
-  let _handling = false;
-  let _elementCounter = 0;
-  let _pageAreaCounter = 0;
-  let _screenAreaCounter = 0;
-  let _pickerActive = false;
-  let _currentSettings = null;
-  let _shadowAttachHandler = null; // capture listener for __blsi_shadow_attached events
-
-  // ── Idle-stamp queue ────────────────────────────────────────────────────────
+  // ── Observer state (one MO per root, idle-batched drain, subscriber pub/sub) ──
   // CSS injection (injectRules) is synchronous and covers alwaysBlur tags
   // immediately. The expensive querySelectorAll('*') for textCheck stamping
   // and shadow-root discovery is deferred to requestIdleCallback so it never
@@ -998,6 +905,10 @@ const BlurEngine = (() => {
   // pending idle picks up the latest queue when it fires.
   // teardown() clears the queue for its root, preventing stale idle work from
   // re-stamping elements after they've been cleaned up.
+
+  // WeakMap<root, MutationObserver> — one observer per active root (document + shadow roots).
+  // WeakMap auto-GCs entries when a shadow root is GC'd (host removed from DOM).
+  const _observers = new WeakMap();
   let _stampIdlePending = false;
   let _stampQueue = [];           // [{root, cats, thorough, mode, settings}]
   const _pendingMoNodes = [];     // nodes collected by MO; drained by a single idle
@@ -1008,6 +919,8 @@ const BlurEngine = (() => {
   // future modules attach via subscribeMutations(); they never own observers.
   const _subscribers = new Map();   // name → handler(mutations, root)
   const _pendingMutations = new Map(); // root → MutationRecord[]
+
+  let _shadowAttachHandler = null; // capture listener for __blsi_shadow_attached events
 
   function _scheduleIdle(fn) {
     if (typeof requestIdleCallback !== 'undefined') {
@@ -1118,19 +1031,240 @@ const BlurEngine = (() => {
       }
     }
   }
-  // ── End idle-stamp queue ───────────────────────────────────────────────────
+
+  /**
+   * Register a MutationObserver on `root` to stamp new text-check elements
+   * and activate shadow roots as they appear. Idempotent — no-op if `root`
+   * already has an active observer.
+   *
+   * Observation target: `root.body ?? root`
+   *   - document: observes document.body
+   *   - shadowRoot: observes the shadow root itself (shadowRoot.body is undefined)
+   */
+  function observeRoot(root) {
+    if (_observers.has(root)) return;
+    const target = root.body ?? root;
+    if (!target) return;
+
+    const obs = new MutationObserver((mutations) => {
+      // Two independent buffers per MO tick:
+      //   1. _pendingMoNodes — element-add nodes for engine drain (stamp /
+      //      pick-blur / shadow / iframe). Gated by !_pickerActive and (blur-all
+      //      OR pick-blur-dynamic active). Picker active silences this side
+      //      because the picker owns the cursor and must not race against
+      //      auto-stamping.
+      //   2. _pendingMutations.get(root) — raw MutationRecord[] for subscriber
+      //      dispatch (PII detector, future modules). Always buffered when at
+      //      least one subscriber is registered, regardless of picker state or
+      //      blur-all/pick-blur state. PII is independent of blur-all and must
+      //      keep wrapping typed text while the picker is open.
+      const engineActive = !_pickerActive && (_isPageBlurred || _pickBlurDynamicActive);
+      const hasSubscribers = _subscribers.size > 0;
+      if (!engineActive && !hasSubscribers) return;
+
+      if (hasSubscribers) {
+        let bucket = _pendingMutations.get(root);
+        if (!bucket) {
+          bucket = [];
+          _pendingMutations.set(root, bucket);
+        }
+        for (let i = 0; i < mutations.length; i++) bucket.push(mutations[i]);
+      }
+
+      let engineCollected = false;
+      if (engineActive) {
+        for (const mutation of mutations) {
+          if (mutation.type !== 'childList') continue;
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            if (node.dataset && node.dataset.blSiZone !== undefined) continue;
+            _pendingMoNodes.push(node);
+            engineCollected = true;
+          }
+        }
+      }
+
+      if (!engineCollected && !hasSubscribers) return;
+
+      // One idle per batch. Flag prevents duplicate scheduling when the MO
+      // fires multiple times before the idle runs (e.g. async SPA inserts).
+      if (_moIdlePending) return;
+      _moIdlePending = true;
+      _scheduleIdle(_drainMoIdle);
+    });
+    obs.observe(target, { childList: true, subtree: true, characterData: true });
+    _observers.set(root, obs);
+  }
+
+  function disconnectObserver(root) {
+    const obs = _observers.get(root);
+    if (obs) {
+      obs.disconnect();
+      _observers.delete(root);
+    }
+  }
+
+  /**
+   * Capture-phase listener for '__blsi_shadow_attached' CustomEvents fired by
+   * main_world_bridge.js when a page calls Element.prototype.attachShadow().
+   *
+   * MutationObserver childList+subtree never fires for attachShadow() — it is a
+   * property assignment, not a DOM tree mutation. This listener bridges the gap:
+   * any shadow root attached after the idle-stamp pass is immediately observed
+   * and queued for stamping, so its content is blurred on the next idle tick.
+   *
+   * Closed shadow roots are skipped by main_world_bridge.js (el.shadowRoot is
+   * null from outside the component; nothing to observe). Open shadow roots that
+   * were already discovered during stampElements are skipped via the _observers
+   * idempotency guard inside handleShadowRoot → observeRoot.
+   */
+  function _initShadowAttachListener() {
+    if (_shadowAttachHandler) return;
+    _shadowAttachHandler = function (e) {
+      if (!_isPageBlurred || !_currentSettings) return;
+      const el = e.target;
+      if (!el || !el.shadowRoot) return;
+      if (_observers.has(el.shadowRoot)) return;
+      handleShadowRoot(_currentSettings, el.shadowRoot);
+    };
+    document.addEventListener('__blsi_shadow_attached', _shadowAttachHandler, true);
+  }
+
+  function _removeShadowAttachListener() {
+    if (!_shadowAttachHandler) return;
+    document.removeEventListener('__blsi_shadow_attached', _shadowAttachHandler, true);
+    _shadowAttachHandler = null;
+  }
+
+  // ── Mutation dispatcher public surface ─────────────────────────────────────
+  // Subscribers receive raw MutationRecord[] per root inside the engine's
+  // idle drain. They never own observers themselves.
+  //
+  // Order: invoked AFTER the engine's own stamp / pick-blur / shadow / iframe
+  // pass for that batch, in registration order.
+  //
+  // The picker-active gate suppresses the engine's stamp drain only —
+  // subscribers still fire while the picker is open. PII detector relies on
+  // this to keep wrapping typed text during picker mode.
+  function subscribeMutations(name, handler) {
+    if (typeof name !== 'string' || !name) return;
+    if (typeof handler !== 'function') return;
+    _subscribers.set(name, handler);
+  }
+
+  function unsubscribeMutations(name) {
+    _subscribers.delete(name);
+  }
+
+  // ── §ITEMS-ZONES ─────────────────────────────────────────────────────────
+  //
+  // Future file: src/blur_engine/zones.js
+  //
+  // Owns:        _zoneOverlays (Map), _activeItems (Map),
+  //              _pickBlurDynamicActive, _elementCounter, _pageAreaCounter,
+  //              _screenAreaCounter, _highlightedEl.
+  // Public:      createZoneOverlay (internal — called via item reconcile),
+  //              removeZoneOverlay, getZoneOverlays, removeAllZoneOverlays,
+  //              applyItem, removeItem, allocateElementName,
+  //              allocateStickyName, resetCounters, highlightItem,
+  //              clearItemHighlight.
+  // Reads:       _isExtensionUI (stamp-observer); blsi.SelectorUtils,
+  //              blsi.css.zone_overlay (constants).
+  // Writes:      _pickBlurDynamicActive (set by _reconcileItems on every
+  //              orchestrator handleSite call).
+  //
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // ── Sticky zone overlays ───────────────────────────────────────────────────
+
+  /** Map of active zone overlays: zoneId → DOM element */
+  const _zoneOverlays = new Map();
+
+  /**
+   * Create and inject a sticky zone overlay div into document.body.
+   * @param {object} zoneData - { id, name, x, y, width, height, ... }
+   * @returns {HTMLElement} The created overlay element
+   */
+  function createZoneOverlay(zoneData) {
+    if (!zoneData || !zoneData.id) return null;
+
+    if (!document.body) return null;
+
+    // Remove existing overlay with same id (idempotent)
+    if (_zoneOverlays.has(zoneData.id)) {
+      removeZoneOverlay(zoneData.id);
+    }
+
+    const el = document.createElement("div");
+    el.className = blsi.css.zone_overlay;
+    el.dataset.blSiZone = zoneData.id;
+    el.dataset.blSiZoneName = zoneData.name || "";
+
+    // Anchor: 'page' (default, absolute positioning in document coordinates
+    // — zone scrolls with content) vs 'screen' (position: fixed in viewport
+    // coordinates — zone stays put during scroll, ideal for always-on
+    // screen-share privacy overlays).
+    const anchor = zoneData.anchor === "screen" ? "screen" : "page";
+    el.dataset.blSiZoneAnchor = anchor;
+    el.dataset.blSiPickBlur = '1';
+
+    const position = anchor === "screen" ? "fixed" : "absolute";
+    el.style.cssText =
+      [
+        "position: " + position,
+        "left: " + zoneData.x + "px",
+        "top: " + zoneData.y + "px",
+        "width: " + zoneData.width + "px",
+        "height: " + zoneData.height + "px",
+      ].join("; ") + ";";
+
+    document.body.appendChild(el);
+    _zoneOverlays.set(zoneData.id, el);
+    return el;
+  }
+
+  /**
+   * Remove a sticky zone overlay by id.
+   * @param {string} zoneId
+   */
+  function removeZoneOverlay(zoneId) {
+    const el = _zoneOverlays.get(zoneId);
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+    _zoneOverlays.delete(zoneId);
+  }
+
+  /**
+   * Get all active zone overlay elements.
+   * @returns {Array<HTMLElement>}
+   */
+  function getZoneOverlays() {
+    return Array.from(_zoneOverlays.values());
+  }
+
+  /**
+   * Remove all zone overlays from the DOM.
+   */
+  function removeAllZoneOverlays() {
+    for (const [id, el] of _zoneOverlays) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }
+    _zoneOverlays.clear();
+  }
+
+  // ── Item reconcile state + counters ────────────────────────────────────────
+
+  let _pickBlurDynamicActive = false; // true when ≥1 active dynamic pick-blur item exists
+  let _elementCounter = 0;
+  let _pageAreaCounter = 0;
+  let _screenAreaCounter = 0;
 
   // Tracks items currently applied to the DOM, keyed by item id
   // (dynamic → selector, sticky → id). Diffed against storage on every
-  // blurAll() call to reconcile add/remove.
+  // handleSite() call to reconcile add/remove.
   const _activeItems = new Map();
 
-  // Fingerprint of the last inputs that drove a page-wide _enablePageWide.
-  // Lets blurAll() skip the nuke+rescan when only BLUR_RADIUS / HIGHLIGHT_COLOR
-  // change (those propagate via CSS vars and don't need DOM work). Frosted
-  // mode is the exception — its radius lives in an SVG attribute and needs
-  // a filter rebuild, so BLUR_RADIUS is folded into the key under frosted.
-  let _lastReconcileKey = null;
   let _highlightedEl = null;
 
   function _itemId(item) {
@@ -1239,6 +1373,33 @@ const BlurEngine = (() => {
     else if (item.type === "sticky") _removeStickyItem(item);
   }
 
+  /**
+   * Diff `desired` items against `_activeItems` and apply/remove the delta.
+   * Runs in both active and inactive paths — picker blurs and sticky zones
+   * persist even when blur-all is off.
+   */
+  function _reconcileItems(desired) {
+    const desiredArray = Array.isArray(desired) ? desired : [];
+    const desiredById = new Map(desiredArray.map((i) => [_itemId(i), i]));
+
+    let added = 0, removed = 0;
+    for (const [id, item] of Array.from(_activeItems)) {
+      if (!desiredById.has(id)) {
+        removeItem(item);
+        _activeItems.delete(id);
+        removed++;
+      }
+    }
+    for (const [id, item] of desiredById) {
+      const isNew = !_activeItems.has(id);
+      applyItem(item);
+      _activeItems.set(id, item);
+      if (isNew) added++;
+    }
+    _pickBlurDynamicActive = desiredArray.some(i => i.type === 'dynamic');
+    return { added, removed };
+  }
+
   function resetCounters() {
     _elementCounter = 0;
     _pageAreaCounter = 0;
@@ -1259,108 +1420,91 @@ const BlurEngine = (() => {
     return 'Area on page ' + _pageAreaCounter;
   }
 
-  /**
-   * Register a MutationObserver on `root` to stamp new text-check elements
-   * and activate shadow roots as they appear. Idempotent — no-op if `root`
-   * already has an active observer.
-   *
-   * Observation target: `root.body ?? root`
-   *   - document: observes document.body
-   *   - shadowRoot: observes the shadow root itself (shadowRoot.body is undefined)
-   */
-  function observeRoot(root) {
-    if (_observers.has(root)) return;
-    const target = root.body ?? root;
-    if (!target) return;
+  // ── Popup hover highlight ──────────────────────────────────────────────────
 
-    const obs = new MutationObserver((mutations) => {
-      // Two independent buffers per MO tick:
-      //   1. _pendingMoNodes — element-add nodes for engine drain (stamp /
-      //      pick-blur / shadow / iframe). Gated by !_pickerActive and (blur-all
-      //      OR pick-blur-dynamic active). Picker active silences this side
-      //      because the picker owns the cursor and must not race against
-      //      auto-stamping.
-      //   2. _pendingMutations.get(root) — raw MutationRecord[] for subscriber
-      //      dispatch (PII detector, future modules). Always buffered when at
-      //      least one subscriber is registered, regardless of picker state or
-      //      blur-all/pick-blur state. PII is independent of blur-all and must
-      //      keep wrapping typed text while the picker is open.
-      const engineActive = !_pickerActive && (_isPageBlurred || _pickBlurDynamicActive);
-      const hasSubscribers = _subscribers.size > 0;
-      if (!engineActive && !hasSubscribers) return;
-
-      if (hasSubscribers) {
-        let bucket = _pendingMutations.get(root);
-        if (!bucket) {
-          bucket = [];
-          _pendingMutations.set(root, bucket);
-        }
-        for (let i = 0; i < mutations.length; i++) bucket.push(mutations[i]);
-      }
-
-      let engineCollected = false;
-      if (engineActive) {
-        for (const mutation of mutations) {
-          if (mutation.type !== 'childList') continue;
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            if (node.dataset && node.dataset.blSiZone !== undefined) continue;
-            _pendingMoNodes.push(node);
-            engineCollected = true;
-          }
+  function highlightItem(item) {
+    if (_highlightedEl) {
+      _highlightedEl.classList.remove("bl-si-hover-highlight");
+      _highlightedEl = null;
+    }
+    var el = null;
+    if (item && item.item_type === "dynamic") {
+      el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector || []);
+      // Fallback: SPA position shifts make structural selectors non-unique or stale.
+      // Class combo (now always stored) lets us find the right element among hits.
+      if (!el) {
+        var sels = Array.isArray(item.selectors) ? item.selectors
+          : (item.selector ? [item.selector] : []);
+        outer: for (var i = 0; i < sels.length; i++) {
+          try {
+            var hits = document.querySelectorAll(sels[i]);
+            for (var j = 0; j < hits.length; j++) {
+              if (hits[j].dataset && hits[j].dataset.blSiPickBlur) { el = hits[j]; break outer; }
+            }
+          } catch (_e2) {}
         }
       }
-
-      if (!engineCollected && !hasSubscribers) return;
-
-      // One idle per batch. Flag prevents duplicate scheduling when the MO
-      // fires multiple times before the idle runs (e.g. async SPA inserts).
-      if (_moIdlePending) return;
-      _moIdlePending = true;
-      _scheduleIdle(_drainMoIdle);
-    });
-    obs.observe(target, { childList: true, subtree: true, characterData: true });
-    _observers.set(root, obs);
+    } else if (item && item.item_type === "sticky") {
+      el = _zoneOverlays.get(item.id) || null;
+    }
+    if (!el) return;
+    el.classList.add("bl-si-hover-highlight");
+    if (typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    _highlightedEl = el;
   }
 
-  function disconnectObserver(root) {
-    const obs = _observers.get(root);
-    if (obs) {
-      obs.disconnect();
-      _observers.delete(root);
+  function clearItemHighlight() {
+    if (_highlightedEl) {
+      _highlightedEl.classList.remove("bl-si-hover-highlight");
+      _highlightedEl = null;
     }
   }
 
-  /**
-   * Capture-phase listener for '__blsi_shadow_attached' CustomEvents fired by
-   * main_world_bridge.js when a page calls Element.prototype.attachShadow().
-   *
-   * MutationObserver childList+subtree never fires for attachShadow() — it is a
-   * property assignment, not a DOM tree mutation. This listener bridges the gap:
-   * any shadow root attached after the idle-stamp pass is immediately observed
-   * and queued for stamping, so its content is blurred on the next idle tick.
-   *
-   * Closed shadow roots are skipped by main_world_bridge.js (el.shadowRoot is
-   * null from outside the component; nothing to observe). Open shadow roots that
-   * were already discovered during stampElements are skipped via the _observers
-   * idempotency guard inside handleShadowRoot → observeRoot.
-   */
-  function _initShadowAttachListener() {
-    if (_shadowAttachHandler) return;
-    _shadowAttachHandler = function (e) {
-      if (!_isPageBlurred || !_currentSettings) return;
-      const el = e.target;
-      if (!el || !el.shadowRoot) return;
-      if (_observers.has(el.shadowRoot)) return;
-      handleShadowRoot(_currentSettings, el.shadowRoot);
-    };
-    document.addEventListener('__blsi_shadow_attached', _shadowAttachHandler, true);
+  // ── §ORCHESTRATOR ────────────────────────────────────────────────────────
+  //
+  // Future file: src/blur_engine/orchestrator.js
+  //
+  // Owns:        _isPageBlurred, _handling, _pickerActive, _currentSettings,
+  //              _lastReconcileKey. Top-level lifecycle state.
+  // Public:      handleSite, handleShadowRoot, handleIframe, teardown,
+  //              unblurAll, _setPickerActiveForObserver, isPageBlurred (get),
+  //              blurredCount (get).
+  // Reads:       Everything above — calls injectRules, injectPickBlurRules,
+  //              injectPiiRules, removePiiRules (CSS); stampElements,
+  //              observeRoot, _initShadowAttachListener, disconnectObserver
+  //              (stamp-observer); _reconcileItems, removeAllZoneOverlays
+  //              (items-zones).
+  // Writes:      _isPageBlurred, _handling, _pickerActive, _currentSettings,
+  //              _lastReconcileKey. Mutates _stampQueue (stamp-observer).
+  //
+  // ──────────────────────────────────────────────────────────────────────────
+
+  let _isPageBlurred = false;
+  // Mutex — prevents concurrent handleSite() calls from interleaving DOM mutations.
+  let _handling = false;
+  let _pickerActive = false;
+  let _currentSettings = null;
+
+  // Fingerprint of the last inputs that drove a page-wide _enablePageWide.
+  // Lets blurAll() skip the nuke+rescan when only BLUR_RADIUS / HIGHLIGHT_COLOR
+  // change (those propagate via CSS vars and don't need DOM work). Frosted
+  // mode is the exception — its radius lives in an SVG attribute and needs
+  // a filter rebuild, so BLUR_RADIUS is folded into the key under frosted.
+  let _lastReconcileKey = null;
+
+  function _setPickerActiveForObserver(v) {
+    _pickerActive = !!v;
   }
 
-  function _removeShadowAttachListener() {
-    if (!_shadowAttachHandler) return;
-    document.removeEventListener('__blsi_shadow_attached', _shadowAttachHandler, true);
-    _shadowAttachHandler = null;
+  function _applyCssVars(settings) {
+    if (!document.documentElement) return;
+    const s = document.documentElement.style;
+    s.setProperty('--bl-si-radius', `${settings.blur_radius}px`);
+    s.setProperty('--bl-si-highlight-color', settings.highlight_color);
+    s.setProperty('--bl-si-transition-duration', `${settings.transition_duration}ms`);
+    s.setProperty('--bl-si-redaction-color', settings.redaction_color);
   }
 
   /**
@@ -1405,6 +1549,12 @@ const BlurEngine = (() => {
 
     // Recurse into shadow roots after this root is fully cleaned up.
     shadowHosts.forEach(h => teardown(h.shadowRoot));
+  }
+
+  // Public alias — used by picker callbacks and tests.
+  function unblurAll() {
+    teardown(document);
+    removeAllZoneOverlays();
   }
 
   /**
@@ -1492,33 +1642,6 @@ const BlurEngine = (() => {
   }
 
   /**
-   * Diff `desired` items against `_activeItems` and apply/remove the delta.
-   * Runs in both active and inactive paths — picker blurs and sticky zones
-   * persist even when blur-all is off.
-   */
-  function _reconcileItems(desired) {
-    const desiredArray = Array.isArray(desired) ? desired : [];
-    const desiredById = new Map(desiredArray.map((i) => [_itemId(i), i]));
-
-    let added = 0, removed = 0;
-    for (const [id, item] of Array.from(_activeItems)) {
-      if (!desiredById.has(id)) {
-        removeItem(item);
-        _activeItems.delete(id);
-        removed++;
-      }
-    }
-    for (const [id, item] of desiredById) {
-      const isNew = !_activeItems.has(id);
-      applyItem(item);
-      _activeItems.set(id, item);
-      if (isNew) added++;
-    }
-    _pickBlurDynamicActive = desiredArray.some(i => i.type === 'dynamic');
-    return { added, removed };
-  }
-
-  /**
    * Single entry point — reconcile the entire page (document + all open shadow
    * roots) to the provided settings snapshot.
    *
@@ -1530,15 +1653,6 @@ const BlurEngine = (() => {
    * Storage reads live in content_script — handleSite is stateless/pure w.r.t.
    * storage. Every caller MUST await — concurrent calls are dropped (mutex).
    */
-  function _applyCssVars(settings) {
-    if (!document.documentElement) return;
-    const s = document.documentElement.style;
-    s.setProperty('--bl-si-radius', `${settings.blur_radius}px`);
-    s.setProperty('--bl-si-highlight-color', settings.highlight_color);
-    s.setProperty('--bl-si-transition-duration', `${settings.transition_duration}ms`);
-    s.setProperty('--bl-si-redaction-color', settings.redaction_color);
-  }
-
   async function handleSite(settings) {
     if (_handling) return;
     _handling = true;
@@ -1609,30 +1723,6 @@ const BlurEngine = (() => {
     } finally {
       _handling = false;
     }
-  }
-
-  function _setPickerActiveForObserver(v) {
-    _pickerActive = !!v;
-  }
-
-  // ── Mutation dispatcher public surface ─────────────────────────────────────
-  // Subscribers receive raw MutationRecord[] per root inside the engine's
-  // idle drain. They never own observers themselves.
-  //
-  // Order: invoked AFTER the engine's own stamp / pick-blur / shadow / iframe
-  // pass for that batch, in registration order.
-  //
-  // The picker-active gate suppresses the engine's stamp drain only —
-  // subscribers still fire while the picker is open. PII detector relies on
-  // this to keep wrapping typed text during picker mode.
-  function subscribeMutations(name, handler) {
-    if (typeof name !== 'string' || !name) return;
-    if (typeof handler !== 'function') return;
-    _subscribers.set(name, handler);
-  }
-
-  function unsubscribeMutations(name) {
-    _subscribers.delete(name);
   }
 
 
