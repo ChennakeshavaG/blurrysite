@@ -6,7 +6,7 @@
     "message": "इस तत्व का धुंधलापन हटाएँ"
   },
   "ctxBlurSelection": {
-    "message": "चयनित पाठ धुंधला करें"
+    "message": "चुने गए टेक्स्ट को धुंधला करें"
   },
   "pickerPrefixLabel": {
     "message": "",
@@ -16,24 +16,22 @@
     "message": "तत्व"
   },
   "pickerChipLabelStickyPage": {
-    "message": "पेज क्षेत्र"
+    "message": "पेज पर क्षेत्र"
   },
   "pickerChipLabelStickyScreen": {
-    "message": "स्क्रीन क्षेत्र"
+    "message": "स्क्रीन पर क्षेत्र"
   },
   "pickerChipDescDynamic": {
-    "message": "पेज पर किसी तत्व पर टैप करके उसे धुंधला करें। धुंधलापन उस तत्व का अनुसरण करता है। मोड बदलने के लिए क्लिक करें।"
+    "message": "पेज पर किसी तत्व पर टैप करके उसे धुंधला करें। धुंधलापन उसी तत्व के साथ रहता है। मोड बदलने के लिए क्लिक करें।"
   },
   "pickerChipDescStickyPage": {
-    "message": "पेज के एक क्षेत्र पर एक बॉक्स बनाएँ। सामग्री के साथ स्क्रॉल होता है। मोड बदलने के लिए क्लिक करें।",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Sketch' → 'Draw' (existing translation likely still valid)"
+    "message": "पेज के किसी हिस्से पर एक बॉक्स बनाएँ। कंटेंट के साथ स्क्रॉल होता है। मोड बदलने के लिए क्लिक करें।"
   },
   "pickerChipDescStickyScreen": {
-    "message": "अपनी स्क्रीन पर एक स्थिर बॉक्स बनाएँ। स्क्रॉल करते समय अपनी जगह पर रहता है — स्क्रीन-शेयरिंग के लिए बढ़िया। मोड बदलने के लिए क्लिक करें।",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Sketch' → 'Draw' (existing translation likely still valid)"
+    "message": "स्क्रीन से चिपका बॉक्स बनाएँ। स्क्रॉल पर भी अपनी जगह रहता है — स्क्रीन शेयर के लिए बढ़िया। मोड बदलने के लिए क्लिक करें।"
   },
   "pickerChipAria": {
-    "message": "पिकर मोड — चक्र के लिए क्लिक करें"
+    "message": "पिकर मोड — मोड बदलने के लिए क्लिक करें"
   },
   "pickerDragHandleAria": {
     "message": "पिकर को खींचकर हटाएँ"
@@ -42,13 +40,13 @@
     "message": "खींचकर हटाएँ"
   },
   "pickerClearBtn": {
-    "message": "साफ़"
+    "message": "साफ़ करें"
   },
   "pickerClearBtnTip": {
-    "message": "इस पेज से सभी धुंधलापन हटाएँ"
+    "message": "इस पेज से सारा धुंधलापन हटाएँ"
   },
   "pickerCloseBtnTip": {
-    "message": "पिकर मोड से बाहर निकलें"
+    "message": "पिकर मोड बंद करें"
   },
   "pickerCloseBtnAria": {
     "message": "पिकर बंद करें"
@@ -57,13 +55,13 @@
     "message": "धुंधला"
   },
   "pickerFlashUnblurred": {
-    "message": "अधुंधला"
+    "message": "साफ़"
   },
   "pickerAreaTooSmall": {
-    "message": "क्षेत्र बहुत छोटा (न्यूनतम 10px)"
+    "message": "क्षेत्र बहुत छोटा है (कम से कम 10px)"
   },
   "popup_title": {
-    "message": "ब्लरी साइट"
+    "message": "Blurry Site"
   },
   "toggle_on": {
     "message": "चालू"
@@ -72,29 +70,28 @@
     "message": "बंद"
   },
   "btn_blur_all": {
-    "message": "सब धुंधला"
+    "message": "सब धुंधला करें"
   },
   "btn_clear_all": {
-    "message": "सब साफ़"
+    "message": "सब साफ़ करें"
   },
   "btn_modify": {
-    "message": "बदलें →",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26 to 'Customize →'"
+    "message": "पसंद के अनुसार बदलें →"
   },
   "btn_picker": {
-    "message": "चुनें और धुंधला"
+    "message": "Pick & Blur"
   },
   "section_general": {
     "message": "सामान्य"
   },
   "nav_general_desc": {
-    "message": "भाषा, टैब गोपनीयता, और अधिक"
+    "message": "भाषा, टैब प्राइवेसी, और बहुत कुछ"
   },
   "setting_language": {
-    "message": "प्रदर्शन भाषा"
+    "message": "पॉपअप की भाषा"
   },
   "setting_language_hint": {
-    "message": "इस पॉपअप की भाषा चुनें। ऑटो आपके ब्राउज़र का अनुसरण करता है।"
+    "message": "पॉपअप किस भाषा में दिखे, चुनें। ऑटो आपके ब्राउज़र की भाषा लेगा।"
   },
   "lang_auto": {
     "message": "ऑटो (ब्राउज़र डिफ़ॉल्ट)"
@@ -112,27 +109,25 @@
     "message": "कीबोर्ड शॉर्टकट"
   },
   "section_pii_title": {
-    "message": "PII स्वतः-पहचान",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Auto-Detect PII' → 'Auto-Detect Sensitive Data'"
+    "message": "संवेदनशील डेटा खुद पकड़ें"
   },
   "section_rules_title": {
     "message": "साइट नियम"
   },
   "section_automate_title": {
-    "message": "स्वचालित"
+    "message": "ऑटोमेट"
   },
   "section_pii_desc": {
-    "message": "ईमेल और संख्यात्मक पैटर्न का पता लगाता है"
+    "message": "ईमेल और संख्या जैसे पैटर्न पकड़ता है"
   },
   "section_automate_desc": {
-    "message": "टाइमर पर, निष्क्रियता पर, या टैब स्विच पर धुंधला करें"
+    "message": "टाइमर पर, निष्क्रिय रहने पर, या टैब बदलने पर धुंधला करें"
   },
   "nav_shortcuts_desc": {
-    "message": "ब्लर क्रियाओं के लिए कीबोर्ड शॉर्टकट अनुकूलित करें"
+    "message": "ब्लर एक्शन के लिए कीबोर्ड शॉर्टकट बदलें"
   },
   "nav_rules_desc": {
-    "message": "प्रति-साइट ब्लर नियम और ओवरराइड कॉन्फ़िगर करें",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'and overrides' (snapshot-based now)"
+    "message": "हर साइट के लिए ब्लर नियम सेट करें"
   },
   "subpage_htb_title": {
     "message": "धुंधला कैसे करें"
@@ -147,63 +142,61 @@
     "message": "स्मूथ एनिमेशन"
   },
   "setting_transition_hint": {
-    "message": "धुंधले को झटके से नहीं, फीकर तरीके से दिखाएँ।"
+    "message": "धुंधले अचानक नहीं, धीरे-धीरे आएँ-जाएँ।"
   },
   "setting_blur_mode": {
-    "message": "धुंधलापन शैली",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Blur Look' → 'Blur Style' (existing translation likely still valid)"
+    "message": "धुंधलापन शैली"
   },
   "setting_thorough_blur": {
-    "message": "तेज़ धुंधलापन",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Aggressive Blur' → 'Catch Hidden Layouts' (semantic shift — please re-translate)"
+    "message": "छिपे लेआउट भी पकड़ें"
   },
   "setting_thorough_hint": {
-    "message": "खाली कंटेनर भी धुंधले करें। अधिक पकड़ता है, लेकिन लेआउट छुप सकता है।"
+    "message": "खाली कंटेनर भी धुंधले करें। ज़्यादा पकड़ता है, पर लेआउट छुप सकते हैं।"
   },
   "setting_tab_privacy": {
-    "message": "टैब शीर्षक और आइकन छुपाएँ"
+    "message": "टैब टाइटल और आइकन छुपाएँ"
   },
   "setting_tab_privacy_hint": {
-    "message": "स्क्रीन शेयरिंग के लिए टैब शीर्षक और फ़ेविकॉन को सामान्य प्लेसहोल्डर से बदलें।"
+    "message": "ब्राउज़र टैब के टाइटल और फ़ेविकॉन की जगह सादा प्लेसहोल्डर दिखाएँ। स्क्रीन शेयर के लिए बढ़िया।"
   },
   "setting_debug_logging": {
     "message": "डीबग लॉगिंग"
   },
   "setting_debug_logging_hint": {
-    "message": "DevTools कंसोल में एक्सटेंशन की आंतरिक जानकारी लॉग करें।"
+    "message": "एक्सटेंशन की अंदरूनी जानकारी DevTools कंसोल में लॉग करें।"
   },
   "setting_backup": {
-    "message": "बैकअप और पुनर्स्थापना"
+    "message": "बैकअप और रीस्टोर"
   },
   "setting_backup_hint": {
-    "message": "सभी सेटिंग्स को JSON फ़ाइल के रूप में निर्यात या पुनर्स्थापित करें।"
+    "message": "सारी सेटिंग्स को JSON फ़ाइल में एक्सपोर्ट करें या रीस्टोर करें।"
   },
   "btn_export": {
-    "message": "निर्यात करें"
+    "message": "एक्सपोर्ट"
   },
   "btn_import": {
-    "message": "आयात करें"
+    "message": "इम्पोर्ट"
   },
   "toast_import_success": {
-    "message": "सेटिंग्स आयात की गईं"
+    "message": "सेटिंग्स इम्पोर्ट हो गईं"
   },
   "toast_import_error": {
-    "message": "अमान्य सेटिंग्स फ़ाइल"
+    "message": "सेटिंग्स फ़ाइल अमान्य है"
   },
   "setting_auto_blur_tab": {
     "message": "टैब बदलने पर धुंधला करें"
   },
   "setting_auto_blur_tab_hint": {
-    "message": "दूसरे टैब पर जाने पर पेज स्वचालित रूप से धुंधला करें।"
+    "message": "दूसरे टैब पर जाते ही पेज अपने आप धुंधला कर दें।"
   },
   "setting_auto_blur_idle_hint": {
-    "message": "निष्क्रियता की अवधि के बाद पेज स्वचालित रूप से धुंधला करें।"
+    "message": "कुछ देर निष्क्रिय रहने पर पेज अपने आप धुंधला कर दें।"
   },
   "reveal_click": {
-    "message": "क्लिक से झलक"
+    "message": "क्लिक करके झलक"
   },
   "reveal_hover": {
-    "message": "होवर से झलक"
+    "message": "होवर पर झलक"
   },
   "reveal_none": {
     "message": "बंद — कभी न दिखाएँ"
@@ -212,11 +205,10 @@
     "message": "रेडैक्शन रंग"
   },
   "group_categories": {
-    "message": "क्या धुंधला करें"
+    "message": "क्या-क्या धुंधला करें"
   },
   "detect_pii": {
-    "message": "संवेदनशील डेटा (PII)",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped '(PII)' suffix → 'Sensitive Data'"
+    "message": "संवेदनशील डेटा"
   },
   "cat_text": {
     "message": "टेक्स्ट"
@@ -237,118 +229,118 @@
     "message": "सब कुछ धुंधला करें"
   },
   "shortcut_toggle_blur_all_hint": {
-    "message": "इस पेज पर हर समर्थित तत्व को धुंधला करें।"
+    "message": "इस पेज पर जो भी समर्थित हो, सब धुंधला करें।"
   },
   "shortcut_toggle_picker": {
     "message": "तत्व चुनें"
   },
   "shortcut_toggle_picker_hint": {
-    "message": "एक तत्व या क्षेत्र को धुंधला करने के लिए पिकर खोलें।"
+    "message": "एक तत्व या क्षेत्र धुंधला करने के लिए पिकर खोलें।"
   },
   "shortcut_clear_all": {
     "message": "पेज साफ़ करें"
   },
   "shortcut_clear_all_hint": {
-    "message": "इस पेज पर हर धुंधलापन हटाएँ।"
+    "message": "इस पेज से सारा धुंधलापन हटाएँ।"
   },
   "shortcut_screenshot": {
     "message": "स्क्रीनशॉट लें"
   },
   "shortcut_screenshot_hint": {
-    "message": "सभी धुंधलापन लागू करके दृश्य पेज कैप्चर करें और PNG के रूप में डाउनलोड करें।"
+    "message": "दिखता हुआ पेज सारे धुंधलों के साथ कैप्चर करें और PNG में डाउनलोड करें।"
   },
   "shortcut_blur_selection": {
-    "message": "चयनित टेक्स्ट धुंधला करें"
+    "message": "चुने गए टेक्स्ट को धुंधला करें"
   },
   "shortcut_blur_selection_hint": {
-    "message": "पेज पर वर्तमान में चयनित टेक्स्ट को धुंधला करें।"
+    "message": "पेज पर अभी जो टेक्स्ट चुना है, उसे धुंधला करें।"
   },
   "shortcut_customize": {
     "message": "बदलें"
   },
   "shortcut_modal_prompt": {
-    "message": "एक मॉडिफ़ायर (Ctrl/Alt/Shift/Cmd) दबाए रखें, फिर अपनी पसंद की कुंजी दबाएँ।"
+    "message": "एक मॉडिफ़ायर (Ctrl/Alt/Shift/Cmd) दबाए रखें, फिर कोई की दबाएँ।"
   },
   "shortcut_modal_placeholder": {
-    "message": "कुंजी संयोजन दबाएँ…"
+    "message": "की कॉम्बो दबाएँ…"
   },
   "shortcut_modal_no_modifier": {
-    "message": "पहले एक मॉडिफ़ायर दबाए रखें, फिर कुंजी दबाएँ।"
+    "message": "पहले मॉडिफ़ायर दबाए रखें, फिर की दबाएँ।"
   },
   "shortcut_reset": {
     "message": "डिफ़ॉल्ट पर रीसेट"
   },
   "shortcut_reset_all": {
-    "message": "सभी रीसेट करें"
+    "message": "सब रीसेट करें"
   },
   "shortcut_reserved_known": {
-    "message": "आरक्षित: {label} — फिर भी सहेजने पर ओवरराइड होगा।"
+    "message": "रिज़र्व्ड: {label} — सहेजने पर भी इसे बदल दिया जाएगा।"
   },
   "shortcut_reserved_browser": {
-    "message": "यह कुंजी संयोजन ब्राउज़र द्वारा आरक्षित है।"
+    "message": "यह की कॉम्बो ब्राउज़र ने रिज़र्व कर रखा है।"
   },
   "rule_pattern": {
-    "message": "URL पैटर्न"
+    "message": "URL मैच"
   },
   "rule_pattern_placeholder": {
     "message": "youtube.com"
   },
   "rule_pattern_type": {
-    "message": "मिलान प्रकार"
+    "message": "मैच का तरीका"
   },
   "rule_pattern_wildcard": {
     "message": "सरल (वाइल्डकार्ड)"
   },
   "rule_pattern_regex": {
-    "message": "उन्नत (regex)"
+    "message": "एडवांस्ड (regex)"
   },
   "rule_pattern_required": {
-    "message": "कृपया एक URL पैटर्न दर्ज करें।"
+    "message": "URL पैटर्न डालें।"
   },
   "rule_pattern_too_long": {
     "message": "पैटर्न बहुत लंबा है (अधिकतम 500 अक्षर)।"
   },
   "rule_no_rules": {
-    "message": "अभी कोई साइट नियम नहीं। नियम विशिष्ट साइटों पर धुंधलापन के काम करने का तरीका बदलते हैं।"
+    "message": "अभी कोई साइट नियम नहीं है। नियम से आप किसी ख़ास साइट पर ब्लर का तरीका बदल सकते हैं।"
   },
   "rule_hint": {
-    "message": "विशिष्ट साइटों पर सेटिंग्स बदलें। पहला मेल खाने वाला नियम जीतता है।"
+    "message": "किसी ख़ास साइट के लिए सेटिंग्स बदलें। पहला मेल खाने वाला नियम लागू होगा।"
   },
   "rule_delete_btn": {
     "message": "हटाएँ"
   },
   "rule_edit_pattern": {
-    "message": "पैटर्न संपादित करें"
+    "message": "पैटर्न बदलें"
   },
   "rule_add_for_site": {
-    "message": "+ वर्तमान सेटिंग्स को साइट नियम के रूप में सहेजें"
+    "message": "+ अभी की सेटिंग्स को साइट नियम बनाएँ"
   },
   "rule_pattern_exact": {
     "message": "सटीक होस्टनाम"
   },
   "rule_pattern_help_wildcard": {
-    "message": "youtube.com सभी YouTube पृष्ठों से मेल खाता है (सबडोमेन सहित)। *.youtube.com केवल सबडोमेन से। github.com/settings/* पथ उपसर्ग से।"
+    "message": "youtube.com सभी YouTube पेजों से मेल खाता है (सबडोमेन भी)। *.youtube.com सिर्फ़ सबडोमेन से। github.com/settings/* पाथ प्रीफ़िक्स से।"
   },
   "rule_pattern_help_regex": {
-    "message": "URL के विरुद्ध मिलाया गया पूर्ण नियमित अभिव्यक्ति। उदाहरण: github\\.com/[a-z]+/settings या (mail|inbox)\\.google\\.com"
+    "message": "URL पर पूरा रेगुलर एक्सप्रेशन लगता है। उदाहरण: github\\.com/[a-z]+/settings या (mail|inbox)\\.google\\.com"
   },
   "rule_pattern_help_exact": {
-    "message": "केवल सटीक होस्टनाम से मेल खाता है — कोई सबडोमेन नहीं, कोई पथ नहीं। उदाहरण: www.youtube.com"
+    "message": "सिर्फ़ सटीक होस्टनाम से मेल — कोई सबडोमेन नहीं, कोई पाथ नहीं। उदाहरण: www.youtube.com"
   },
   "rule_snapshot_label": {
     "message": "सेटिंग्स स्नैपशॉट"
   },
   "rule_snapshot_preview": {
-    "message": "स्नैपशॉट पूर्वावलोकन"
+    "message": "स्नैपशॉट प्रीव्यू"
   },
   "rule_snapshot_empty": {
-    "message": "कोई स्नैपशॉट सहेजा नहीं — वैश्विक सेटिंग्स का उपयोग होगा"
+    "message": "स्नैपशॉट नहीं सहेजा — ग्लोबल सेटिंग्स लागू होंगी"
   },
   "rule_snapshot_recapture": {
-    "message": "पुनः कैप्चर करें"
+    "message": "फिर से कैप्चर करें"
   },
   "rule_snapshot_saved_note": {
-    "message": "सहेजा गया"
+    "message": "सहेजा"
   },
   "rule_snap_blur_mode": {
     "message": "ब्लर मोड"
@@ -357,10 +349,10 @@
     "message": "ब्लर श्रेणियाँ"
   },
   "rule_snap_pick_blur_type": {
-    "message": "पिक & ब्लर प्रकार"
+    "message": "Pick & Blur टाइप"
   },
   "rule_snap_pick_blur_enabled": {
-    "message": "पिक & ब्लर"
+    "message": "Pick & Blur"
   },
   "rule_snap_val_blur": {
     "message": "ब्लर"
@@ -372,13 +364,13 @@
     "message": "रंग"
   },
   "rule_snap_val_redacted": {
-    "message": "रिडैक्टेड"
+    "message": "रेडैक्टेड"
   },
   "rule_snap_val_censored": {
     "message": "सेंसर्ड"
   },
   "rule_snap_val_starred": {
-    "message": "तारांकित"
+    "message": "स्टार्ड"
   },
   "rule_snap_val_on": {
     "message": "चालू"
@@ -393,27 +385,22 @@
     "message": "ब्लर"
   },
   "rule_snap_section_pii": {
-    "message": "PII",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'PII' → 'Sensitive Data'"
+    "message": "संवेदनशील डेटा"
   },
   "rule_snap_section_automate": {
-    "message": "स्वचालित"
+    "message": "ऑटोमेट"
   },
   "rule_snap_label_pii_email": {
-    "message": "PII: ईमेल",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII:' prefix → 'Email'"
+    "message": "ईमेल"
   },
   "rule_snap_label_pii_numeric": {
-    "message": "PII: संख्या",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII:' prefix → 'Numeric'"
+    "message": "संख्या"
   },
   "rule_snap_label_pii_mode": {
-    "message": "PII मोड",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'PII mode' → 'Display mode'"
+    "message": "डिस्प्ले मोड"
   },
   "rule_snap_label_pii_redaction_color": {
-    "message": "PII रंग",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII' prefix → 'Redaction color'"
+    "message": "रेडैक्शन रंग"
   },
   "rule_snap_label_pick_blur_items": {
     "message": "आइटम"
@@ -431,7 +418,7 @@
     "message": "स्क्रीन-शेयर ट्रिगर"
   },
   "popup_badge_managed_by_rule": {
-    "message": "साइट नियम द्वारा प्रबंधित"
+    "message": "साइट नियम लागू"
   },
   "toast_suffix_site_rule": {
     "message": "(साइट नियम)"
@@ -446,74 +433,73 @@
     "message": "तत्व"
   },
   "item_type_sticky_page": {
-    "message": "पेज क्षेत्र"
+    "message": "पेज पर क्षेत्र"
   },
   "item_type_sticky_screen": {
-    "message": "स्क्रीन क्षेत्र"
+    "message": "स्क्रीन पर क्षेत्र"
   },
   "item_remove_aria": {
-    "message": "हटाएं"
+    "message": "हटाएँ"
   },
   "item_remove_title": {
     "message": "इसे साफ़ करें"
   },
   "toast_enabled": {
-    "message": "ब्लरी साइट चालू"
+    "message": "Blurry Site चालू"
   },
   "toast_disabled": {
-    "message": "ब्लरी साइट बंद"
+    "message": "Blurry Site बंद"
   },
   "toast_blur_all": {
     "message": "इस पेज पर सब कुछ धुंधला है"
   },
   "toast_cleared": {
-    "message": "पेज साफ़ किया"
+    "message": "पेज साफ़"
   },
   "footer_feedback": {
-    "message": "प्रतिक्रिया"
+    "message": "फ़ीडबैक"
   },
   "footer_export": {
-    "message": "निर्यात"
+    "message": "एक्सपोर्ट"
   },
   "footer_logs": {
     "message": "लॉग्स"
   },
   "theme_toggle": {
-    "message": "लाइट / डार्क थीम बदलें",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26 to 'Switch theme'"
+    "message": "थीम बदलें"
   },
   "modal_cancel": {
-    "message": "रद्द"
+    "message": "रद्द करें"
   },
   "modal_save": {
     "message": "सहेजें"
   },
   "tt_power_enable": {
-    "message": "Blurry Site सक्षम करें"
+    "message": "Blurry Site चालू करें"
   },
   "tt_power_disable": {
-    "message": "Blurry Site अक्षम करें"
+    "message": "Blurry Site बंद करें"
   },
   "off_state_message": {
     "message": "Blurry Site बंद है"
   },
   "off_state_hint": {
-    "message": "हर साइट पर सभी ब्लर रुका हुआ है"
+    "message": "हर साइट पर सारा ब्लर रुका है"
   },
   "power_turn_on": {
     "message": "चालू करें"
   },
   "htb_chip_blur": {
-    "message": "धुंधला"
+    "message": "ब्लर"
   },
   "htb_chip_frosted": {
     "message": "फ्रॉस्टेड"
   },
   "htb_chip_redacted": {
-    "message": "संपादित"
+    "message": "रेडैक्टेड"
   },
   "htb_chip_censored": {
-    "message": "सेंसर किया"
+    "message": "सेंसर्ड"
   },
   "htb_chip_color": {
     "message": "रंग"
@@ -522,13 +508,13 @@
     "message": "मोड"
   },
   "htb_label_covers": {
-    "message": "कवर करता है"
+    "message": "क्या ढकता है"
   },
   "htb_label_strength": {
     "message": "तीव्रता"
   },
   "htb_label_reveal": {
-    "message": "प्रकट करें"
+    "message": "झलक"
   },
   "htb_label_color": {
     "message": "रंग"
@@ -540,25 +526,25 @@
     "message": "मध्यम"
   },
   "htb_strength_strong": {
-    "message": "मजबूत"
+    "message": "तेज़"
   },
   "pii_chip_blur": {
-    "message": "धुंधला"
+    "message": "ब्लर"
   },
   "pii_chip_frosted": {
     "message": "फ्रॉस्टेड"
   },
   "pii_chip_redacted": {
-    "message": "संपादित"
+    "message": "रेडैक्टेड"
   },
   "pii_chip_starred": {
-    "message": "तारांकित"
+    "message": "स्टार्ड"
   },
   "automate_idle": {
     "message": "निष्क्रिय"
   },
   "automate_tab_switch": {
-    "message": "टैब स्विच"
+    "message": "टैब बदलना"
   },
   "automate_off": {
     "message": "बंद"
@@ -567,22 +553,22 @@
     "message": "चालू"
   },
   "automate_unit_sec": {
-    "message": "से."
+    "message": "सेकंड"
   },
   "automate_unit_min": {
-    "message": "मि."
+    "message": "मिनट"
   },
   "automate_unit_hr": {
-    "message": "घं."
+    "message": "घंटा"
   },
   "mode_blur_all_off_hint": {
     "message": "बंद — पेज दिख रहा है।"
   },
   "mode_pick_blur_empty": {
-    "message": "अभी तक कोई तत्व नहीं चुना। शुरू करने के लिए पिकर खोलें।"
+    "message": "अभी कोई तत्व नहीं चुना। शुरू करने के लिए पिकर खोलें।"
   },
   "mode_pick_off_hint": {
-    "message": "Pick & Blur बंद है। विशिष्ट तत्वों को धुंधला करने के लिए चालू करें।"
+    "message": "Pick & Blur बंद है। ख़ास तत्वों को धुंधला करने के लिए चालू करें।"
   },
   "mode_pick_off_paused": {
     "message": "$COUNT$ आइटम · रुका हुआ",
@@ -603,30 +589,28 @@
     "message": "तत्व"
   },
   "mode_badge_sticky_page": {
-    "message": "पृष्ठ पर क्षेत्र"
+    "message": "पेज पर क्षेत्र"
   },
   "mode_badge_sticky_screen": {
     "message": "स्क्रीन पर क्षेत्र"
   },
   "tooltip_mode_dynamic": {
-    "message": "किसी भी तत्व को धुंधला करने के लिए टैप करें"
+    "message": "किसी भी तत्व पर टैप करके धुंधला करें"
   },
   "tooltip_mode_sticky_page": {
-    "message": "पृष्ठ से जुड़ा धुंधला क्षेत्र बनाएं",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: now says 'scrolls with the page'"
+    "message": "पेज के साथ स्क्रॉल होने वाला धुंधला क्षेत्र बनाएँ"
   },
   "tooltip_mode_sticky_screen": {
-    "message": "स्क्रीन पर स्थिर धुंधला क्षेत्र बनाएं",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: now says 'stays fixed when you scroll'"
+    "message": "स्क्रॉल पर भी अपनी जगह रहने वाला धुंधला क्षेत्र बनाएँ"
   },
   "automate_footer": {
-    "message": "ट्रिगर होने पर → वर्तमान ब्लर मोड सेटिंग्स लागू होती हैं"
+    "message": "ट्रिगर होने पर → अभी की ब्लर मोड सेटिंग्स लागू होती हैं"
   },
   "automate_screen_share": {
     "message": "स्क्रीन शेयर"
   },
   "automate_screen_share_desc": {
-    "message": "स्क्रीन शेयरिंग का पता चलने पर स्वचालित ब्लर"
+    "message": "स्क्रीन शेयर शुरू होते ही अपने आप ब्लर"
   },
   "automate_turn_off": {
     "message": "बंद करें"
@@ -638,55 +622,55 @@
     "message": "यह साइट (सत्र)"
   },
   "automate_disable_feature": {
-    "message": "सुविधा अक्षम करें"
+    "message": "फ़ीचर बंद करें"
   },
   "automate_toast_screen_share": {
-    "message": "ब्लर लागू — स्क्रीन शेयर सक्रिय"
+    "message": "ब्लर लागू — स्क्रीन शेयर चालू"
   },
   "automate_toast_idle": {
-    "message": "ब्लर लागू — निष्क्रियता का पता चला"
+    "message": "ब्लर लागू — निष्क्रिय"
   },
   "automate_toast_tab_switch": {
-    "message": "ब्लर लागू — टैब स्विच"
+    "message": "ब्लर लागू — टैब बदला"
   },
   "automate_toast_skipped": {
-    "message": "ब्लर पहले से सक्रिय — स्वचालन छोड़ा"
+    "message": "ब्लर पहले से चालू — ऑटोमेट छोड़ा"
   },
   "notif_screen_share_active": {
-    "message": "स्क्रीन शेयर सक्रिय"
+    "message": "स्क्रीन शेयर चालू"
   },
   "notif_sharing_for": {
-    "message": "साझा कर रहा है"
+    "message": "शेयर हो रहा"
   },
   "notif_skipped_reason_site_rule": {
-    "message": "ब्लर पहले से सक्रिय (साइट नियम)"
+    "message": "ब्लर पहले से चालू (साइट नियम)"
   },
   "notif_skipped_reason_manual": {
-    "message": "ब्लर पहले से सक्रिय"
+    "message": "ब्लर पहले से चालू"
   },
   "notif_skipped_reason_pick_blur": {
-    "message": "पिक एंड ब्लर पहले से सक्रिय"
+    "message": "Pick & Blur पहले से चालू"
   },
   "notif_suppressed_for_tab": {
-    "message": "इस टैब के लिए दबाया गया"
+    "message": "इस टैब के लिए चुप कर दिया"
   },
   "notif_suppressed_for_site": {
-    "message": "इस साइट के लिए दबाया गया"
+    "message": "इस साइट के लिए चुप कर दिया"
   },
   "notif_suppressed_undo": {
-    "message": "पूर्ववत करें"
+    "message": "वापस लाएँ"
   },
   "site_rule_managed_banner_title": {
-    "message": "साइट नियम द्वारा प्रबंधित"
+    "message": "साइट नियम लागू"
   },
   "site_rule_managed_banner_body": {
-    "message": "इस साइट की सेटिंग्स $HOSTNAME$ ($TYPE$) नियम से नियंत्रित हैं। उन्हें साइट नियमों में संपादित करें।",
+    "message": "इस साइट की सेटिंग्स $HOSTNAME$ ($TYPE$) नियम से नियंत्रित हैं। उन्हें साइट नियमों में बदलें।",
     "placeholders": {
       "hostname": { "content": "$1", "example": "*.example.com" },
       "type": { "content": "$2", "example": "wildcard" }
     }
   },
   "site_rule_managed_edit_cta": {
-    "message": "साइट नियमों में संपादित करें"
+    "message": "साइट नियमों में बदलें"
   }
 }

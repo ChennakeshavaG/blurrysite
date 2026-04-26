@@ -6,7 +6,7 @@
     "message": "இந்தக் கூறின் மங்கலை அகற்று"
   },
   "ctxBlurSelection": {
-    "message": "தேர்ந்தெடுத்த உரையை மங்கச்செய்"
+    "message": "தேர்ந்த உரையை மங்கச்செய்"
   },
   "pickerPrefixLabel": {
     "message": "",
@@ -16,24 +16,22 @@
     "message": "கூறு"
   },
   "pickerChipLabelStickyPage": {
-    "message": "பக்கப் பகுதி"
+    "message": "பக்கத்தில் பகுதி"
   },
   "pickerChipLabelStickyScreen": {
-    "message": "திரைப் பகுதி"
+    "message": "திரையில் பகுதி"
   },
   "pickerChipDescDynamic": {
-    "message": "பக்கத்தில் ஒரு கூறைத் தட்டினால் அது மங்கும். மங்கல் அந்தக் கூறைப் பின்தொடரும். மோடை மாற்ற கிளிக் செய்யவும்."
+    "message": "பக்கத்தில் ஒரு கூறைத் தட்டினால் அது மங்கும். மங்கல் அந்தக் கூறுடன் இருக்கும். மோட் மாற்ற கிளிக் செய்யவும்."
   },
   "pickerChipDescStickyPage": {
-    "message": "பக்கத்தின் ஒரு பகுதியில் ஒரு பெட்டியை வரையவும். உள்ளடக்கத்துடன் ஸ்க்ரோல் ஆகும். மோடை மாற்ற கிளிக் செய்யவும்.",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Sketch' → 'Draw' (existing translation likely still valid)"
+    "message": "பக்கத்தின் ஒரு பகுதியில் ஒரு பெட்டியை வரையவும். உள்ளடக்கத்துடன் ஸ்க்ரோல் ஆகும். மோட் மாற்ற கிளிக் செய்யவும்."
   },
   "pickerChipDescStickyScreen": {
-    "message": "உங்கள் திரையில் ஒரு நிலையான பெட்டியை வரையவும். ஸ்க்ரோல் செய்யும்போது இடம் மாறாது — திரைப் பகிர்வுக்கு சிறந்தது. மோடை மாற்ற கிளிக் செய்யவும்.",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Sketch' → 'Draw' (existing translation likely still valid)"
+    "message": "திரையில் ஒட்டிய பெட்டியை வரையவும். ஸ்க்ரோல் செய்தாலும் இடம் மாறாது — திரை பகிர்வுக்கு சிறந்தது. மோட் மாற்ற கிளிக் செய்யவும்."
   },
   "pickerChipAria": {
-    "message": "பிக்கர் மோட் — மாற்ற கிளிக் செய்யவும்"
+    "message": "பிக்கர் மோட் — மோட் மாற்ற கிளிக் செய்யவும்"
   },
   "pickerDragHandleAria": {
     "message": "பிக்கரை இழுத்து நகர்த்து"
@@ -45,10 +43,10 @@
     "message": "அழி"
   },
   "pickerClearBtnTip": {
-    "message": "இந்தப் பக்கத்திலிருந்து அனைத்து மங்கலையும் அகற்று"
+    "message": "இந்தப் பக்கத்திலிருந்து எல்லா மங்கலையும் அகற்று"
   },
   "pickerCloseBtnTip": {
-    "message": "பிக்கர் மோடிலிருந்து வெளியேறு"
+    "message": "பிக்கர் மோடை மூடு"
   },
   "pickerCloseBtnAria": {
     "message": "பிக்கரை மூடு"
@@ -57,19 +55,19 @@
     "message": "மங்கியது"
   },
   "pickerFlashUnblurred": {
-    "message": "தெளிவானது"
+    "message": "தெளிந்தது"
   },
   "pickerAreaTooSmall": {
     "message": "பகுதி மிகச் சிறியது (குறைந்தது 10px)"
   },
   "popup_title": {
-    "message": "ப்ளர்ரி சைட்"
+    "message": "Blurry Site"
   },
   "toggle_on": {
-    "message": "இயக்கு"
+    "message": "ஆன்"
   },
   "toggle_off": {
-    "message": "நிறுத்து"
+    "message": "ஆஃப்"
   },
   "btn_blur_all": {
     "message": "அனைத்தையும் மங்கச்செய்"
@@ -78,26 +76,25 @@
     "message": "அனைத்தையும் அழி"
   },
   "btn_modify": {
-    "message": "மாற்று →",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26 to 'Customize →'"
+    "message": "உங்கள் விருப்பப்படி அமை →"
   },
   "btn_picker": {
-    "message": "தேர்ந்து மங்கச்செய்"
+    "message": "Pick & Blur"
   },
   "section_general": {
     "message": "பொது"
   },
   "nav_general_desc": {
-    "message": "மொழி, தாவல் தனியுரிமை மற்றும் பலவற்றை"
+    "message": "மொழி, டேப் தனியுரிமை, மற்றும் இன்னும் பல"
   },
   "setting_language": {
-    "message": "காட்சி மொழி"
+    "message": "பாப்-அப் மொழி"
   },
   "setting_language_hint": {
-    "message": "இந்த பாப்அப்பின் மொழியைத் தேர்ந்தெடுக்கவும். ஆட்டோ உங்கள் உலாவியைப் பின்பற்றும்."
+    "message": "இந்த பாப்-அப் எந்த மொழியில் வேண்டும் என்று தேர்ந்தெடுக்கவும். ஆட்டோ உங்கள் உலாவியின் மொழியை எடுக்கும்."
   },
   "lang_auto": {
-    "message": "ஆட்டோ (உலாவி இயல்புநிலை)"
+    "message": "ஆட்டோ (உலாவி இயல்பு)"
   },
   "lang_en": {
     "message": "English (ஆங்கிலம்)"
@@ -112,30 +109,28 @@
     "message": "விசைப்பலகை குறுக்குவழிகள்"
   },
   "section_pii_title": {
-    "message": "PII தானாக கண்டறிதல்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Auto-Detect PII' → 'Auto-Detect Sensitive Data'"
+    "message": "உணர்திறன் தரவை தானே கண்டறி"
   },
   "section_rules_title": {
     "message": "தள விதிகள்"
   },
   "section_automate_title": {
-    "message": "தானியங்கு"
+    "message": "தானியக்கு"
   },
   "section_pii_desc": {
-    "message": "மின்னஞ்சல் மற்றும் எண் வடிவங்களை கண்டறிகிறது"
+    "message": "மின்னஞ்சல் மற்றும் எண் முறைகளைக் கண்டறியும்"
   },
   "section_automate_desc": {
-    "message": "கால அளவு, செயலற்ற நிலை அல்லது தாவல் மாற்றத்தில் மங்கலாக்கு"
+    "message": "டைமரில், செயலற்ற நிலையில், அல்லது டேப் மாறும்போது மங்கச்செய்"
   },
   "nav_shortcuts_desc": {
-    "message": "மங்கல் செயல்களுக்கான விசைப்பலகை குறுக்குவழிகளை தனிப்பயனாக்கு"
+    "message": "ப்ளர் செயல்களுக்கான விசைப்பலகை குறுக்குவழிகளை மாற்று"
   },
   "nav_rules_desc": {
-    "message": "தளம்-வாரியான மங்கல் விதிகள் மற்றும் மேலெழுதுதல்களை அமை",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'and overrides' (snapshot-based now)"
+    "message": "ஒவ்வொரு தளத்துக்கும் ப்ளர் விதியை அமை"
   },
   "subpage_htb_title": {
-    "message": "மங்கலாக்குவது எப்படி"
+    "message": "எப்படி மங்கச்செய்வது"
   },
   "setting_blur_radius": {
     "message": "மங்கல் வலிமை"
@@ -147,36 +142,34 @@
     "message": "மென்மையான அசைவூட்டங்கள்"
   },
   "setting_transition_hint": {
-    "message": "மங்கலை திடீரென மாற்றாமல் மென்மையாக மாற்றுக."
+    "message": "மங்கல் திடீரென மாறாமல், மென்மையாக வந்து போகட்டும்."
   },
   "setting_blur_mode": {
-    "message": "மங்கல் தோற்றம்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Blur Look' → 'Blur Style' (existing translation likely still valid)"
+    "message": "மங்கல் பாணி"
   },
   "setting_thorough_blur": {
-    "message": "தீவிர மங்கல்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Aggressive Blur' → 'Catch Hidden Layouts' (semantic shift — please re-translate)"
+    "message": "மறைந்த தளவமைப்பையும் பிடி"
   },
   "setting_thorough_hint": {
-    "message": "வெற்று கொள்கலன்களையும் மங்கச்செய். அதிகம் பிடிக்கும், ஆனால் தளவமைப்பை மறைக்கலாம்."
+    "message": "காலியான கொள்கலன்களையும் மங்கச்செய். அதிகம் பிடிக்கும், ஆனால் தளவமைப்பு மறையக்கூடும்."
   },
   "setting_tab_privacy": {
     "message": "டேப் தலைப்பு & ஐகானை மறை"
   },
   "setting_tab_privacy_hint": {
-    "message": "திரைப் பகிர்வுக்கு டேப் தலைப்பு மற்றும் ஃபேவிகானை பொது இடக்குறிப்பாக மாற்றுக."
+    "message": "டேப் தலைப்பு மற்றும் ஃபேவிகானை சாதாரண இடக்குறிப்பாக மாற்று. திரை பகிர்வுக்கு சிறந்தது."
   },
   "setting_debug_logging": {
-    "message": "பிழைத்திருத்த பதிவு"
+    "message": "டிபக் பதிவு"
   },
   "setting_debug_logging_hint": {
-    "message": "DevTools கன்சோலில் நீட்டிப்பு உள்ளமையை பதிவு செய்."
+    "message": "நீட்டிப்பின் உள் தகவலை DevTools கன்சோலில் பதிவு செய்."
   },
   "setting_backup": {
-    "message": "காப்புப்பிரதி & மீட்டமை"
+    "message": "காப்பெடு & மீட்டமை"
   },
   "setting_backup_hint": {
-    "message": "அனைத்து அமைப்புகளையும் JSON கோப்பாக ஏற்றுமதி அல்லது மீட்டமைக்கவும்."
+    "message": "எல்லா அமைப்புகளையும் JSON கோப்பாக ஏற்றுமதி செய், அல்லது மீட்டமை."
   },
   "btn_export": {
     "message": "ஏற்றுமதி"
@@ -185,38 +178,37 @@
     "message": "இறக்குமதி"
   },
   "toast_import_success": {
-    "message": "அமைப்புகள் இறக்குமதி செய்யப்பட்டன"
+    "message": "அமைப்புகள் இறக்குமதி ஆகிவிட்டன"
   },
   "toast_import_error": {
-    "message": "தவறான அமைப்புகள் கோப்பு"
+    "message": "அமைப்புக் கோப்பு தவறானது"
   },
   "setting_auto_blur_tab": {
     "message": "டேப் மாறும்போது மங்கச்செய்"
   },
   "setting_auto_blur_tab_hint": {
-    "message": "வேறு டேப்புக்கு மாறும்போது பக்கத்தை தானாக மங்கச்செய்."
+    "message": "வேறு டேபுக்குச் சென்றால் பக்கத்தை தானாக மங்கச்செய்."
   },
   "setting_auto_blur_idle_hint": {
-    "message": "செயலின்மை காலத்திற்குப் பிறகு பக்கத்தை தானாக மங்கச்செய்."
+    "message": "சிறிது நேரம் செயலற்று இருந்தால் பக்கத்தை தானாக மங்கச்செய்."
   },
   "reveal_click": {
-    "message": "க்ளிக் செய்து எட்டிப் பார்"
+    "message": "கிளிக் செய்து எட்டிப் பார்"
   },
   "reveal_hover": {
-    "message": "மீது நகர்த்தி எட்டிப் பார்"
+    "message": "ஹோவர் செய்து எட்டிப் பார்"
   },
   "reveal_none": {
-    "message": "நிறுத்து — ஒருபோதும் காட்டாதே"
+    "message": "ஆஃப் — ஒருபோதும் காட்டாதே"
   },
   "setting_redaction_color": {
-    "message": "மறைப்பு நிறம்"
+    "message": "ரெடாக்ஷன் நிறம்"
   },
   "group_categories": {
-    "message": "எதை மங்கச்செய்ய"
+    "message": "எதை எதை மங்கச்செய்ய"
   },
   "detect_pii": {
-    "message": "உணர்திறன் தரவு (PII)",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped '(PII)' suffix → 'Sensitive Data'"
+    "message": "உணர்திறன் தரவு"
   },
   "cat_text": {
     "message": "உரை"
@@ -234,7 +226,7 @@
     "message": "கொள்கலன்கள்"
   },
   "shortcut_toggle_blur_all": {
-    "message": "அனைத்தையும் மங்கச்செய்"
+    "message": "எல்லாவற்றையும் மங்கச்செய்"
   },
   "shortcut_toggle_blur_all_hint": {
     "message": "இந்தப் பக்கத்தில் ஆதரிக்கப்படும் ஒவ்வொரு கூறையும் மங்கச்செய்."
@@ -243,52 +235,52 @@
     "message": "ஒரு கூறைத் தேர்ந்தெடு"
   },
   "shortcut_toggle_picker_hint": {
-    "message": "ஒரு கூறு அல்லது பகுதியை மங்கச்செய்ய பிக்கரைத் திறக்கவும்."
+    "message": "ஒரு கூறு அல்லது பகுதியை மங்கச்செய்ய பிக்கரைத் திற."
   },
   "shortcut_clear_all": {
     "message": "பக்கத்தை அழி"
   },
   "shortcut_clear_all_hint": {
-    "message": "இந்தப் பக்கத்தில் ஒவ்வொரு மங்கலையும் அகற்று."
+    "message": "இந்தப் பக்கத்தில் எல்லா மங்கலையும் அகற்று."
   },
   "shortcut_screenshot": {
-    "message": "திரைப்பிடிப்பு எடு"
+    "message": "ஸ்க்ரீன்ஷாட் எடு"
   },
   "shortcut_screenshot_hint": {
-    "message": "அனைத்து மங்கல்களுடன் தெரியும் பக்கத்தைப் பிடித்து PNG ஆக பதிவிறக்கு."
+    "message": "தெரியும் பக்கத்தை எல்லா மங்கல்களுடனும் பிடித்து PNG ஆக பதிவிறக்கு."
   },
   "shortcut_blur_selection": {
-    "message": "தேர்ந்தெடுத்த உரையை மங்கச்செய்"
+    "message": "தேர்ந்த உரையை மங்கச்செய்"
   },
   "shortcut_blur_selection_hint": {
-    "message": "பக்கத்தில் தற்போது தேர்ந்தெடுக்கப்பட்ட உரையை மங்கச்செய்யுங்கள்."
+    "message": "பக்கத்தில் இப்போது தேர்ந்துள்ள உரையை மங்கச்செய்."
   },
   "shortcut_customize": {
     "message": "மாற்று"
   },
   "shortcut_modal_prompt": {
-    "message": "ஒரு மாற்றியை (Ctrl/Alt/Shift/Cmd) அழுத்திப் பிடிக்கவும், பின்னர் விரும்பிய விசையை அழுத்தவும்."
+    "message": "ஒரு மாடிஃபையரை (Ctrl/Alt/Shift/Cmd) அழுத்திப் பிடித்துக்கொண்டு, விரும்பிய கீயை அழுத்தவும்."
   },
   "shortcut_modal_placeholder": {
-    "message": "விசை சேர்க்கையை அழுத்தவும்…"
+    "message": "கீ காம்போவை அழுத்தவும்…"
   },
   "shortcut_modal_no_modifier": {
-    "message": "முதலில் ஒரு மாற்றியை அழுத்திப் பிடிக்கவும், பின்னர் விசையை அழுத்தவும்."
+    "message": "முதலில் ஒரு மாடிஃபையரை அழுத்திப் பிடிக்கவும், பின்னர் கீயை அழுத்தவும்."
   },
   "shortcut_reset": {
-    "message": "இயல்புநிலைக்கு மீட்டமை"
+    "message": "இயல்புக்கு மீட்டமை"
   },
   "shortcut_reset_all": {
-    "message": "அனைத்தையும் மீட்டமை"
+    "message": "எல்லாம் மீட்டமை"
   },
   "shortcut_reserved_known": {
-    "message": "ஒதுக்கப்பட்டது: {label} — சேமித்தாலும் மேலெழுதப்படும்."
+    "message": "ரிசர்வ்: {label} — சேமித்தாலும் இது மேலெழுதப்படும்."
   },
   "shortcut_reserved_browser": {
-    "message": "இந்த கீ சேர்மானம் உலாவியால் ஒதுக்கப்பட்டுள்ளது."
+    "message": "இந்த கீ காம்போ உலாவியால் ரிசர்வ் செய்யப்பட்டுள்ளது."
   },
   "rule_pattern": {
-    "message": "URL வடிவம்"
+    "message": "URL பொருத்தம்"
   },
   "rule_pattern_placeholder": {
     "message": "youtube.com"
@@ -303,37 +295,37 @@
     "message": "மேம்பட்ட (regex)"
   },
   "rule_pattern_required": {
-    "message": "தயவுசெய்து ஒரு URL வடிவத்தை உள்ளிடவும்."
+    "message": "URL வடிவத்தை உள்ளிடவும்."
   },
   "rule_pattern_too_long": {
-    "message": "வடிவம் மிக நீளமானது (அதிகபட்சம் 500 எழுத்துக்கள்)."
+    "message": "வடிவம் மிக நீளமானது (அதிகபட்சம் 500 எழுத்துகள்)."
   },
   "rule_no_rules": {
-    "message": "இன்னும் தள விதிகள் இல்லை. குறிப்பிட்ட தளங்களில் மங்கல் எவ்வாறு செயல்படுகிறது என்பதை விதிகள் மாற்றுகின்றன."
+    "message": "இன்னும் தள விதிகள் இல்லை. ஒரு குறிப்பிட்ட தளத்தில் மங்கல் எப்படி வேலை செய்கிறது என்பதை விதிகள் மாற்றும்."
   },
   "rule_hint": {
-    "message": "குறிப்பிட்ட தளங்களில் அமைப்புகளை மாற்றவும். முதலில் பொருந்தும் விதி வெல்லும்."
+    "message": "ஒரு குறிப்பிட்ட தளத்துக்கு அமைப்புகளை மாற்று. முதலில் பொருந்தும் விதியே வெல்லும்."
   },
   "rule_delete_btn": {
     "message": "அகற்று"
   },
   "rule_edit_pattern": {
-    "message": "வடிவத்தை திருத்து"
+    "message": "வடிவத்தை மாற்று"
   },
   "rule_add_for_site": {
-    "message": "+ தற்போதைய அமைப்புகளை தள விதியாக சேமி"
+    "message": "+ இப்போதைய அமைப்புகளை தள விதியாகச் சேமி"
   },
   "rule_pattern_exact": {
     "message": "சரியான ஹோஸ்ட்பெயர்"
   },
   "rule_pattern_help_wildcard": {
-    "message": "youtube.com அனைத்து YouTube பக்கங்களுடனும் பொருந்தும் (துணை டொமைன்கள் உட்பட)। *.youtube.com துணை டொமைன்களுக்கு மட்டும். github.com/settings/* பாதை முன்னொட்டிற்கு."
+    "message": "youtube.com எல்லா YouTube பக்கங்களுக்கும் (சப்-டொமைன்கள் உட்பட) பொருந்தும். *.youtube.com சப்-டொமைன்களுக்கு மட்டும். github.com/settings/* பாதை முன்னொட்டிற்கு."
   },
   "rule_pattern_help_regex": {
-    "message": "URL உடன் பொருத்தப்படும் முழு வழக்கமான வெளிப்பாடு. உதாரணம்: github\\.com/[a-z]+/settings அல்லது (mail|inbox)\\.google\\.com"
+    "message": "URL உடன் பொருத்தப்படும் முழு regex. உதாரணம்: github\\.com/[a-z]+/settings அல்லது (mail|inbox)\\.google\\.com"
   },
   "rule_pattern_help_exact": {
-    "message": "சரியான ஹோஸ்ட்பெயருடன் மட்டுமே பொருந்தும் — துணை டொமைன்கள் இல்லை, பாதை இல்லை. உதாரணம்: www.youtube.com"
+    "message": "சரியான ஹோஸ்ட்பெயருக்கு மட்டுமே பொருந்தும் — சப்-டொமைன்கள் இல்லை, பாதை இல்லை. உதாரணம்: www.youtube.com"
   },
   "rule_snapshot_label": {
     "message": "அமைப்புகள் ஸ்னாப்ஷாட்"
@@ -342,78 +334,73 @@
     "message": "ஸ்னாப்ஷாட் முன்னோட்டம்"
   },
   "rule_snapshot_empty": {
-    "message": "ஸ்னாப்ஷாட் சேமிக்கப்படவில்லை — உலகளாவிய அமைப்புகளை பின்பற்றும்"
+    "message": "ஸ்னாப்ஷாட் சேமிக்கப்படவில்லை — பொது அமைப்புகளே பயன்படும்"
   },
   "rule_snapshot_recapture": {
     "message": "மீண்டும் பிடி"
   },
   "rule_snapshot_saved_note": {
-    "message": "சேமிக்கப்பட்டது"
+    "message": "சேமித்தது"
   },
   "rule_snap_blur_mode": {
-    "message": "மங்கல் பயன்முறை"
+    "message": "ப்ளர் மோட்"
   },
   "rule_snap_blur_categories": {
-    "message": "மங்கல் வகைகள்"
+    "message": "ப்ளர் வகைகள்"
   },
   "rule_snap_pick_blur_type": {
-    "message": "தேர்வு & மங்கல் வகை"
+    "message": "Pick & Blur வகை"
   },
   "rule_snap_pick_blur_enabled": {
-    "message": "தேர்வு & மங்கல்"
+    "message": "Pick & Blur"
   },
   "rule_snap_val_blur": {
-    "message": "மங்கல்"
+    "message": "ப்ளர்"
   },
   "rule_snap_val_frosted": {
-    "message": "மங்கிய கண்ணாடி"
+    "message": "ஃப்ராஸ்டெட்"
   },
   "rule_snap_val_color": {
     "message": "நிறம்"
   },
   "rule_snap_val_redacted": {
-    "message": "மறைக்கப்பட்டது"
+    "message": "ரெடாக்டெட்"
   },
   "rule_snap_val_censored": {
-    "message": "தணிக்கை"
+    "message": "செனசோர்டு"
   },
   "rule_snap_val_starred": {
-    "message": "நட்சத்திரம்"
+    "message": "ஸ்டார்டு"
   },
   "rule_snap_val_on": {
-    "message": "இயக்கு"
+    "message": "ஆன்"
   },
   "rule_snap_val_off": {
-    "message": "நிறுத்து"
+    "message": "ஆஃப்"
   },
   "rule_snap_val_none": {
     "message": "எதுவுமில்லை"
   },
   "rule_snap_section_blur": {
-    "message": "மறை"
+    "message": "ப்ளர்"
   },
   "rule_snap_section_pii": {
-    "message": "PII",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'PII' → 'Sensitive Data'"
+    "message": "உணர்திறன் தரவு"
   },
   "rule_snap_section_automate": {
-    "message": "தானியக்கம்"
+    "message": "தானியக்கு"
   },
   "rule_snap_label_pii_email": {
-    "message": "PII: மின்னஞ்சல்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII:' prefix → 'Email'"
+    "message": "மின்னஞ்சல்"
   },
   "rule_snap_label_pii_numeric": {
-    "message": "PII: எண்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII:' prefix → 'Numeric'"
+    "message": "எண்"
   },
   "rule_snap_label_pii_mode": {
-    "message": "PII முறை",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'PII mode' → 'Display mode'"
+    "message": "காட்சி மோட்"
   },
   "rule_snap_label_pii_redaction_color": {
-    "message": "PII நிறம்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII' prefix → 'Redaction color'"
+    "message": "ரெடாக்ஷன் நிறம்"
   },
   "rule_snap_label_pick_blur_items": {
     "message": "உருப்படிகள்"
@@ -425,31 +412,31 @@
     "message": "செயலற்ற வரம்பு"
   },
   "rule_snap_label_automate_tab_switch": {
-    "message": "தாவல்-மாற்று தூண்டுதல்"
+    "message": "டேப்-மாற்று தூண்டுதல்"
   },
   "rule_snap_label_automate_screen_share": {
-    "message": "திரைப்பகிர்வு தூண்டுதல்"
+    "message": "திரை பகிர்வு தூண்டுதல்"
   },
   "popup_badge_managed_by_rule": {
-    "message": "தள விதியால் நிர்வகிக்கப்படுகிறது"
+    "message": "தள விதி செயலில்"
   },
   "toast_suffix_site_rule": {
     "message": "(தள விதி)"
   },
   "rule_active_banner": {
-    "message": "தள விதி செயல்பாட்டில்"
+    "message": "தள விதி செயலில்"
   },
   "rule_active_view": {
-    "message": "விதியை காண்க"
+    "message": "விதியைக் காண்"
   },
   "item_type_dynamic": {
     "message": "கூறு"
   },
   "item_type_sticky_page": {
-    "message": "பக்கப் பகுதி"
+    "message": "பக்கத்தில் பகுதி"
   },
   "item_type_sticky_screen": {
-    "message": "திரைப் பகுதி"
+    "message": "திரையில் பகுதி"
   },
   "item_remove_aria": {
     "message": "அகற்று"
@@ -458,16 +445,16 @@
     "message": "இதை அழி"
   },
   "toast_enabled": {
-    "message": "ப்ளர்ரி சைட் இயக்கப்பட்டது"
+    "message": "Blurry Site இயக்கப்பட்டது"
   },
   "toast_disabled": {
-    "message": "ப்ளர்ரி சைட் நிறுத்தப்பட்டது"
+    "message": "Blurry Site நிறுத்தப்பட்டது"
   },
   "toast_blur_all": {
-    "message": "இந்தப் பக்கத்தில் அனைத்தும் மங்கியுள்ளன"
+    "message": "இந்தப் பக்கத்தில் எல்லாமே மங்கியுள்ளது"
   },
   "toast_cleared": {
-    "message": "பக்கம் அழிக்கப்பட்டது"
+    "message": "பக்கம் அழிந்தது"
   },
   "footer_feedback": {
     "message": "கருத்து"
@@ -479,8 +466,7 @@
     "message": "பதிவுகள்"
   },
   "theme_toggle": {
-    "message": "ஒளி / இருள் தீம் மாற்று",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26 to 'Switch theme'"
+    "message": "தீம் மாற்று"
   },
   "modal_cancel": {
     "message": "ரத்து"
@@ -489,100 +475,100 @@
     "message": "சேமி"
   },
   "tt_power_enable": {
-    "message": "Blurry Site இயக்கு"
+    "message": "Blurry Site-ஐ இயக்கு"
   },
   "tt_power_disable": {
-    "message": "Blurry Site முடக்கு"
+    "message": "Blurry Site-ஐ நிறுத்து"
   },
   "off_state_message": {
-    "message": "Blurry Site முடக்கப்பட்டுள்ளது"
+    "message": "Blurry Site நிறுத்தப்பட்டுள்ளது"
   },
   "off_state_hint": {
-    "message": "அனைத்து தளங்களிலும் மங்கல் நிறுத்தப்பட்டுள்ளது"
+    "message": "எல்லா தளங்களிலும் ப்ளர் இடைநிறுத்தப்பட்டுள்ளது"
   },
   "power_turn_on": {
     "message": "இயக்கு"
   },
   "htb_chip_blur": {
-    "message": "மங்கல்"
+    "message": "ப்ளர்"
   },
   "htb_chip_frosted": {
-    "message": "உறைந்த"
+    "message": "ஃப்ராஸ்டெட்"
   },
   "htb_chip_redacted": {
-    "message": "திருத்தப்பட்டது"
+    "message": "ரெடாக்டெட்"
   },
   "htb_chip_censored": {
-    "message": "தணிக்கை"
+    "message": "செனசோர்டு"
   },
   "htb_chip_color": {
-    "message": "வண்ணம்"
+    "message": "நிறம்"
   },
   "htb_label_mode": {
-    "message": "பயன்முறை"
+    "message": "மோட்"
   },
   "htb_label_covers": {
-    "message": "உள்ளடக்குகிறது"
+    "message": "எதை மறைக்கும்"
   },
   "htb_label_strength": {
-    "message": "தீவிரம்"
+    "message": "வலிமை"
   },
   "htb_label_reveal": {
-    "message": "காட்டு"
+    "message": "எட்டிப்பார்வை"
   },
   "htb_label_color": {
-    "message": "வண்ணம்"
+    "message": "நிறம்"
   },
   "htb_strength_subtle": {
-    "message": "மெல்லிய"
+    "message": "மென்மை"
   },
   "htb_strength_moderate": {
-    "message": "மிதமான"
+    "message": "மிதம்"
   },
   "htb_strength_strong": {
-    "message": "வலிமையான"
+    "message": "கடும்"
   },
   "pii_chip_blur": {
-    "message": "மங்கல்"
+    "message": "ப்ளர்"
   },
   "pii_chip_frosted": {
-    "message": "உறைந்த"
+    "message": "ஃப்ராஸ்டெட்"
   },
   "pii_chip_redacted": {
-    "message": "திருத்தப்பட்டது"
+    "message": "ரெடாக்டெட்"
   },
   "pii_chip_starred": {
-    "message": "நட்சத்திரமிட்டது"
+    "message": "ஸ்டார்டு"
   },
   "automate_idle": {
     "message": "செயலற்ற"
   },
   "automate_tab_switch": {
-    "message": "தாவல் மாற்றம்"
+    "message": "டேப் மாற்று"
   },
   "automate_off": {
-    "message": "முடக்கு"
+    "message": "ஆஃப்"
   },
   "automate_on": {
-    "message": "இயக்கு"
+    "message": "ஆன்"
   },
   "automate_unit_sec": {
-    "message": "வி."
+    "message": "வினாடி"
   },
   "automate_unit_min": {
-    "message": "நிமி."
+    "message": "நிமிடம்"
   },
   "automate_unit_hr": {
-    "message": "மணி."
+    "message": "மணி"
   },
   "mode_blur_all_off_hint": {
-    "message": "முடக்கு — பக்கம் தெரிகிறது."
+    "message": "ஆஃப் — பக்கம் தெரிகிறது."
   },
   "mode_pick_blur_empty": {
-    "message": "இன்னும் எந்த உறுப்பும் தேர்ந்தெடுக்கப்படவில்லை. தொடங்க பிக்கரைத் திறக்கவும்."
+    "message": "இன்னும் ஒரு கூறும் தேர்ந்தெடுக்கப்படவில்லை. தொடங்க பிக்கரைத் திற."
   },
   "mode_pick_off_hint": {
-    "message": "Pick & Blur முடக்கப்பட்டுள்ளது. குறிப்பிட்ட உறுப்புகளை மங்கலாக்க இயக்கவும்."
+    "message": "Pick & Blur ஆஃப். குறிப்பிட்ட கூறுகளை மங்கச்செய்ய இயக்கு."
   },
   "mode_pick_off_paused": {
     "message": "$COUNT$ உருப்படிகள் · இடைநிறுத்தம்",
@@ -594,13 +580,13 @@
     }
   },
   "mode_open_picker": {
-    "message": "பிக்கரைத் திறக்கவும்"
+    "message": "பிக்கரைத் திற"
   },
   "htb_opacity": {
     "message": "ஒளிபுகாமை"
   },
   "mode_badge_dynamic": {
-    "message": "உறுப்பு"
+    "message": "கூறு"
   },
   "mode_badge_sticky_page": {
     "message": "பக்கத்தில் பகுதி"
@@ -609,30 +595,28 @@
     "message": "திரையில் பகுதி"
   },
   "tooltip_mode_dynamic": {
-    "message": "எந்த உறுப்பையும் மங்கலாக்க தட்டவும்"
+    "message": "எந்தக் கூறையும் தட்டினால் மங்கும்"
   },
   "tooltip_mode_sticky_page": {
-    "message": "பக்கத்தில் நிலைத்த மங்கல் பகுதி வரையவும்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: now says 'scrolls with the page'"
+    "message": "பக்கத்துடன் ஸ்க்ரோல் ஆகும் மங்கல் பகுதியை வரை"
   },
   "tooltip_mode_sticky_screen": {
-    "message": "திரையில் நிலைத்த மங்கல் பகுதி வரையவும்",
-    "description": "TODO_TRANSLATE — English changed 2026-04-26: now says 'stays fixed when you scroll'"
+    "message": "ஸ்க்ரோல் செய்தாலும் இடம் மாறாத மங்கல் பகுதியை வரை"
   },
   "automate_footer": {
-    "message": "தூண்டும்போது → தற்போதைய மங்கல் பயன்முறை அமைப்புகள் பயன்படுத்தப்படும்"
+    "message": "தூண்டப்பட்டால் → இப்போதைய ப்ளர் மோட் அமைப்புகள் பயன்படும்"
   },
   "automate_screen_share": {
     "message": "திரை பகிர்வு"
   },
   "automate_screen_share_desc": {
-    "message": "திரை பகிர்வு கண்டறியும்போது தானாக மங்கலாக்கு"
+    "message": "திரை பகிர்வு தொடங்கியதும் தானாக ப்ளர்"
   },
   "automate_turn_off": {
-    "message": "முடக்கு"
+    "message": "நிறுத்து"
   },
   "automate_stop_per_tab": {
-    "message": "இந்த தாவல்"
+    "message": "இந்த டேப்"
   },
   "automate_stop_site_session": {
     "message": "இந்த தளம் (அமர்வு)"
@@ -641,16 +625,16 @@
     "message": "அம்சத்தை முடக்கு"
   },
   "automate_toast_screen_share": {
-    "message": "மங்கல் பயன்படுத்தப்பட்டது — திரை பகிர்வு செயலில்"
+    "message": "ப்ளர் ஆனது — திரை பகிர்வு செயலில்"
   },
   "automate_toast_idle": {
-    "message": "மங்கல் பயன்படுத்தப்பட்டது — செயலற்ற நிலை கண்டறியப்பட்டது"
+    "message": "ப்ளர் ஆனது — செயலற்ற நிலை"
   },
   "automate_toast_tab_switch": {
-    "message": "மங்கல் பயன்படுத்தப்பட்டது — தாவல் மாற்றம்"
+    "message": "ப்ளர் ஆனது — டேப் மாற்றம்"
   },
   "automate_toast_skipped": {
-    "message": "மங்கல் ஏற்கனவே செயலில் — தானியங்கு தவிர்க்கப்பட்டது"
+    "message": "ப்ளர் ஏற்கனவே ஆன் — தானியக்கு தவிர்க்கப்பட்டது"
   },
   "notif_screen_share_active": {
     "message": "திரை பகிர்வு செயலில்"
@@ -659,34 +643,34 @@
     "message": "பகிர்ந்து"
   },
   "notif_skipped_reason_site_rule": {
-    "message": "மங்கல் ஏற்கனவே செயலில் (தள விதி)"
+    "message": "ப்ளர் ஏற்கனவே ஆன் (தள விதி)"
   },
   "notif_skipped_reason_manual": {
-    "message": "மங்கல் ஏற்கனவே செயலில்"
+    "message": "ப்ளர் ஏற்கனவே ஆன்"
   },
   "notif_skipped_reason_pick_blur": {
-    "message": "தேர்ந்தெடு மற்றும் மங்கல் ஏற்கனவே செயலில்"
+    "message": "Pick & Blur ஏற்கனவே ஆன்"
   },
   "notif_suppressed_for_tab": {
-    "message": "இந்த தாவலுக்கு அடக்கப்பட்டது"
+    "message": "இந்த டேபுக்கு அமைதியாக்கப்பட்டது"
   },
   "notif_suppressed_for_site": {
-    "message": "இந்த தளத்திற்கு அடக்கப்பட்டது"
+    "message": "இந்த தளத்துக்கு அமைதியாக்கப்பட்டது"
   },
   "notif_suppressed_undo": {
     "message": "மீளமை"
   },
   "site_rule_managed_banner_title": {
-    "message": "தள விதியால் நிர்வகிக்கப்படுகிறது"
+    "message": "தள விதி செயலில்"
   },
   "site_rule_managed_banner_body": {
-    "message": "இந்த தளத்தின் அமைப்புகள் $HOSTNAME$ ($TYPE$) விதியால் கட்டுப்படுத்தப்படுகின்றன. தள விதிகளில் திருத்தவும்.",
+    "message": "இந்த தளத்தின் அமைப்புகள் $HOSTNAME$ ($TYPE$) விதியால் கட்டுப்படுத்தப்படுகின்றன. தள விதிகளில் மாற்றவும்.",
     "placeholders": {
       "hostname": { "content": "$1", "example": "*.example.com" },
       "type": { "content": "$2", "example": "wildcard" }
     }
   },
   "site_rule_managed_edit_cta": {
-    "message": "தள விதிகளில் திருத்தவும்"
+    "message": "தள விதிகளில் மாற்று"
   }
 }
