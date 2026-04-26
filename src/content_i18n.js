@@ -90,6 +90,8 @@ const ContentI18n = (() => {
       lang = _resolveAuto(supported);
     }
 
+    if (lang === _lang && (lang === 'en' || Object.keys(_strings).length > 0)) return;
+
     _lang = lang;
     _strings = (lang === 'en') ? {} : await _loadJSON(lang);
     _warnedKeys = new Set();

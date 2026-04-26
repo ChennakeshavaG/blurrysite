@@ -12,6 +12,35 @@
  * Exposed as blsi.BlurEngine (IIFE — no ES module syntax).
  */
 
+// ── AGENT NAVIGATION ─────────────────────────────────────────────────────────
+// Run: grep -n "§" src/blur_engine.js   → get current line of each section
+// Contract: docs/contracts/blur_engine.md
+//
+// Use case                                          → Section
+// ─────────────────────────────────────────────────────────────────────────────
+// Add/change a blur mode, CSS rules, SVG filters,  → §CSS-INJECTION
+//   alwaysBlur/textCheck selectors, EXCLUDE chain
+//
+// Fix text stamping, MutationObserver callback,    → §STAMP-OBSERVER
+//   idle scheduling (requestIdleCallback), shadow
+//   root discovery, attachShadow event bridge
+//
+// Zone overlays, sticky zones, item reconciliation → §ITEMS-ZONES
+//   (dynamic/sticky names, _activeItems Map,
+//   _applyStickyItem, _applyDynamicItem, counters)
+//
+// Top-level blur init: handleSite, handleShadow-   → §ORCHESTRATOR
+//   Root, handleIframe, handleMainDocument, CSS
+//   vars, teardown, lifecycle state
+//
+// PII rule injection and removal                   → §PII
+//
+// Public API surface (blsi.BlurEngine return)      → §PUBLIC-API
+//
+// Category definitions (HTML tags per category,   → §CATEGORY-SELECTORS
+//   ARIA roles, alwaysBlur vs textCheck split)
+// ─────────────────────────────────────────────────────────────────────────────
+
 const BlurEngine = (() => {
   "use strict";
 
@@ -19,7 +48,7 @@ const BlurEngine = (() => {
   const STYLE_ID      = "bl-si-blur-styles";
   const PICK_STYLE_ID = "bl-si-pick-blur-styles";
 
-  // ── Category selector definitions ──────────────────────────────────────────
+  // ── §CATEGORY-SELECTORS ───────────────────────────────────────────────────
 
   const CATEGORY_SELECTORS = Object.freeze({
     text: Object.freeze({
@@ -138,7 +167,10 @@ const BlurEngine = (() => {
     "table",
   ]);
 
-  // ── cache ─────────────────────────────────────────────────────────
+  // ── §CSS-INJECTION ────────────────────────────────────────────────────────
+  // injectRules, removeRules, injectPickBlurRules, removePickBlurRules,
+  // injectPiiRules, removePiiRules, ensureSvgFilter, isBlurAllActive,
+  // EXCLUDE chain, CSS vars, blur mode declarations.
 
   let selectorCache = null;
 
@@ -196,10 +228,15 @@ const BlurEngine = (() => {
 
   /** Set of text-check tag names for O(1) lookup in MO callback */
   let _textCheckSet = new Set();
+  let _lastTextCheckKey = null;
+  let _blurredCount = 0;
 
   function _rebuildTextCheckSet(categories) {
-    _textCheckSet = new Set();
     const cats = categories || DEFAULT_CATS;
+    const key = CATEGORY_ORDER.filter(n => cats[n]).join(',');
+    if (key === _lastTextCheckKey) return;
+    _lastTextCheckKey = key;
+    _textCheckSet = new Set();
     for (const name of CATEGORY_ORDER) {
       if (!cats[name]) continue;
       const cat = CATEGORY_SELECTORS[name];
@@ -442,6 +479,10 @@ const BlurEngine = (() => {
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
+  // ── §PII ─────────────────────────────────────────────────────────────────
+  // injectPiiRules, removePiiRules — PII-specific CSS injection only.
+  // PII detector logic lives in src/pii_detector.js.
+
   const PII_STYLE_ID = "bl-si-pii-styles";
 
   function removePiiRules() {
@@ -505,6 +546,11 @@ const BlurEngine = (() => {
     return !!(document.head && document.head.querySelector('#' + STYLE_ID));
   }
 
+  // ── §STAMP-OBSERVER ──────────────────────────────────────────────────────
+  // stampElements, tryBlurTextCheck, _isExtensionUI, hasMeaningfulTextContent,
+  // _rebuildTextCheckSet, _textCheckSet. MutationObserver wiring, idle queue,
+  // shadow root discovery, attachShadow event bridge (_initShadowAttachListener).
+
   // ── Text-check element blur (scan + MO for new nodes) ─────────────────────
 
   /**
@@ -526,7 +572,7 @@ const BlurEngine = (() => {
     root.querySelectorAll('*').forEach((el) => {
       // Inline stale-clear — avoids a separate querySelectorAll('[data-bl-si-blur]')
       // pre-pass. PII-stamped elements keep their stamp (they own their blur lifecycle).
-      if (el.dataset.blSiBlur && !el.dataset.blSiPii) delete el.dataset.blSiBlur;
+      if (el.dataset.blSiBlur && !el.dataset.blSiPii) { delete el.dataset.blSiBlur; _blurredCount--; }
 
       // Shadow root discovery: collect for post-stamp dispatch by caller.
       // CSS injected into each shadow root handles alwaysBlur declaratively;
@@ -545,6 +591,7 @@ const BlurEngine = (() => {
             (cats.structure !== false || cats.text !== false) &&
             (thorough || hasMeaningfulTextContent(el))) {
           el.dataset.blSiBlur = '1';
+          _blurredCount++;
         }
         return;
       }
@@ -571,6 +618,7 @@ const BlurEngine = (() => {
       }
       if (shouldStamp) {
         el.dataset.blSiBlur = "1";
+        _blurredCount++;
       }
     });
 
@@ -589,12 +637,12 @@ const BlurEngine = (() => {
     if (!_textCheckSet.has(tag)) return;
     const needsTextGate = _structuralTags.has(tag);
     if (needsTextGate) {
-      if (hasMeaningfulTextContent(element)) element.dataset.blSiBlur = "1";
+      if (hasMeaningfulTextContent(element)) { element.dataset.blSiBlur = "1"; _blurredCount++; }
     } else if (thorough || hasMeaningfulTextContent(element) ||
                !!(element.querySelector && element.querySelector('slot'))) {
       // slot check: dynamically added shadow DOM elements with <slot> descendants
       // render projected light-DOM content — stamp them even without direct text.
-      element.dataset.blSiBlur = "1";
+      element.dataset.blSiBlur = "1"; _blurredCount++;
     }
   }
 
@@ -686,10 +734,12 @@ const BlurEngine = (() => {
     if (element.dataset.blSiBlur) return;
     if (_isExtensionUI(element)) return;
     element.dataset.blSiBlur = "1";
+    _blurredCount++;
   }
 
   function removeBlur(element) {
     if (!element || !(element instanceof Element)) return;
+    if (element.dataset.blSiBlur) _blurredCount--;
     delete element.dataset.blSiBlur;
     delete element.dataset.blSiPickBlur;
   }
@@ -755,6 +805,46 @@ const BlurEngine = (() => {
     removeAllZoneOverlays();
   }
 
+  function highlightItem(item) {
+    if (_highlightedEl) {
+      _highlightedEl.classList.remove("bl-si-hover-highlight");
+      _highlightedEl = null;
+    }
+    var el = null;
+    if (item && item.item_type === "dynamic") {
+      el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector || []);
+      // Fallback: SPA position shifts make structural selectors non-unique or stale.
+      // Class combo (now always stored) lets us find the right element among hits.
+      if (!el) {
+        var sels = Array.isArray(item.selectors) ? item.selectors
+          : (item.selector ? [item.selector] : []);
+        outer: for (var i = 0; i < sels.length; i++) {
+          try {
+            var hits = document.querySelectorAll(sels[i]);
+            for (var j = 0; j < hits.length; j++) {
+              if (hits[j].dataset && hits[j].dataset.blSiPickBlur) { el = hits[j]; break outer; }
+            }
+          } catch (_e2) {}
+        }
+      }
+    } else if (item && item.item_type === "sticky") {
+      el = _zoneOverlays.get(item.id) || null;
+    }
+    if (!el) return;
+    el.classList.add("bl-si-hover-highlight");
+    if (typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    _highlightedEl = el;
+  }
+
+  function clearItemHighlight() {
+    if (_highlightedEl) {
+      _highlightedEl.classList.remove("bl-si-hover-highlight");
+      _highlightedEl = null;
+    }
+  }
+
   function matchesActiveCategories(element, categories) {
     if (!element || !(element instanceof Element)) return false;
     const cats = categories || DEFAULT_CATS;
@@ -788,6 +878,12 @@ const BlurEngine = (() => {
     }
     return false;
   }
+
+  // ── §ITEMS-ZONES ─────────────────────────────────────────────────────────
+  // createZoneOverlay, removeZoneOverlay, getZoneOverlays, removeAllZoneOverlays,
+  // _applyDynamicItem, _removeDynamicItem, _applyStickyItem, _removeStickyItem,
+  // applyItem, removeItem, resetCounters, allocateDynamicName, allocateStickyName,
+  // _reconcileItems, _activeItems Map, _dynamicCounter, _stickyCounter.
 
   // ── Sticky zone overlays ───────────────────────────────────────────────────
 
@@ -867,21 +963,29 @@ const BlurEngine = (() => {
     _zoneOverlays.clear();
   }
 
+  // ── §ORCHESTRATOR ────────────────────────────────────────────────────────
+  // handleSite (mutex entry point), handleMainDocument, handleShadowRoot,
+  // handleIframe, handleDocument, _applyCssVars, _setPickerActiveForObserver,
+  // observeRoot, disconnectObserver, teardown, lifecycle state variables.
+
   // ── High-level controller state (blur-all + item dispatch) ────────────────
   // Consolidated from the former content_script orchestrator so the engine
   // owns the full blur lifecycle — low-level primitives above are now the
   // private utilities of the wrappers below.
 
   let _isPageBlurred = false;
+  let _pickBlurDynamicActive = false; // true when ≥1 active dynamic pick-blur item exists
   // WeakMap<root, MutationObserver> — one observer per active root (document + shadow roots).
   // WeakMap auto-GCs entries when a shadow root is GC'd (host removed from DOM).
   const _observers = new WeakMap();
   // Mutex — prevents concurrent handleSite() calls from interleaving DOM mutations.
   let _handling = false;
-  let _dynamicCounter = 0;
-  let _stickyCounter = 0;
+  let _elementCounter = 0;
+  let _pageAreaCounter = 0;
+  let _screenAreaCounter = 0;
   let _pickerActive = false;
   let _currentSettings = null;
+  let _shadowAttachHandler = null; // capture listener for __blsi_shadow_attached events
 
   // ── Idle-stamp queue ────────────────────────────────────────────────────────
   // CSS injection (injectRules) is synchronous and covers alwaysBlur tags
@@ -948,6 +1052,7 @@ const BlurEngine = (() => {
   // mode is the exception — its radius lives in an SVG attribute and needs
   // a filter rebuild, so BLUR_RADIUS is folded into the key under frosted.
   let _lastReconcileKey = null;
+  let _highlightedEl = null;
 
   function _itemId(item) {
     return item && item.type === "dynamic"
@@ -960,8 +1065,28 @@ const BlurEngine = (() => {
     if (el && !_isExtensionUI(el)) {
       el.dataset.blSiPickBlur = '1';
     }
-    const num = parseInt((item.name || "").replace("Dynamic ", ""), 10);
-    if (!isNaN(num) && num > _dynamicCounter) _dynamicCounter = num;
+    const raw = item.name || '';
+    const numStr = raw.startsWith('Element ') ? raw.slice(8) : raw.slice('Dynamic '.length);
+    const num = parseInt(numStr, 10);
+    if (!isNaN(num) && num > _elementCounter) _elementCounter = num;
+  }
+
+  function _tryPickBlurNode(el) {
+    if (!el || !(el instanceof Element)) return;
+    if (el.dataset.blSiPickBlur) return;
+    if (_isExtensionUI(el)) return;
+    for (const item of _activeItems.values()) {
+      if (item.type !== 'dynamic') continue;
+      const sels = item.selectors || (item.selector ? [item.selector] : []);
+      for (let s = 0; s < sels.length; s++) {
+        try {
+          if (el.matches(sels[s]) && document.querySelectorAll(sels[s]).length === 1) {
+            el.dataset.blSiPickBlur = '1';
+            return;
+          }
+        } catch (_) {}
+      }
+    }
   }
 
   function _removeDynamicItem(item) {
@@ -1012,8 +1137,17 @@ const BlurEngine = (() => {
       height: Math.round(h),
     });
 
-    const num = parseInt((item.name || "").replace("Sticky ", ""), 10);
-    if (!isNaN(num) && num > _stickyCounter) _stickyCounter = num;
+    const raw = item.name || '';
+    if (raw.startsWith('Area on screen ')) {
+      const num = parseInt(raw.slice(15), 10);
+      if (!isNaN(num) && num > _screenAreaCounter) _screenAreaCounter = num;
+    } else if (raw.startsWith('Area on page ')) {
+      const num = parseInt(raw.slice(13), 10);
+      if (!isNaN(num) && num > _pageAreaCounter) _pageAreaCounter = num;
+    } else {
+      const num = parseInt(raw.replace('Sticky ', ''), 10);
+      if (!isNaN(num) && num > _pageAreaCounter) _pageAreaCounter = num;
+    }
   }
 
   function _removeStickyItem(item) {
@@ -1033,18 +1167,23 @@ const BlurEngine = (() => {
   }
 
   function resetCounters() {
-    _dynamicCounter = 0;
-    _stickyCounter = 0;
+    _elementCounter = 0;
+    _pageAreaCounter = 0;
+    _screenAreaCounter = 0;
   }
 
-  function allocateDynamicName() {
-    _dynamicCounter++;
-    return "Dynamic " + _dynamicCounter;
+  function allocateElementName() {
+    _elementCounter++;
+    return 'Element ' + _elementCounter;
   }
 
-  function allocateStickyName() {
-    _stickyCounter++;
-    return "Sticky " + _stickyCounter;
+  function allocateStickyName(anchor) {
+    if (anchor === 'screen') {
+      _screenAreaCounter++;
+      return 'Area on screen ' + _screenAreaCounter;
+    }
+    _pageAreaCounter++;
+    return 'Area on page ' + _pageAreaCounter;
   }
 
   /**
@@ -1062,7 +1201,7 @@ const BlurEngine = (() => {
     if (!target) return;
 
     const obs = new MutationObserver((mutations) => {
-      if (_pickerActive || !_isPageBlurred) return;
+      if (_pickerActive || (!_isPageBlurred && !_pickBlurDynamicActive)) return;
 
       // Synchronous part: collect added nodes only — no DOM queries here.
       // querySelectorAll('*') for subtrees is deferred to the idle callback
@@ -1085,26 +1224,40 @@ const BlurEngine = (() => {
         _moIdlePending = true;
         _scheduleIdle(() => {
           _moIdlePending = false;
-          if (!_isPageBlurred) { _pendingMoNodes.length = 0; return; }
+          const blurAllOn = _isPageBlurred;
+          const pickBlurOn = _pickBlurDynamicActive;
+          if (!blurAllOn && !pickBlurOn) { _pendingMoNodes.length = 0; return; }
           const thorough = _currentSettings ? !!_currentSettings.thorough_blur : false;
-          const nodes = _pendingMoNodes.splice(0);
+          const raw = _pendingMoNodes.splice(0);
+          // Drop nodes whose subtree is already covered by an ancestor in the
+          // same batch — prevents double-walking when a SPA inserts a container
+          // in one MO tick and its children in another before the idle fires.
+          const nodes = raw.filter(n =>
+            !raw.some(other => other !== n && other.contains && other.contains(n))
+          );
           for (let n = 0; n < nodes.length; n++) {
             const node = nodes[n];
-            tryBlurTextCheck(node, thorough);
-            if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
-              handleShadowRoot(_currentSettings, node.shadowRoot);
-            }
-            if (node.tagName === 'IFRAME' && _currentSettings) {
-              handleIframe(_currentSettings, node);
+            if (blurAllOn) tryBlurTextCheck(node, thorough);
+            if (pickBlurOn) _tryPickBlurNode(node);
+            if (blurAllOn) {
+              if (node.shadowRoot && _currentSettings && !_observers.has(node.shadowRoot)) {
+                handleShadowRoot(_currentSettings, node.shadowRoot);
+              }
+              if (node.tagName === 'IFRAME' && _currentSettings) {
+                handleIframe(_currentSettings, node);
+              }
             }
             const children = node.querySelectorAll('*');
             for (let i = 0; i < children.length; i++) {
-              tryBlurTextCheck(children[i], thorough);
-              if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
-                handleShadowRoot(_currentSettings, children[i].shadowRoot);
-              }
-              if (children[i].tagName === 'IFRAME' && _currentSettings) {
-                handleIframe(_currentSettings, children[i]);
+              if (blurAllOn) tryBlurTextCheck(children[i], thorough);
+              if (pickBlurOn) _tryPickBlurNode(children[i]);
+              if (blurAllOn) {
+                if (children[i].shadowRoot && _currentSettings && !_observers.has(children[i].shadowRoot)) {
+                  handleShadowRoot(_currentSettings, children[i].shadowRoot);
+                }
+                if (children[i].tagName === 'IFRAME' && _currentSettings) {
+                  handleIframe(_currentSettings, children[i]);
+                }
               }
             }
           }
@@ -1124,6 +1277,38 @@ const BlurEngine = (() => {
   }
 
   /**
+   * Capture-phase listener for '__blsi_shadow_attached' CustomEvents fired by
+   * main_world_bridge.js when a page calls Element.prototype.attachShadow().
+   *
+   * MutationObserver childList+subtree never fires for attachShadow() — it is a
+   * property assignment, not a DOM tree mutation. This listener bridges the gap:
+   * any shadow root attached after the idle-stamp pass is immediately observed
+   * and queued for stamping, so its content is blurred on the next idle tick.
+   *
+   * Closed shadow roots are skipped by main_world_bridge.js (el.shadowRoot is
+   * null from outside the component; nothing to observe). Open shadow roots that
+   * were already discovered during stampElements are skipped via the _observers
+   * idempotency guard inside handleShadowRoot → observeRoot.
+   */
+  function _initShadowAttachListener() {
+    if (_shadowAttachHandler) return;
+    _shadowAttachHandler = function (e) {
+      if (!_isPageBlurred || !_currentSettings) return;
+      const el = e.target;
+      if (!el || !el.shadowRoot) return;
+      if (_observers.has(el.shadowRoot)) return;
+      handleShadowRoot(_currentSettings, el.shadowRoot);
+    };
+    document.addEventListener('__blsi_shadow_attached', _shadowAttachHandler, true);
+  }
+
+  function _removeShadowAttachListener() {
+    if (!_shadowAttachHandler) return;
+    document.removeEventListener('__blsi_shadow_attached', _shadowAttachHandler, true);
+    _shadowAttachHandler = null;
+  }
+
+  /**
    * Remove all blur state from `root` and recursively from any open shadow
    * roots found within it. One pass: clear stamps + find shadow hosts.
    *
@@ -1132,6 +1317,7 @@ const BlurEngine = (() => {
    * turns off (matches the original _disablePageWide behaviour).
    */
   function teardown(root) {
+    if (root === document) _removeShadowAttachListener();
     // Cancel any pending idle work for this root — prevents stampElements
     // re-stamping elements after teardown has cleared all attributes.
     _stampQueue = _stampQueue.filter(item => item.root !== root);
@@ -1147,6 +1333,7 @@ const BlurEngine = (() => {
     root.querySelectorAll('*').forEach(el => {
       if (el.dataset.blSiBlur && !el.dataset.blSiPii) {
         delete el.dataset.blSiBlur;
+        _blurredCount--;
       }
       if (el.dataset.blSiPickBlur) {
         delete el.dataset.blSiPickBlur;
@@ -1182,6 +1369,7 @@ const BlurEngine = (() => {
 
     injectRules(document, cats, mode);   // synchronous — alwaysBlur tags blurred now
     observeRoot(document);               // synchronous — MO live before idle fires
+    _initShadowAttachListener();         // catch shadow roots attached after idle stamp
 
     // Replace queue (not append). Pending idle, if any, will use this new queue.
     _stampQueue = [{ root: document, cats, thorough, mode, settings }];
@@ -1228,9 +1416,9 @@ const BlurEngine = (() => {
     if (isSameOrigin) return;
 
     if (active) {
-      iframeEl.dataset.blSiBlur = '1';
+      if (!iframeEl.dataset.blSiBlur) { iframeEl.dataset.blSiBlur = '1'; _blurredCount++; }
     } else {
-      delete iframeEl.dataset.blSiBlur;
+      if (iframeEl.dataset.blSiBlur) { delete iframeEl.dataset.blSiBlur; _blurredCount--; }
     }
   }
 
@@ -1268,6 +1456,7 @@ const BlurEngine = (() => {
       _activeItems.set(id, item);
       if (isNew) added++;
     }
+    _pickBlurDynamicActive = desiredArray.some(i => i.type === 'dynamic');
     return { added, removed };
   }
 
@@ -1283,12 +1472,26 @@ const BlurEngine = (() => {
    * Storage reads live in content_script — handleSite is stateless/pure w.r.t.
    * storage. Every caller MUST await — concurrent calls are dropped (mutex).
    */
+  function _applyCssVars(settings) {
+    if (!document.documentElement) return;
+    const s = document.documentElement.style;
+    s.setProperty('--bl-si-radius', `${settings.blur_radius}px`);
+    s.setProperty('--bl-si-highlight-color', settings.highlight_color);
+    s.setProperty('--bl-si-transition-duration', `${settings.transition_duration}ms`);
+    s.setProperty('--bl-si-redaction-color', settings.redaction_color);
+  }
+
   async function handleSite(settings) {
     if (_handling) return;
     _handling = true;
     try {
       // Store FIRST — MO callback reads _currentSettings for new shadow hosts.
       _currentSettings = settings;
+
+      // CSS vars must be written before injectRules — ensureSvgFilter reads
+      // --bl-si-radius via _readCssRadius(). content.css has per-var fallbacks
+      // so there is no flash of unstyled state before the first handleSite call.
+      _applyCssVars(settings);
 
       // ── Extension disabled — full teardown including items ──────────────────
       if (settings.enabled === false) {
@@ -1306,8 +1509,9 @@ const BlurEngine = (() => {
       // don't require a nuke+rescan. Frosted mode is the exception — its radius
       // lives in an SVG attribute and needs a full filter rebuild.
       const isActive = !!settings.blur_all_active;
+      const _rcCats = settings.blur_categories || DEFAULT_CATS;
       const reconcileKey = isActive
-        ? `${settings.blur_mode}|${JSON.stringify(settings.blur_categories)}|${settings.thorough_blur}|${settings.blur_mode === blsi.blur_modes.frosted ? settings.blur_radius : ''}`
+        ? `${settings.blur_mode}|${CATEGORY_ORDER.map(n => (_rcCats[n] ? '1' : '0')).join('')}|${settings.thorough_blur}|${settings.blur_mode === blsi.blur_modes.frosted ? settings.blur_radius : ''}`
         : 'inactive';
       const pageWideChanged = reconcileKey !== _lastReconcileKey;
       _lastReconcileKey = reconcileKey;
@@ -1321,6 +1525,12 @@ const BlurEngine = (() => {
       // Runs in both active and inactive paths: picker blurs + sticky zones
       // persist when blur-all is off.
       const { added, removed } = _reconcileItems(settings.blur_items || []);
+
+      // When blur-all is OFF, handleMainDocument tears down the observer.
+      // If dynamic pick-blur items exist, re-attach the MO so late-loading
+      // elements are still caught by _tryPickBlurNode in the idle drain.
+      // observeRoot is idempotent — no-op if blur-all already attached it.
+      if (_pickBlurDynamicActive) observeRoot(document);
 
       // idempotent: re-inject on every call so mode/color changes take effect without a DOM pass
       if (settings.pick_blur_enabled && (settings.blur_items || []).length > 0) {
@@ -1348,7 +1558,9 @@ const BlurEngine = (() => {
   }
 
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // ── §PUBLIC-API ───────────────────────────────────────────────────────────
+  // All exported methods. To add/remove a public method, edit this return block
+  // AND update CLAUDE.md Module Globals table + docs/contracts/blur_engine.md.
 
   return {
     // Semi-private: exposed for unit tests only.
@@ -1364,9 +1576,12 @@ const BlurEngine = (() => {
     // Individual element (picker / context menu)
     applyBlur,
     removeBlur,
-    toggleBlur,
     unblurAll,   // alias for teardown(document) + removeAllZoneOverlays
     teardown,
+
+    // Popup hover highlight — highlights the page element corresponding to a blur item
+    highlightItem,
+    clearItemHighlight,
 
     // Queries
     isBlurred,
@@ -1374,11 +1589,8 @@ const BlurEngine = (() => {
     matchesActiveCategories,
     shouldBlurElement,
 
-    // Sticky zones
-    createZoneOverlay,
-    removeZoneOverlay,
+    // Sticky zones — create/remove/removeAll are internal (called via handleSite item reconcile)
     getZoneOverlays,
-    removeAllZoneOverlays,
 
     // PII mode CSS injection
     injectPiiRules,
@@ -1390,7 +1602,7 @@ const BlurEngine = (() => {
 
     // Counter allocation for picker callbacks
     resetCounters,
-    allocateDynamicName,
+    allocateElementName,
     allocateStickyName,
 
     // Single orchestration entry point.
@@ -1398,14 +1610,14 @@ const BlurEngine = (() => {
     handleSite,
 
     // Per-root dispatch. Public for unit tests; all production callers go through handleSite.
-    handleDocument,       // thin router — backward compat / tests
-    handleMainDocument,   // main document only, returns ShadowRoot[]
     handleShadowRoot,     // one shadow root, recurses into nested
     handleIframe,         // cross-origin iframes only
     observeRoot,
-    disconnectObserver,
     get isPageBlurred() {
       return _isPageBlurred;
+    },
+    get blurredCount() {
+      return _blurredCount;
     },
     _setPickerActiveForObserver,
   };

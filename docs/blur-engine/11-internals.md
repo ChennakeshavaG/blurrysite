@@ -37,7 +37,7 @@ The engine reads these globals that must be loaded before `blur_engine.js` in th
 - `blsi.ids.svg_filters` — SVG filter element ID string
 - `blsi.ids.picker_toolbar` — picker toolbar DOM ID
 - `blsi.css.*` — CSS class name strings (zone_overlay, toast, toolbar, etc.)
-- `blsi.DEFAULT_MODEL.settings.blur_categories` — fallback categories
+- `blsi.DEFAULT_MODEL.global_default_settings.blur_categories` — fallback categories
 - `blsi.blur_modes.*` / `blsi.pick_blur_modes.*` / `blsi.pii_modes.*` — mode enum strings
 - `blsi.SelectorUtils.restoreSelector()` — selector-to-element restoration
 - `blsi.Fonts.*` — embedded font face strings (DISC_FONT_FACE, ASTERISK_FONT_FACE)

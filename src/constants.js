@@ -43,8 +43,10 @@ const Constants = (() => {
 
   /** Popup → content script */
   const popup = Object.freeze({
-    get_status:  'GET_STATUS',
-    unblur_item: 'UNBLUR_ITEM',
+    get_status:     'GET_STATUS',
+    unblur_item:    'UNBLUR_ITEM',
+    highlight_item: 'HIGHLIGHT_ITEM',
+    clear_highlight: 'CLEAR_HIGHLIGHT',
   });
 
   // ── Derived helpers ────────────────────────────────────────────────────────
@@ -163,7 +165,7 @@ const Constants = (() => {
   // from blsi.Actions.defaultBindings() (loaded by action_registry.js after this module).
 
   const DEFAULT_MODEL = Object.freeze({
-    settings: Object.freeze({
+    global_default_settings: Object.freeze({
       blur_radius:         8,
       transition_duration: 300,
       highlight_color:     '#f59e0b',
@@ -196,10 +198,10 @@ const Constants = (() => {
         blur_type:   'blur',
         blur_color:  Object.freeze({ hex: '#000000', opacity: 1.0 }),
       }),
+      items: Object.freeze({}),
     }),
 
     auto_detect_pii: Object.freeze({
-      status: true,
       settings: Object.freeze({
         email:              true,
         numeric:            true,
@@ -209,7 +211,6 @@ const Constants = (() => {
     }),
 
     automate: Object.freeze({
-      status: false,
       settings: Object.freeze({
         screen_share: Object.freeze({ enabled: false }),
         idle:         Object.freeze({ value: 5, unit: 'min', enabled: false }),
@@ -298,34 +299,36 @@ const Constants = (() => {
     const d = build_default_model();
     const r = {};
 
-    // ── settings ───────────────────────────────────────────────────────────
+    // ── global_default_settings ────────────────────────────────────────────
     {
-      const s = (model.settings && typeof model.settings === 'object') ? model.settings : {};
+      // Migration: old storage key was 'settings'; read either for backwards compat.
+      const raw = model.global_default_settings || model.settings;
+      const s = (raw && typeof raw === 'object') ? raw : {};
 
-      r.settings = {
+      r.global_default_settings = {
         blur_radius: (typeof s.blur_radius === 'number' && s.blur_radius >= 2 && s.blur_radius <= 32)
-          ? s.blur_radius : d.settings.blur_radius,
+          ? s.blur_radius : d.global_default_settings.blur_radius,
 
         transition_duration: (typeof s.transition_duration === 'number' && s.transition_duration >= 0 && s.transition_duration <= 2000)
-          ? s.transition_duration : d.settings.transition_duration,
+          ? s.transition_duration : d.global_default_settings.transition_duration,
 
         highlight_color: (typeof s.highlight_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(s.highlight_color))
-          ? s.highlight_color : d.settings.highlight_color,
+          ? s.highlight_color : d.global_default_settings.highlight_color,
 
         redaction_color: (typeof s.redaction_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(s.redaction_color))
-          ? s.redaction_color : d.settings.redaction_color,
+          ? s.redaction_color : d.global_default_settings.redaction_color,
 
         reveal_mode: Object.values(reveal_modes).includes(s.reveal_mode)
-          ? s.reveal_mode : d.settings.reveal_mode,
+          ? s.reveal_mode : d.global_default_settings.reveal_mode,
 
-        enabled: (typeof s.enabled === 'boolean') ? s.enabled : d.settings.enabled,
+        enabled: (typeof s.enabled === 'boolean') ? s.enabled : d.global_default_settings.enabled,
 
-        thorough_blur: (typeof s.thorough_blur === 'boolean') ? s.thorough_blur : d.settings.thorough_blur,
+        thorough_blur: (typeof s.thorough_blur === 'boolean') ? s.thorough_blur : d.global_default_settings.thorough_blur,
 
         language: (typeof s.language === 'string' && supported_languages.includes(s.language))
-          ? s.language : d.settings.language,
+          ? s.language : d.global_default_settings.language,
 
-        tab_privacy: (typeof s.tab_privacy === 'boolean') ? s.tab_privacy : d.settings.tab_privacy,
+        tab_privacy: (typeof s.tab_privacy === 'boolean') ? s.tab_privacy : d.global_default_settings.tab_privacy,
       };
     }
 
@@ -342,9 +345,9 @@ const Constants = (() => {
             ? migrated_blur_mode : d.blur_all.settings.blur_mode,
           blur_categories: (() => {
             // Prefer new location (blur_all.settings.blur_categories).
-            // Fall back to model.settings.blur_categories for one-time migration of
-            // existing users whose data still lives under the old settings key.
-            const _old_s = (model.settings && typeof model.settings === 'object') ? model.settings : {};
+            // Fall back to global_default_settings.blur_categories (or legacy 'settings' key)
+            // for one-time migration of existing users whose data still lives under the old key.
+            const _old_s = (model.global_default_settings || model.settings || {});
             const cats = (ba_s.blur_categories && typeof ba_s.blur_categories === 'object')
               ? ba_s.blur_categories
               : ((_old_s.blur_categories && typeof _old_s.blur_categories === 'object') ? _old_s.blur_categories : {});
@@ -382,6 +385,34 @@ const Constants = (() => {
               ? pbc.opacity : d.pick_and_blur.settings.blur_color.opacity,
           },
         },
+        items: (() => {
+          const raw_items = (pb.items && typeof pb.items === 'object' && !Array.isArray(pb.items))
+            ? pb.items : {};
+          const out = {};
+          for (const hn of Object.keys(raw_items)) {
+            if (!hn || hn === '__proto__' || hn === 'constructor') continue;
+            const arr = raw_items[hn];
+            if (!Array.isArray(arr)) continue;
+            const validated = arr.filter(function(item) {
+              if (!item || typeof item !== 'object') return false;
+              if (item.type === 'dynamic') {
+                if (Array.isArray(item.selectors)) {
+                  return item.selectors.length > 0 &&
+                    item.selectors.every(function(s) { return typeof s === 'string' && s.length > 0; });
+                }
+                return typeof item.selector === 'string' && item.selector.length > 0;
+              }
+              if (item.type === 'sticky') {
+                return typeof item.id === 'string' && item.id.length > 0 &&
+                  typeof item.x === 'number' && typeof item.y === 'number' &&
+                  typeof item.width === 'number' && typeof item.height === 'number';
+              }
+              return false;
+            }).slice(0, 10);
+            if (validated.length > 0) out[hn] = validated;
+          }
+          return out;
+        })(),
       };
     }
 
@@ -392,7 +423,6 @@ const Constants = (() => {
       // Migrate old enum values: gaussian→blur, asterisked→starred, hidden→starred
       const migrated_pii_mode = ({ gaussian: 'blur', asterisked: 'starred', hidden: 'starred' })[ap_s.pii_mode] ?? ap_s.pii_mode;
       r.auto_detect_pii = {
-        status: (typeof ap.status === 'boolean') ? ap.status : d.auto_detect_pii.status,
         settings: {
           email:    (typeof ap_s.email === 'boolean')   ? ap_s.email   : d.auto_detect_pii.settings.email,
           numeric:  (typeof ap_s.numeric === 'boolean') ? ap_s.numeric : d.auto_detect_pii.settings.numeric,
@@ -412,7 +442,6 @@ const Constants = (() => {
       const id   = (am_s.idle  && typeof am_s.idle  === 'object') ? am_s.idle  : {};
       const ts   = (am_s.tab_switch && typeof am_s.tab_switch === 'object') ? am_s.tab_switch : {};
       r.automate = {
-        status: (typeof am.status === 'boolean') ? am.status : d.automate.status,
         settings: {
           screen_share: {
             enabled: (typeof ss.enabled === 'boolean') ? ss.enabled : d.automate.settings.screen_share.enabled,
@@ -466,59 +495,70 @@ const Constants = (() => {
             ? rule.hostname_type : pattern_types.exact,
           blur_all: (rule.blur_all === null || typeof rule.blur_all === 'boolean')
             ? rule.blur_all : null,
-          items: Array.isArray(rule.items) ? rule.items.filter(function(item) {
-            if (!item || typeof item !== 'object') return false;
-            if (item.type === 'dynamic') {
-              if (Array.isArray(item.selectors)) {
-                return item.selectors.length > 0 &&
-                  item.selectors.every(function(s) { return typeof s === 'string' && s.length > 0; });
-              }
-              return typeof item.selector === 'string' && item.selector.length > 0;
-            }
-            if (item.type === 'sticky') {
-              return typeof item.id === 'string' && item.id.length > 0 &&
-                typeof item.x === 'number' && typeof item.y === 'number' &&
-                typeof item.width === 'number' && typeof item.height === 'number';
-            }
-            return false;
-          }).slice(0, 10) : [],
-          settings: (() => {
-            const rs = (rule.settings && typeof rule.settings === 'object' && !Array.isArray(rule.settings))
-              ? rule.settings : {};
-            // Pass through only known SNAPSHOT_KEYS; validate nested objects.
+          snapshot: (() => {
+            const raw = (rule.snapshot && typeof rule.snapshot === 'object' && !Array.isArray(rule.snapshot))
+              ? rule.snapshot : {};
             const out = {};
-            // Must stay in sync with SNAPSHOT_KEYS in storage_model.js.
-            const SNAPSHOT_KEYS = [
-              'blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
-              'blur_categories', 'pick_blur_type', 'pick_blur_color', 'pii_mode',
-            ];
-            for (const k of SNAPSHOT_KEYS) {
-              if (!(k in rs)) continue;
-              if (k === 'blur_categories') {
-                const cats = (rs.blur_categories && typeof rs.blur_categories === 'object')
-                  ? rs.blur_categories : null;
-                if (cats) {
-                  const cats_out = {};
-                  for (const ck of Object.keys(d.blur_all.settings.blur_categories)) {
-                    cats_out[ck] = (typeof cats[ck] === 'boolean') ? cats[ck] : d.blur_all.settings.blur_categories[ck];
-                  }
-                  out.blur_categories = cats_out;
-                }
-              } else if (k === 'pick_blur_color') {
-                const pbc = (rs.pick_blur_color && typeof rs.pick_blur_color === 'object')
-                  ? rs.pick_blur_color : {};
-                out.pick_blur_color = {
-                  hex: (typeof pbc.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(pbc.hex))
-                    ? pbc.hex : d.pick_and_blur.settings.blur_color.hex,
-                  opacity: (typeof pbc.opacity === 'number' && pbc.opacity >= 0 && pbc.opacity <= 1)
-                    ? pbc.opacity : d.pick_and_blur.settings.blur_color.opacity,
-                };
-              } else {
-                // Scalar snapshot keys — pass through as-is (resolve() already
-                // applies per-feature validation when building the resolved view).
-                out[k] = rs[k];
+
+            // settings section
+            if (raw.settings && typeof raw.settings === 'object') {
+              const ss = raw.settings;
+              const ss_out = {};
+              for (const k of ['blur_radius', 'reveal_mode', 'thorough_blur', 'highlight_color',
+                               'redaction_color', 'tab_privacy', 'transition_duration']) {
+                if (k in ss) ss_out[k] = ss[k];
               }
+              if (Object.keys(ss_out).length) out.settings = ss_out;
             }
+
+            // blur_all section
+            if (raw.blur_all && typeof raw.blur_all === 'object') {
+              const ba = raw.blur_all;
+              const ba_out = {};
+              if (ba.settings && typeof ba.settings === 'object') {
+                const ba_s = ba.settings;
+                const ba_s_out = {};
+                if ('blur_mode' in ba_s) ba_s_out.blur_mode = ba_s.blur_mode;
+                if ('blur_categories' in ba_s) {
+                  const cats = (ba_s.blur_categories && typeof ba_s.blur_categories === 'object')
+                    ? ba_s.blur_categories : null;
+                  if (cats) {
+                    const cats_out = {};
+                    for (const ck of Object.keys(d.blur_all.settings.blur_categories)) {
+                      cats_out[ck] = (typeof cats[ck] === 'boolean') ? cats[ck] : d.blur_all.settings.blur_categories[ck];
+                    }
+                    ba_s_out.blur_categories = cats_out;
+                  }
+                }
+                if (Object.keys(ba_s_out).length) ba_out.settings = ba_s_out;
+              }
+              if (Object.keys(ba_out).length) out.blur_all = ba_out;
+            }
+
+            // pick_and_blur section
+            if (raw.pick_and_blur && typeof raw.pick_and_blur === 'object') {
+              const pb = raw.pick_and_blur;
+              const pb_out = {};
+              if (typeof pb.status === 'boolean') pb_out.status = pb.status;
+              if (pb.settings && typeof pb.settings === 'object') {
+                const pb_s = pb.settings;
+                const pb_s_out = {};
+                if ('blur_type'   in pb_s) pb_s_out.blur_type   = pb_s.blur_type;
+                if ('picker_mode' in pb_s) pb_s_out.picker_mode = pb_s.picker_mode;
+                if ('blur_color'  in pb_s) {
+                  const pbc = (pb_s.blur_color && typeof pb_s.blur_color === 'object') ? pb_s.blur_color : {};
+                  pb_s_out.blur_color = {
+                    hex: (typeof pbc.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(pbc.hex))
+                      ? pbc.hex : d.pick_and_blur.settings.blur_color.hex,
+                    opacity: (typeof pbc.opacity === 'number' && pbc.opacity >= 0 && pbc.opacity <= 1)
+                      ? pbc.opacity : d.pick_and_blur.settings.blur_color.opacity,
+                  };
+                }
+                if (Object.keys(pb_s_out).length) pb_out.settings = pb_s_out;
+              }
+              if (Object.keys(pb_out).length) out.pick_and_blur = pb_out;
+            }
+
             return out;
           })(),
         }));

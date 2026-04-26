@@ -285,6 +285,13 @@
   margin-top: 2px;
 }
 
+.bl-rule-form__help {
+  font-size: var(--bl-text-xs);
+  color: var(--bl-text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .bl-rule-form__type {
   display: flex;
   flex-direction: column;

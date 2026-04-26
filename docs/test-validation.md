@@ -130,6 +130,7 @@ Source module: `src/tab_privacy.js` → `blsi.TabPrivacy`
 | Favicon creation (2) | `enable()` replaces favicon with blank canvas data URL; favicon `<link>` created if absent | Enable tab privacy | Recognizable site favicon visible in tab strip during screenshare |
 | Disable safety (1) | `disable()` when no stored favicon is safe (no throw) | Fresh page with no favicon | Disable throws on pages without favicons |
 | Multiple favicons (1) | All `rel="icon"` and `rel="shortcut icon"` links replaced on enable | Pages with multiple favicon variants | Some favicon variants escape replacement |
+| Page-write defense (1) | While active, `document.title = '…'` from page code cannot leak; reads still return `Tab`; `disable()` restores the most recent attempted title | Screen-share Gmail / Slack / Twitter where SPA rewrites title (unread counter) | Sensitive title leaks to meeting participants when SPA rewrites `document.title` mid-share |
 
 ---
 
@@ -454,7 +455,7 @@ Source module: `src/storage_model.js` → `blsi.Model`
 | Group | What it asserts | User trigger | User impact |
 |---|---|---|---|
 | init_cache / get | `init_cache()` populates in-memory cache from `chrome.storage.local`; `get()` returns cached model without I/O | Any page load | Content script/popup reads stale or missing model |
-| patch_section / save_settings | `patch_section(section, delta)` deep-merges and writes; `save_settings(patch)` routes to `model.settings` | Popup saves a setting | Setting change not persisted; reverts on reload |
+| patch_section / save_settings | `patch_section(section, delta)` deep-merges and writes; `save_settings(patch)` routes to `model.global_default_settings` | Popup saves a setting | Setting change not persisted; reverts on reload |
 | get_site_entry / set_site_entry / remove_site_entry | CRUD on `site_rules` array; `set_site_entry` upserts; `remove_site_entry` is no-op when absent | Site-specific settings changes | Wrong hostname entry modified; rules pile up without deduplicate |
 | save_blur_state — ON path | `save_blur_state('example.com', true)` writes `blur_all:true` to the site entry | User enables blur-all for a site | Blur not persisted; off after page reload |
 | save_blur_state — OFF path (3) | `save_blur_state('example.com', false)` writes `blur_all:false`; storage is written (not skipped); items on the same host survive the write | User turns off blur-all for a site | **Root cause of toggle-off bug**: `blur_all:false` not written, or written but items stripped as side-effect |

@@ -90,6 +90,9 @@
   "section_general": {
     "message": "பொது"
   },
+  "nav_general_desc": {
+    "message": "மொழி, தாவல் தனியுரிமை மற்றும் பலவற்றை"
+  },
   "section_advanced": {
     "message": "மேம்பட்டது"
   },
@@ -132,6 +135,24 @@
   "section_rules_title": {
     "message": "தள விதிகள்"
   },
+  "section_automate_title": {
+    "message": "தானியங்கு"
+  },
+  "section_pii_desc": {
+    "message": "மின்னஞ்சல் மற்றும் எண் வடிவங்களை கண்டறிகிறது"
+  },
+  "section_automate_desc": {
+    "message": "கால அளவு, செயலற்ற நிலை அல்லது தாவல் மாற்றத்தில் மங்கலாக்கு"
+  },
+  "nav_shortcuts_desc": {
+    "message": "மங்கல் செயல்களுக்கான விசைப்பலகை குறுக்குவழிகளை தனிப்பயனாக்கு"
+  },
+  "nav_rules_desc": {
+    "message": "தளம்-வாரியான மங்கல் விதிகள் மற்றும் மேலெழுதுதல்களை அமை"
+  },
+  "subpage_htb_title": {
+    "message": "மங்கலாக்குவது எப்படி"
+  },
   "setting_blur_radius": {
     "message": "மங்கல் வலிமை"
   },
@@ -173,6 +194,30 @@
   },
   "setting_tab_privacy_hint": {
     "message": "திரைப் பகிர்வுக்கு டேப் தலைப்பு மற்றும் ஃபேவிகானை பொது இடக்குறிப்பாக மாற்றுக."
+  },
+  "setting_debug_logging": {
+    "message": "பிழைத்திருத்த பதிவு"
+  },
+  "setting_debug_logging_hint": {
+    "message": "DevTools கன்சோலில் நீட்டிப்பு உள்ளமையை பதிவு செய்."
+  },
+  "setting_backup": {
+    "message": "காப்புப்பிரதி & மீட்டமை"
+  },
+  "setting_backup_hint": {
+    "message": "அனைத்து அமைப்புகளையும் JSON கோப்பாக ஏற்றுமதி அல்லது மீட்டமைக்கவும்."
+  },
+  "btn_export": {
+    "message": "ஏற்றுமதி"
+  },
+  "btn_import": {
+    "message": "இறக்குமதி"
+  },
+  "toast_import_success": {
+    "message": "அமைப்புகள் இறக்குமதி செய்யப்பட்டன"
+  },
+  "toast_import_error": {
+    "message": "தவறான அமைப்புகள் கோப்பு"
   },
   "setting_auto_blur_tab": {
     "message": "டேப் மாறும்போது மங்கச்செய்"
@@ -291,6 +336,12 @@
   "shortcut_screenshot_hint": {
     "message": "அனைத்து மங்கல்களுடன் தெரியும் பக்கத்தைப் பிடித்து PNG ஆக பதிவிறக்கு."
   },
+  "shortcut_blur_selection": {
+    "message": "தேர்ந்தெடுத்த உரையை மங்கச்செய்"
+  },
+  "shortcut_blur_selection_hint": {
+    "message": "பக்கத்தில் தற்போது தேர்ந்தெடுக்கப்பட்ட உரையை மங்கச்செய்யுங்கள்."
+  },
   "shortcut_customize": {
     "message": "மாற்று"
   },
@@ -318,6 +369,15 @@
   "shortcut_reset_done": {
     "message": "குறுக்குவழி மீட்டமைக்கப்பட்டது"
   },
+  "shortcut_reset_all": {
+    "message": "அனைத்தையும் மீட்டமை"
+  },
+  "shortcut_reserved_known": {
+    "message": "ஒதுக்கப்பட்டது: {label} — சேமித்தாலும் மேலெழுதப்படும்."
+  },
+  "shortcut_reserved_browser": {
+    "message": "இந்த கீ சேர்மானம் உலாவியால் ஒதுக்கப்பட்டுள்ளது."
+  },
   "rule_add": {
     "message": "+ தள விதியைச் சேர்"
   },
@@ -337,7 +397,7 @@
     "message": "URL வடிவம்"
   },
   "rule_pattern_placeholder": {
-    "message": "*.bank.com/*"
+    "message": "youtube.com"
   },
   "rule_pattern_type": {
     "message": "பொருத்த வகை"
@@ -393,11 +453,110 @@
   "rule_delete_btn": {
     "message": "அகற்று"
   },
+  "rule_edit_pattern": {
+    "message": "வடிவத்தை திருத்து"
+  },
+  "rule_add_for_site": {
+    "message": "+ தற்போதைய அமைப்புகளை தள விதியாக சேமி"
+  },
+  "rule_pattern_exact": {
+    "message": "சரியான ஹோஸ்ட்பெயர்"
+  },
+  "rule_pattern_help_wildcard": {
+    "message": "youtube.com அனைத்து YouTube பக்கங்களுடனும் பொருந்தும் (துணை டொமைன்கள் உட்பட)। *.youtube.com துணை டொமைன்களுக்கு மட்டும். github.com/settings/* பாதை முன்னொட்டிற்கு."
+  },
+  "rule_pattern_help_regex": {
+    "message": "URL உடன் பொருத்தப்படும் முழு வழக்கமான வெளிப்பாடு. உதாரணம்: github\\.com/[a-z]+/settings அல்லது (mail|inbox)\\.google\\.com"
+  },
+  "rule_pattern_help_exact": {
+    "message": "சரியான ஹோஸ்ட்பெயருடன் மட்டுமே பொருந்தும் — துணை டொமைன்கள் இல்லை, பாதை இல்லை. உதாரணம்: www.youtube.com"
+  },
+  "rule_snapshot_label": {
+    "message": "அமைப்புகள் ஸ்னாப்ஷாட்"
+  },
+  "rule_snapshot_preview": {
+    "message": "ஸ்னாப்ஷாட் முன்னோட்டம்"
+  },
+  "rule_snapshot_empty": {
+    "message": "ஸ்னாப்ஷாட் சேமிக்கப்படவில்லை — உலகளாவிய அமைப்புகளை பின்பற்றும்"
+  },
+  "rule_snapshot_recapture": {
+    "message": "மீண்டும் பிடி"
+  },
+  "rule_snapshot_saved_note": {
+    "message": "சேமிக்கப்பட்டது"
+  },
+  "rule_snap_blur_radius": {
+    "message": "மங்கல் ஆரம்"
+  },
+  "rule_snap_blur_mode": {
+    "message": "மங்கல் பயன்முறை"
+  },
+  "rule_snap_reveal_mode": {
+    "message": "வெளிப்படுத்தல் பயன்முறை"
+  },
+  "rule_snap_thorough_blur": {
+    "message": "ஆழமான மங்கல்"
+  },
+  "rule_snap_blur_categories": {
+    "message": "மங்கல் வகைகள்"
+  },
+  "rule_snap_pick_blur_type": {
+    "message": "தேர்வு & மங்கல் வகை"
+  },
+  "rule_snap_pick_blur_enabled": {
+    "message": "தேர்வு & மங்கல்"
+  },
+  "rule_snap_val_blur": {
+    "message": "மங்கல்"
+  },
+  "rule_snap_val_frosted": {
+    "message": "மங்கிய கண்ணாடி"
+  },
+  "rule_snap_val_color": {
+    "message": "நிறம்"
+  },
+  "rule_snap_val_redacted": {
+    "message": "மறைக்கப்பட்டது"
+  },
+  "rule_snap_val_censored": {
+    "message": "தணிக்கை"
+  },
+  "rule_snap_val_starred": {
+    "message": "நட்சத்திரம்"
+  },
+  "rule_snap_val_reveal_hover": {
+    "message": "மேல்நிலை"
+  },
+  "rule_snap_val_reveal_click": {
+    "message": "கிளிக்"
+  },
+  "rule_snap_val_reveal_none": {
+    "message": "இல்லை"
+  },
+  "rule_snap_val_on": {
+    "message": "இயக்கு"
+  },
+  "rule_snap_val_off": {
+    "message": "நிறுத்து"
+  },
+  "rule_snap_val_none": {
+    "message": "எதுவுமில்லை"
+  },
+  "rule_active_banner": {
+    "message": "தள விதி செயல்பாட்டில்"
+  },
+  "rule_active_view": {
+    "message": "விதியை காண்க"
+  },
   "item_type_dynamic": {
     "message": "கூறு"
   },
-  "item_type_sticky": {
-    "message": "மண்டலம்"
+  "item_type_sticky_page": {
+    "message": "பக்கப் பகுதி"
+  },
+  "item_type_sticky_screen": {
+    "message": "திரைப் பகுதி"
   },
   "item_remove_aria": {
     "message": "அகற்று"
@@ -459,6 +618,15 @@
   "footer_clear_all": {
     "message": "ஒவ்வொரு தளமும் அழி"
   },
+  "footer_feedback": {
+    "message": "கருத்து"
+  },
+  "footer_export": {
+    "message": "ஏற்றுமதி"
+  },
+  "footer_logs": {
+    "message": "பதிவுகள்"
+  },
   "theme_toggle": {
     "message": "ஒளி / இருள் தீம் மாற்று"
   },
@@ -479,6 +647,12 @@
   },
   "tt_theme": {
     "message": "ஒளி அல்லது இருளுக்கு மாற்று"
+  },
+  "tt_power_enable": {
+    "message": "Blurry Site இயக்கு"
+  },
+  "tt_power_disable": {
+    "message": "Blurry Site முடக்கு"
   },
   "tt_blur_all": {
     "message": "இந்தப் பக்கத்தில் எல்லாவற்றையும் மங்கச்செய்"
@@ -514,103 +688,103 @@
     "message": "இந்த விதியை நீக்கு"
   },
   "off_state_message": {
-    "message": "Blurry Site is off"
+    "message": "Blurry Site முடக்கப்பட்டுள்ளது"
   },
   "off_state_hint": {
-    "message": "All blur is paused on every site"
+    "message": "அனைத்து தளங்களிலும் மங்கல் நிறுத்தப்பட்டுள்ளது"
   },
   "power_turn_on": {
-    "message": "Turn On"
+    "message": "இயக்கு"
   },
   "htb_chip_blur": {
-    "message": "Blur"
+    "message": "மங்கல்"
   },
   "htb_chip_frosted": {
-    "message": "Frosted"
+    "message": "உறைந்த"
   },
   "htb_chip_redacted": {
-    "message": "Redacted"
+    "message": "திருத்தப்பட்டது"
   },
   "htb_chip_censored": {
-    "message": "Censored"
+    "message": "தணிக்கை"
   },
   "htb_chip_color": {
-    "message": "Color"
+    "message": "வண்ணம்"
   },
   "htb_label_mode": {
-    "message": "Mode"
+    "message": "பயன்முறை"
   },
   "htb_label_covers": {
-    "message": "Covers"
+    "message": "உள்ளடக்குகிறது"
   },
   "htb_label_strength": {
-    "message": "Strength"
+    "message": "தீவிரம்"
   },
   "htb_label_reveal": {
-    "message": "Reveal"
+    "message": "காட்டு"
   },
   "htb_label_color": {
-    "message": "Color"
+    "message": "வண்ணம்"
   },
   "htb_strength_subtle": {
-    "message": "Subtle"
+    "message": "மெல்லிய"
   },
   "htb_strength_moderate": {
-    "message": "Moderate"
+    "message": "மிதமான"
   },
   "htb_strength_strong": {
-    "message": "Strong"
+    "message": "வலிமையான"
   },
   "htb_pick_blur_note": {
-    "message": "Redacted & Censored available in Blur All mode."
+    "message": "Redacted மற்றும் Censored, Blur All பயன்முறையில் கிடைக்கும்."
   },
   "pii_chip_blur": {
-    "message": "Blur"
+    "message": "மங்கல்"
   },
   "pii_chip_frosted": {
-    "message": "Frosted"
+    "message": "உறைந்த"
   },
   "pii_chip_redacted": {
-    "message": "Redacted"
+    "message": "திருத்தப்பட்டது"
   },
   "pii_chip_starred": {
-    "message": "Starred"
+    "message": "நட்சத்திரமிட்டது"
   },
   "automate_idle": {
-    "message": "Idle"
+    "message": "செயலற்ற"
   },
   "automate_tab_switch": {
-    "message": "Tab Switch"
+    "message": "தாவல் மாற்றம்"
   },
   "automate_off": {
-    "message": "Off"
+    "message": "முடக்கு"
   },
   "automate_on": {
-    "message": "On"
+    "message": "இயக்கு"
   },
   "automate_unit_sec": {
-    "message": "sec"
+    "message": "வி."
   },
   "automate_unit_min": {
-    "message": "min"
+    "message": "நிமி."
   },
   "automate_unit_hr": {
-    "message": "hr"
+    "message": "மணி."
   },
   "mode_blur_all_active_desc": {
-    "message": "All matching categories are blurred on this page."
+    "message": "இந்தப் பக்கத்தில் பொருந்தும் அனைத்து வகைகளும் மங்கலாக்கப்பட்டுள்ளன."
   },
   "mode_blur_all_off_hint": {
-    "message": "Off — page is visible."
+    "message": "முடக்கு — பக்கம் தெரிகிறது."
   },
   "mode_pick_blur_empty": {
-    "message": "No elements picked yet. Open the picker to start."
+    "message": "இன்னும் எந்த உறுப்பும் தேர்ந்தெடுக்கப்படவில்லை. தொடங்க பிக்கரைத் திறக்கவும்."
   },
   "mode_pick_off_hint": {
-    "message": "Pick & Blur is off. Toggle on to blur specific elements."
+    "message": "Pick & Blur முடக்கப்பட்டுள்ளது. குறிப்பிட்ட உறுப்புகளை மங்கலாக்க இயக்கவும்."
   },
   "mode_pick_off_paused": {
-    "message": "$COUNT$ items · paused",
+    "message": "$COUNT$ உருப்படிகள் · இடைநிறுத்தம்",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -619,13 +793,13 @@
     }
   },
   "mode_open_picker": {
-    "message": "Open Picker"
+    "message": "பிக்கரைத் திறக்கவும்"
   },
   "mode_blur_all_cats": {
-    "message": "categories"
+    "message": "வகைகள்"
   },
   "htb_opacity": {
-    "message": "Opacity"
+    "message": "ஒளிபுகாமை"
   },
   "mode_switch_confirm": {
     "message": "பயன்முறை மாற்றினால் $COUNT$ சேமித்த மங்கல் நீக்கப்படும். தொடரவா?",
@@ -676,30 +850,45 @@
     "message": "திரையில் நிலைத்த மங்கல் பகுதி வரையவும்"
   },
   "automate_idle_max_warn": {
-    "message": "Max is 50 min (Chrome API limit)"
+    "message": "அதிகபட்சம் 50 நிமிடங்கள் (Chrome API வரம்பு)"
   },
   "automate_footer": {
-    "message": "When triggered → applies current blur mode settings"
+    "message": "தூண்டும்போது → தற்போதைய மங்கல் பயன்முறை அமைப்புகள் பயன்படுத்தப்படும்"
   },
   "automate_screen_share": {
-    "message": "Screen Share"
+    "message": "திரை பகிர்வு"
+  },
+  "automate_screen_share_desc": {
+    "message": "திரை பகிர்வு கண்டறியும்போது தானாக மங்கலாக்கு"
   },
   "automate_triggered_by": {
-    "message": "Active:"
+    "message": "செயலில்:"
   },
   "automate_turn_off": {
-    "message": "Turn Off"
+    "message": "முடக்கு"
+  },
+  "automate_stop_screen_share": {
+    "message": "திரை பகிர்வு மங்கலை நிறுத்து"
+  },
+  "automate_stop_per_tab": {
+    "message": "இந்த தாவல்"
+  },
+  "automate_stop_per_domain": {
+    "message": "இந்த தளம்"
+  },
+  "automate_disable_feature": {
+    "message": "முடக்கு"
   },
   "automate_toast_screen_share": {
-    "message": "Blur applied — screen share active"
+    "message": "மங்கல் பயன்படுத்தப்பட்டது — திரை பகிர்வு செயலில்"
   },
   "automate_toast_idle": {
-    "message": "Blur applied — idle detected"
+    "message": "மங்கல் பயன்படுத்தப்பட்டது — செயலற்ற நிலை கண்டறியப்பட்டது"
   },
   "automate_toast_tab_switch": {
-    "message": "Blur applied — tab switch"
+    "message": "மங்கல் பயன்படுத்தப்பட்டது — தாவல் மாற்றம்"
   },
   "automate_toast_skipped": {
-    "message": "Blur already active — automate skipped"
+    "message": "மங்கல் ஏற்கனவே செயலில் — தானியங்கு தவிர்க்கப்பட்டது"
   }
 }

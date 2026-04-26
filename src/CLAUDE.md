@@ -38,8 +38,8 @@ Rules:
 
 ```
 MAIN world (world:"MAIN", run_at:"document_start" — separate content_scripts entry):
-  screen_share_main.js  → no global; wraps navigator.mediaDevices.getDisplayMedia;
-                          dispatches '__blsi_screen_share' CustomEvent on start/stop
+  main_world_bridge.js  → no global; patches getDisplayMedia (dispatches '__blsi_screen_share')
+                          and attachShadow (dispatches '__blsi_shadow_attached' on element)
 
 Isolated world (run_at:"document_idle"):
  0. constants.js          → globalThis.blsi (message types + DEFAULTS)
@@ -89,6 +89,9 @@ A module may only depend on modules loaded before it.
 - `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — reveal_controller can find and reveal PII spans.
 
 ### blur_engine.js
+
+**Navigation**: run `grep -n "§" src/blur_engine.js` to get section positions. Read only the section matching your use case — do NOT read the entire file. Match test section with `grep -n "§<NAME>-TESTS" tests/unit/blur_engine.test.js`. See `docs/contracts/blur_engine.md` for the full section map.
+
 - `applyBlur` is idempotent — guards via direct `element.dataset.blSiBlur` attribute check, NOT `isBlurred()`. `isBlurred()` is used by picker / context-menu unblur paths to check whether a clicked element has a stored item; those paths intentionally ignore role-only matches because there is no storage entry to remove.
 - Two blur checks:
   - `isBlurred(el)` — "is this stamped or tag-rule blurred?" Used by picker.js, content_script.js (context-menu ancestor walk), and the internal `toggleBlur`.
@@ -119,18 +122,17 @@ A module may only depend on modules loaded before it.
 #### Single orchestration entry point: `handleSite(settings)`
 - `async handleSite(settings)` — one arg: the full resolved settings snapshot from `blsi.Model.resolve(hostname, url)`. The resolved object already includes `blur_all_active` and `blur_items` — no caller-side fold needed. Handles enable / disable / refresh / item diff / extension-disabled teardown in one pass. Safe to call from any path — init, storage onChange, shortcut, picker callback, SPA URL change.
 - `blur_all_active` (boolean) and `blur_items` (array) are included in the resolved settings by `blsi.Model.resolve()`. Engine never reads storage — all data arrives via the settings argument.
-- `handleSite` calls `handleMainDocument(settings)` (awaited) to get `shadowRoots[]`, then `Promise.all(shadowRoots.map(sr => handleShadowRoot(settings, sr)))`. Iframes: same-origin are self-managed via `all_frames:true`; cross-origin iframes are stamped by `handleIframe` in the MO callback when dynamically inserted.
-- `handleMainDocument(settings)` — main document only. Active path: injectRules + clear stale stamps + stampElements + observeRoot, returns `ShadowRoot[]`. Inactive path: `teardown(document)`, returns `[]`.
+- `handleSite` internally calls `handleMainDocument(settings)` (private) to get `shadowRoots[]`, then `Promise.all(shadowRoots.map(sr => handleShadowRoot(settings, sr)))`. Iframes: same-origin are self-managed via `all_frames:true`; cross-origin iframes are stamped by `handleIframe` in the MO callback when dynamically inserted.
 - `handleShadowRoot(settings, shadowRoot)` — one shadow root. Active path: injectRules + clear stale stamps + stampElements + observeRoot, recurses into nested shadow roots via `Promise.all`. Inactive path: `teardown(shadowRoot)`.
 - `handleIframe(settings, iframeEl)` — cross-origin iframes only. Stamps `data-bl-si-blur='1'` on the `<iframe>` element itself when active (CSS filter blurs the rendered output as an opaque box). Skips same-origin iframes (their own content_script handles blur via `all_frames:true`). Called from the `observeRoot` MO callback when an iframe is dynamically inserted.
-- `handleDocument(settings, root)` — thin router kept for backward compatibility and unit tests. Routes to `handleMainDocument` or `handleShadowRoot` based on root type.
-- `teardown(root)` — disconnects observer, removes injected style, clears stamps, recurses into shadow roots. Used by `unblurAll()` (alias: `teardown(document)`) and the inactive path of `handleMainDocument`/`handleShadowRoot`. The `querySelectorAll('*')` stamp-clearing pass already covers `<iframe>` elements — no separate cleanup needed.
+- `handleDocument(settings, root)` — thin router (private). Routes to the private `handleMainDocument` or `handleShadowRoot` based on root type. Not exported — unit tests call `handleShadowRoot` directly.
+- `teardown(root)` — disconnects observer, removes injected style, clears stamps, recurses into shadow roots. Used by `unblurAll()` (alias: `teardown(document)`) and the inactive path of the internal handleMainDocument / `handleShadowRoot`. The `querySelectorAll('*')` stamp-clearing pass already covers `<iframe>` elements — no separate cleanup needed.
 - `injectRules(root, categories, mode)` — injects a `<style id="bl-si-blur-styles">` into `root.head ?? root`. Stateless — no DOM branch on root type. Calls `removeRules(root)` first (replace semantics).
 - `removeRules(root)` — removes the injected style from `root.head ?? root`.
 - `stampElements(root, categories, thorough, mode)` — single `querySelectorAll('*')` pass; stamps `data-bl-si-blur` on text-check elements, returns discovered `ShadowRoot[]`.
-- `observeRoot(root)` — attaches a `MutationObserver` to `root.body ?? root`, keyed in `_observers` (WeakMap, auto-GCs with detached shadow roots). Observer is gated by `_pickerActive` and `_isPageBlurred`. MO callback calls `handleShadowRoot` for new shadow hosts and `handleIframe` for dynamically inserted iframes.
-- Private state: `_isPageBlurred`, `_observers` (WeakMap), `_handling` (mutex), `_dynamicCounter`, `_stickyCounter`, `_pickerActive`, `_currentSettings`, `_activeItems` (Map of currently-applied items by id). Do not introduce parallel state in callers.
-- Internal helpers `applyItem(item)` / `removeItem(item)` are private. `allocateDynamicName()` / `allocateStickyName()` / `resetCounters()` remain public — picker callbacks need them for item naming before writing to storage.
+- `observeRoot(root)` — attaches a `MutationObserver` to `root.body ?? root`, keyed in `_observers` (WeakMap, auto-GCs with detached shadow roots). MO callback gated by `_pickerActive || (!_isPageBlurred && !_pickBlurDynamicActive)` — runs whenever blur-all OR any dynamic pick-blur item is active. Idle drain calls `tryBlurTextCheck` + shadow/iframe handling when `blurAllOn`; calls `_tryPickBlurNode` when `pickBlurOn`.
+- Private state: `_isPageBlurred`, `_pickBlurDynamicActive` (true when ≥1 active dynamic pick-blur item; drives MO gate for pick-blur-only users), `_observers` (WeakMap), `_handling` (mutex), `_elementCounter`, `_pageAreaCounter`, `_screenAreaCounter`, `_pickerActive`, `_currentSettings`, `_activeItems` (Map of currently-applied items by id). Do not introduce parallel state in callers.
+- Internal helpers `applyItem(item)` / `removeItem(item)` are private. `allocateElementName()` / `allocateStickyName(anchor)` / `resetCounters()` remain public — picker callbacks need them for item naming before writing to storage.
 - Item reconciliation via `_activeItems` Map (keyed by `selector` for dynamic, `id` for sticky). Items in desired but not tracked → `applyItem`; tracked but not in desired → `removeItem`. Counter seeding happens inside `applyItem` — high-water mark from item names, so callers only need `resetCounters()` once on init.
 - MutationObserver reads `_currentSettings.THOROUGH_BLUR` fresh on every callback — never capture settings in a closure.
 - `isBlurAllActive()` — stateless DOM check (`document.head.querySelector('#bl-si-blur-styles')`). `get isPageBlurred` is the state-based getter — callers should prefer it.
@@ -194,7 +196,7 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - `get()` — returns the full cached model. Never reads storage directly after init; always returns from cache.
 - `patch_section(section, delta)` — deep-merges `delta` into the named section, writes the updated model back to storage, and updates cache. Use for deliberate user-triggered saves.
 - `debounced_patch(section, delta, delay?)` — same as `patch_section` but batches rapid calls (default **150 ms**). Use from popup inputs to avoid saturating storage writes.
-- `save_settings(patch)` — merges a partial settings patch into `model.settings`. Pass only the keys you want to update; unspecified keys are preserved.
+- `save_settings(patch)` — merges a partial settings patch into `model.global_default_settings`. Pass only the keys you want to update; unspecified keys are preserved.
 - `resolve(hostname, url)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `blur_all_active`, `blur_items`, `automate_blur_active`, and `automate_blur_triggers` in the output. Reads automate state from `_automate_cache` (session storage), not from the model.
 - `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
 - `clear_host(host)` — clears `blur_all` + items for the host in local storage, then calls `clear_automate_blur(host)` to clear session storage separately.
@@ -205,11 +207,11 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - `save_automate_blur(hostname, trigger, bool)` — write one automate trigger (`'idle'|'tab_switch'|'screen_share'`) to `chrome.storage.session`.
 - `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one session storage write.
 - `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname from session storage.
-- `get_rules()` / `save_rules(rules)` — URL rules CRUD. Rules are an array of `{ hostname_value, hostname_type, blur_all, items, settings }` where `hostname_type` is `'wildcard'|'regex'` (non-exact entries only).
-- `capture_snapshot()` — reads current global settings from cache; returns a plain object with only SNAPSHOT_KEYS (`blur_radius`, `blur_mode`, `reveal_mode`, `thorough_blur`, `blur_categories`, `pick_blur_type`, `pick_blur_color`, `pii_mode`). Deep-copies `blur_categories` and `pick_blur_color`. Source values come from `m.settings.*`, `m.blur_all.settings.*`, `m.pick_and_blur.settings.*`, and `m.auto_detect_pii.settings.*`.
-- `save_site_snapshot(hostname_value, hostname_type, snapshot)` — finds or creates the matching rule entry in `site_rules[]` and sets its `.settings` to the snapshot. Works for all `hostname_type` values (`'exact'|'wildcard'|'regex'`). For wildcard/regex rules, ensure the rule exists via `save_rules()` first. Returns a Promise.
-- `clear_site_snapshot(hostname_value, hostname_type)` — resets `.settings` to `{}` for the matching rule. No-op if the rule doesn't exist. Returns a Promise.
-- `get_site_snapshot(hostname_value, hostname_type)` — returns the `.settings` object for the matching rule, or `null` if the rule doesn't exist or settings is empty `{}`. Synchronous.
+- `get_rules()` / `save_rules(rules)` — URL rules CRUD. Rules are an array of `{ hostname_value, hostname_type, blur_all, items, snapshot }` where `hostname_type` is `'wildcard'|'regex'` (non-exact entries only).
+- `capture_snapshot()` — reads current global settings from cache; returns a nested snapshot object `{ settings, blur_all, pick_and_blur }` mirroring the global model structure. Deep-copies `blur_categories` and `blur_color`. Source values: `settings.*` from `m.global_default_settings`, `blur_all.settings.*` from `m.blur_all.settings`, `pick_and_blur.*` from `m.pick_and_blur`. Excludes: automate, site_rules, auto_detect_pii, shortcuts, enabled, language.
+- `save_site_snapshot(hostname_value, hostname_type, snapshot)` — finds or creates the matching rule entry in `site_rules[]` and sets its `.snapshot` to the provided nested snapshot object `{ settings, blur_all, pick_and_blur }`. Works for all `hostname_type` values (`'exact'|'wildcard'|'regex'`). For wildcard/regex rules, ensure the rule exists via `save_rules()` first. Returns a Promise.
+- `clear_site_snapshot(hostname_value, hostname_type)` — resets `.snapshot` to `{}` for the matching rule. No-op if the rule doesn't exist. Returns a Promise.
+- `get_site_snapshot(hostname_value, hostname_type)` — returns the `.snapshot` object for the matching rule, or `null` if the rule doesn't exist or snapshot is empty `{}`. Synchronous.
 - `_reset_cache()` — test-only helper. Clears both `_cache` and `_automate_cache` so tests start from a clean slate.
 
 ### action_registry.js
@@ -256,10 +258,10 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - Use the `setPickerActive(active)` helper for every picker state change — it's the single source of truth that updates the local flag, `Shortcuts._setPickerActive`, AND `Engine._setPickerActiveForObserver` together. Do NOT update any of those three directly from call sites (TOGGLE_PICKER handler, pickerCallbacks.onDeactivate, applyState disable path all go through the helper). Skipping the observer gate leaves the MutationObserver silent for new DOM nodes after the picker closes, which silently breaks dynamic content on the page.
 - Pass `resolved.shortcuts` directly to `Shortcuts.init()` — no flattening needed. Keys are kebab-case action ids (e.g. `'toggle-blur-all'`).
 - `Reveal.init({ getMode: () => settings.reveal_mode, isPickerActive: () => isPickerActive })` — pass functions, not values, so reveal state stays consistent without re-init on every settings change.
-- `GET_STATUS` response: `{ isPageBlurred: Engine.isPageBlurred, isPickerActive, blurredCount: document.querySelectorAll('[data-bl-si-blur]').length }`.
+- `GET_STATUS` response: `{ isPageBlurred: Engine.isPageBlurred, isPickerActive, blurredCount: Engine.blurredCount }`. `Engine.blurredCount` is an O(1) getter maintained by `blur_engine` — no DOM scan.
 - Async message handlers that need `sendResponse` must `return true` from `handleMessage`. `TOGGLE_BLUR_ALL`, `CLEAR_ALL_BLUR`, `CONTEXT_BLUR`, `CONTEXT_UNBLUR` are all async (storage write + `_sync()`), so they return `true`.
 - All settings keys are **snake_case** throughout — `resolved.blur_radius`, `resolved.reveal_mode`, `resolved.blur_categories` (object with lowercase sub-keys: `{ text, media, form, table, structure }`), etc.
-- **All blur state changes go through `_sync()`.** The pattern is: write to `Store.*`, then `await _sync()`. This applies to toggle, clear-all, context menu, picker callbacks, settings change, and init. `_sync()` calls `Store.resolve(_topHostname, location.href)` — which returns the full resolved snapshot including `blur_all_active` and `blur_items` — then passes to `Engine.handleSite(resolved)`. Engine never reads storage.
+- **All blur state changes go through `_sync()`.** The pattern is: write to `Store.*`, then `await _sync()`. This applies to toggle, clear-all, context menu, picker callbacks, settings change, and init. `_sync()` calls `Store.resolve(_topHostname, location.href)` — which returns the full resolved snapshot including `blur_all_active` and `blur_items` — then passes to `Engine.handleSite(resolved)`. Engine never reads storage. CSS custom properties (`--bl-si-radius`, `--bl-si-highlight-color`, `--bl-si-transition-duration`, `--bl-si-redaction-color`) are set by the engine at the top of `handleSite` via `_applyCssVars` — do NOT set them in `content_script`. `content.css` has per-var fallback values so there is no flash of unstyled state before the first `handleSite` call.
 - **Every `_sync()` call site MUST `await`.** Fire-and-forget invocations let concurrent onChange events interleave two reconciles that corrupt the engine's `_activeItems` Map.
 - `applyState(resolved, prev)` awaits `_sync()` at the end — no per-field branching on categories/mode/thorough/radius. Engine skips the page-wide nuke when nothing structural changed.
 - Settings resolution: `Store.resolve(_topHostname, location.href)` → `applyState(resolved, prev)` — used by `init()`, `handleStorageChange()`, and `onUrlChange()` (SPA).

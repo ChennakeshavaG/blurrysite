@@ -61,6 +61,17 @@ const Actions = (() => {
       messageType:    'CAPTURE_VIEWPORT',
       chromeCommand:  null,
     }),
+
+    'blur-selection': Object.freeze({
+      id:             'blur-selection',
+      label:          'Blur selected text',
+      description:    'Blur the text currently selected on the page',
+      defaultBinding: Object.freeze([
+        Object.freeze({ code: 'KeyX', mods: Object.freeze(['Alt', 'Shift']) }),
+      ]),
+      messageType:    'BLUR_SELECTION',
+      chromeCommand:  null,
+    }),
   });
 
   function list() { return Object.values(ACTIONS); }

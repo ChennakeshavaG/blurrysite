@@ -128,8 +128,8 @@ async function applyState(resolved, prev) {
   }
 
   // 8. PII Detection
-  const piiEnabled = resolved.auto_detect_pii.status === 'on';
-  const piiTypes = resolved.auto_detect_pii.settings;
+  const piiTypes = { email: resolved.pii_email, numeric: resolved.pii_numeric };
+  const piiEnabled = piiTypes.email || piiTypes.numeric;
   if (piiEnabled) {
     PiiDetector.scan(document.body, piiTypes);
     Engine.injectPiiRules(resolved.pii_mode, resolved.redaction_color);

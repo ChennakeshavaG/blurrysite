@@ -1,9 +1,7 @@
 const BlurrySitePopupRender = (() => {
   'use strict';
 
-  function _t(key) {
-    return chrome.i18n.getMessage(key) || key;
-  }
+  var _t = BlurrySitePopupShared.t;
 
   const _TYPE_KEY = {
     blur:     'htb_chip_blur',
@@ -28,18 +26,10 @@ const BlurrySitePopupRender = (() => {
     structure: 'cat_structure',
   };
 
-  const _REVEAL_SHORT = { click: 'Click', hover: 'Hover', none: 'Off' };
-
   const _PICKER_MODE_KEY = {
     'dynamic':       'mode_badge_dynamic',
     'sticky-page':   'mode_badge_sticky_page',
     'sticky-screen': 'mode_badge_sticky_screen',
-  };
-
-  const _PICKER_MODE_LABEL = {
-    'dynamic':       'Dynamic',
-    'sticky-page':   'Page',
-    'sticky-screen': 'Screen',
   };
 
   const _PICKER_MODE_ASSET = {
@@ -88,12 +78,12 @@ const BlurrySitePopupRender = (() => {
     const summaryEl = document.getElementById('bl-htb-summary');
     if (!chipsEl || !summaryEl) return;
 
-    const activeType = isBlurAll ? settings.blur_mode : settings.pick_blur_type;
+    const activeType = isBlurAll ? settings.blur_all.settings.blur_mode : settings.pick_and_blur.settings.blur_type;
     const types      = isBlurAll
       ? ['blur', 'frosted', 'redacted', 'censored']
       : ['blur', 'frosted', 'color'];
 
-    chipsEl.innerHTML = '';
+    chipsEl.replaceChildren();
     for (const t of types) {
       const btn = document.createElement('button');
       btn.className = 'bl-chip' + (t === activeType ? ' bl-chip--active' : '');
@@ -103,10 +93,10 @@ const BlurrySitePopupRender = (() => {
       chipsEl.appendChild(btn);
     }
 
-    summaryEl.innerHTML = '';
+    summaryEl.replaceChildren();
 
     if (isBlurAll) {
-      const cats = settings.blur_categories || {};
+      const cats = settings.blur_all.settings.blur_categories || {};
       const catLabels = Object.keys(_CAT_KEY)
         .filter(k => cats[k])
         .map(k => _t(_CAT_KEY[k]));
@@ -117,7 +107,7 @@ const BlurrySitePopupRender = (() => {
     }
 
     if (activeType !== 'color' && activeType !== 'redacted' && activeType !== 'censored') {
-      const r = settings.blur_radius;
+      const r = settings.global_default_settings.blur_radius;
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
       summaryEl.appendChild(_summaryRow(
         _t('htb_label_strength'),
@@ -129,12 +119,12 @@ const BlurrySitePopupRender = (() => {
       const revealKeyMap = { hover: 'reveal_hover', click: 'reveal_click', none: 'reveal_none' };
       summaryEl.appendChild(_summaryRow(
         _t('htb_label_reveal'),
-        _t(revealKeyMap[settings.reveal_mode] || 'reveal_none'),
+        _t(revealKeyMap[settings.global_default_settings.reveal_mode] || 'reveal_none'),
       ));
     }
 
     if (activeType === 'color') {
-      const colorHex = (settings.pick_blur_color && settings.pick_blur_color.hex) || '#000000';
+      const colorHex = (settings.pick_and_blur.settings.blur_color && settings.pick_and_blur.settings.blur_color.hex) || '#000000';
       summaryEl.appendChild(_summaryRow(
         _t('htb_label_color'),
         colorHex,
@@ -150,12 +140,12 @@ const BlurrySitePopupRender = (() => {
     const colorRowEl = document.getElementById('bl-pii-color-row');
     if (!toggleEl || !chipsEl) return;
 
-    toggleEl.checked = !!(settings.pii_email || settings.pii_numeric);
+    toggleEl.checked = !!(settings.auto_detect_pii.settings.email || settings.auto_detect_pii.settings.numeric);
 
-    chipsEl.innerHTML = '';
+    chipsEl.replaceChildren();
     for (const t of ['blur', 'frosted', 'redacted', 'starred']) {
       const btn = document.createElement('button');
-      const isActive = t === settings.pii_mode;
+      const isActive = t === settings.auto_detect_pii.settings.pii_mode;
       btn.className = 'bl-chip' + (isActive ? ' bl-chip--active bl-glow-active' : '');
       btn.dataset.piiMode = t;
       btn.textContent = _t(_PII_KEY[t]);
@@ -164,7 +154,7 @@ const BlurrySitePopupRender = (() => {
     }
 
     if (colorRowEl) {
-      const isRedacted = settings.pii_mode === 'redacted';
+      const isRedacted = settings.auto_detect_pii.settings.pii_mode === 'redacted';
       colorRowEl.hidden = !isRedacted;
       if (isRedacted && onSave) {
         let colorInput = colorRowEl.querySelector('input[type="color"]');
@@ -173,7 +163,7 @@ const BlurrySitePopupRender = (() => {
           colorInput.type = 'color';
           colorInput.className = 'bl-color-input';
           colorInput.addEventListener('input', function () {
-            onSave({ pii_redaction_color: colorInput.value });
+            onSave({ auto_detect_pii: { settings: { pii_redaction_color: colorInput.value } } });
           });
           const colorLabel = document.createElement('span');
           colorLabel.className = 'bl-form-row__label';
@@ -185,43 +175,91 @@ const BlurrySitePopupRender = (() => {
           colorRowEl.appendChild(row);
         }
         // Update value without recreating the element — keeps picker open during drag.
-        colorInput.value = settings.pii_redaction_color || '#000000';
+        colorInput.value = settings.auto_detect_pii.settings.pii_redaction_color || '#000000';
       } else {
-        colorRowEl.innerHTML = '';
+        colorRowEl.replaceChildren();
       }
+    }
+  }
+
+  // ── Notification area (site-rule + automate active pills) ─────────────────
+
+  function renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, onClearScreenShareBlur) {
+    const el = document.getElementById('bl-notif-area');
+    if (!el) return;
+    el.replaceChildren();
+
+    // ── Site rule pill ───────────────────────────────────────────────────
+    if (activeRule) {
+      const pill = document.createElement('div');
+      pill.className = 'bl-notif-pill';
+
+      const dot = document.createElement('span');
+      dot.className = 'bl-notif-dot';
+      pill.appendChild(dot);
+
+      const text = document.createElement('span');
+      text.className = 'bl-notif-text';
+      text.textContent = _t('rule_active_banner') + ': ' + activeRule.hostname_value;
+      pill.appendChild(text);
+
+      const viewBtn = document.createElement('button');
+      viewBtn.className = 'bl-notif-btn';
+      viewBtn.textContent = _t('rule_active_view') + ' →';
+      viewBtn.addEventListener('click', function() { if (onOpenSiteRules) onOpenSiteRules(); });
+      pill.appendChild(viewBtn);
+
+      el.appendChild(pill);
+    }
+
+    // ── Automate pill ────────────────────────────────────────────────────
+    const triggers = settings.automate_blur_triggers || {};
+    if (settings.automate_blur_active) {
+      const pill = document.createElement('div');
+      pill.className = 'bl-notif-pill';
+
+      const dot = document.createElement('span');
+      dot.className = 'bl-notif-dot';
+      pill.appendChild(dot);
+
+      const activeNames = [];
+      if (triggers.idle)         activeNames.push(_t('automate_idle'));
+      if (triggers.tab_switch)   activeNames.push(_t('automate_tab_switch'));
+      if (triggers.screen_share) activeNames.push(_t('automate_screen_share'));
+
+      const text = document.createElement('span');
+      text.className = 'bl-notif-text';
+      text.textContent = _t('automate_triggered_by') + ' ' + activeNames.join(', ');
+      pill.appendChild(text);
+
+      if (triggers.screen_share && onClearScreenShareBlur) {
+        const ssBtn = document.createElement('button');
+        ssBtn.className = 'bl-notif-btn';
+        ssBtn.textContent = _t('automate_stop_screen_share');
+        ssBtn.addEventListener('click', function() { onClearScreenShareBlur(); });
+        pill.appendChild(ssBtn);
+      }
+
+      const offBtn = document.createElement('button');
+      offBtn.className = 'bl-notif-btn';
+      offBtn.textContent = _t('automate_turn_off');
+      offBtn.addEventListener('click', function() { if (onClearAutomate) onClearAutomate(); });
+      pill.appendChild(offBtn);
+
+      el.appendChild(pill);
     }
   }
 
   // ── Automate section ───────────────────────────────────────────────────────
 
-  function renderAutomateSection(settings, onClearAutomate) {
+  function renderAutomateSection(settings, onClearAutomate, onClearScreenShareBlur) {
     const summaryEl = document.getElementById('bl-automate-summary');
     if (!summaryEl) return;
-    summaryEl.innerHTML = '';
+    summaryEl.replaceChildren();
 
-    // Active-trigger banner — shown when any automate trigger is currently active.
-    const triggers = settings.automate_blur_triggers || {};
-    if (settings.automate_blur_active) {
-      const activeNames = [];
-      if (triggers.idle)         activeNames.push(_t('automate_idle'));
-      if (triggers.tab_switch)   activeNames.push(_t('automate_tab_switch'));
-      if (triggers.screen_share) activeNames.push(_t('automate_screen_share'));
-      const banner = document.createElement('div');
-      banner.className = 'bl-automate-active-banner';
-      const label = document.createElement('span');
-      label.textContent = _t('automate_triggered_by') + ' ' + activeNames.join(', ');
-      banner.appendChild(label);
-      const clearBtn = document.createElement('button');
-      clearBtn.className = 'bl-automate-clear-btn';
-      clearBtn.textContent = _t('automate_turn_off');
-      clearBtn.addEventListener('click', function() { if (onClearAutomate) onClearAutomate(); });
-      banner.appendChild(clearBtn);
-      summaryEl.appendChild(banner);
-    }
-
-    const idle       = settings.automate_idle       || { value: 5, unit: 'min', enabled: false };
-    const tab_switch = settings.automate_tab_switch || { enabled: false };
-    const ss         = settings.automate_screen_share || { enabled: false };
+    const idle       = settings.automate.settings.idle        || { value: 5, unit: 'min', enabled: false };
+    const tab_switch = settings.automate.settings.tab_switch  || { enabled: false };
+    const ss         = settings.automate.settings.screen_share || { enabled: false };
 
     const idleVal = (idle.enabled && idle.value > 0)
       ? idle.value + ' ' + _t('automate_unit_' + idle.unit)
@@ -259,7 +297,7 @@ const BlurrySitePopupRender = (() => {
   }
 
   function _renderPickerModeButtons(settings) {
-    const currentMode = settings.picker_mode;
+    const currentMode = settings.pick_and_blur.settings.picker_mode;
     const wrap = document.createElement('div');
     wrap.className = 'bl-chips bl-picker-mode-chips';
     for (const [mode, key] of Object.entries(_PICKER_MODE_KEY)) {
@@ -343,29 +381,30 @@ const BlurrySitePopupRender = (() => {
     const revealKeyMap = { hover: 'reveal_hover', click: 'reveal_click', none: 'reveal_none' };
     wrap.appendChild(_summaryRow(
       _t('htb_label_reveal'),
-      _t(revealKeyMap[settings.reveal_mode] || 'reveal_none'),
+      _t(revealKeyMap[settings.global_default_settings.reveal_mode] || 'reveal_none'),
     ));
 
+    const blurMode = settings.blur_all.settings.blur_mode;
     let modeValue;
-    if (settings.blur_mode === 'redacted') {
+    if (blurMode === 'redacted') {
       modeValue = document.createElement('span');
       modeValue.className = 'bl-summary-row__value-with-swatch';
       const text = document.createTextNode(_t(_TYPE_KEY.redacted) + ' ');
       const swatch = document.createElement('span');
       swatch.className = 'bl-color-swatch';
-      swatch.style.background = settings.redaction_color || '#000000';
+      swatch.style.background = settings.global_default_settings.redaction_color || '#000000';
       modeValue.appendChild(text);
       modeValue.appendChild(swatch);
     } else {
-      modeValue = _t(_TYPE_KEY[settings.blur_mode] || _TYPE_KEY.blur);
+      modeValue = _t(_TYPE_KEY[blurMode] || _TYPE_KEY.blur);
     }
     wrap.appendChild(_summaryRow(_t('htb_label_mode'), modeValue));
 
-    const r = settings.blur_radius;
+    const r = settings.global_default_settings.blur_radius;
     const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
     wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
 
-    const cats = settings.blur_categories || {};
+    const cats = settings.blur_all.settings.blur_categories || {};
     const catLabels = Object.keys(_CAT_KEY).filter(k => cats[k]).map(k => _t(_CAT_KEY[k]));
     wrap.appendChild(_summaryRow(
       _t('htb_label_covers'),
@@ -376,7 +415,7 @@ const BlurrySitePopupRender = (() => {
   }
 
   function _renderBlurAllBlock(el, settings, isPageBlurred) {
-    el.innerHTML = '';
+    el.replaceChildren();
     el.className = 'bl-mode-block bl-mode-block--blur-all' + (!isPageBlurred ? ' bl-mode-block--off' : '');
 
     const header = document.createElement('div');
@@ -408,6 +447,14 @@ const BlurrySitePopupRender = (() => {
     blurItems.forEach(function(item) {
       const row = document.createElement('div');
       row.className = 'bl-item-row';
+      row.dataset.highlightType = item.type;
+      if (item.type === 'dynamic') {
+        row.dataset.highlightSelectors = JSON.stringify(
+          Array.isArray(item.selectors) ? item.selectors : (item.selector ? [item.selector] : [])
+        );
+      } else {
+        row.dataset.highlightId = item.id || '';
+      }
 
       const dot = document.createElement('span');
       dot.className = 'bl-item-dot ' + (item.type === 'sticky' ? 'bl-item-dot--cyan' : 'bl-item-dot--amber');
@@ -421,7 +468,11 @@ const BlurrySitePopupRender = (() => {
 
       const typeEl = document.createElement('span');
       typeEl.className = 'bl-item-type';
-      typeEl.textContent = _t(item.type === 'sticky' ? 'item_type_sticky' : 'item_type_dynamic');
+      typeEl.textContent = item.type === 'sticky' && (item.anchor || 'page') === 'screen'
+        ? _t('item_type_sticky_screen')
+        : item.type === 'sticky'
+        ? _t('item_type_sticky_page')
+        : _t('item_type_dynamic');
       row.appendChild(typeEl);
 
       const removeBtn = document.createElement('button');
@@ -429,8 +480,17 @@ const BlurrySitePopupRender = (() => {
       removeBtn.type = 'button';
       removeBtn.title = _t('item_remove_title');
       removeBtn.setAttribute('aria-label', _t('item_remove_aria'));
-      removeBtn.dataset.itemId = item.type === 'dynamic' ? item.selector : item.id;
-      removeBtn.textContent = '×';
+      removeBtn.dataset.itemId = item.type === 'dynamic'
+        ? (item.selectors ? item.selectors[0] : item.selector)
+        : item.id;
+      var trashDoc = new DOMParser().parseFromString(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
+          '<path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>' +
+          '<path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>' +
+        '</svg>',
+        'image/svg+xml'
+      );
+      removeBtn.appendChild(document.adoptNode(trashDoc.documentElement));
       row.appendChild(removeBtn);
 
       list.appendChild(row);
@@ -444,8 +504,8 @@ const BlurrySitePopupRender = (() => {
 
     if (pickBlurEnabled && blurItems.length > 0) {
       wrap.appendChild(_renderPickItemList(blurItems));
-      wrap.appendChild(_summaryRow(_t('htb_label_mode'), _t(_TYPE_KEY[settings.pick_blur_type || 'blur'])));
-      const r = settings.blur_radius;
+      wrap.appendChild(_summaryRow(_t('htb_label_mode'), _t(_TYPE_KEY[settings.pick_and_blur.settings.blur_type || 'blur'])));
+      const r = settings.global_default_settings.blur_radius;
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
       wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
     } else {
@@ -453,7 +513,7 @@ const BlurrySitePopupRender = (() => {
       countEl.className = 'bl-pick-count';
       if (!pickBlurEnabled) {
         countEl.textContent = blurItems.length > 0
-          ? (chrome.i18n.getMessage('mode_pick_off_paused', [String(blurItems.length)]) || blurItems.length + ' items · paused')
+          ? _t('mode_pick_off_paused').replace('$COUNT$', String(blurItems.length))
           : _t('mode_pick_off_hint');
       } else {
         countEl.textContent = _t('mode_pick_blur_empty');
@@ -466,7 +526,7 @@ const BlurrySitePopupRender = (() => {
 
   function _renderPickBlurBlock(el, settings, blurItems, pickBlurEnabled) {
     blurItems = blurItems || [];
-    el.innerHTML = '';
+    el.replaceChildren();
     el.className = 'bl-mode-block bl-mode-block--pick-blur' + (!pickBlurEnabled ? ' bl-mode-block--off' : '');
 
     const header = document.createElement('div');
@@ -495,18 +555,19 @@ const BlurrySitePopupRender = (() => {
     if (!blurAllEl || !pickBlurEl) return;
 
     _renderBlurAllBlock(blurAllEl, settings, isPageBlurred);
-    _renderPickBlurBlock(pickBlurEl, settings, blurItems, settings.pick_blur_enabled);
+    _renderPickBlurBlock(pickBlurEl, settings, blurItems, settings.pick_and_blur.status);
   }
 
   // ── Render all sections ────────────────────────────────────────────────────
 
-  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate) {
+  function renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, onClearScreenShareBlur, activeRule, onOpenSiteRules) {
+    renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, onClearScreenShareBlur);
     renderModesSection(settings, blurItems, isPageBlurred);
     renderPiiSection(settings, onSave);
-    renderAutomateSection(settings, onClearAutomate);
+    renderAutomateSection(settings, onClearAutomate, onClearScreenShareBlur);
   }
 
-  return { renderAll, renderHtbSection, renderPiiSection, renderAutomateSection, renderModesSection };
+  return { renderAll, renderHtbSection, renderPiiSection, renderAutomateSection, renderModesSection, renderNotifArea };
 })();
 
 window.BlurrySitePopupRender = BlurrySitePopupRender;

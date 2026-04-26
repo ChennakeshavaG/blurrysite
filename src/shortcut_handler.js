@@ -92,8 +92,24 @@ const Shortcuts = (() => {
 
   // ── Toast notification ─────────────────────────────────────────────────────
 
-  function showToast(text, duration) {
-    if (duration === undefined) duration = 1500;
+  function _dismissToast(toast) {
+    if (toast._removeTimer) clearTimeout(toast._removeTimer);
+    toast.classList.add(_CSS.toast_exiting || 'bl-si-toast--exiting');
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+      if (currentToastEl === toast) currentToastEl = null;
+    }, 250);
+  }
+
+  /**
+   * @param {string}   text
+   * @param {number}   [duration=15000]
+   * @param {Array<{label:string, onClick:function, variant?:string}>} [actions]
+   *   Optional action buttons shown in a second row below the message.
+   *   variant 'warn' renders with amber styling.
+   */
+  function showToast(text, duration, actions) {
+    if (duration === undefined) duration = 15000;
     if (currentToastEl && currentToastEl.parentNode) {
       if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
       currentToastEl.parentNode.removeChild(currentToastEl);
@@ -105,22 +121,57 @@ const Shortcuts = (() => {
     toast.setAttribute('role', 'status');
     toast.setAttribute('aria-live', 'polite');
 
+    // ── Top row: logo + message + close ────────────────────────────────────
+    const topRow = document.createElement('div');
+    topRow.className = 'bl-si-toast__top';
+
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+      const logo = document.createElement('img');
+      logo.src = chrome.runtime.getURL('icons/icon16.png');
+      logo.className = 'bl-si-toast__logo';
+      logo.setAttribute('aria-hidden', 'true');
+      logo.alt = '';
+      topRow.appendChild(logo);
+    }
+
     const msgSpan = document.createElement('span');
     msgSpan.className = _CSS.toast_message || 'bl-si-toast__message';
     msgSpan.textContent = text;
-    toast.appendChild(msgSpan);
+    topRow.appendChild(msgSpan);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'bl-si-toast__close';
+    closeBtn.textContent = '✕';
+    closeBtn.setAttribute('aria-label', 'Dismiss');
+    closeBtn.addEventListener('click', () => _dismissToast(toast));
+    topRow.appendChild(closeBtn);
+
+    toast.appendChild(topRow);
+
+    // ── Actions row (optional) ──────────────────────────────────────────────
+    const actionList = Array.isArray(actions) ? actions : [];
+    if (actionList.length > 0) {
+      const actionsRow = document.createElement('div');
+      actionsRow.className = 'bl-si-toast__actions';
+      actionList.forEach(function(action) {
+        if (!action || !action.label || typeof action.onClick !== 'function') return;
+        const btn = document.createElement('button');
+        btn.className = 'bl-si-toast__action' +
+          (action.variant === 'warn' ? ' bl-si-toast__action--warn' : '');
+        btn.textContent = action.label;
+        btn.addEventListener('click', function() {
+          _dismissToast(toast);
+          action.onClick();
+        });
+        actionsRow.appendChild(btn);
+      });
+      toast.appendChild(actionsRow);
+    }
 
     document.body.appendChild(toast);
     currentToastEl = toast;
 
-    const removeTimer = setTimeout(() => {
-      toast.classList.add(_CSS.toast_exiting || 'bl-si-toast--exiting');
-      setTimeout(() => {
-        if (toast.parentNode) toast.parentNode.removeChild(toast);
-        if (currentToastEl === toast) currentToastEl = null;
-      }, 250);
-    }, duration);
-
+    const removeTimer = setTimeout(() => _dismissToast(toast), duration);
     toast._removeTimer = removeTimer;
   }
 
@@ -205,7 +256,7 @@ const Shortcuts = (() => {
 
         const action = (blsi.Actions && blsi.Actions.get) ? blsi.Actions.get(sc.actionId) : null;
         const toastText = 'Blurry Site — ' + (action ? action.label : sc.actionId);
-        showToast(toastText, 1500);
+        showToast(toastText);
         return;
       }
     }

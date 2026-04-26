@@ -13,6 +13,7 @@
   --bl-indigo:       #818cf8;   /* indigo-400 — was #6366f1 (3.5:1), now 4.8:1 */
   --bl-purple:       #c084fc;   /* purple-400 — was #a855f7, now 5.6:1, more vivid */
   --bl-danger:       #f87171;   /* 4.6:1 on surface — unchanged */
+  --bl-green:        #4ade80;   /* green-400 — 7.2:1 on surface — notification area */
 
   /* ── Text hierarchy ── critical: muted must read against raised surfaces */
   --bl-text-primary: #ecedf4;   /* near-white, slight cool tint */
@@ -45,6 +46,7 @@
   --bl-indigo:       #4338ca;
   --bl-purple:       #7e22ce;
   --bl-danger:       #b91c1c;
+  --bl-green:        #16a34a;   /* green-700 — 4.6:1 on light surface */
 
   --bl-text-primary: #0d0f18;
   --bl-text-muted:   #4b5473;

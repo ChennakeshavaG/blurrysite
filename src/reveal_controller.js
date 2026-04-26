@@ -21,6 +21,10 @@ const BlurrySiteReveal = (() => {
   const Engine = blsi.BlurEngine;
   const RM = blsi.reveal_modes;
 
+  // Tests cannot set e.isTrusted (jsdom non-configurable). Any test event that
+  // should pass the trusted check must set this Symbol on the event object.
+  const _TRUST = Symbol.for('blsi_event_trusted');
+
   // Derived from Engine.CATEGORY_SELECTORS — single source of truth.
   // Joins every alwaysBlur tag across all categories into one CSS selector.
   const ALWAYS_BLUR_SELECTOR = (function () {
@@ -44,6 +48,12 @@ const BlurrySiteReveal = (() => {
   let mouseoutTimer = null;
   let _hoverRevealedEl = null;
   const _revealedElements = new Set();
+
+  // mousemove-based zone detection state
+  let _rafPending = false;
+  let _lastMouseX = -1;
+  let _lastMouseY = -1;
+  let _mouseMoveAttached = false;
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -243,6 +253,62 @@ const BlurrySiteReveal = (() => {
     return null;
   }
 
+  // ── Zone mousemove detection ─────────────────────────────────────────────
+
+  // Attached only when zones exist — detached when none. Zero cost on zone-free pages.
+  function _syncMouseMoveListener() {
+    const hasZones = Engine.getZoneOverlays().length > 0;
+    if (hasZones && !_mouseMoveAttached) {
+      document.addEventListener('mousemove', onRevealMouseMove, true);
+      _mouseMoveAttached = true;
+    } else if (!hasZones && _mouseMoveAttached) {
+      document.removeEventListener('mousemove', onRevealMouseMove, true);
+      _mouseMoveAttached = false;
+    }
+  }
+
+  // Thin handler — stores coordinates and schedules one rAF. Chrome 60+ already
+  // frame-aligns mousemove events (once per frame), so the rAF gate mainly guards
+  // older browsers and avoids queuing multiple frames when the layout is slow.
+  function onRevealMouseMove(e) {
+    if (_getMode() !== RM.hover) return;
+    if (!e.isTrusted && !e[_TRUST]) return;
+    if (_getPickerActive()) return;
+    _lastMouseX = e.clientX;
+    _lastMouseY = e.clientY;
+    if (_rafPending) return;
+    _rafPending = true;
+    requestAnimationFrame(_processZoneHover);
+  }
+
+  // rAF callback — actual zone boundary detection. getBoundingClientRect() stays
+  // on the cheap path (~0.1ms) because fixed-position zone overlays are not
+  // invalidated by page content mutations.
+  function _processZoneHover() {
+    _rafPending = false;
+    if (!_installed) return; // guard: destroy() may have been called before rAF fired
+    const zones = Engine.getZoneOverlays();
+    if (!zones.length) return;
+
+    const zone = _findZoneAtPoint(_lastMouseX, _lastMouseY);
+
+    if (zone) {
+      if (mouseoutTimer) { clearTimeout(mouseoutTimer); mouseoutTimer = null; }
+      if (_hoverRevealedEl === zone) return;
+      _dismissHoverReveal();
+      _revealElement(zone);
+      _hoverRevealedEl = zone;
+    } else if (_hoverRevealedEl && _isZoneOverlay(_hoverRevealedEl)) {
+      // Cursor left zone area — start 50ms debounce (mirrors regular element behavior)
+      if (!mouseoutTimer) {
+        mouseoutTimer = setTimeout(() => {
+          mouseoutTimer = null;
+          _dismissHoverReveal();
+        }, 50);
+      }
+    }
+  }
+
   // ── Event handlers ───────────────────────────────────────────────────────
 
   function onRevealClick(e) {
@@ -307,6 +373,8 @@ const BlurrySiteReveal = (() => {
 
   function onRevealMouseOver(e) {
     if (_getMode() !== RM.hover) return;
+    if (!e.isTrusted && !e[_TRUST]) return;
+    _syncMouseMoveListener();
     // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
     // host when the mouseover originates inside a shadow root. composedPath()[0]
     // gives the actual element under the cursor (e.g. svg or path inside shadow).
@@ -318,15 +386,8 @@ const BlurrySiteReveal = (() => {
       : e.target;
     if (!(target instanceof Element)) return;
 
-    const zone = _findZoneAtPoint(e.clientX, e.clientY);
-    if (zone) {
-      if (mouseoutTimer) { clearTimeout(mouseoutTimer); mouseoutTimer = null; }
-      if (_hoverRevealedEl === zone) return;
-      _dismissHoverReveal();
-      _revealElement(zone);
-      _hoverRevealedEl = zone;
-      return;
-    }
+    // Zone detection moved to mousemove (_processZoneHover) — precise boundary
+    // detection without the "distance to travel" lag from pointer-events:none gaps.
 
     const blurredRoot = findBlurredTarget(target, e.clientX, e.clientY);
 
@@ -353,8 +414,15 @@ const BlurrySiteReveal = (() => {
     revealAncestorChain(blurredRoot);
   }
 
-  function onRevealMouseOut(_e) {
+  function onRevealMouseOut(e) {
+    if (!e.isTrusted && !e[_TRUST]) return;
     if (!_hoverRevealedEl) return;
+    _syncMouseMoveListener();
+    // Zone dismiss is owned by _processZoneHover (mousemove). mouseout on a zone
+    // overlay never fires because pointer-events:none makes them invisible to the
+    // event system — the browser delivers mouseout only when the cursor leaves an
+    // underlying website element, which may be well inside the zone boundary.
+    if (_isZoneOverlay(_hoverRevealedEl)) return;
     if (mouseoutTimer) clearTimeout(mouseoutTimer);
     mouseoutTimer = setTimeout(() => {
       mouseoutTimer = null;
@@ -391,6 +459,10 @@ const BlurrySiteReveal = (() => {
     document.removeEventListener('mouseout', onRevealMouseOut, true);
     document.removeEventListener('click', onRevealClick, true);
     document.removeEventListener('keydown', onRevealKeydown);
+    if (_mouseMoveAttached) {
+      document.removeEventListener('mousemove', onRevealMouseMove, true);
+      _mouseMoveAttached = false;
+    }
     clearAll();
     _installed = false;
   }
@@ -400,6 +472,9 @@ const BlurrySiteReveal = (() => {
       clearTimeout(mouseoutTimer);
       mouseoutTimer = null;
     }
+    _rafPending = false;
+    _lastMouseX = -1;
+    _lastMouseY = -1;
     _unrevealAll();
     clearRevealedAncestors();
     clickRevealedEl = null;

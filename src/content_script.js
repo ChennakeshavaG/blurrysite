@@ -8,18 +8,67 @@
 (() => {
   'use strict';
 
-  const Reveal = blsi.Reveal;
+  // ── Immutable page constants ───────────────────────────────────────────────
 
-  // ── State ──────────────────────────────────────────────────────────────────
+  /** Hostname used as the storage key for persisted blur items */
+  const hostname = location.hostname;
+
+  /** True when running in the top-level document, false inside any iframe */
+  const IS_MAIN_FRAME = window === window.top;
+
+  /** True when the page is running as an installed PWA (standalone display mode) */
+  const IS_PWA = IS_MAIN_FRAME && window.matchMedia('(display-mode: standalone)').matches;
+
+  // ── Module aliases (synchronous — loaded before this script by manifest) ──
+
+  const Engine    = blsi.BlurEngine;
+  const Store     = blsi.Model;
+  const Selector  = blsi.SelectorUtils;
+  const Picker    = blsi.Picker;
+  const Shortcuts = blsi.Shortcuts;
+  const Reveal    = blsi.Reveal;
+  const log       = blsi.Logger.scope('content');
+
+  // ── Mutable state ─────────────────────────────────────────────────────────
 
   /** @type {object} Resolved settings for the current URL (snake_case keys). */
-  let settings = blsi.build_default_model().settings;
+  let settings = blsi.build_default_model().global_default_settings;
 
   /** Whether the element picker is currently active */
   let isPickerActive = false;
 
   /** Last element the user right-clicked — used by the context menu blur handler */
   let lastContextMenuTarget = null;
+
+  /** Shadow DOM host element for the in-page settings panel (PWA only) */
+  let _pwaPanelHost = null;
+
+  /** Debounce timer for SPA URL-change detection */
+  let _urlChangeTimer = null;
+
+  /**
+   * Per-tab screen-share blur suppression flag. Set to true when the user
+   * chooses "This tab" from the screen-share toast. Prevents future
+   * SCREEN_SHARE_BLUR messages from re-blurring this specific tab for the
+   * remainder of its lifetime. Cleared on full page navigation (content
+   * script re-runs). Not persisted to storage.
+   */
+  let _ssBlurSuppressed = false;
+
+  /**
+   * Top-level page hostname — used exclusively for blur_all_hosts lookup so
+   * cross-origin iframes follow the parent page's blur-all state rather than
+   * their own. Seeded from document.referrer on initial load; updated via
+   * postMessage from the main frame thereafter.
+   */
+  let _topHostname = IS_MAIN_FRAME
+    ? location.hostname
+    : (() => { try { return new URL(document.referrer).hostname; } catch (_) { return ''; } })();
+
+  /** Last observed URL — SPA navigation change detection */
+  let lastUrl = location.href;
+
+  // ── State helpers ──────────────────────────────────────────────────────────
 
   /**
    * Single source of truth for picker-active state. Updates the local flag,
@@ -35,54 +84,56 @@
     Engine._setPickerActiveForObserver(active);
   }
 
-  /** Hostname used as the storage key for persisted blur items */
-  const hostname = location.hostname;
-
-  /** True when running in the top-level document, false inside any iframe */
-  const IS_MAIN_FRAME = window === window.top;
-
-  /** True when the page is running as an installed PWA (standalone display mode) */
-  const IS_PWA = IS_MAIN_FRAME && window.matchMedia('(display-mode: standalone)').matches;
-
-  /** Shadow DOM host element for the in-page settings panel (PWA only) */
-  let _pwaPanelHost = null;
-
-  /**
-   * Top-level page hostname — used exclusively for blur_all_hosts lookup so
-   * cross-origin iframes follow the parent page's blur-all state rather than
-   * their own. Seeded from document.referrer on initial load; updated via
-   * postMessage from the main frame thereafter.
-   */
-  let _topHostname = IS_MAIN_FRAME
-    ? location.hostname
-    : (() => { try { return new URL(document.referrer).hostname; } catch (_) { return ''; } })();
-
-  // ── Module aliases (synchronous — loaded before this script by manifest) ──
-
-  const Engine    = blsi.BlurEngine;
-  const Store     = blsi.Model;
-  const Selector  = blsi.SelectorUtils;
-  const Picker    = blsi.Picker;
-  const Shortcuts = blsi.Shortcuts;
-
-  // ── Logger alias ──────────────────────────────────────────────────────────
-  const log = blsi.Logger.scope('content');
-
-  // ── Unit conversion helper ────────────────────────────────────────────────
   function _to_seconds(value, unit) {
     if (unit === 'min') return value * 60;
     return value; // sec
   }
 
+  // ── Screen share helpers ───────────────────────────────────────────────────
+
   /**
-   * Reads the resolved settings from Model.resolve() and calls
-   * Engine.handleSite() with the resolved snapshot. Model is the single
-   * source of truth; handleSite is pure.
+   * Returns the 3 screen-share-blur stop actions for the automate toast.
+   * Built at call time so i18n strings are resolved after init.
    */
-  async function _sync() {
-    const resolved = Store.resolve(_topHostname, location.href);
+  function _ssBlurStopActions() {
+    return [
+      {
+        label: chrome.i18n.getMessage('automate_stop_per_tab'),
+        onClick: async () => {
+          _ssBlurSuppressed = true;
+          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await _sync();
+        },
+      },
+      {
+        label: chrome.i18n.getMessage('automate_stop_per_domain'),
+        onClick: async () => {
+          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await _sync();
+        },
+      },
+      {
+        label: chrome.i18n.getMessage('automate_disable_feature'),
+        variant: 'warn',
+        onClick: async () => {
+          await Store.patch_section('automate', { settings: { screen_share: { enabled: false } } });
+          await Store.save_automate_blur(hostname, 'screen_share', false);
+          await _sync();
+        },
+      },
+    ];
+  }
+
+  // ── Core sync ─────────────────────────────────────────────────────────────
+
+  /**
+   * Resolves settings and drives the engine. Accepts a pre-resolved snapshot
+   * from applyState to avoid a redundant Store.resolve() call; re-resolves
+   * from storage when called directly (picker callbacks, message handlers).
+   */
+  async function _sync(preResolved) {
+    const resolved = preResolved || Store.resolve(_topHostname, location.href);
     settings = resolved;
-    applySettingsToDom(resolved);
     await Engine.handleSite(resolved);
   }
 
@@ -96,7 +147,7 @@
     async onBlur(el) {
       const selectors = Selector.getSelectors(el);
       if (!selectors.length) return;
-      const name = Engine.allocateDynamicName();
+      const name = Engine.allocateElementName();
       const item = { type: 'dynamic', name, selectors };
       log.flow('picker.blur', { name, selectors });
       await Store.save_blur_item(hostname, item);
@@ -112,12 +163,11 @@
     },
 
     async onStickyBlur(zoneRect) {
-      const name = Engine.allocateStickyName();
       const id = _generateZoneId();
       const scrollW = zoneRect.scrollWidth;
       const scrollH = zoneRect.scrollHeight;
-
       const anchor = zoneRect.anchor === 'screen' ? 'screen' : 'page';
+      const name = Engine.allocateStickyName(anchor);
       const item = {
         type: 'sticky', name: name, id: id,
         anchor: anchor,
@@ -143,10 +193,9 @@
       await _sync();
     },
 
-    onModeChange(mode) {
+    async onModeChange(mode) {
       log.flow('picker.modeChange', { mode });
-      // Save only the picker mode change into the pick_and_blur feature section.
-      Store.patch_section('pick_and_blur', { settings: { picker_mode: mode } });
+      await Store.patch_section('pick_and_blur', { settings: { picker_mode: mode } });
     },
 
     onDeactivate() {
@@ -182,10 +231,12 @@
         log.error('Screenshot capture failed', _e);
       }
     },
+    'blur-selection'() {
+      handleMessage({ type: blsi.command.blur_selection }, null, () => {});
+    },
     onExitPicker() {
       if (isPickerActive) {
-        Picker.deactivate();
-        setPickerActive(false);
+        Picker.deactivate(); // fires pickerCallbacks.onDeactivate → setPickerActive(false)
       }
     },
   };
@@ -217,11 +268,10 @@
     log.flow('msg.in', { type });
 
     // Iframes don't handle chrome.runtime messages — they receive state via
-    // chrome.storage.onChanged and postMessage from the main frame.
-    if (!IS_MAIN_FRAME) {
-      if (sendResponse) sendResponse({ ok: false, reason: 'iframe' });
-      return false;
-    }
+    // chrome.storage.onChanged and postMessage from the main frame. Stay
+    // silent (no sendResponse) so an iframe can never racewin the response
+    // when a caller forgets `frameId: 0` and broadcasts to all frames.
+    if (!IS_MAIN_FRAME) return false;
 
     // Fire-token dedup for trigger messages.
     const actionId = MESSAGE_TO_ACTION_ID[type];
@@ -237,7 +287,8 @@
       fireTokens[actionId] = nowTs;
     }
 
-    if (settings.enabled === false && type !== blsi.popup.get_status && type !== blsi.command.toggle_panel) {
+    if (settings.enabled === false && type !== blsi.popup.get_status && type !== blsi.command.toggle_panel
+        && type !== blsi.popup.highlight_item && type !== blsi.popup.clear_highlight) {
       if (sendResponse) sendResponse({ ok: false, reason: 'disabled' });
       return false;
     }
@@ -257,7 +308,7 @@
 
       // ── Toggle element picker ───────────────────────────────────────────
       case blsi.command.toggle_picker: {
-        const resolved = Store.resolve(hostname, location.href);
+        const resolved = Store.resolve(_topHostname, location.href);
         const pickerMode = message.picker_mode || resolved.picker_mode;
         log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: pickerMode });
         if (isPickerActive) {
@@ -277,8 +328,20 @@
 
       // ── Status query ────────────────────────────────────────────────────
       case blsi.popup.get_status: {
-        const blurredCount = document.querySelectorAll('[data-bl-si-blur]').length;
-        if (sendResponse) sendResponse({ isPageBlurred: Engine.isPageBlurred, isPickerActive, blurredCount });
+        if (sendResponse) sendResponse({ isPageBlurred: Engine.isPageBlurred, isPickerActive, blurredCount: Engine.blurredCount });
+        break;
+      }
+
+      // ── Popup list hover highlight ──────────────────────────────────────
+      case blsi.popup.highlight_item: {
+        Engine.highlightItem(message);
+        if (sendResponse) sendResponse({ ok: true });
+        break;
+      }
+
+      case blsi.popup.clear_highlight: {
+        Engine.clearItemHighlight();
+        if (sendResponse) sendResponse({ ok: true });
         break;
       }
 
@@ -307,7 +370,7 @@
           if (sendResponse) sendResponse({ ok: false, reason: 'no_selector' });
           return false;
         }
-        const name = Engine.allocateDynamicName();
+        const name = Engine.allocateElementName();
         const item = { type: 'dynamic', name, selectors: sels };
         log.flow('trigger.contextBlur', { name, selectors: sels });
         (async () => {
@@ -324,7 +387,7 @@
         lastContextMenuTarget = null;
         if (!target) {
           if (sendResponse) sendResponse({ ok: false, reason: 'no_target' });
-          break;
+          return false;
         }
         // Walk up from target to nearest blurred ancestor.
         let unblurTarget = null;
@@ -370,13 +433,14 @@
 
       // ── Screen share blur (from background fan-out) ─────────────────────
       case blsi.command.screen_share_blur: {
+        if (_ssBlurSuppressed) { if (sendResponse) sendResponse({ ok: false, reason: 'tab-suppressed' }); break; }
         const am_s = (Store.get().automate || {}).settings || {};
         if ((am_s.screen_share || {}).enabled) {
           log.flow('trigger.screenShareBlur');
           (async () => {
             await Store.save_automate_blur(hostname, 'screen_share', true);
             await _sync();
-            if (settings.automate_blur_only)    Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 2500);
+            if (settings.automate_blur_only)    Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _ssBlurStopActions());
             if (settings.automate_blur_skipped) Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
             if (sendResponse) sendResponse({ ok: true });
           })();
@@ -403,20 +467,9 @@
     return false;
   }
 
-  // ── Apply CSS custom properties ───────────────────────────────────────────
-
-  function applySettingsToDom(resolved) {
-    document.documentElement.style.setProperty('--bl-si-radius', `${resolved.blur_radius}px`);
-    document.documentElement.style.setProperty('--bl-si-highlight-color', resolved.highlight_color);
-    document.documentElement.style.setProperty('--bl-si-transition-duration', `${resolved.transition_duration}ms`);
-    document.documentElement.style.setProperty('--bl-si-redaction-color', resolved.redaction_color);
-  }
-
-  // ── Idempotent state application ───────────────────────────────────────────
-  // Thin coordinator — applies resolved settings to CSS vars, shortcuts, picker,
-  // reveal, then awaits _sync() to push storage state to DOM. Idempotent.
-  // Async — all callers must `await` so onChange events don't overlap.
-
+  // Applies resolved settings to shortcuts, picker, reveal, autoBlur, PII, then
+  // forwards the same snapshot to _sync() to update CSS vars + engine. Idempotent.
+  // Callers must `await` — concurrent invocations corrupt engine's _activeItems Map.
   async function applyState(resolved, prev) {
     const old = prev || settings;
     const changedKeys = [];
@@ -424,10 +477,6 @@
       if (JSON.stringify(old[k]) !== JSON.stringify(resolved[k])) changedKeys.push(k);
     }
     if (changedKeys.length) log.flow('settings.apply', { changed: changedKeys });
-    settings = resolved;
-
-    // CSS custom properties (cheap, idempotent)
-    applySettingsToDom(resolved);
 
     // Shortcuts — main frame only (iframes don't capture keyboard)
     if (IS_MAIN_FRAME) {
@@ -448,6 +497,9 @@
           blurRadius: resolved.blur_radius,
           highlightColor: resolved.highlight_color,
         });
+        if (old.picker_mode !== resolved.picker_mode) {
+          Picker.setMode(resolved.picker_mode);
+        }
       }
     }
 
@@ -465,8 +517,8 @@
       Reveal.clearAll();
     }
 
-    // Delegate blur reconciliation to _sync() — reads resolved model, calls handleSite.
-    await _sync();
+    // Single resolve — pass the snapshot through so _sync() doesn't re-resolve.
+    await _sync(resolved);
 
     // Auto-blur — main frame only (tab-level concerns)
     if (IS_MAIN_FRAME) {
@@ -568,14 +620,92 @@
     return host;
   }
 
-  function _checkPwaHint() {
-    chrome.storage.local.get('blsi_pwa_hint_shown', (result) => {
-      if (result && result.blsi_pwa_hint_shown) return;
-      chrome.storage.local.set({ blsi_pwa_hint_shown: true });
-      const isMac = typeof navigator !== 'undefined' &&
-        navigator.platform && navigator.platform.toLowerCase().includes('mac');
-      Shortcuts.showToast('PWA — right-click or press ' + (isMac ? '⌥⇧O' : 'Alt+Shift+O') + ' to open settings');
-    });
+  async function _checkPwaHint() {
+    const result = await chrome.storage.local.get('blsi_pwa_hint_shown');
+    if (result && result.blsi_pwa_hint_shown) return;
+    await chrome.storage.local.set({ blsi_pwa_hint_shown: true });
+    const isMac = typeof navigator !== 'undefined' &&
+      navigator.platform && navigator.platform.toLowerCase().includes('mac');
+    Shortcuts.showToast('PWA — right-click or press ' + (isMac ? '⌥⇧O' : 'Alt+Shift+O') + ' to open settings');
+  }
+
+  // ── iframe postMessage broadcast ──────────────────────────────────────────
+
+  function _broadcastToFrames() {
+    if (!window.frames.length) return;
+    for (let i = 0; i < window.frames.length; i++) {
+      try {
+        window.frames[i].postMessage(
+          { type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }, location.origin
+        );
+      } catch (_) {}
+    }
+  }
+
+  // ── Storage change subscriber ──────────────────────────────────────────────
+  // Any real (non-echo) change to the model = full re-resolve + applyState.
+
+  async function handleStorageChange(newModel, _oldModel) {
+    if (!Engine) return;
+
+    const resolved = Store.resolve(_topHostname, location.href);
+    const prev = { ...settings };
+
+    // Detect language change for i18n re-init.
+    if (IS_MAIN_FRAME && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
+      const newLang = newModel && newModel.global_default_settings && newModel.global_default_settings.language;
+      if (newLang && newLang !== settings.language) {
+        try { await blsi.ContentI18n.init(newLang); }
+        catch (_e) { /* keep stale strings */ }
+        if (Picker && typeof Picker.rebuildToolbar === 'function' && Picker.isActive) {
+          try { Picker.rebuildToolbar(); } catch (_e) {}
+        }
+      }
+    }
+
+    await applyState(resolved, prev);
+
+    // Notify child iframes so they re-sync with the updated storage state.
+    if (IS_MAIN_FRAME) _broadcastToFrames();
+  }
+
+  // ── SPA URL change detection ───────────────────────────────────────────────
+
+  function onUrlChange() {
+    clearTimeout(_urlChangeTimer);
+    _urlChangeTimer = setTimeout(async () => {
+      if (!Engine) return;
+      const currentUrl = location.href;
+      if (currentUrl === lastUrl) return;
+      log.flow('spa.urlChange', { from: lastUrl, to: currentUrl });
+      lastUrl = currentUrl;
+      try {
+        const prev = { ...settings };
+        const resolved = Store.resolve(_topHostname, currentUrl);
+        await applyState(resolved, prev);
+      } catch (err) {
+        console.warn('[BlurrySite] URL change handler error:', err.message, err.stack);
+      }
+    }, 150);
+  }
+
+  // SPA URL change detection — main frame only.
+  if (IS_MAIN_FRAME) {
+    window.addEventListener('popstate', onUrlChange);
+    window.addEventListener('hashchange', onUrlChange);
+
+    const _origPushState = history.pushState;
+    const _origReplaceState = history.replaceState;
+    history.pushState = function() {
+      const result = _origPushState.apply(this, arguments);
+      try { onUrlChange(); } catch (_) {}
+      return result;
+    };
+    history.replaceState = function() {
+      const result = _origReplaceState.apply(this, arguments);
+      try { onUrlChange(); } catch (_) {}
+      return result;
+    };
   }
 
   // ── Initialisation ─────────────────────────────────────────────────────────
@@ -601,9 +731,6 @@
       try { await blsi.ContentI18n.init(resolved.language); }
       catch (_e) { /* picker falls back to English literals */ }
     }
-
-    // 3. Apply CSS custom properties from resolved settings.
-    applySettingsToDom(resolved);
 
     // 3b. In PWA mode, inject the shadow DOM settings panel early so the
     //     message handler can toggle it as soon as it's registered.
@@ -654,7 +781,7 @@
           await Store.save_automate_blur(hostname, 'screen_share', true);
           await _sync();
           if (settings.automate_blur_only)
-            Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 2500);
+            Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _ssBlurStopActions());
           if (settings.automate_blur_skipped)
             Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_skipped'), 2500);
         }
@@ -671,11 +798,11 @@
 
     // 11a. Iframes: listen for topHostname updates from the main frame.
     if (!IS_MAIN_FRAME) {
-      window.addEventListener('message', (event) => {
+      window.addEventListener('message', async (event) => {
         if (event.source !== window.parent) return;
         if (!event.data || event.data.type !== 'BLSI_SETTINGS_CHANGED') return;
         _topHostname = event.data.topHostname || _topHostname;
-        _sync();
+        await _sync();
       });
     }
 
@@ -692,85 +819,6 @@
     // Signal to perf tests that initialization is fully complete (blur applied,
     // shortcuts registered, storage subscription active).
     document.dispatchEvent(new CustomEvent('bl-si-ready'));
-  }
-
-  // ── iframe postMessage broadcast ──────────────────────────────────────────
-
-  function _broadcastToFrames() {
-    for (let i = 0; i < window.frames.length; i++) {
-      try {
-        window.frames[i].postMessage(
-          { type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }, '*'
-        );
-      } catch (_) {}
-    }
-  }
-
-  // ── Storage change subscriber ──────────────────────────────────────────────
-  // Any real (non-echo) change to the model = full re-resolve + applyState.
-  // The model already contains the truth; we just re-read it.
-
-  async function handleStorageChange(newModel, _oldModel) {
-    if (!Engine) return;
-
-    const resolved = Store.resolve(_topHostname, location.href);
-    const prev = { ...settings };
-
-    // Detect language change for i18n re-init.
-    if (IS_MAIN_FRAME && blsi.ContentI18n && typeof blsi.ContentI18n.init === 'function') {
-      const newLang = newModel && newModel.settings && newModel.settings.language;
-      if (newLang && newLang !== settings.language) {
-        try { await blsi.ContentI18n.init(newLang); }
-        catch (_e) { /* keep stale strings */ }
-        if (Picker && typeof Picker.rebuildToolbar === 'function' && Picker.isActive) {
-          try { Picker.rebuildToolbar(); } catch (_e) {}
-        }
-      }
-    }
-
-    await applyState(resolved, prev);
-
-    // Notify child iframes so they re-sync with the updated storage state.
-    if (IS_MAIN_FRAME) _broadcastToFrames();
-  }
-
-  // ── SPA URL change detection ────────────────────────────────────────────────
-
-  let lastUrl = location.href;
-
-  async function onUrlChange() {
-    if (!Engine) return;
-    const currentUrl = location.href;
-    if (currentUrl === lastUrl) return;
-    log.flow('spa.urlChange', { from: lastUrl, to: currentUrl });
-    lastUrl = currentUrl;
-
-    try {
-      const prev = { ...settings };
-      const resolved = Store.resolve(hostname, currentUrl);
-      await applyState(resolved, prev);
-    } catch (err) {
-      console.warn('[BlurrySite] URL change handler error:', err.message, err.stack);
-    }
-  }
-
-  // SPA URL change detection — main frame only.
-  if (IS_MAIN_FRAME) {
-    window.addEventListener('popstate', onUrlChange);
-    window.addEventListener('hashchange', onUrlChange);
-
-    const _origPushState = history.pushState;
-    const _origReplaceState = history.replaceState;
-    history.pushState = function() {
-      const result = _origPushState.apply(this, arguments);
-      try { onUrlChange(); } catch (_) {}
-      return result;
-    };
-    history.replaceState = function() {
-      const result = _origReplaceState.apply(this, arguments);
-      try { onUrlChange(); } catch (_) {}
-      return result;
-    };
   }
 
   // ── DOM-ready guard ────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="renders/automate.css">
   <link rel="stylesheet" href="renders/keyboard.css">
   <link rel="stylesheet" href="renders/site_rules.css">
+  <link rel="stylesheet" href="renders/general.css">
 </head>
 <body>
 
@@ -17,10 +18,13 @@
   <header class="bl-header" id="bl-header">
     <div class="bl-header__brand">
       <img class="bl-header__logo" id="bl-logo" src="../icons/icon48.png" alt="" aria-hidden="true" width="20" height="20">
-      <span class="bl-header__wordmark">Blurry Site</span>
+      <span class="bl-header__wordmark" data-i18n="popup_title">Blurry Site</span>
     </div>
     <span class="bl-header__host" id="bl-host"></span>
-    <button class="bl-icon-btn" id="bl-theme-toggle" aria-label="Toggle theme" title="Toggle theme"></button>
+    <button class="bl-icon-btn" id="bl-theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+      <svg class="bl-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <svg class="bl-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+    </button>
     <button class="bl-icon-btn bl-icon-btn--power" id="bl-power" aria-label="Power on/off" title="Toggle Blurry Site on/off"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v7"/><path d="M6.2 5.2a8 8 0 1 0 11.6 0"/></svg></button>
   </header>
 
@@ -32,6 +36,7 @@
 
     <!-- SWAPPABLE MODES + HOW TO BLUR -->
     <section class="bl-section bl-modes" id="bl-modes">
+      <div id="bl-notif-area"></div>
       <div id="bl-mode-blur-all" class="bl-mode-block bl-mode-block--blur-all"></div>
       <div id="bl-mode-pick-blur" class="bl-mode-block bl-mode-block--pick-blur"></div>
     </section>
@@ -39,13 +44,13 @@
     <!-- AUTO-DETECT PII -->
     <section class="bl-section" id="bl-pii">
       <div class="bl-section__header">
-        <span class="bl-section__title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Auto-Detect PII</span>
+        <span class="bl-section__title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span data-i18n="section_pii_title">Auto-Detect PII</span></span>
         <label class="bl-toggle" aria-label="Auto-detect PII on/off">
           <input type="checkbox" id="bl-pii-master">
           <span class="bl-toggle__track"></span>
         </label>
       </div>
-      <p class="bl-section__desc">Detects emails and numeric patterns</p>
+      <p class="bl-section__desc" data-i18n="section_pii_desc">Detects emails and numeric patterns</p>
       <div class="bl-chips bl-zone--primary" id="bl-pii-chips" role="list" aria-label="PII blur mode"></div>
       <div id="bl-pii-color-row" hidden></div>
     </section>
@@ -53,26 +58,33 @@
     <!-- AUTOMATE -->
     <section class="bl-section" id="bl-automate">
       <div class="bl-section__header">
-        <span class="bl-section__title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Automate</span>
+        <span class="bl-section__title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span data-i18n="section_automate_title">Automate</span></span>
         <button class="bl-btn-text" id="bl-automate-modify">Modify →</button>
       </div>
-      <p class="bl-section__desc">Blur on a timer, after idle, or when switching tabs</p>
+      <p class="bl-section__desc" data-i18n="section_automate_desc">Blur on a timer, after idle, or when switching tabs</p>
       <div class="bl-summary bl-zone--info" id="bl-automate-summary"></div>
     </section>
 
     <!-- NAV ROWS -->
     <nav class="bl-nav-rows" aria-label="Settings">
+      <button class="bl-nav-row" id="bl-nav-general">
+        <span class="bl-nav-row__content">
+          <span class="bl-nav-row__label" data-i18n="section_general"></span>
+          <span class="bl-nav-row__desc" data-i18n="nav_general_desc"></span>
+        </span>
+        <span class="bl-nav-row__arrow" aria-hidden="true">→</span>
+      </button>
       <button class="bl-nav-row" id="bl-nav-shortcuts">
         <span class="bl-nav-row__content">
-          <span class="bl-nav-row__label">Shortcuts</span>
-          <span class="bl-nav-row__desc">Customize keyboard shortcuts for blur actions</span>
+          <span class="bl-nav-row__label" data-i18n="section_shortcuts_title">Shortcuts</span>
+          <span class="bl-nav-row__desc" data-i18n="nav_shortcuts_desc">Customize keyboard shortcuts for blur actions</span>
         </span>
         <span class="bl-nav-row__arrow" aria-hidden="true">→</span>
       </button>
       <button class="bl-nav-row" id="bl-nav-site-rules">
         <span class="bl-nav-row__content">
-          <span class="bl-nav-row__label">Site Rules</span>
-          <span class="bl-nav-row__desc">Configure per-site blur rules and overrides</span>
+          <span class="bl-nav-row__label" data-i18n="section_rules_title">Site Rules</span>
+          <span class="bl-nav-row__desc" data-i18n="nav_rules_desc">Configure per-site blur rules and overrides</span>
         </span>
         <span class="bl-nav-row__arrow" aria-hidden="true">→</span>
       </button>
@@ -93,7 +105,7 @@
   <div class="bl-subpage" id="bl-view-htb-modify" hidden>
     <header class="bl-subpage__header">
       <button class="bl-back-btn" data-back="main" aria-label="Close"><span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></span></button>
-      <span class="bl-subpage__title">How to Blur</span>
+      <span class="bl-subpage__title" data-i18n="subpage_htb_title">How to Blur</span>
     </header>
     <div class="bl-subpage__scroll-wrap">
       <div class="bl-sp-arrow bl-sp-arrow--top" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
@@ -105,7 +117,7 @@
   <div class="bl-subpage" id="bl-view-automate-modify" hidden>
     <header class="bl-subpage__header">
       <button class="bl-back-btn" data-back="main" aria-label="Close"><span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></span></button>
-      <span class="bl-subpage__title">Automate</span>
+      <span class="bl-subpage__title" data-i18n="section_automate_title">Automate</span>
     </header>
     <div class="bl-subpage__scroll-wrap">
       <div class="bl-sp-arrow bl-sp-arrow--top" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
@@ -117,7 +129,7 @@
   <div class="bl-subpage" id="bl-view-shortcuts" hidden>
     <header class="bl-subpage__header">
       <button class="bl-back-btn" data-back="main" aria-label="Close"><span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></span></button>
-      <span class="bl-subpage__title">Shortcuts</span>
+      <span class="bl-subpage__title" data-i18n="section_shortcuts_title">Shortcuts</span>
     </header>
     <div class="bl-subpage__scroll-wrap">
       <div class="bl-sp-arrow bl-sp-arrow--top" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
@@ -129,11 +141,23 @@
   <div class="bl-subpage" id="bl-view-site-rules" hidden>
     <header class="bl-subpage__header">
       <button class="bl-back-btn" data-back="main" aria-label="Close"><span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></span></button>
-      <span class="bl-subpage__title">Site Rules</span>
+      <span class="bl-subpage__title" data-i18n="section_rules_title">Site Rules</span>
     </header>
     <div class="bl-subpage__scroll-wrap">
       <div class="bl-sp-arrow bl-sp-arrow--top" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
       <div class="bl-subpage__body" id="bl-site-rules-body"></div>
+      <div class="bl-sp-arrow bl-sp-arrow--bottom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+    </div>
+  </div>
+
+  <div class="bl-subpage" id="bl-view-general" hidden>
+    <header class="bl-subpage__header">
+      <button class="bl-back-btn" data-back="main" aria-label="Close"><span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></span></button>
+      <span class="bl-subpage__title" data-i18n="section_general"></span>
+    </header>
+    <div class="bl-subpage__scroll-wrap">
+      <div class="bl-sp-arrow bl-sp-arrow--top" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
+      <div class="bl-subpage__body" id="bl-general-body"></div>
       <div class="bl-sp-arrow bl-sp-arrow--bottom" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
     </div>
   </div>
@@ -151,17 +175,21 @@
   <!-- ── FOOTER ────────────────────────────────────────────────────────── -->
   <footer class="bl-footer">
     <span class="bl-footer__version" id="bl-version"></span>
-    <button class="bl-footer__btn" id="bl-feedback">Feedback</button>
-    <button class="bl-footer__btn" id="bl-export">Export</button>
-    <button class="bl-footer__btn" id="bl-logs">Logs</button>
-    <button class="bl-footer__btn" id="bl-language">Language</button>
+    <button class="bl-footer__btn" id="bl-feedback" data-i18n="footer_feedback">Feedback</button>
+    <button class="bl-footer__btn" id="bl-export" data-i18n="footer_export">Export</button>
+    <button class="bl-footer__btn" id="bl-logs" data-i18n="footer_logs">Logs</button>
   </footer>
 
   <!-- ── TOAST ─────────────────────────────────────────────────────────── -->
-  <div class="bl-toast" id="bl-toast" role="status" aria-live="polite" hidden></div>
+  <div class="bl-toast" id="bl-toast" role="status" aria-live="polite" hidden>
+    <img class="bl-toast__logo" src="../icons/icon16.png" alt="" aria-hidden="true">
+    <span class="bl-toast__msg" id="bl-toast-msg"></span>
+    <button class="bl-toast__close" id="bl-toast-close" aria-label="Dismiss">✕</button>
+  </div>
 
   <!-- Scripts: constants → logger → action_registry → shortcut_label → url_matcher → storage_model → renders → state → ui → popup -->
   <script src="../src/constants.js"></script>
+  <script src="../src/content_i18n.js"></script>
   <script src="../src/logger.js"></script>
   <script src="../src/action_registry.js"></script>
   <script src="../src/shortcut_label.js"></script>
@@ -173,6 +201,7 @@
   <script src="renders/automate.js"></script>
   <script src="renders/keyboard.js"></script>
   <script src="renders/site_rules.js"></script>
+  <script src="renders/general.js"></script>
   <script src="popup_state.js"></script>
   <script src="popup_ui.js"></script>
   <script src="popup.js"></script>

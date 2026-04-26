@@ -6,13 +6,13 @@ const BlurrySitePopupRenderSiteRules = (() => {
   // ── Snapshot key label map ────────────────────────────────────────────────
 
   var SNAPSHOT_LABELS = {
-    blur_radius:     'rule_snap_blur_radius',
-    blur_mode:       'rule_snap_blur_mode',
-    reveal_mode:     'rule_snap_reveal_mode',
-    thorough_blur:   'rule_snap_thorough_blur',
-    blur_categories: 'rule_snap_blur_categories',
-    pick_blur_type:  'rule_snap_pick_blur_type',
-    pii_mode:        'rule_snap_pii_mode',
+    blur_radius:       'rule_snap_blur_radius',
+    blur_mode:         'rule_snap_blur_mode',
+    reveal_mode:       'rule_snap_reveal_mode',
+    thorough_blur:     'rule_snap_thorough_blur',
+    blur_categories:   'rule_snap_blur_categories',
+    pick_blur_enabled: 'rule_snap_pick_blur_enabled',
+    pick_blur_type:    'rule_snap_pick_blur_type',
   };
 
   var BLUR_MODE_I18N = {
@@ -43,16 +43,13 @@ const BlurrySitePopupRenderSiteRules = (() => {
     if (key === 'reveal_mode') {
       return _t(REVEAL_MODE_I18N[value]) || value;
     }
-    if (key === 'thorough_blur') {
+    if (key === 'thorough_blur' || key === 'pick_blur_enabled') {
       return value ? _t('rule_snap_val_on') : _t('rule_snap_val_off');
     }
     if (key === 'blur_categories' && typeof value === 'object' && value !== null) {
       var enabled = Object.keys(value).filter(function(k) { return value[k]; });
-      if (enabled.length === 0) return 'None';
-      return enabled.map(function(k) {
-        // Capitalise first letter
-        return k.charAt(0).toUpperCase() + k.slice(1);
-      }).join(', ');
+      if (enabled.length === 0) return _t('rule_snap_val_none');
+      return enabled.map(function(k) { return _t('cat_' + k) || k; }).join(', ');
     }
     return String(value);
   }
@@ -60,6 +57,20 @@ const BlurrySitePopupRenderSiteRules = (() => {
   // ── Snapshot summary rows (read-only key-value list) ────────────────────
 
   function _makeSnapshotRows(snapshot) {
+    // Flatten nested snapshot to the display key set used by SNAPSHOT_LABELS.
+    var flat = {};
+    if (snapshot && snapshot.settings) Object.assign(flat, snapshot.settings);
+    if (snapshot && snapshot.blur_all && snapshot.blur_all.settings) Object.assign(flat, snapshot.blur_all.settings);
+    if (snapshot && snapshot.pick_and_blur) {
+      var pb = snapshot.pick_and_blur;
+      if (typeof pb.status === 'boolean') flat.pick_blur_enabled = pb.status;
+      if (pb.settings) {
+        if (pb.settings.blur_type   !== undefined) flat.pick_blur_type  = pb.settings.blur_type;
+        if (pb.settings.blur_color  !== undefined) flat.pick_blur_color = pb.settings.blur_color;
+        if (pb.settings.picker_mode !== undefined) flat.picker_mode     = pb.settings.picker_mode;
+      }
+    }
+
     var wrap = document.createElement('div');
     wrap.className = 'bl-rule-snapshot';
 
@@ -67,8 +78,8 @@ const BlurrySitePopupRenderSiteRules = (() => {
     var keys = Object.keys(SNAPSHOT_LABELS);
     for (var i = 0; i < keys.length; i++) {
       var key = keys[i];
-      if (!(key in snapshot)) continue;
-      var formatted = _formatSnapshotValue(key, snapshot[key]);
+      if (!(key in flat)) continue;
+      var formatted = _formatSnapshotValue(key, flat[key]);
       if (formatted === null) continue;
       hasAny = true;
 
@@ -144,11 +155,11 @@ const BlurrySitePopupRenderSiteRules = (() => {
     snapshotLabel.textContent = _t('rule_snapshot_label');
     body.appendChild(snapshotLabel);
 
-    var hasSnapshot = rule.settings && Object.keys(rule.settings).length > 0;
+    var hasSnapshot = rule.snapshot && Object.keys(rule.snapshot).length > 0;
     var snapshotWrap;
 
     if (hasSnapshot) {
-      snapshotWrap = _makeSnapshotRows(rule.settings);
+      snapshotWrap = _makeSnapshotRows(rule.snapshot || {});
     } else {
       snapshotWrap = document.createElement('p');
       snapshotWrap.className = 'bl-rule-snapshot-empty';
@@ -167,9 +178,9 @@ const BlurrySitePopupRenderSiteRules = (() => {
     recaptureBtn.className = 'bl-rule-recapture-btn';
     recaptureBtn.textContent = _t('rule_snapshot_recapture');
     recaptureBtn.addEventListener('click', function() {
-      var snapshot = blsi.Model.capture_snapshot();
-      blsi.Model.save_site_snapshot(rule.hostname_value, rule.hostname_type, snapshot).then(function() {
-        rule.settings = snapshot;
+      var snapshot = callbacks.captureSnapshot();
+      callbacks.saveSiteSnapshot(rule.hostname_value, rule.hostname_type, snapshot).then(function() {
+        rule.snapshot = snapshot;
         body.removeChild(snapshotWrap);
         snapshotWrap = _makeSnapshotRows(snapshot);
         body.insertBefore(snapshotWrap, actRow);
@@ -235,15 +246,15 @@ const BlurrySitePopupRenderSiteRules = (() => {
 
     var initialPattern     = isEdit ? (existingRule.hostname_value || '') : '';
     var initialPatternType = isEdit
-      ? (existingRule.hostname_type || blsi.pattern_types.wildcard)
-      : blsi.pattern_types.wildcard;
+      ? (existingRule.hostname_type || blsi.pattern_types.exact)
+      : blsi.pattern_types.exact;
 
     // Capture snapshot immediately on form open
     var currentSnapshot = isEdit
-      ? (existingRule.settings && Object.keys(existingRule.settings).length > 0
-          ? existingRule.settings
-          : blsi.Model.capture_snapshot())
-      : blsi.Model.capture_snapshot();
+      ? (existingRule.snapshot && Object.keys(existingRule.snapshot).length > 0
+          ? existingRule.snapshot
+          : callbacks.captureSnapshot())
+      : callbacks.captureSnapshot();
 
     var form = document.createElement('div');
     form.className = 'bl-rule-form';
@@ -270,6 +281,10 @@ const BlurrySitePopupRenderSiteRules = (() => {
     patError.hidden = true;
     patGroup.appendChild(patError);
 
+    var patHelp = document.createElement('div');
+    patHelp.className = 'bl-rule-form__help';
+    patGroup.appendChild(patHelp);
+
     form.appendChild(patGroup);
 
     // ── Match type radios ─────────────────────────────────────────────────
@@ -285,7 +300,14 @@ const BlurrySitePopupRenderSiteRules = (() => {
     var typeRow = document.createElement('div');
     typeRow.className = 'bl-rule-form__type';
 
+    var HELP_KEYS = {
+      wildcard: 'rule_pattern_help_wildcard',
+      regex:    'rule_pattern_help_regex',
+      exact:    'rule_pattern_help_exact',
+    };
+
     var radios = [
+      { value: blsi.pattern_types.exact,    labelKey: 'rule_pattern_exact' },
       { value: blsi.pattern_types.wildcard, labelKey: 'rule_pattern_wildcard' },
       { value: blsi.pattern_types.regex,    labelKey: 'rule_pattern_regex' },
     ];
@@ -312,6 +334,17 @@ const BlurrySitePopupRenderSiteRules = (() => {
     typeGroup.appendChild(typeRow);
     form.appendChild(typeGroup);
 
+    // Keep help text in sync with selected type
+    function _updateHelp() {
+      var sel = blsi.pattern_types.wildcard;
+      for (var i = 0; i < radioInputs.length; i++) {
+        if (radioInputs[i].checked) { sel = radioInputs[i].value; break; }
+      }
+      patHelp.textContent = _t(HELP_KEYS[sel] || 'rule_pattern_help_wildcard');
+    }
+    radioInputs.forEach(function(r) { r.addEventListener('change', _updateHelp); });
+    _updateHelp();
+
     // ── Snapshot preview ──────────────────────────────────────────────────
 
     var previewGroup = document.createElement('div');
@@ -325,7 +358,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
     previewLbl.textContent = _t('rule_snapshot_preview');
     previewHeader.appendChild(previewLbl);
 
-    if (isEdit && existingRule.settings && Object.keys(existingRule.settings).length > 0) {
+    if (isEdit && existingRule.snapshot && Object.keys(existingRule.snapshot).length > 0) {
       var savedNote = document.createElement('span');
       savedNote.className = 'bl-rule-form__snapshot-note';
       savedNote.textContent = _t('rule_snapshot_saved_note');
@@ -343,7 +376,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
     recaptureBtn.className = 'bl-rule-recapture-btn bl-rule-recapture-btn--inline';
     recaptureBtn.textContent = _t('rule_snapshot_recapture');
     recaptureBtn.addEventListener('click', function() {
-      currentSnapshot = blsi.Model.capture_snapshot();
+      currentSnapshot = callbacks.captureSnapshot();
       var newRows = _makeSnapshotRows(currentSnapshot);
       newRows.className += ' bl-rule-form__snapshot-preview';
       previewGroup.replaceChild(newRows, previewRows);
@@ -381,7 +414,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
     saveBtn.addEventListener('click', function() {
       var pattern = patInput.value.trim();
 
-      var selectedType = blsi.pattern_types.wildcard;
+      var selectedType = blsi.pattern_types.exact;
       for (var i = 0; i < radioInputs.length; i++) {
         if (radioInputs[i].checked) {
           selectedType = radioInputs[i].value;
@@ -410,7 +443,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
           return Object.assign({}, r, {
             hostname_value: pattern,
             hostname_type:  selectedType,
-            settings:       currentSnapshot,
+            snapshot:       currentSnapshot,
           });
         });
       } else {
@@ -418,8 +451,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
           hostname_value: pattern,
           hostname_type:  selectedType,
           blur_all:       null,
-          items:          [],
-          settings:       currentSnapshot,
+          snapshot:       currentSnapshot,
         };
         updatedRules = rules.concat([newRule]);
       }
@@ -435,7 +467,7 @@ const BlurrySitePopupRenderSiteRules = (() => {
   // ── Main render ───────────────────────────────────────────────────────────
 
   function _render(containerEl, rules, settings, callbacks, editingKey) {
-    containerEl.innerHTML = '';
+    containerEl.replaceChildren();
 
     // Hint
     var hint = document.createElement('p');
@@ -483,8 +515,8 @@ const BlurrySitePopupRenderSiteRules = (() => {
   // ── Public API ────────────────────────────────────────────────────────────
 
   async function renderBody(containerEl, settings, callbacks) {
-    containerEl.innerHTML = '';
-    var rules = await blsi.Model.get_rules();
+    containerEl.replaceChildren();
+    var rules = await callbacks.getRules();
     _render(containerEl, rules, settings, callbacks);
   }
 

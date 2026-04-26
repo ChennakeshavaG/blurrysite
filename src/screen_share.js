@@ -1,11 +1,11 @@
 /**
  * screen_share.js — Screen share event bridge (isolated world)
  *
- * Listens for '__blsi_screen_share' CustomEvents dispatched by screen_share_main.js
+ * Listens for '__blsi_screen_share' CustomEvents dispatched by main_world_bridge.js
  * (world: "MAIN") and relays them to the background via chrome.runtime messaging.
  * Background fans out SCREEN_SHARE_BLUR to all other open tabs.
  *
- * The getDisplayMedia() interceptor lives in screen_share_main.js (world: "MAIN",
+ * The getDisplayMedia() interceptor lives in main_world_bridge.js (world: "MAIN",
  * run_at: "document_start") — no script injection here.
  *
  * Covers: web-app screen shares only. OS-level captures (Zoom desktop, Discord)

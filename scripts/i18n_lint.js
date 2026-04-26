@@ -12,7 +12,7 @@
  *  - Stale keys    (locale has something en has dropped)
  *  - Placeholder drift  ({{count}} in en → Hindi must still have {{count}})
  *  - Empty values  (probably forgotten translation)
- *  - Wrong shape   (popup.json must be flat strings; messages.json must wrap)
+ *  - Wrong shape   (messages.json must wrap each value in { "message": "..." })
  *
  * Usage:
  *   node scripts/i18n_lint.js
@@ -83,28 +83,7 @@ function eqSet(a, b) {
   return true;
 }
 
-// ── Shape validators ──────────────────────────────────────────────────────
-
-/** popup.json: flat `{ "key": "value" }` (except _meta). */
-function validatePopupShape(data, errors) {
-  if (data.__parseError) {
-    errors.push('parse error: ' + data.__parseError);
-    return false;
-  }
-  if (typeof data !== 'object' || Array.isArray(data)) {
-    errors.push('root must be an object');
-    return false;
-  }
-  let ok = true;
-  for (const [key, value] of Object.entries(data)) {
-    if (META_KEYS.has(key)) continue;
-    if (typeof value !== 'string') {
-      errors.push(`key "${key}" is ${typeof value}, expected string`);
-      ok = false;
-    }
-  }
-  return ok;
-}
+// ── Shape validator ───────────────────────────────────────────────────────
 
 /** messages.json: Chrome shape `{ "key": { "message": "value", ... } }`. */
 function validateMessagesShape(data, errors) {
@@ -131,18 +110,14 @@ function validateMessagesShape(data, errors) {
   return ok;
 }
 
-/** Return a plain `{ key: string }` map from whichever shape is given. */
-function flatten(data, isMessages) {
+/** Return a plain `{ key: string }` map from messages.json shape. */
+function flatten(data) {
   const out = {};
   if (!data || data.__parseError) return out;
   for (const [key, value] of Object.entries(data)) {
     if (META_KEYS.has(key)) continue;
-    if (isMessages) {
-      if (value && typeof value === 'object' && typeof value.message === 'string') {
-        out[key] = value.message;
-      }
-    } else {
-      if (typeof value === 'string') out[key] = value;
+    if (value && typeof value === 'object' && typeof value.message === 'string') {
+      out[key] = value.message;
     }
   }
   return out;
@@ -166,7 +141,7 @@ function comparePair(enFlat, enKeys, locFlat, fileLabel, errors) {
   // Placeholder parity + empty-value check for every key present in both.
   for (const key of enKeys) {
     if (!locKeys.has(key)) continue;
-    const enVal = enFlat[key];
+    const enVal  = enFlat[key];
     const locVal = locFlat[key];
 
     if (locVal === '' && !EMPTY_ALLOWED.has(key)) {
@@ -192,28 +167,17 @@ function lint() {
     process.exit(2);
   }
 
-  // Load English first as the reference.
-  const enPopup    = readJson(path.join(LOCALES_DIR, 'en', 'popup.json'));
   const enMessages = readJson(path.join(LOCALES_DIR, 'en', 'messages.json'));
 
-  const popupErrors = [];
   const messagesErrors = [];
-
-  if (!validatePopupShape(enPopup, popupErrors)) {
-    console.error('en/popup.json failed shape validation:');
-    for (const e of popupErrors) console.error('  ' + e);
-    process.exit(1);
-  }
   if (!validateMessagesShape(enMessages, messagesErrors)) {
     console.error('en/messages.json failed shape validation:');
     for (const e of messagesErrors) console.error('  ' + e);
     process.exit(1);
   }
 
-  const enPopupFlat    = flatten(enPopup, /*isMessages*/ false);
-  const enMessagesFlat = flatten(enMessages, /*isMessages*/ true);
-  const enPopupKeys    = new Set(Object.keys(enPopupFlat));
-  const enMessagesKeys = new Set(Object.keys(enMessagesFlat));
+  const enFlat = flatten(enMessages);
+  const enKeys = new Set(Object.keys(enFlat));
 
   let totalErrors = 0;
   const perLocale = [];
@@ -222,26 +186,15 @@ function lint() {
     if (loc === 'en') continue;
     const errors = [];
 
-    const popupPath    = path.join(LOCALES_DIR, loc, 'popup.json');
     const messagesPath = path.join(LOCALES_DIR, loc, 'messages.json');
-
-    if (!fs.existsSync(popupPath)) {
-      errors.push('popup.json: missing file');
-    } else {
-      const data = readJson(popupPath);
-      if (validatePopupShape(data, errors)) {
-        const flat = flatten(data, false);
-        comparePair(enPopupFlat, enPopupKeys, flat, 'popup.json', errors);
-      }
-    }
 
     if (!fs.existsSync(messagesPath)) {
       errors.push('messages.json: missing file');
     } else {
       const data = readJson(messagesPath);
       if (validateMessagesShape(data, errors)) {
-        const flat = flatten(data, true);
-        comparePair(enMessagesFlat, enMessagesKeys, flat, 'messages.json', errors);
+        const flat = flatten(data);
+        comparePair(enFlat, enKeys, flat, 'messages.json', errors);
       }
     }
 
@@ -252,8 +205,7 @@ function lint() {
   // ── Report ─────────────────────────────────────────────────────────────
   const allOk = totalErrors === 0;
   console.log(`i18n lint: ${locales.length} locales (en reference + ${locales.length - 1} target${locales.length - 1 === 1 ? '' : 's'})`);
-  console.log(`  en/popup.json    — ${enPopupKeys.size} keys`);
-  console.log(`  en/messages.json — ${enMessagesKeys.size} keys`);
+  console.log(`  en/messages.json — ${enKeys.size} keys`);
 
   for (const { loc, errors } of perLocale) {
     if (errors.length === 0) {

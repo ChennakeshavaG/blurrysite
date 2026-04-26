@@ -83,7 +83,6 @@ popup/
     Inter-Regular.woff2         ← Inter font (3 weights)
     Inter-SemiBold.woff2
     Inter-Bold.woff2
-_locales/en/popup.json          ← English strings for i18n
 ```
 
 **Architecture:** Settings are defined as POJO config arrays in `popup_configs.js`, classified into 3 tiers (General, Advanced, Experimental). The `popup_settings_renderer.js` takes these configs + a settings object and builds DOM dynamically. Same renderer is reused for URL rule overrides.
@@ -401,7 +400,6 @@ blurrysite/
 │   ├── popup_configs.js            ← Settings classification (General/Advanced/Experimental)
 │   ├── popup_settings_renderer.js  ← Reusable POJO-driven settings component
 │   └── fonts/                      ← Inter font woff2 files
-├── _locales/en/popup.json          ← English strings for i18n
 ├── styles/
 │   └── content.css         ← Injected page styles (bl-si-blurred, bl-si-ancestor-reveal, etc.)
 ├── tests/

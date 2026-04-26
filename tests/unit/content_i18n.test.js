@@ -18,8 +18,7 @@
  * Redundant:
  *   Tests 2-7 are structurally identical to their popup_i18n.test.js counterparts.
  *   The only differences are: chrome.i18n.getUILanguage() vs navigator.language,
- *   and messages.json vs popup.json. Each test below is marked with the equivalent
- *   popup_i18n test it mirrors.
+ *   Each test below is marked with the equivalent popup_i18n test it mirrors.
  *
  * Optimization opportunities:
  *   All init/t/auto tests are structurally identical to popup_i18n — a shared
@@ -95,7 +94,7 @@ describe('blsi.ContentI18n', () => {
     expect(typeof blsi.ContentI18n.t).toBe('function');
   });
 
-  // REDUNDANT: mirrors popup_i18n "init('en') leaves t() returning English fallback" — same shape, different file (messages.json vs popup.json)
+  // REDUNDANT: mirrors popup_i18n "init('en') leaves t() returning English fallback"
   // OPTIMIZE: structurally identical to init('hi_IN') and init('ta_IN') tests — test.each candidate
   test("init('en') only fetches the English file", async () => {
     mockFetch({ '/en/messages.json': EN_BASE });

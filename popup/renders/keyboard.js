@@ -15,26 +15,29 @@ const BlurrySitePopupRenderShortcuts = (() => {
 
   /** i18n key pairs per action id */
   var ACTION_I18N = {
-    'toggle-blur-all': { label: 'shortcut_toggle_blur_all', hint: 'shortcut_toggle_blur_all_hint' },
-    'toggle-picker':   { label: 'shortcut_toggle_picker',   hint: 'shortcut_toggle_picker_hint' },
-    'clear-all':       { label: 'shortcut_clear_all',       hint: 'shortcut_clear_all_hint' },
-    'screenshot':      { label: 'shortcut_screenshot',       hint: 'shortcut_screenshot_hint' },
+    'toggle-blur-all':  { label: 'shortcut_toggle_blur_all',   hint: 'shortcut_toggle_blur_all_hint' },
+    'toggle-picker':    { label: 'shortcut_toggle_picker',     hint: 'shortcut_toggle_picker_hint' },
+    'clear-all':        { label: 'shortcut_clear_all',         hint: 'shortcut_clear_all_hint' },
+    'screenshot':       { label: 'shortcut_screenshot',        hint: 'shortcut_screenshot_hint' },
+    'blur-selection':   { label: 'shortcut_blur_selection',    hint: 'shortcut_blur_selection_hint' },
   };
 
   /** Accent CSS variable per action (references theme tokens) */
   var ACTION_ACCENT = {
-    'toggle-blur-all': 'var(--bl-indigo)',
-    'toggle-picker':   'var(--bl-purple)',
-    'clear-all':       'var(--bl-danger)',
-    'screenshot':      'var(--bl-sky)',
+    'toggle-blur-all':  'var(--bl-indigo)',
+    'toggle-picker':    'var(--bl-purple)',
+    'clear-all':        'var(--bl-danger)',
+    'screenshot':       'var(--bl-sky)',
+    'blur-selection':   'var(--bl-amber)',
   };
 
   /** SVG icon markup per action (18×18, stroke-width 2, inside 32px badge) */
   var ACTION_ICONS = {
-    'toggle-blur-all': '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 8s3-4.5 7-4.5S15 8 15 8s-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>',
-    'toggle-picker':   '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="4"/><line x1="8" y1="1" x2="8" y2="4"/><line x1="8" y1="12" x2="8" y2="15"/><line x1="1" y1="8" x2="4" y2="8"/><line x1="12" y1="8" x2="15" y2="8"/></svg>',
-    'clear-all':       '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5l1.5 1.5L6.5 12H4.5L3 10.5 9.5 4z"/><line x1="1" y1="14" x2="15" y2="14"/></svg>',
-    'screenshot':      '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="5" width="14" height="9" rx="1.5"/><path d="M5.5 5L7 3h2l1.5 2"/><circle cx="8" cy="9.5" r="2"/></svg>',
+    'toggle-blur-all':  '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 8s3-4.5 7-4.5S15 8 15 8s-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+    'toggle-picker':    '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="4"/><line x1="8" y1="1" x2="8" y2="4"/><line x1="8" y1="12" x2="8" y2="15"/><line x1="1" y1="8" x2="4" y2="8"/><line x1="12" y1="8" x2="15" y2="8"/></svg>',
+    'clear-all':        '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5l1.5 1.5L6.5 12H4.5L3 10.5 9.5 4z"/><line x1="1" y1="14" x2="15" y2="14"/></svg>',
+    'screenshot':       '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="5" width="14" height="9" rx="1.5"/><path d="M5.5 5L7 3h2l1.5 2"/><circle cx="8" cy="9.5" r="2"/></svg>',
+    'blur-selection':   '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h12M2 8h8M2 11h10"/><rect x="8" y="6" width="6" height="4" rx="1" fill="currentColor" opacity="0.25" stroke="none"/></svg>',
   };
 
   /**
@@ -91,13 +94,19 @@ const BlurrySitePopupRenderShortcuts = (() => {
     return els;
   }
 
+  function _parseSvg(svgStr) {
+    if (!svgStr) return null;
+    var doc = new DOMParser().parseFromString(svgStr, 'image/svg+xml');
+    return document.adoptNode(doc.documentElement);
+  }
+
   // ── Row builders ──────────────────────────────────────────────────────────────
 
   /**
    * Build the normal (non-capture) card state for a row.
    */
   function _buildNormalRow(rowEl, action, settings, onSave, activateCapture) {
-    rowEl.innerHTML = '';
+    rowEl.replaceChildren();
     rowEl.className = 'bl-sc-row';
 
     var i18nKeys = ACTION_I18N[action.id] || {};
@@ -114,7 +123,7 @@ const BlurrySitePopupRenderShortcuts = (() => {
     var iconEl = document.createElement('span');
     iconEl.className = 'bl-sc-card-icon';
     iconEl.style.color = accent;
-    iconEl.innerHTML = ACTION_ICONS[action.id] || '';
+    var _svg = _parseSvg(ACTION_ICONS[action.id]); if (_svg) iconEl.appendChild(_svg);
     innerEl.appendChild(iconEl);
 
     // Label + description
@@ -195,7 +204,7 @@ const BlurrySitePopupRenderShortcuts = (() => {
    * listener at capture phase. Cleans up on save / cancel / escape.
    */
   function _buildCaptureRow(rowEl, action, settings, onSave, activateCapture, cancelCapture) {
-    rowEl.innerHTML = '';
+    rowEl.replaceChildren();
     rowEl.className = 'bl-sc-row bl-sc-row--capturing';
 
     var recordedChord = null;
@@ -212,7 +221,7 @@ const BlurrySitePopupRenderShortcuts = (() => {
     var iconEl = document.createElement('span');
     iconEl.className = 'bl-sc-card-icon';
     iconEl.style.color = accent;
-    iconEl.innerHTML = ACTION_ICONS[action.id] || '';
+    var _svg = _parseSvg(ACTION_ICONS[action.id]); if (_svg) iconEl.appendChild(_svg);
     innerEl.appendChild(iconEl);
 
     var labelEl = document.createElement('span');
@@ -290,7 +299,7 @@ const BlurrySitePopupRenderShortcuts = (() => {
 
       // Render keycaps in preview
       previewEl.className = 'bl-sc-capture__preview';
-      previewEl.innerHTML = '';
+      previewEl.replaceChildren();
       var keycaps = _buildKeycaps([recordedChord]);
       for (var ki = 0; ki < keycaps.length; ki++) {
         previewEl.appendChild(keycaps[ki]);
@@ -298,9 +307,9 @@ const BlurrySitePopupRenderShortcuts = (() => {
 
       if (blsi.ShortcutLabel.isReserved(recordedChord)) {
         var reserved = blsi.ShortcutLabel.lookup(recordedChord);
-        warningEl.textContent = (reserved && reserved.label)
-          ? '⚠️ Reserved: ' + reserved.label + ' — saving anyway will override it.'
-          : '⚠️ This chord is reserved by the browser.';
+        warningEl.textContent = '⚠️ ' + ((reserved && reserved.label)
+          ? _t('shortcut_reserved_known').replace('{label}', reserved.label)
+          : _t('shortcut_reserved_browser'));
         warningEl.hidden = false;
       } else {
         warningEl.hidden = true;
@@ -348,7 +357,7 @@ const BlurrySitePopupRenderShortcuts = (() => {
    * @param {function}    onSave      - Called with partial settings patch
    */
   function renderBody(containerEl, settings, onSave) {
-    containerEl.innerHTML = '';
+    containerEl.replaceChildren();
 
     var actions = blsi.Actions.list();
 

@@ -97,6 +97,7 @@ function fireClick(target) {
 function fireMouseOver(target) {
   const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
   Object.defineProperty(ev, 'target', { value: target, writable: false });
+  ev[Symbol.for('blsi_event_trusted')] = true;
   document.dispatchEvent(ev);
 }
 
@@ -207,6 +208,7 @@ describe('blsi.Reveal — hover mode', () => {
     fireMouseOver(el);
     const out = new MouseEvent('mouseout', { bubbles: true });
     Object.defineProperty(out, 'target', { value: el });
+    out[Symbol.for('blsi_event_trusted')] = true;
     document.dispatchEvent(out);
     // Still revealed right after mouseout
     expect(el.dataset.blSiReveal).toBe('1');
@@ -251,6 +253,7 @@ describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
 
     const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
     Object.defineProperty(ev, 'target', { value: hostEl, writable: false });
+    ev[Symbol.for('blsi_event_trusted')] = true;
     // Override composedPath to return the actual inner element first
     ev.composedPath = () => [innerEl, hostEl, document.body, document.documentElement, document, window];
     document.dispatchEvent(ev);
@@ -298,6 +301,7 @@ describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
 
     const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
     Object.defineProperty(ev, 'target', { value: host, writable: false });
+    ev[Symbol.for('blsi_event_trusted')] = true;
     ev.composedPath = () => [inner, shadow, host, document.body, document.documentElement, document, window];
     document.dispatchEvent(ev);
 
@@ -324,6 +328,7 @@ describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
 
     const ev = new MouseEvent('mouseover', { bubbles: true, clientX: 5, clientY: 5 });
     Object.defineProperty(ev, 'target', { value: host, writable: false });
+    ev[Symbol.for('blsi_event_trusted')] = true;
     ev.composedPath = () => [inner, shadow, host, wrapper, document.body, document.documentElement, document, window];
     document.dispatchEvent(ev);
 

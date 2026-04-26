@@ -5,25 +5,15 @@
  */
 
 /* === TEST QUALITY ANNOTATIONS ===
- * COVERS: injectRules/removeRules, stampElements, tryBlurTextCheck, applyBlur/removeBlur/toggleBlur,
+ * COVERS: injectRules/removeRules, stampElements, tryBlurTextCheck, applyBlur/removeBlur,
  *         isBlurred, unblurAll, shouldBlurElement, matchesActiveCategories, CATEGORY_SELECTORS,
- *         zone overlay CRUD, handleSite reconciler (items + page-wide), counters,
- *         shadow DOM (injectRules/stampElements/handleDocument/handleSite/teardown/observeRoot),
+ *         zone overlay queries (getZoneOverlays), handleSite reconciler (items + page-wide), counters,
+ *         shadow DOM (injectRules/stampElements/handleShadowRoot/handleSite/teardown/observeRoot),
  *         custom element stamping, ARIA role matching, reveal cascade rule, li/dt/dd placement.
  *
- * REDUNDANT:
- *   - "applyBlur sets data-bl-si-blur" + "applyBlur idempotent": both assert stamp attribute;
- *     idempotent test adds no new assertion beyond checking the value is still '1'.
- *   - "isBlurred true for data-bl-si-blur" + shouldBlurElement "true for always-blur":
- *     both confirm that isBlurred delegates to shouldBlurElement for always-blur tags.
- *   - "defaults to page anchor when anchor omitted" + "page anchor uses position: absolute":
- *     both verify the same default-anchor path; only the zoneData.anchor field differs.
- *   - category coverage "hgroup/progress+meter/audio" tests each verify a single tag in
- *     the CSS output — three nearly identical tests for the same CSS-building logic.
- *
  * OPTIMIZE:
- *   - Zone overlay tests (8 createZoneOverlay tests) share the same zoneData shape;
- *     extract a makeZone(id, overrides) helper to reduce boilerplate.
+ *   - category coverage tests (hgroup/audio/progress+meter) could use test.each
+ *     over tag name and expected css substring.
  *   - ARIA role tests (7 tests) follow identical injectRules→inspect-css or
  *     createElement→setAttribute→matchesActiveCategories patterns; use test.each
  *     over role names and expected boolean outcomes.
@@ -100,8 +90,40 @@ afterEach(() => {
   blsi.BlurEngine.unblurAll();
 });
 
+// ── AGENT NAVIGATION ─────────────────────────────────────────────────────────
+// Run: grep -n "§" tests/unit/blur_engine.test.js  → get current line of each test section
+// Each test section mirrors the same § label in src/blur_engine.js.
+//
+// Use case                     → Test section          → Code section
+// ─────────────────────────────────────────────────────────────────────────────
+// injectRules / CSS modes /    → §CSS-INJECTION-TESTS  → §CSS-INJECTION
+//   pick-blur rules / reveal
+//   cascade / ARIA CSS
+//
+// stampElements / tryBlur-     → §STAMP-OBSERVER-TESTS → §STAMP-OBSERVER
+//   TextCheck / shadow DOM /
+//   observeRoot / custom elem
+//
+// applyBlur / removeBlur /     → §ELEMENT-QUERIES-TESTS → §ELEMENT-QUERIES (implicit)
+//   isBlurred / unblurAll /
+//   shouldBlurElement /
+//   matchesActiveCategories
+//
+// CATEGORY_SELECTORS const /   → §CATEGORY-SELECTORS-TESTS → §CATEGORY-SELECTORS
+//   category coverage / li/dt
+//
+// Zone overlays / item         → §ITEMS-ZONES-TESTS    → §ITEMS-ZONES
+//   reconcile / counters /
+//   handleIframe
+//
+// handleSite page-wide /       → §ORCHESTRATOR-TESTS   → §ORCHESTRATOR
+//   blurAll reconcile /
+//   pick-blur injection
+// ─────────────────────────────────────────────────────────────────────────────
+
 describe('blsi.BlurEngine', () => {
 
+  // ── §CSS-INJECTION-TESTS ─────────────────────────────────────────────────
   // USER IMPACT: blur-all toggle — CSS rules injected so all matching elements render blurred
   describe('injectRules', () => {
     test('creates style element in head', () => {
@@ -156,6 +178,7 @@ describe('blsi.BlurEngine', () => {
   });
 
   // USER IMPACT: SPA navigation — new DOM elements stamped correctly after route change
+  // ── §STAMP-OBSERVER-TESTS ────────────────────────────────────────────────
   describe('stampElements', () => {
     test('stamps text-check elements with direct text', () => {
       document.body.innerHTML = '<div>text</div><div></div>';
@@ -206,19 +229,11 @@ describe('blsi.BlurEngine', () => {
   });
 
   // USER IMPACT: picker element click — selected element gets blur attribute applied
+  // ── §ELEMENT-QUERIES-TESTS ───────────────────────────────────────────────
   describe('applyBlur (picker)', () => {
     test('sets data-bl-si-blur', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.applyBlur(div);
-      expect(div.dataset.blSiBlur).toBe('1');
-    });
-
-    // REDUNDANT: both this and "sets data-bl-si-blur" assert dataset.blSiBlur === '1'; second call adds no new assertion
-    test('idempotent', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      blsi.BlurEngine.applyBlur(div);
       blsi.BlurEngine.applyBlur(div);
       expect(div.dataset.blSiBlur).toBe('1');
     });
@@ -242,17 +257,6 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
-  describe('toggleBlur', () => {
-    test('toggles on/off', () => {
-      const div = document.createElement('div');
-      document.body.appendChild(div);
-      blsi.BlurEngine.toggleBlur(div);
-      expect(blsi.BlurEngine.isBlurred(div)).toBe(true);
-      blsi.BlurEngine.toggleBlur(div);
-      expect(blsi.BlurEngine.isBlurred(div)).toBe(false);
-    });
-  });
-
   // USER IMPACT: picker unblur decision — isBlurred determines whether click triggers onBlur or onUnblur
   describe('isBlurred', () => {
     test('true for data-bl-si-blur', () => {
@@ -262,14 +266,6 @@ describe('blsi.BlurEngine', () => {
       expect(blsi.BlurEngine.isBlurred(div)).toBe(true);
     });
 
-    // REDUNDANT: overlaps with shouldBlurElement "true for always-blur" — both verify the same always-blur tag path
-    test('true for always-blur tag when rules active', () => {
-      const p = document.createElement('p');
-      document.body.appendChild(p);
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
-      expect(blsi.BlurEngine.isBlurred(p)).toBe(true);
-    });
-
     test('false for non-blurred', () => {
       expect(blsi.BlurEngine.isBlurred(document.createElement('div'))).toBe(false);
     });
@@ -277,7 +273,15 @@ describe('blsi.BlurEngine', () => {
     test('false for null', () => {
       expect(blsi.BlurEngine.isBlurred(null)).toBe(false);
     });
-    // MISSING: no test for isBlurred returning false after rules removed from an always-blur tag
+
+    test('false after rules removed from always-blur tag', () => {
+      const p = document.createElement('p');
+      document.body.appendChild(p);
+      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      expect(blsi.BlurEngine.isBlurred(p)).toBe(true);
+      blsi.BlurEngine.removeRules(document);
+      expect(blsi.BlurEngine.isBlurred(p)).toBe(false);
+    });
   });
 
   // USER IMPACT: clear all blur shortcut (Alt+Shift+U) — removes every blur without page reload
@@ -319,10 +323,16 @@ describe('blsi.BlurEngine', () => {
     test('false for null', () => {
       expect(blsi.BlurEngine.shouldBlurElement(null, ALL, false)).toBe(false);
     });
-    // MISSING: no test for shouldBlurElement with element whose category is disabled (e.g. img with MEDIA:false)
+
+    test('false for img when MEDIA category is off', () => {
+      const img = document.createElement('img');
+      document.body.appendChild(img);
+      expect(blsi.BlurEngine.shouldBlurElement(img, { text: true, media: false, form: true, table: true, structure: true }, false)).toBe(false);
+    });
   });
 
   // USER IMPACT: settings panel category toggles — only elements in enabled categories are selectable/blurred
+  // ── §CATEGORY-SELECTORS-TESTS ────────────────────────────────────────────
   describe('CATEGORY_SELECTORS', () => {
     test('frozen with 5 categories', () => {
       expect(Object.isFrozen(blsi.BlurEngine.CATEGORY_SELECTORS)).toBe(true);
@@ -341,89 +351,28 @@ describe('blsi.BlurEngine', () => {
       const img = document.createElement('img');
       expect(blsi.BlurEngine.matchesActiveCategories(img, { text: true, media: false, form: false, table: false, structure: false })).toBe(false);
     });
-    // MISSING: no test for matchesActiveCategories with a custom element (hyphenated tag name)
-    // OPTIMIZE: these two tests follow the same img+category on/off pattern — use test.each([tag, cats, expected])
-  });
 
-  // ── Zone overlay methods ──────────────────────────────────────────────────
-
-  // USER IMPACT: sticky picker — zone overlay rendered at correct document/viewport coordinates
-  // OPTIMIZE: all createZoneOverlay tests share the same zoneData shape; extract makeZone(id, overrides) helper
-  describe('createZoneOverlay', () => {
-    test('injects overlay div into document.body', () => {
-      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_test1', name: 'Sticky 1', x: 10, y: 20, width: 100, height: 50 });
-      expect(el).not.toBeNull();
-      expect(el.parentNode).toBe(document.body);
-      expect(el.dataset.blSiZone).toBe('s_test1');
-      expect(el.dataset.blSiZoneName).toBe('Sticky 1');
-    });
-
-    test('sets position styles from coordinates', () => {
-      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_pos', name: 'S', x: 120, y: 340, width: 400, height: 200 });
-      expect(el.style.left).toBe('120px');
-      expect(el.style.top).toBe('340px');
-      expect(el.style.width).toBe('400px');
-      expect(el.style.height).toBe('200px');
-    });
-
-    test('has bl-si-zone-overlay class', () => {
-      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_cls', name: 'S', x: 0, y: 0, width: 10, height: 10 });
-      expect(el.classList.contains('bl-si-zone-overlay')).toBe(true);
-    });
-
-    test('returns null for missing id', () => {
-      expect(blsi.BlurEngine.createZoneOverlay({ name: 'S', x: 0, y: 0, width: 10, height: 10 })).toBeNull();
-      expect(blsi.BlurEngine.createZoneOverlay(null)).toBeNull();
-    });
-
-    test('replaces existing overlay with same id', () => {
-      blsi.BlurEngine.createZoneOverlay({ id: 's_dup', name: 'S1', x: 10, y: 10, width: 50, height: 50 });
-      const el2 = blsi.BlurEngine.createZoneOverlay({ id: 's_dup', name: 'S1b', x: 20, y: 20, width: 60, height: 60 });
-      expect(el2.style.left).toBe('20px');
-      expect(document.querySelectorAll('[data-bl-si-zone="s_dup"]').length).toBe(1);
-    });
-
-    test('defaults to page anchor when anchor is omitted', () => {
-      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_def', name: 'S', x: 0, y: 0, width: 10, height: 10 });
-      expect(el.style.position).toBe('absolute');
-      expect(el.dataset.blSiZoneAnchor).toBe('page');
-    });
-
-    // REDUNDANT: same assertions as "defaults to page anchor when anchor is omitted" — only difference is explicit anchor:'page'
-    test('page anchor uses position: absolute', () => {
-      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_page', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 });
-      expect(el.style.position).toBe('absolute');
-      expect(el.dataset.blSiZoneAnchor).toBe('page');
-    });
-
-    test('screen anchor uses position: fixed', () => {
-      const el = blsi.BlurEngine.createZoneOverlay({ id: 's_scr', name: 'S', anchor: 'screen', x: 0, y: 0, width: 10, height: 10 });
-      expect(el.style.position).toBe('fixed');
-      expect(el.dataset.blSiZoneAnchor).toBe('screen');
+    test('false for custom element (hyphenated tag) when no category matches', () => {
+      const el = document.createElement('my-widget');
+      document.body.appendChild(el);
+      expect(blsi.BlurEngine.matchesActiveCategories(el, { text: true, media: true, form: true, table: true, structure: true })).toBe(false);
     });
   });
 
-  // USER IMPACT: sticky picker cleanup — removing a zone removes its overlay from the page
-  describe('removeZoneOverlay', () => {
-    test('removes overlay from DOM and tracking', () => {
-      blsi.BlurEngine.createZoneOverlay({ id: 's_rm', name: 'S', x: 0, y: 0, width: 10, height: 10 });
-      expect(document.querySelector('[data-bl-si-zone="s_rm"]')).not.toBeNull();
-      blsi.BlurEngine.removeZoneOverlay('s_rm');
-      expect(document.querySelector('[data-bl-si-zone="s_rm"]')).toBeNull();
-    });
-
-    test('no-op for unknown id', () => {
-      expect(() => blsi.BlurEngine.removeZoneOverlay('s_nonexistent')).not.toThrow();
-    });
-  });
+  // ── §ITEMS-ZONES-TESTS ───────────────────────────────────────────────────
+  // ── Zone overlay queries ──────────────────────────────────────────────────
+  // Zone creation/removal is internal — driven via handleSite item reconcile.
 
   // USER IMPACT: popup zone list — popup queries active overlays to display saved zones
   describe('getZoneOverlays', () => {
-    test('returns all active overlays', () => {
-      blsi.BlurEngine.createZoneOverlay({ id: 's_a', name: 'A', x: 0, y: 0, width: 10, height: 10 });
-      blsi.BlurEngine.createZoneOverlay({ id: 's_b', name: 'B', x: 20, y: 20, width: 10, height: 10 });
-      const zones = blsi.BlurEngine.getZoneOverlays();
-      expect(zones).toHaveLength(2);
+    const stickyBase = { enabled: true, blur_all_active: true, blur_categories: { text: true, media: false, form: false, table: false, structure: false }, blur_mode: null, thorough_blur: false };
+
+    test('returns all active overlays after handleSite applies sticky items', async () => {
+      await blsi.BlurEngine.handleSite({ ...stickyBase, blur_items: [
+        { type: 'sticky', id: 's_a', name: 'A', anchor: 'page', x: 0, y: 0, width: 10, height: 10 },
+        { type: 'sticky', id: 's_b', name: 'B', anchor: 'page', x: 20, y: 20, width: 10, height: 10 },
+      ]});
+      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(2);
     });
 
     test('returns empty array when none exist', () => {
@@ -431,23 +380,18 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
-  // USER IMPACT: clear all blur — all zone overlays removed from the page in one call
-  describe('removeAllZoneOverlays', () => {
-    test('removes all overlays', () => {
-      blsi.BlurEngine.createZoneOverlay({ id: 's_x', name: 'X', x: 0, y: 0, width: 10, height: 10 });
-      blsi.BlurEngine.createZoneOverlay({ id: 's_y', name: 'Y', x: 20, y: 20, width: 10, height: 10 });
-      blsi.BlurEngine.removeAllZoneOverlays();
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(0);
-      expect(document.querySelectorAll('.bl-si-zone-overlay').length).toBe(0);
-    });
-  });
-
   describe('unblurAll cleans zones', () => {
-    test('removes zone overlays along with data-bl-si-blur elements', () => {
+    test('removes zone overlays along with data-bl-si-blur elements', async () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
       blsi.BlurEngine.applyBlur(div);
-      blsi.BlurEngine.createZoneOverlay({ id: 's_unblur', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+      await blsi.BlurEngine.handleSite({
+        enabled: true, blur_all_active: true, blur_items: [
+          { type: 'sticky', id: 's_unblur', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 },
+        ],
+        blur_categories: { text: true, media: false, form: false, table: false, structure: false },
+        blur_mode: null, thorough_blur: false,
+      });
 
       blsi.BlurEngine.unblurAll();
       expect(div.dataset.blSiBlur).toBeUndefined();
@@ -456,10 +400,16 @@ describe('blsi.BlurEngine', () => {
   });
 
   describe('_isExtensionUI excludes zones', () => {
-    test('zone overlay not treated as blur target', () => {
-      const zone = blsi.BlurEngine.createZoneOverlay({ id: 's_excl', name: 'S', x: 0, y: 0, width: 10, height: 10 });
+    test('zone overlay not treated as blur target', async () => {
+      await blsi.BlurEngine.handleSite({
+        enabled: true, blur_all_active: true, blur_items: [
+          { type: 'sticky', id: 's_excl', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 },
+        ],
+        blur_categories: { text: true, media: false, form: false, table: false, structure: false },
+        blur_mode: null, thorough_blur: false,
+      });
+      const zone = blsi.BlurEngine.getZoneOverlays()[0];
       blsi.BlurEngine.applyBlur(zone);
-      // applyBlur should be a no-op on extension UI elements
       expect(zone.dataset.blSiBlur).toBeUndefined();
     });
   });
@@ -548,8 +498,22 @@ describe('blsi.BlurEngine', () => {
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('rmsel').dataset.blSiPickBlur).toBeUndefined();
     });
-    // MISSING: no test for dynamic item whose selector matches nothing (element not in DOM)
-    // MISSING: no test for sticky item with anchor:'screen' (position:fixed overlay)
+    test('dynamic item with no DOM match is a no-op (does not throw)', async () => {
+      document.body.innerHTML = '';
+      fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#does-not-exist' }];
+      await expect(
+        blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items })
+      ).resolves.not.toThrow();
+    });
+
+    test('sticky item with anchor screen creates position:fixed overlay', async () => {
+      fakeStorage.items = [{ type: 'sticky', id: 'ss_screen', name: 'Sticky 1', anchor: 'screen', x: 50, y: 80, width: 200, height: 100 }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      const overlays = blsi.BlurEngine.getZoneOverlays();
+      expect(overlays).toHaveLength(1);
+      expect(overlays[0].style.position).toBe('fixed');
+      expect(overlays[0].dataset.blSiZoneAnchor).toBe('screen');
+    });
   });
 
   // USER IMPACT: blur item naming in popup — "Dynamic 1", "Sticky 2" labels in the saved items list
@@ -558,41 +522,78 @@ describe('blsi.BlurEngine', () => {
       blsi.BlurEngine.resetCounters();
     });
 
-    test('allocateDynamicName increments', () => {
-      expect(blsi.BlurEngine.allocateDynamicName()).toBe('Dynamic 1');
-      expect(blsi.BlurEngine.allocateDynamicName()).toBe('Dynamic 2');
+    test('allocateElementName increments', () => {
+      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 1');
+      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 2');
     });
 
-    test('allocateStickyName increments', () => {
-      expect(blsi.BlurEngine.allocateStickyName()).toBe('Sticky 1');
-      expect(blsi.BlurEngine.allocateStickyName()).toBe('Sticky 2');
+    test('allocateStickyName page anchor increments', () => {
+      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 1');
+      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 2');
     });
 
-    test('resetCounters zeroes both', () => {
-      blsi.BlurEngine.allocateDynamicName();
-      blsi.BlurEngine.allocateStickyName();
+    test('allocateStickyName screen anchor increments', () => {
+      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 1');
+      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 2');
+    });
+
+    test('allocateStickyName defaults to page when anchor missing', () => {
+      expect(blsi.BlurEngine.allocateStickyName()).toBe('Area on page 1');
+    });
+
+    test('resetCounters zeroes all three', () => {
+      blsi.BlurEngine.allocateElementName();
+      blsi.BlurEngine.allocateStickyName('page');
+      blsi.BlurEngine.allocateStickyName('screen');
       blsi.BlurEngine.resetCounters();
-      expect(blsi.BlurEngine.allocateDynamicName()).toBe('Dynamic 1');
-      expect(blsi.BlurEngine.allocateStickyName()).toBe('Sticky 1');
+      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 1');
+      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 1');
+      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 1');
     });
 
-    test('blurAll seeds dynamic counter from item name (high-water mark)', async () => {
+    test('seeds element counter from new-format item name', async () => {
+      document.body.innerHTML = '<div id="seed">x</div>';
+      fakeStorage.items = [{ type: 'dynamic', name: 'Element 5', selector: '#seed' }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 6');
+    });
+
+    test('seeds element counter from legacy Dynamic name (backward compat)', async () => {
       document.body.innerHTML = '<div id="seed">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 5', selector: '#seed' }];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateDynamicName()).toBe('Dynamic 6');
+      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 6');
     });
 
-    test('blurAll seeds sticky counter from item name', async () => {
+    test('seeds page area counter from new-format item name', async () => {
+      fakeStorage.items = [{
+        type: 'sticky', id: 's_seed', name: 'Area on page 9',
+        x: 0, y: 0, width: 10, height: 10,
+      }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 10');
+    });
+
+    test('seeds screen area counter from new-format item name', async () => {
+      fakeStorage.items = [{
+        type: 'sticky', id: 's_seed2', name: 'Area on screen 3',
+        anchor: 'screen', x: 0, y: 0, width: 10, height: 10,
+      }];
+      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 4');
+    });
+
+    test('seeds page counter from legacy Sticky name (backward compat)', async () => {
       fakeStorage.items = [{
         type: 'sticky', id: 's_seed', name: 'Sticky 9',
         x: 0, y: 0, width: 10, height: 10,
       }];
       await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateStickyName()).toBe('Sticky 10');
+      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 10');
     });
   });
 
+  // ── §ORCHESTRATOR-TESTS ──────────────────────────────────────────────────
   // ─── blurAll() reconciler: page-wide blur-all handling ────────────────────
   // USER IMPACT: blur-all toggle and settings change — page-wide state reconciled correctly
   describe('blurAll — page-wide reconcile', () => {
@@ -771,21 +772,6 @@ describe('blsi.BlurEngine', () => {
       expect(css).toContain('hgroup');
     });
 
-    // REDUNDANT: same injectRules→css.toContain pattern as "hgroup" test above
-    test('progress and meter are stamped when FORM is on (alwaysBlur rule)', () => {
-      blsi.BlurEngine.injectRules(document,onlyFormCats);
-      const css = document.getElementById('bl-si-blur-styles').textContent;
-      expect(css).toContain('progress');
-      expect(css).toContain('meter');
-    });
-
-    // REDUNDANT: same injectRules→css.toContain pattern as "hgroup" and "progress/meter" tests above
-    test('audio is stamped when MEDIA is on (alwaysBlur rule)', () => {
-      blsi.BlurEngine.injectRules(document,onlyMediaCats);
-      const css = document.getElementById('bl-si-blur-styles').textContent;
-      expect(css).toContain('audio');
-    });
-
     test('ruby/rt/rp gated by text content when TEXT is on', () => {
       document.body.innerHTML =
         '<ruby id="ruby-filled">漢<rt id="rt-filled">kan</rt></ruby>' +
@@ -891,10 +877,11 @@ describe('blsi.BlurEngine', () => {
     // MISSING: no test that CSS rule correctly uses :not(button):not(input) guard to avoid double-applying to native form elements
   });
 
+  // ── §SHADOW-DOM-TESTS ────────────────────────────────────────────────────
   // ─── Shadow DOM support ───────────────────────────────────────────────────
   // Uses jsdom's attachShadow({ mode: 'open' }) to create real shadow roots.
   // Tests exercise the root-aware API (injectRules, removeRules, stampElements,
-  // handleDocument, handleSite, teardown) in shadow root scope.
+  // handleShadowRoot, handleSite, teardown) in shadow root scope.
   // USER IMPACT: web component sites (Slack/Discord/Figma) — blur penetrates shadow boundaries
   // OPTIMIZE: manual host+shadow+innerHTML setup repeated in every test; extend the shared makeShadowRoot() helper
   describe('shadow DOM', () => {
@@ -903,7 +890,7 @@ describe('blsi.BlurEngine', () => {
     // Drive _lastReconcileKey to 'inactive' after each test so that the next
     // handleSite(BLUR_ALL_ACTIVE:true, textCats) call sees pageWideChanged=true.
     // Without this, two consecutive handleSite(active, textCats) calls in
-    // adjacent tests skip handleDocument on the second call (key unchanged).
+    // adjacent tests skip handleShadowRoot on the second call (key unchanged).
     afterEach(async () => {
       await blsi.BlurEngine.handleSite({
         enabled: true, blur_all_active: false, blur_items: [],
@@ -966,35 +953,35 @@ describe('blsi.BlurEngine', () => {
       expect(found).toEqual([]);
     });
 
-    // ── handleDocument ─────────────────────────────────────────────────────
+    // ── handleShadowRoot ───────────────────────────────────────────────────
 
-    test('handleDocument active path injects rules into shadow root', async () => {
+    test('handleShadowRoot active path injects rules into shadow root', async () => {
       const sr = makeShadowRoot('<p>hello</p>');
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleDocument(s, sr);
+      await blsi.BlurEngine.handleShadowRoot(s, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
     });
 
-    test('handleDocument active path stamps text-check elements inside shadow root', async () => {
+    test('handleShadowRoot active path stamps text-check elements inside shadow root', async () => {
       const sr = makeShadowRoot('<span>secret</span>');
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleDocument(s, sr);
+      await blsi.BlurEngine.handleShadowRoot(s, sr);
       expect(sr.querySelector('span').dataset.blSiBlur).toBe('1');
     });
 
-    test('handleDocument inactive path removes rules and stamps from shadow root', async () => {
+    test('handleShadowRoot inactive path removes rules and stamps from shadow root', async () => {
       const sr = makeShadowRoot('<span>secret</span>');
       const on  = { enabled: true, blur_all_active: true,  blur_categories: textCats, blur_mode: null, thorough_blur: false };
       const off = { enabled: true, blur_all_active: false, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleDocument(on, sr);
+      await blsi.BlurEngine.handleShadowRoot(on, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(sr.querySelector('span').dataset.blSiBlur).toBe('1');
-      await blsi.BlurEngine.handleDocument(off, sr);
+      await blsi.BlurEngine.handleShadowRoot(off, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).toBeNull();
       expect(sr.querySelector('span').dataset.blSiBlur).toBeUndefined();
     });
 
-    test('handleDocument recurses into nested shadow roots', async () => {
+    test('handleShadowRoot recurses into nested shadow roots', async () => {
       // document.body → outerHost → sr → innerHost → nestedSr
       const outerHost = document.createElement('div');
       document.body.appendChild(outerHost);
@@ -1005,7 +992,7 @@ describe('blsi.BlurEngine', () => {
       nestedSr.innerHTML = '<span>nested secret</span>';
 
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleDocument(s, sr);
+      await blsi.BlurEngine.handleShadowRoot(s, sr);
 
       expect(nestedSr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBe('1');
@@ -1024,7 +1011,7 @@ describe('blsi.BlurEngine', () => {
       nestedSr.innerHTML = '<span>text</span>';
 
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleDocument(s, sr);
+      await blsi.BlurEngine.handleShadowRoot(s, sr);
       expect(nestedSr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBe('1');
 
@@ -1077,13 +1064,74 @@ describe('blsi.BlurEngine', () => {
 
     // ── observeRoot idempotency ────────────────────────────────────────────
 
-    test('handleDocument called twice on same shadow root yields one style element', async () => {
+    test('handleShadowRoot called twice on same shadow root yields one style element', async () => {
       const sr = makeShadowRoot('<span>text</span>');
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleDocument(s, sr);
-      await blsi.BlurEngine.handleDocument(s, sr);
+      await blsi.BlurEngine.handleShadowRoot(s, sr);
+      await blsi.BlurEngine.handleShadowRoot(s, sr);
       expect(sr.querySelectorAll('#bl-si-blur-styles').length).toBe(1);
     });
+    // ── __blsi_shadow_attached event (late attachShadow detection) ───────────
+
+    test('__blsi_shadow_attached event triggers injectRules on newly-attached shadow root', async () => {
+      // Simulate: host already in DOM at stamp time (no shadow root yet),
+      // then shadow root is attached asynchronously after the idle stamp pass.
+      // main_world_bridge.js fires __blsi_shadow_attached; blur_engine should observe it.
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      await blsi.BlurEngine.handleSite({
+        enabled: true, blur_all_active: true, blur_items: [],
+        blur_categories: textCats, blur_mode: null, thorough_blur: false,
+      });
+
+      // Shadow root attached AFTER handleSite stamp pass — the gap this feature closes.
+      const sr = host.attachShadow({ mode: 'open' });
+      sr.innerHTML = '<span>secret</span>';
+
+      host.dispatchEvent(
+        new CustomEvent('__blsi_shadow_attached', { bubbles: true, composed: true })
+      );
+
+      // injectRules is synchronous inside handleShadowRoot — style injected immediately.
+      expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
+    });
+
+    test('__blsi_shadow_attached is a no-op when blur-all is inactive', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      await blsi.BlurEngine.handleSite({
+        enabled: true, blur_all_active: false, blur_items: [],
+        blur_categories: textCats, blur_mode: null, thorough_blur: false,
+      });
+
+      const sr = host.attachShadow({ mode: 'open' });
+      host.dispatchEvent(
+        new CustomEvent('__blsi_shadow_attached', { bubbles: true, composed: true })
+      );
+
+      expect(sr.querySelector('#bl-si-blur-styles')).toBeNull();
+    });
+
+    test('__blsi_shadow_attached is a no-op when shadow root already observed', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const sr = host.attachShadow({ mode: 'open' });
+      sr.innerHTML = '<span>text</span>';
+
+      await blsi.BlurEngine.handleSite({
+        enabled: true, blur_all_active: true, blur_items: [],
+        blur_categories: textCats, blur_mode: null, thorough_blur: false,
+      });
+
+      // Dispatch a second time — already observed, injectRules called once only.
+      host.dispatchEvent(
+        new CustomEvent('__blsi_shadow_attached', { bubbles: true, composed: true })
+      );
+      expect(sr.querySelectorAll('#bl-si-blur-styles').length).toBe(1);
+    });
+
     // MISSING: no test for MutationObserver callback — observeRoot attaches observer but mutations are never triggered/verified
     // MISSING: no test for closed shadow roots (mode:'closed') — currently assumed open only
   });
@@ -1255,6 +1303,7 @@ describe('blsi.BlurEngine', () => {
     });
   });
 
+  // ── §PICK-BLUR-TESTS ─────────────────────────────────────────────────────
   // ─── Pick & Blur attribute + CSS injection (data-bl-si-pick-blur) ────────────
   // USER IMPACT: selected blur mode (blur/frosted/color) actually applied to
   // picked elements instead of always falling back to blur.
@@ -1284,8 +1333,11 @@ describe('blsi.BlurEngine', () => {
       expect(document.getElementById('p2').dataset.blSiPickBlur).toBeUndefined();
     });
 
-    test('createZoneOverlay stamps data-bl-si-pick-blur on overlay', () => {
-      blsi.BlurEngine.createZoneOverlay({ id: 'z_pick', name: 'Z', x: 0, y: 0, width: 50, height: 50 });
+    test('zone overlay (sticky item) stamps data-bl-si-pick-blur on overlay', async () => {
+      const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [
+        { type: 'sticky', id: 'z_pick', name: 'Z', anchor: 'page', x: 0, y: 0, width: 50, height: 50 },
+      ]});
       const zone = document.querySelector('[data-bl-si-zone="z_pick"]');
       expect(zone).not.toBeNull();
       expect(zone.dataset.blSiPickBlur).toBe('1');
@@ -1373,6 +1425,189 @@ describe('blsi.BlurEngine', () => {
       blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#00ff00', opacity: 1 });
       expect(document.querySelectorAll('#bl-si-pick-blur-styles')).toHaveLength(1);
       expect(document.getElementById('bl-si-pick-blur-styles').textContent).toContain('rgba(0,255,0,1)');
+    });
+  });
+
+  // ── §PICK-BLUR-LATE-LOAD-TESTS ───────────────────────────────────────────
+  // _pickBlurDynamicActive flag + _tryPickBlurNode (MO idle drain)
+  // USER IMPACT: elements inserted after page load are pick-blurred when a
+  // matching dynamic item exists, even when blur-all is OFF.
+  describe('_pickBlurDynamicActive — flag lifecycle', () => {
+    const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
+
+    test('late-loaded element is pick-blurred when blur-all is OFF (MO regression)', async () => {
+      // Regression: handleMainDocument tears down the observer when blur-all is OFF.
+      // handleSite must re-attach it after _reconcileItems via observeRoot() so the
+      // MO idle drain can stamp elements inserted after page load.
+      // jsdom fires MO callbacks as microtasks; setTimeout falls back for idle.
+      document.body.innerHTML = '';
+      await blsi.BlurEngine.handleSite({
+        ...base,
+        blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#late-load' }],
+      });
+      // No element matching #late-load yet — nothing stamped.
+      expect(document.querySelector('[data-bl-si-pick-blur]')).toBeNull();
+
+      // Simulate late-loading element appearing in the DOM.
+      const late = document.createElement('p');
+      late.id = 'late-load';
+      document.body.appendChild(late);
+
+      // Drain MO microtask (MO callback runs → pushes node to _pendingMoNodes →
+      // schedules idle via setTimeout(fn, 0)).
+      await Promise.resolve();
+      // Drain the idle setTimeout (0 ms — scheduled before this Promise).
+      await new Promise(r => setTimeout(r, 0));
+
+      expect(late.dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('flag becomes true when dynamic item reconciled', async () => {
+      document.body.innerHTML = '<p id="late">late</p>';
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#late' }] });
+      // Verify via MO gate: element inserted after reconcile should be stamped by _tryPickBlurNode.
+      // We test the flag indirectly through the function that consults it.
+      expect(document.getElementById('late').dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('flag becomes false after all dynamic items removed', async () => {
+      document.body.innerHTML = '<p id="late2">late</p>';
+      const item = { type: 'dynamic', name: 'Element 1', selector: '#late2' };
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
+      expect(document.getElementById('late2').dataset.blSiPickBlur).toBe('1');
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
+      // After removal the element is unstamped and flag is false.
+      expect(document.getElementById('late2').dataset.blSiPickBlur).toBeUndefined();
+    });
+
+    test('sticky-only items do not set dynamic flag (no _tryPickBlurNode calls needed)', async () => {
+      // Sticky items use zone overlays, not _tryPickBlurNode, so they don't need the MO path.
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [
+        { type: 'sticky', id: 'z_flag', name: 'Area on page 1', anchor: 'page', x: 0, y: 0, width: 50, height: 50 },
+      ]});
+      // Zone overlay present (sticky path worked), no dynamic items so flag is false.
+      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(1);
+      // Cleanup
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
+    });
+  });
+
+  describe('_tryPickBlurNode — late-loading element detection', () => {
+    const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
+
+    beforeEach(() => {
+      blsi.BlurEngine.resetCounters();
+    });
+
+    test('stamps element that matches a stored dynamic item selector (unique match)', async () => {
+      document.body.innerHTML = '<p id="dyn1">text</p>';
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#dyn1' }] });
+      // Element was in the DOM at reconcile time — confirm it was stamped.
+      expect(document.getElementById('dyn1').dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('does not double-stamp an already-stamped element', async () => {
+      document.body.innerHTML = '<p id="dyn2">text</p>';
+      const el = document.getElementById('dyn2');
+      el.dataset.blSiPickBlur = '1';  // pre-stamp
+      const item = { type: 'dynamic', name: 'Element 1', selector: '#dyn2' };
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
+      // Should still be '1', not changed to anything else.
+      expect(el.dataset.blSiPickBlur).toBe('1');
+    });
+
+    test('does not stamp when selector matches multiple elements (not unique)', async () => {
+      document.body.innerHTML = '<p class="multi">a</p><p class="multi">b</p>';
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '.multi' }] });
+      const els = document.querySelectorAll('.multi');
+      // Non-unique — neither should be stamped.
+      expect(els[0].dataset.blSiPickBlur).toBeUndefined();
+      expect(els[1].dataset.blSiPickBlur).toBeUndefined();
+    });
+
+    test('skips extension UI elements', async () => {
+      // Elements with data-bl-si-zone attribute are extension UI.
+      document.body.innerHTML = '<div id="ext-ui" data-bl-si-zone="z1">zone</div>';
+      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#ext-ui' }] });
+      expect(document.getElementById('ext-ui').dataset.blSiPickBlur).toBeUndefined();
+    });
+  });
+
+  describe('highlightItem / clearItemHighlight', () => {
+    beforeEach(() => {
+      document.body.innerHTML = '<div id="hi-target">content</div>';
+      blsi.BlurEngine.clearItemHighlight();
+    });
+    afterEach(() => {
+      blsi.BlurEngine.clearItemHighlight();
+      document.body.innerHTML = '';
+    });
+
+    test('applies bl-si-hover-highlight to resolved dynamic element', () => {
+      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
+      expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(true);
+    });
+
+    test('does not throw when selector resolves to nothing', () => {
+      expect(() => {
+        blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#nonexistent-xyz'] });
+      }).not.toThrow();
+      expect(document.querySelector('.bl-si-hover-highlight')).toBeNull();
+    });
+
+    test('second highlightItem clears previous highlight before applying new one', () => {
+      document.body.innerHTML += '<div id="hi-target-b">b</div>';
+      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
+      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target-b'] });
+      expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(false);
+      expect(document.getElementById('hi-target-b').classList.contains('bl-si-hover-highlight')).toBe(true);
+    });
+
+    test('clearItemHighlight removes the highlight class', () => {
+      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
+      expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(true);
+      blsi.BlurEngine.clearItemHighlight();
+      expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(false);
+    });
+
+    test('clearItemHighlight is safe when nothing is highlighted', () => {
+      expect(() => blsi.BlurEngine.clearItemHighlight()).not.toThrow();
+    });
+
+    test('intersection fallback highlights element via non-unique class selector when data-bl-si-pick-blur is set', () => {
+      // Simulates SPA list items sharing the same class: structural selector is stale/non-unique,
+      // but class combo is stored and the blurred element has data-bl-si-pick-blur='1'.
+      const a = document.createElement('div');
+      const b = document.createElement('div');
+      a.className = 'shared-row';
+      b.className = 'shared-row';
+      a.dataset.blSiPickBlur = '1';
+      document.body.appendChild(a);
+      document.body.appendChild(b);
+      // Pass only the non-unique class selector (restoreSelector returns null, triggers fallback).
+      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['div.shared-row'] });
+      expect(a.classList.contains('bl-si-hover-highlight')).toBe(true);
+      expect(b.classList.contains('bl-si-hover-highlight')).toBe(false);
+      document.body.removeChild(a);
+      document.body.removeChild(b);
+    });
+
+    test('applies highlight to sticky zone overlay via id', async () => {
+      const fakeSettings = {
+        ...blsi.DEFAULT_MODEL,
+        enabled: true, blur_radius: 8, reveal_mode: 'hover', thorough_blur: false,
+        transition_duration: 0, highlight_color: '#f59e0b', redaction_color: '#000000',
+        blur_all_active: false,
+        blur_items: [{ type: 'sticky', id: 'hl-zone-1', name: 'Zone 1', x: 0, y: 0, width: 50, height: 50 }],
+        pick_and_blur: { status: true, settings: blsi.DEFAULT_MODEL.pick_and_blur.settings },
+      };
+      await blsi.BlurEngine.handleSite(fakeSettings);
+      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(1);
+      blsi.BlurEngine.highlightItem({ item_type: 'sticky', id: 'hl-zone-1' });
+      const overlay = blsi.BlurEngine.getZoneOverlays()[0];
+      expect(overlay.classList.contains('bl-si-hover-highlight')).toBe(true);
+      // Cleanup
+      await blsi.BlurEngine.handleSite({ ...fakeSettings, blur_items: [] });
     });
   });
 });

@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["src/screen_share_main.js"],
+      "js": ["src/main_world_bridge.js"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": false
@@ -103,7 +103,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["_locales/*/*.json", "popup/popup.html"],
+      "resources": ["_locales/*/*.json", "popup/popup.html", "fonts/*.woff2"],
       "matches": ["<all_urls>"]
     }
   ],

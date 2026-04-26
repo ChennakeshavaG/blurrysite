@@ -116,7 +116,7 @@ blsi.Model.get_site_snapshot(hostname_value, type)          → object | null
 **Files to touch:**
 - `popup/renders/site_rules.js` (full rewrite)
 - `popup/renders/site_rules.css` (new or existing — check if CSS is inline or separate)
-- `_locales/en/popup.json` (new i18n keys)
+- `_locales/en/messages.json` (new i18n keys)
 
 **DO NOT touch:** storage layer, content_script, blur_engine.
 
@@ -161,7 +161,7 @@ blsi.Model.get_site_snapshot(hostname_value, type)          → object | null
    - Edit form
    Use box-drawing chars (`┌─┐│└┘├┤┬┴┼`) not dashes. Popup width is ~340px internal.
 
-**i18n keys to add** (add to `_locales/en/popup.json`):
+**i18n keys to add** (add to `_locales/en/messages.json`):
 - `rule_snapshot_empty` — "No snapshot saved"
 - `rule_snapshot_recapture` — "Recapture"
 - `rule_snapshot_label` — "Settings snapshot"

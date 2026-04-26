@@ -4,13 +4,13 @@
  * Unit tests for src/storage_model.js
  * Module exposes blsi.Model with:
  *   init_cache, on_change, get,
- *   patch_section, debounced_patch, save_settings,
- *   get_all_site_rules, get_site_entry, set_site_entry, remove_site_entry,
- *   capture_snapshot, save_site_snapshot, clear_site_snapshot, get_site_snapshot,
+ *   patch_section, save_settings,
+ *   get_all_site_rules, get_site_entry, set_site_entry,
+ *   capture_snapshot, save_site_snapshot, get_site_snapshot,
  *   resolve,
- *   get_blur_items, get_cached_blur_state, get_blur_state,
+ *   get_blur_items, get_cached_blur_state,
  *   save_blur_state, save_blur_item, remove_blur_item,
- *   clear_host, clear_all,
+ *   clear_host,
  *   get_rules, save_rules,
  *   _reset_cache
  */
@@ -44,26 +44,21 @@ function buildStubSource() {
       on_change:              jest.fn(),
       get:                    jest.fn(() => blsi.build_default_model()),
       patch_section:          jest.fn(),
-      debounced_patch:        jest.fn(),
       save_settings:          jest.fn(),
       get_all_site_rules:     jest.fn(() => []),
       get_site_entry:         jest.fn(() => null),
       set_site_entry:         jest.fn(),
-      remove_site_entry:      jest.fn(),
       capture_snapshot:       jest.fn(() => ({})),
       save_site_snapshot:     jest.fn(),
-      clear_site_snapshot:    jest.fn(),
       get_site_snapshot:      jest.fn(() => null),
       resolve:                jest.fn(() => ({})),
-      get_blur_items:         jest.fn(() => Promise.resolve([])),
+      get_blur_items:         jest.fn(() => []),
       get_cached_blur_state:  jest.fn(() => false),
-      get_blur_state:         jest.fn(() => Promise.resolve(false)),
       save_blur_state:        jest.fn(),
       save_blur_item:         jest.fn(),
       remove_blur_item:       jest.fn(),
       clear_host:             jest.fn(),
-      clear_all:              jest.fn(),
-      get_rules:              jest.fn(() => Promise.resolve([])),
+      get_rules:              jest.fn(() => []),
       save_rules:             jest.fn(),
       save_automate_blur:     jest.fn(),
       patch_automate_blur:    jest.fn(),
@@ -109,21 +104,21 @@ describe('init_cache', () => {
     await blsi.Model.init_cache();
 
     expect(chrome.storage.local.set).toHaveBeenCalledWith(
-      expect.objectContaining({ blsi_model: expect.objectContaining({ settings: expect.any(Object) }) }),
+      expect.objectContaining({ blsi_model: expect.objectContaining({ global_default_settings: expect.any(Object) }) }),
       expect.any(Function)
     );
     const saved = chrome.storage.local.set.mock.calls[0][0].blsi_model;
-    expect(saved.settings.blur_radius).toBe(8);
+    expect(saved.global_default_settings.blur_radius).toBe(8);
   });
 
   test('loads and validates existing model from storage', async () => {
     const stored = blsi.build_default_model();
-    stored.settings.blur_radius = 12;
+    stored.global_default_settings.blur_radius = 12;
     mockGet(stored);
 
     await blsi.Model.init_cache();
     const m = blsi.Model.get();
-    expect(m.settings.blur_radius).toBe(12);
+    expect(m.global_default_settings.blur_radius).toBe(12);
     // No second write needed when storage already had a valid model
     // (may write once to seed shortcuts if they were missing — just check get() is populated)
     expect(m).toBeDefined();
@@ -133,7 +128,7 @@ describe('init_cache', () => {
     // After _reset_cache, get() returns build_default_model() (cache is null)
     blsi.Model._reset_cache();
     const m = blsi.Model.get();
-    expect(m.settings.blur_radius).toBe(8);
+    expect(m.global_default_settings.blur_radius).toBe(8);
   });
 });
 
@@ -144,24 +139,24 @@ describe('get', () => {
   test('returns default model when cache is null (not yet init_cached)', () => {
     const m = blsi.Model.get();
     expect(m).toBeDefined();
-    expect(m.settings).toBeDefined();
-    expect(m.settings.blur_radius).toBe(8);
+    expect(m.global_default_settings).toBeDefined();
+    expect(m.global_default_settings.blur_radius).toBe(8);
   });
 
   test('returns cached model after init_cache', async () => {
     const stored = blsi.build_default_model();
-    stored.settings.blur_radius = 18;
+    stored.global_default_settings.blur_radius = 18;
     mockGet(stored);
 
     await blsi.Model.init_cache();
     const m = blsi.Model.get();
-    expect(m.settings.blur_radius).toBe(18);
+    expect(m.global_default_settings.blur_radius).toBe(18);
   });
 });
 
 // ── patch_section ─────────────────────────────────────────────────────────────
 
-// USER IMPACT: popup sliders call patch_section('settings', { blur_radius: N }); other sections
+// USER IMPACT: popup sliders call patch_section('global_default_settings', { blur_radius: N }); other sections
 // must be left untouched.
 describe('patch_section', () => {
   test('deep-merges patch into specified section', async () => {
@@ -169,9 +164,9 @@ describe('patch_section', () => {
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    await blsi.Model.patch_section('settings', { blur_radius: 20 });
+    await blsi.Model.patch_section('global_default_settings', { blur_radius: 20 });
     const m = blsi.Model.get();
-    expect(m.settings.blur_radius).toBe(20);
+    expect(m.global_default_settings.blur_radius).toBe(20);
   });
 
   test('does not mutate other sections', async () => {
@@ -179,7 +174,7 @@ describe('patch_section', () => {
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    await blsi.Model.patch_section('settings', { blur_radius: 20 });
+    await blsi.Model.patch_section('global_default_settings', { blur_radius: 20 });
     const m = blsi.Model.get();
     // blur_all untouched
     expect(m.blur_all.status).toBe(false);
@@ -192,9 +187,9 @@ describe('patch_section', () => {
     await blsi.Model.init_cache();
 
     // blur_radius=999 is out of range — validate_model should coerce to 8
-    await blsi.Model.patch_section('settings', { blur_radius: 999 });
+    await blsi.Model.patch_section('global_default_settings', { blur_radius: 999 });
     const m = blsi.Model.get();
-    expect(m.settings.blur_radius).toBe(8);
+    expect(m.global_default_settings.blur_radius).toBe(8);
   });
 });
 
@@ -210,9 +205,9 @@ describe('save_settings', () => {
 
     await blsi.Model.save_settings({ reveal_mode: 'click' });
     const m = blsi.Model.get();
-    expect(m.settings.reveal_mode).toBe('click');
+    expect(m.global_default_settings.reveal_mode).toBe('click');
     // Other settings preserved
-    expect(m.settings.blur_radius).toBe(8);
+    expect(m.global_default_settings.blur_radius).toBe(8);
   });
 
   test('rejects null input — no storage write', async () => {
@@ -238,11 +233,11 @@ describe('save_settings', () => {
   });
 });
 
-// ── get_site_entry / set_site_entry / remove_site_entry ───────────────────────
+// ── get_site_entry / set_site_entry ───────────────────────────────────────────
 
-// USER IMPACT: per-host blur state and blur items are stored in exact site_rules entries;
-// CRUD operations must work correctly.
-describe('get_site_entry / set_site_entry / remove_site_entry', () => {
+// USER IMPACT: per-host blur state is stored in exact site_rules entries;
+// blur items are stored in pick_and_blur.items (hostname-keyed map).
+describe('get_site_entry / set_site_entry', () => {
   test('get_site_entry returns null when hostname not in site_rules', async () => {
     const stored = blsi.build_default_model();
     mockGet(stored);
@@ -270,34 +265,12 @@ describe('get_site_entry / set_site_entry / remove_site_entry', () => {
     await blsi.Model.init_cache();
 
     await blsi.Model.set_site_entry('example.com', { blur_all: true });
-    await blsi.Model.set_site_entry('example.com', { settings: { blur_radius: 15 } });
+    await blsi.Model.set_site_entry('example.com', { snapshot: { settings: { blur_radius: 15 } } });
     const entry = blsi.Model.get_site_entry('example.com');
     expect(entry.blur_all).toBe(true);
-    expect(entry.settings.blur_radius).toBe(15);
+    expect(entry.snapshot.settings.blur_radius).toBe(15);
   });
 
-  test('remove_site_entry deletes the entry', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.set_site_entry('example.com', { blur_all: true });
-    expect(blsi.Model.get_site_entry('example.com')).not.toBeNull();
-
-    await blsi.Model.remove_site_entry('example.com');
-    expect(blsi.Model.get_site_entry('example.com')).toBeNull();
-  });
-
-  test('remove_site_entry is a no-op when hostname not present', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-    jest.clearAllMocks();
-    mockSet();
-
-    // hostname not in rules — should complete without error
-    await expect(blsi.Model.remove_site_entry('nothere.com')).resolves.not.toThrow();
-  });
 });
 
 // ── save_blur_state / get_blur_state / get_cached_blur_state ─────────────────
@@ -614,50 +587,6 @@ describe('clear_host', () => {
   });
 });
 
-// ── clear_all ─────────────────────────────────────────────────────────────────
-
-// USER IMPACT: user clicks "clear all sites" — all exact host blur data wiped; wildcard/regex
-// rules preserved so per-URL settings are not lost.
-describe('clear_all', () => {
-  test('wipes items and blur_all for all exact entries', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_item('a.com', { type: 'dynamic', selector: '#a', name: 'A' });
-    await blsi.Model.save_blur_state('a.com', true);
-    await blsi.Model.save_blur_item('b.com', { type: 'dynamic', selector: '#b', name: 'B' });
-
-    await blsi.Model.clear_all();
-
-    expect(await blsi.Model.get_blur_items('a.com')).toHaveLength(0);
-    expect(await blsi.Model.get_blur_items('b.com')).toHaveLength(0);
-    expect(blsi.Model.get_cached_blur_state('a.com')).toBe(false);
-  });
-
-  test('leaves wildcard/regex entries intact', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    const wildcardRule = [{
-      hostname_value: '*.example.com',
-      hostname_type: blsi.pattern_types.wildcard,
-      blur_all: null,
-      items: [],
-      settings: { blur_radius: 12 },
-    }];
-    await blsi.Model.save_rules(wildcardRule);
-
-    await blsi.Model.clear_all();
-
-    const rules = await blsi.Model.get_rules();
-    expect(rules).toHaveLength(1);
-    expect(rules[0].hostname_value).toBe('*.example.com');
-    expect(rules[0].settings.blur_radius).toBe(12);
-  });
-});
-
 // ── get_rules / save_rules ────────────────────────────────────────────────────
 
 // USER IMPACT: user creates URL-specific rules — they persist and apply on matching pages.
@@ -671,7 +600,7 @@ describe('get_rules / save_rules', () => {
     await blsi.Model.save_rules([{
       hostname_value: '*.wildcard.com',
       hostname_type: blsi.pattern_types.wildcard,
-      settings: {},
+      snapshot: {},
     }]);
 
     const rules = await blsi.Model.get_rules();
@@ -685,8 +614,8 @@ describe('get_rules / save_rules', () => {
     await blsi.Model.init_cache();
 
     await blsi.Model.save_rules([
-      { hostname_value: '*.a.com', hostname_type: blsi.pattern_types.wildcard, settings: {} },
-      { hostname_value: 'b.com/.*', hostname_type: blsi.pattern_types.regex, settings: {} },
+      { hostname_value: '*.a.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} },
+      { hostname_value: 'b.com/.*', hostname_type: blsi.pattern_types.regex, snapshot: {} },
     ]);
 
     const rules = await blsi.Model.get_rules();
@@ -698,8 +627,8 @@ describe('get_rules / save_rules', () => {
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    await blsi.Model.save_rules([{ hostname_value: '*.old.com', hostname_type: blsi.pattern_types.wildcard, settings: {} }]);
-    await blsi.Model.save_rules([{ hostname_value: '*.new.com', hostname_type: blsi.pattern_types.wildcard, settings: {} }]);
+    await blsi.Model.save_rules([{ hostname_value: '*.old.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} }]);
+    await blsi.Model.save_rules([{ hostname_value: '*.new.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} }]);
 
     const rules = await blsi.Model.get_rules();
     expect(rules).toHaveLength(1);
@@ -712,7 +641,7 @@ describe('get_rules / save_rules', () => {
     await blsi.Model.init_cache();
 
     await blsi.Model.set_site_entry('exact.com', { blur_all: true });
-    await blsi.Model.save_rules([{ hostname_value: '*.new.com', hostname_type: blsi.pattern_types.wildcard, settings: {} }]);
+    await blsi.Model.save_rules([{ hostname_value: '*.new.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} }]);
 
     const entry = blsi.Model.get_site_entry('exact.com');
     expect(entry).not.toBeNull();
@@ -739,8 +668,8 @@ describe('get_rules / save_rules', () => {
     await blsi.Model.init_cache();
 
     await blsi.Model.save_rules([
-      { hostname_value: '  ', hostname_type: blsi.pattern_types.wildcard, settings: {} },
-      { hostname_value: '*.valid.com', hostname_type: blsi.pattern_types.wildcard, settings: {} },
+      { hostname_value: '  ', hostname_type: blsi.pattern_types.wildcard, snapshot: {} },
+      { hostname_value: '*.valid.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} },
     ]);
 
     const rules = await blsi.Model.get_rules();
@@ -771,7 +700,6 @@ describe('resolve', () => {
     expect(Array.isArray(resolved.blur_items)).toBe(true);
     expect(resolved.pick_blur_enabled).toBeDefined();
     expect(resolved.picker_mode).toBeDefined();
-    expect(resolved.pii_enabled).toBeDefined();
     expect(resolved.shortcuts).toBeDefined();
   });
 
@@ -802,7 +730,7 @@ describe('resolve', () => {
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    await blsi.Model.set_site_entry('example.com', { settings: { blur_radius: 25 } });
+    await blsi.Model.set_site_entry('example.com', { snapshot: { settings: { blur_radius: 25 } } });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.blur_radius).toBe(25);
   });
@@ -843,92 +771,11 @@ describe('resolve', () => {
     await blsi.Model.save_rules([{
       hostname_value: 'example.com',
       hostname_type: blsi.pattern_types.wildcard,
-      settings: { blur_radius: 18 },
+      snapshot: { settings: { blur_radius: 18 } },
     }]);
 
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.blur_radius).toBe(18);
-  });
-});
-
-// ── debounced_patch ───────────────────────────────────────────────────────────
-
-// USER IMPACT: popup sliders fire debounced_patch on every drag tick; only the
-// final settled value must reach storage to avoid write storms and data races.
-describe('debounced_patch', () => {
-  beforeEach(() => { jest.useFakeTimers(); });
-  afterEach(() => { jest.useRealTimers(); });
-
-  test('does not write before the timer fires', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-    jest.clearAllMocks();
-    mockSet();
-
-    blsi.Model.debounced_patch('settings', { blur_radius: 14 });
-    expect(chrome.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  test('writes after the default 150 ms delay', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-    jest.clearAllMocks();
-    mockSet();
-
-    blsi.Model.debounced_patch('settings', { blur_radius: 14 });
-    jest.runAllTimers();
-
-    expect(chrome.storage.local.set).toHaveBeenCalled();
-    expect(blsi.Model.get().settings.blur_radius).toBe(14);
-  });
-
-  test('coalesces rapid calls — only the last value is written', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-    jest.clearAllMocks();
-    mockSet();
-
-    blsi.Model.debounced_patch('settings', { blur_radius: 10 });
-    blsi.Model.debounced_patch('settings', { blur_radius: 20 });
-    blsi.Model.debounced_patch('settings', { blur_radius: 30 });
-    jest.runAllTimers();
-
-    expect(chrome.storage.local.set).toHaveBeenCalledTimes(1);
-    expect(blsi.Model.get().settings.blur_radius).toBe(30);
-  });
-
-  test('snapshots patch at schedule time — caller mutation after call has no effect', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-    jest.clearAllMocks();
-    mockSet();
-
-    const patch = { blur_radius: 14 };
-    blsi.Model.debounced_patch('settings', patch);
-    patch.blur_radius = 99; // mutate object after scheduling
-    jest.runAllTimers();
-
-    expect(blsi.Model.get().settings.blur_radius).toBe(14); // snapshot preserved
-  });
-
-  test('different sections debounce independently', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-    jest.clearAllMocks();
-    mockSet();
-
-    blsi.Model.debounced_patch('settings', { blur_radius: 14 });
-    blsi.Model.debounced_patch('blur_all', { status: true });
-    jest.runAllTimers();
-
-    const m = blsi.Model.get();
-    expect(m.settings.blur_radius).toBe(14);
-    expect(m.blur_all.status).toBe(true);
   });
 });
 
@@ -947,11 +794,11 @@ describe('on_change', () => {
     blsi.Model.on_change(cb);
 
     const newModel = blsi.build_default_model();
-    newModel.settings.blur_radius = 20;
+    newModel.global_default_settings.blur_radius = 20;
     _fireStorageChanged({ blsi_model: { newValue: newModel, oldValue: stored } });
 
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0][0].settings.blur_radius).toBe(20);
+    expect(cb.mock.calls[0][0].global_default_settings.blur_radius).toBe(20);
   });
 
   test('subscriber receives the validated new model as the first argument', async () => {
@@ -963,10 +810,10 @@ describe('on_change', () => {
     blsi.Model.on_change(cb);
 
     const newModel = blsi.build_default_model();
-    newModel.settings.blur_radius = 15;
+    newModel.global_default_settings.blur_radius = 15;
     _fireStorageChanged({ blsi_model: { newValue: newModel } });
 
-    expect(cb.mock.calls[0][0].settings.blur_radius).toBe(15);
+    expect(cb.mock.calls[0][0].global_default_settings.blur_radius).toBe(15);
     expect(typeof cb.mock.calls[0][0]).toBe('object');
   });
 
@@ -979,7 +826,7 @@ describe('on_change', () => {
     blsi.Model.on_change(cb);
 
     // Our own write updates _cache synchronously; simulate storage.onChanged echo
-    await blsi.Model.patch_section('settings', { blur_radius: 18 });
+    await blsi.Model.patch_section('global_default_settings', { blur_radius: 18 });
     const currentModel = blsi.Model.get();
 
     _fireStorageChanged({ blsi_model: { newValue: currentModel } });
@@ -1096,7 +943,7 @@ describe('automate_blur', () => {
     await blsi.Model.patch_section('blur_all', { settings: { blur_mode: 'frosted', blur_categories: { text: false, media: false, form: true, table: false, structure: false } } });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.automate_blur_only).toBe(true);
-    const ds  = blsi.DEFAULT_MODEL.settings;
+    const ds  = blsi.DEFAULT_MODEL.global_default_settings;
     const dbs = blsi.DEFAULT_MODEL.blur_all.settings;
     expect(resolved.blur_mode).toBe(dbs.blur_mode);
     expect(resolved.blur_categories).toEqual(dbs.blur_categories);
@@ -1113,7 +960,6 @@ describe('automate_blur', () => {
     // Per-site exact rule override — the bug: these leaked into automate blur
     await blsi.Model.set_site_entry('example.com', {
       blur_all: null,
-      items: [],
       settings: {
         blur_categories: { text: false, media: false, form: true, table: false, structure: true },
         thorough_blur: true,
@@ -1124,7 +970,7 @@ describe('automate_blur', () => {
     });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.automate_blur_only).toBe(true);
-    const ds  = blsi.DEFAULT_MODEL.settings;
+    const ds  = blsi.DEFAULT_MODEL.global_default_settings;
     const dbs = blsi.DEFAULT_MODEL.blur_all.settings;
     expect(resolved.blur_mode).toBe(dbs.blur_mode);
     expect(resolved.blur_categories).toEqual(dbs.blur_categories);
@@ -1180,13 +1026,6 @@ describe('automate_blur', () => {
     expect(entry.idle).toBe(false);
   });
 
-  test('clear_all resets automate_blur to empty', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    await blsi.Model.save_automate_blur('other.com', 'tab_switch', true);
-    await blsi.Model.clear_all();
-    expect(blsi.Model.get_automate_blur('example.com').idle).toBe(false);
-    expect(blsi.Model.get_automate_blur('other.com').tab_switch).toBe(false);
-  });
 });
 
 // ── capture_snapshot ──────────────────────────────────────────────────────────
@@ -1203,63 +1042,58 @@ describe('capture_snapshot', () => {
     await blsi.Model.init_cache();
   });
 
-  test('returns an object with all SNAPSHOT_KEYS present', () => {
+  test('returns an object with nested sections present', () => {
     const snap = blsi.Model.capture_snapshot();
-    const SNAPSHOT_KEYS = [
-      'blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
-      'blur_categories', 'pick_blur_type', 'pick_blur_color', 'pii_mode',
-    ];
-    for (const k of SNAPSHOT_KEYS) {
-      expect(snap).toHaveProperty(k);
-    }
+    expect(snap).toHaveProperty('settings');
+    expect(snap).toHaveProperty('blur_all');
+    expect(snap).toHaveProperty('blur_all.settings');
+    expect(snap).toHaveProperty('pick_and_blur');
+    expect(snap).toHaveProperty('pick_and_blur.settings');
   });
 
-  test('returns exactly SNAPSHOT_KEYS — no extra keys', () => {
+  test('returns exactly 3 top-level sections — no extra keys', () => {
     const snap = blsi.Model.capture_snapshot();
-    const SNAPSHOT_KEYS = new Set([
-      'blur_radius', 'blur_mode', 'reveal_mode', 'thorough_blur',
-      'blur_categories', 'pick_blur_type', 'pick_blur_color', 'pii_mode',
-    ]);
+    const TOP_KEYS = new Set(['settings', 'blur_all', 'pick_and_blur']);
     for (const k of Object.keys(snap)) {
-      expect(SNAPSHOT_KEYS.has(k)).toBe(true);
+      expect(TOP_KEYS.has(k)).toBe(true);
     }
-    expect(Object.keys(snap).length).toBe(SNAPSHOT_KEYS.size);
+    expect(Object.keys(snap).length).toBe(TOP_KEYS.size);
   });
 
   test('snapshot values match default model values', async () => {
     const snap = blsi.Model.capture_snapshot();
     const d = blsi.build_default_model();
-    expect(snap.blur_radius).toBe(d.settings.blur_radius);
-    expect(snap.blur_mode).toBe(d.blur_all.settings.blur_mode);
-    expect(snap.reveal_mode).toBe(d.settings.reveal_mode);
-    expect(snap.thorough_blur).toBe(d.settings.thorough_blur);
-    expect(snap.blur_categories).toEqual(d.blur_all.settings.blur_categories);
-    expect(snap.pick_blur_type).toBe(d.pick_and_blur.settings.blur_type);
-    expect(snap.pick_blur_color).toEqual(d.pick_and_blur.settings.blur_color);
-    expect(snap.pii_mode).toBe(d.auto_detect_pii.settings.pii_mode);
+    expect(snap.settings.blur_radius).toBe(d.global_default_settings.blur_radius);
+    expect(snap.blur_all.settings.blur_mode).toBe(d.blur_all.settings.blur_mode);
+    expect(snap.settings.reveal_mode).toBe(d.global_default_settings.reveal_mode);
+    expect(snap.settings.thorough_blur).toBe(d.global_default_settings.thorough_blur);
+    expect(snap.blur_all.settings.blur_categories).toEqual(d.blur_all.settings.blur_categories);
+    expect(snap.pick_and_blur.settings.blur_type).toBe(d.pick_and_blur.settings.blur_type);
+    expect(snap.pick_and_blur.settings.blur_color).toEqual(d.pick_and_blur.settings.blur_color);
+    expect(snap.pick_and_blur.status).toBe(d.pick_and_blur.status);
   });
 
   test('capture reflects in-flight settings changes', async () => {
-    await blsi.Model.patch_section('settings', { blur_radius: 24, reveal_mode: 'click' });
+    await blsi.Model.patch_section('global_default_settings', { blur_radius: 24, reveal_mode: 'click' });
     await blsi.Model.patch_section('blur_all', { settings: { blur_mode: 'frosted' } });
     const snap = blsi.Model.capture_snapshot();
-    expect(snap.blur_radius).toBe(24);
-    expect(snap.reveal_mode).toBe('click');
-    expect(snap.blur_mode).toBe('frosted');
+    expect(snap.settings.blur_radius).toBe(24);
+    expect(snap.settings.reveal_mode).toBe('click');
+    expect(snap.blur_all.settings.blur_mode).toBe('frosted');
   });
 
   test('blur_categories is a deep copy — mutating snapshot does not affect cache', () => {
     const snap = blsi.Model.capture_snapshot();
-    snap.blur_categories.text = !snap.blur_categories.text;
+    snap.blur_all.settings.blur_categories.text = !snap.blur_all.settings.blur_categories.text;
     const snap2 = blsi.Model.capture_snapshot();
-    expect(snap2.blur_categories.text).toBe(blsi.build_default_model().blur_all.settings.blur_categories.text);
+    expect(snap2.blur_all.settings.blur_categories.text).toBe(blsi.build_default_model().blur_all.settings.blur_categories.text);
   });
 
   test('pick_blur_color is a deep copy — mutating snapshot does not affect cache', () => {
     const snap = blsi.Model.capture_snapshot();
-    snap.pick_blur_color.hex = '#ffffff';
+    snap.pick_and_blur.settings.blur_color.hex = '#ffffff';
     const snap2 = blsi.Model.capture_snapshot();
-    expect(snap2.pick_blur_color.hex).toBe(blsi.build_default_model().pick_and_blur.settings.blur_color.hex);
+    expect(snap2.pick_and_blur.settings.blur_color.hex).toBe(blsi.build_default_model().pick_and_blur.settings.blur_color.hex);
   });
 });
 
@@ -1277,47 +1111,47 @@ describe('save_site_snapshot', () => {
     await blsi.Model.init_cache();
   });
 
-  test('creates a new exact rule with the snapshot in .settings', async () => {
+  test('creates a new exact rule with the snapshot in .snapshot', async () => {
     const snap = blsi.Model.capture_snapshot();
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
-    const snapshot = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
-    expect(snapshot).not.toBeNull();
-    expect(snapshot.blur_radius).toBe(snap.blur_radius);
-    expect(snapshot.blur_mode).toBe(snap.blur_mode);
+    const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
+    expect(stored).not.toBeNull();
+    expect(stored.settings.blur_radius).toBe(snap.settings.blur_radius);
+    expect(stored.blur_all.settings.blur_mode).toBe(snap.blur_all.settings.blur_mode);
   });
 
-  test('updates .settings on an existing exact rule', async () => {
+  test('updates .snapshot on an existing exact rule', async () => {
     await blsi.Model.set_site_entry('github.com', { blur_all: true });
     const snap = blsi.Model.capture_snapshot();
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
     const rule = blsi.Model.get_site_entry('github.com');
-    expect(rule.blur_all).toBe(true);               // other fields preserved
-    expect(rule.settings.blur_radius).toBeDefined(); // snapshot applied
+    expect(rule.blur_all).toBe(true);                        // other fields preserved
+    expect(rule.snapshot.settings.blur_radius).toBeDefined(); // snapshot applied
   });
 
   test('replaces previous snapshot on a second save', async () => {
     const snap1 = blsi.Model.capture_snapshot();
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap1);
 
-    await blsi.Model.patch_section('settings', { blur_radius: 20 });
+    await blsi.Model.patch_section('global_default_settings', { blur_radius: 20 });
     const snap2 = blsi.Model.capture_snapshot();
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap2);
 
     const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
-    expect(stored.blur_radius).toBe(20);
+    expect(stored.settings.blur_radius).toBe(20);
   });
 
   test('works for wildcard rules created via save_rules', async () => {
     await blsi.Model.save_rules([{
       hostname_value: '*.example.com',
       hostname_type:  blsi.pattern_types.wildcard,
-      settings:       {},
+      snapshot:       {},
     }]);
     const snap = blsi.Model.capture_snapshot();
     await blsi.Model.save_site_snapshot('*.example.com', blsi.pattern_types.wildcard, snap);
     const stored = blsi.Model.get_site_snapshot('*.example.com', blsi.pattern_types.wildcard);
     expect(stored).not.toBeNull();
-    expect(stored.blur_radius).toBeDefined();
+    expect(stored.settings.blur_radius).toBeDefined();
   });
 
   test('is a no-op for invalid hostname_value', async () => {
@@ -1331,52 +1165,6 @@ describe('save_site_snapshot', () => {
     jest.clearAllMocks();
     mockSet();
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, null);
-    expect(chrome.storage.local.set).not.toHaveBeenCalled();
-  });
-});
-
-// ── clear_site_snapshot ───────────────────────────────────────────────────────
-
-// USER IMPACT: user deletes the snapshot from a rule — subsequent visits inherit
-// global settings instead of the saved snapshot.
-describe('clear_site_snapshot', () => {
-  beforeEach(async () => {
-    mockSet();
-    blsi.Model._reset_cache();
-    const m = blsi.build_default_model();
-    mockGet(m);
-    await blsi.Model.init_cache();
-  });
-
-  test('resets .settings to {} for an existing rule', async () => {
-    const snap = blsi.Model.capture_snapshot();
-    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
-    await blsi.Model.clear_site_snapshot('github.com', blsi.pattern_types.exact);
-    const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
-    expect(stored).toBeNull();
-  });
-
-  test('leaves other fields on the rule intact after clear', async () => {
-    await blsi.Model.set_site_entry('github.com', { blur_all: true });
-    const snap = blsi.Model.capture_snapshot();
-    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
-    await blsi.Model.clear_site_snapshot('github.com', blsi.pattern_types.exact);
-    const rule = blsi.Model.get_site_entry('github.com');
-    expect(rule.blur_all).toBe(true);    // blur_all preserved
-    expect(rule.settings).toEqual({});   // settings cleared
-  });
-
-  test('is a no-op when rule does not exist', async () => {
-    jest.clearAllMocks();
-    mockSet();
-    await blsi.Model.clear_site_snapshot('nobody.com', blsi.pattern_types.exact);
-    expect(chrome.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  test('is a no-op for invalid hostname_value', async () => {
-    jest.clearAllMocks();
-    mockSet();
-    await blsi.Model.clear_site_snapshot('', blsi.pattern_types.exact);
     expect(chrome.storage.local.set).not.toHaveBeenCalled();
   });
 });
@@ -1403,21 +1191,15 @@ describe('get_site_snapshot', () => {
     expect(blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact)).toBeNull();
   });
 
-  test('returns settings object after save_site_snapshot', async () => {
+  test('returns snapshot object after save_site_snapshot', async () => {
     const snap = blsi.Model.capture_snapshot();
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
     const stored = blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact);
     expect(stored).not.toBeNull();
-    expect(stored.blur_radius).toBe(snap.blur_radius);
-    expect(stored.blur_categories).toEqual(snap.blur_categories);
+    expect(stored.settings.blur_radius).toBe(snap.settings.blur_radius);
+    expect(stored.blur_all.settings.blur_categories).toEqual(snap.blur_all.settings.blur_categories);
   });
 
-  test('returns null after clear_site_snapshot', async () => {
-    const snap = blsi.Model.capture_snapshot();
-    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
-    await blsi.Model.clear_site_snapshot('github.com', blsi.pattern_types.exact);
-    expect(blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact)).toBeNull();
-  });
 });
 
 // ── validate_model — snapshot passthrough ─────────────────────────────────────
@@ -1426,51 +1208,63 @@ describe('get_site_snapshot', () => {
 // with a full snapshot must not be stripped or corrupted — users would lose their
 // per-site configurations silently.
 describe('validate_model snapshot passthrough', () => {
-  test('passes through all SNAPSHOT_KEYS in site_rules[i].settings', () => {
+  test('passes through all snapshot sections in site_rules[i].snapshot', () => {
     const model = blsi.build_default_model();
     model.site_rules = [{
       hostname_value: 'github.com',
       hostname_type:  blsi.pattern_types.exact,
       blur_all:       null,
       items:          [],
-      settings: {
-        blur_radius:     12,
-        blur_mode:       'frosted',
-        reveal_mode:     'click',
-        thorough_blur:   true,
-        blur_categories: { text: true, media: false, form: false, table: false, structure: false },
-        pick_blur_type:  'blur',
-        pick_blur_color: { hex: '#ff0000', opacity: 0.5 },
-        pii_mode:        'redacted',
+      snapshot: {
+        settings: {
+          blur_radius:  12,
+          reveal_mode:  'click',
+          thorough_blur: true,
+        },
+        blur_all: {
+          settings: {
+            blur_mode:       'frosted',
+            blur_categories: { text: true, media: false, form: false, table: false, structure: false },
+          },
+        },
+        pick_and_blur: {
+          status: true,
+          settings: {
+            blur_type:  'blur',
+            blur_color: { hex: '#ff0000', opacity: 0.5 },
+          },
+        },
       },
     }];
     const validated = blsi.validate_model(model);
-    const s = validated.site_rules[0].settings;
-    expect(s.blur_radius).toBe(12);
-    expect(s.blur_mode).toBe('frosted');
-    expect(s.reveal_mode).toBe('click');
-    expect(s.thorough_blur).toBe(true);
-    expect(s.blur_categories).toEqual({ text: true, media: false, form: false, table: false, structure: false });
-    expect(s.pick_blur_type).toBe('blur');
-    expect(s.pick_blur_color).toEqual({ hex: '#ff0000', opacity: 0.5 });
-    expect(s.pii_mode).toBe('redacted');
+    const snap = validated.site_rules[0].snapshot;
+    expect(snap.settings.blur_radius).toBe(12);
+    expect(snap.settings.reveal_mode).toBe('click');
+    expect(snap.settings.thorough_blur).toBe(true);
+    expect(snap.blur_all.settings.blur_mode).toBe('frosted');
+    expect(snap.blur_all.settings.blur_categories).toEqual({ text: true, media: false, form: false, table: false, structure: false });
+    expect(snap.pick_and_blur.status).toBe(true);
+    expect(snap.pick_and_blur.settings.blur_type).toBe('blur');
+    expect(snap.pick_and_blur.settings.blur_color).toEqual({ hex: '#ff0000', opacity: 0.5 });
   });
 
-  test('validate_model strips unknown keys from site_rules[i].settings (only SNAPSHOT_KEYS survive)', () => {
+  test('validate_model strips unknown keys from site_rules[i].snapshot.settings', () => {
     const model = blsi.build_default_model();
     model.site_rules = [{
       hostname_value: 'github.com',
       hostname_type:  blsi.pattern_types.exact,
       blur_all:       null,
       items:          [],
-      settings: {
-        blur_radius: 10,
-        some_unknown_key: 'bad',
-        another_bad_key:  42,
+      snapshot: {
+        settings: {
+          blur_radius: 10,
+          some_unknown_key: 'bad',
+          another_bad_key:  42,
+        },
       },
     }];
     const validated = blsi.validate_model(model);
-    const s = validated.site_rules[0].settings;
+    const s = validated.site_rules[0].snapshot.settings;
     expect(s.blur_radius).toBe(10);
     expect(s.some_unknown_key).toBeUndefined();
     expect(s.another_bad_key).toBeUndefined();
@@ -1483,12 +1277,16 @@ describe('validate_model snapshot passthrough', () => {
       hostname_type:  blsi.pattern_types.exact,
       blur_all:       null,
       items:          [],
-      settings: {
-        blur_categories: { text: 'yes', media: null, form: false, table: true, structure: true },
+      snapshot: {
+        blur_all: {
+          settings: {
+            blur_categories: { text: 'yes', media: null, form: false, table: true, structure: true },
+          },
+        },
       },
     }];
     const validated = blsi.validate_model(model);
-    const cats = validated.site_rules[0].settings.blur_categories;
+    const cats = validated.site_rules[0].snapshot.blur_all.settings.blur_categories;
     const d = blsi.build_default_model();
     // 'yes' and null are not booleans — repaired to defaults
     expect(cats.text).toBe(d.blur_all.settings.blur_categories.text);
@@ -1506,28 +1304,32 @@ describe('validate_model snapshot passthrough', () => {
       hostname_type:  blsi.pattern_types.exact,
       blur_all:       null,
       items:          [],
-      settings: {
-        pick_blur_color: { hex: 'not-a-hex', opacity: 5.0 },
+      snapshot: {
+        pick_and_blur: {
+          settings: {
+            blur_color: { hex: 'not-a-hex', opacity: 5.0 },
+          },
+        },
       },
     }];
     const validated = blsi.validate_model(model);
-    const pbc = validated.site_rules[0].settings.pick_blur_color;
+    const pbc = validated.site_rules[0].snapshot.pick_and_blur.settings.blur_color;
     const d = blsi.build_default_model();
     expect(pbc.hex).toBe(d.pick_and_blur.settings.blur_color.hex);
     expect(pbc.opacity).toBe(d.pick_and_blur.settings.blur_color.opacity);
   });
 
-  test('empty settings {} survives validate_model as empty {}', () => {
+  test('empty snapshot {} survives validate_model as empty {}', () => {
     const model = blsi.build_default_model();
     model.site_rules = [{
       hostname_value: 'github.com',
       hostname_type:  blsi.pattern_types.exact,
       blur_all:       null,
       items:          [],
-      settings:       {},
+      snapshot:       {},
     }];
     const validated = blsi.validate_model(model);
-    expect(validated.site_rules[0].settings).toEqual({});
+    expect(validated.site_rules[0].snapshot).toEqual({});
   });
 });
 
@@ -1544,16 +1346,27 @@ describe('resolve with full snapshot overrides', () => {
     await blsi.Model.init_cache();
   });
 
-  test('snapshot in exact site_rule overrides all SNAPSHOT_KEYS in resolved output', async () => {
+  test('snapshot in exact site_rule overrides all snapshot sections in resolved output', async () => {
     const snapshot = {
-      blur_radius:     20,
-      blur_mode:       'frosted',
-      reveal_mode:     'click',
-      thorough_blur:   true,
-      blur_categories: { text: false, media: false, form: false, table: false, structure: false },
-      pick_blur_type:  'color',
-      pick_blur_color: { hex: '#123456', opacity: 0.7 },
-      pii_mode:        'redacted',
+      settings: {
+        blur_radius:  20,
+        reveal_mode:  'click',
+        thorough_blur: true,
+      },
+      blur_all: {
+        settings: {
+          blur_mode:       'frosted',
+          blur_categories: { text: false, media: false, form: false, table: false, structure: false },
+        },
+      },
+      pick_and_blur: {
+        status: true,
+        settings: {
+          blur_type:   'color',
+          blur_color:  { hex: '#123456', opacity: 0.7 },
+          picker_mode: 'dynamic',
+        },
+      },
     };
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
 
@@ -1565,16 +1378,19 @@ describe('resolve with full snapshot overrides', () => {
     expect(resolved.blur_categories).toEqual({ text: false, media: false, form: false, table: false, structure: false });
     expect(resolved.pick_blur_type).toBe('color');
     expect(resolved.pick_blur_color).toEqual({ hex: '#123456', opacity: 0.7 });
-    expect(resolved.pii_mode).toBe('redacted');
+    expect(resolved.pick_blur_enabled).toBe(true);
   });
 
-  test('snapshot in wildcard site_rule overrides global SNAPSHOT_KEYS', async () => {
+  test('snapshot in wildcard site_rule overrides global snapshot keys', async () => {
     await blsi.Model.save_rules([{
       hostname_value: '*.github.com',
       hostname_type:  blsi.pattern_types.wildcard,
-      settings:       {},
+      snapshot:       {},
     }]);
-    const snapshot = { blur_radius: 18, blur_mode: 'redacted' };
+    const snapshot = {
+      settings:  { blur_radius: 18 },
+      blur_all:  { settings: { blur_mode: 'redacted' } },
+    };
     await blsi.Model.save_site_snapshot('*.github.com', blsi.pattern_types.wildcard, snapshot);
 
     const resolved = blsi.Model.resolve('sub.github.com', 'https://sub.github.com/page');
@@ -1586,17 +1402,17 @@ describe('resolve with full snapshot overrides', () => {
     await blsi.Model.save_rules([{
       hostname_value: '*.github.com',
       hostname_type:  blsi.pattern_types.wildcard,
-      settings:       { blur_radius: 10 },
+      snapshot:       { settings: { blur_radius: 10 } },
     }]);
-    const exactSnap = { blur_radius: 30 };
+    const exactSnap = { settings: { blur_radius: 30 } };
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, exactSnap);
 
     const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
     expect(resolved.blur_radius).toBe(30);
   });
 
-  test('non-SNAPSHOT_KEYS in resolved output come from global/feature settings when no override', async () => {
-    const snapshot = { blur_radius: 20 };
+  test('non-snapshot keys in resolved output come from global/feature settings when no override', async () => {
+    const snapshot = { settings: { blur_radius: 20 } };
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
 
     const resolved = blsi.Model.resolve('github.com', 'https://github.com/');

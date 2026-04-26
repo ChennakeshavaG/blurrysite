@@ -15,13 +15,13 @@ const BlurrySitePopupRenderAutomate = (() => {
 
   function _secsToLabel(secs) {
     secs = Math.round(secs);
-    if (secs < 60) return secs + ' sec';
+    if (secs < 60) return secs + ' ' + _t('automate_unit_sec');
     var m = Math.round(secs / 60);
-    if (m < 60) return m + ' min';
+    if (m < 60) return m + ' ' + _t('automate_unit_min');
     var h = Math.floor(secs / 3600);
     var rem = Math.round((secs % 3600) / 60);
-    if (rem === 0) return h + ' hr';
-    return h + ' hr ' + rem + ' min';
+    if (rem === 0) return h + ' ' + _t('automate_unit_hr');
+    return h + ' ' + _t('automate_unit_hr') + ' ' + rem + ' ' + _t('automate_unit_min');
   }
 
   function _secsToValueUnit(secs, hasHr) {
@@ -118,7 +118,7 @@ const BlurrySitePopupRenderAutomate = (() => {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var ss = settings.automate_screen_share || { enabled: false };
+    var ss = (settings.automate && settings.automate.settings && settings.automate.settings.screen_share) || { enabled: false };
     var tog = _makeToggleInput('bl-auto-screen-share-toggle', ss.enabled, _t('automate_screen_share'));
 
     block.appendChild(_makeBlockHeader(
@@ -138,7 +138,7 @@ const BlurrySitePopupRenderAutomate = (() => {
 
     tog.input.addEventListener('change', function () {
       block.classList.toggle('bl-auto-block--inactive', !tog.input.checked);
-      onSave({ automate_screen_share: { enabled: tog.input.checked } });
+      onSave({ automate: { settings: { screen_share: { enabled: tog.input.checked } } } });
     });
 
     return block;
@@ -148,7 +148,7 @@ const BlurrySitePopupRenderAutomate = (() => {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var tabSwitch = settings.automate_tab_switch || { enabled: false };
+    var tabSwitch = (settings.automate && settings.automate.settings && settings.automate.settings.tab_switch) || { enabled: false };
     var tog = _makeToggleInput('bl-auto-tab-switch-toggle', tabSwitch.enabled, _t('setting_auto_blur_tab'));
 
     block.appendChild(_makeBlockHeader(
@@ -162,7 +162,7 @@ const BlurrySitePopupRenderAutomate = (() => {
     block.appendChild(_makeDesc(_t('setting_auto_blur_tab_hint')));
 
     tog.input.addEventListener('change', function () {
-      onSave({ automate_tab_switch: { enabled: tog.input.checked } });
+      onSave({ automate: { settings: { tab_switch: { enabled: tog.input.checked } } } });
     });
 
     return block;
@@ -172,7 +172,7 @@ const BlurrySitePopupRenderAutomate = (() => {
     var block = document.createElement('div');
     block.className = 'bl-auto-block';
 
-    var idle = settings.automate_idle || { value: 5, unit: 'min', enabled: false };
+    var idle = (settings.automate && settings.automate.settings && settings.automate.settings.idle) || { value: 5, unit: 'min', enabled: false };
     var initialSecs = Math.max(15, Math.min(3600, _toSecs(idle.value, idle.unit)));
     var tog = _makeToggleInput('bl-auto-idle-toggle', idle.enabled, _t('automate_idle'));
 
@@ -201,12 +201,12 @@ const BlurrySitePopupRenderAutomate = (() => {
       block.classList.toggle('bl-auto-block--inactive', !active);
       sliderEl.slider.disabled = !active;
       var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
-      onSave({ automate_idle: { value: vu.value, unit: vu.unit, enabled: active } });
+      onSave({ automate: { settings: { idle: { value: vu.value, unit: vu.unit, enabled: active } } } });
     });
 
     sliderEl.slider.addEventListener('change', function () {
       var vu = _secsToValueUnit(Number(sliderEl.slider.value), false);
-      onSave({ automate_idle: { value: vu.value, unit: vu.unit, enabled: tog.input.checked } });
+      onSave({ automate: { settings: { idle: { value: vu.value, unit: vu.unit, enabled: tog.input.checked } } } });
     });
 
     return block;
@@ -215,7 +215,7 @@ const BlurrySitePopupRenderAutomate = (() => {
   // ── Public API ──────────────────────────────────────────────────────────────
 
   function renderBody(containerEl, settings, onSave) {
-    containerEl.innerHTML = '';
+    containerEl.replaceChildren();
     containerEl.appendChild(_buildScreenShareBlock(settings, onSave));
     containerEl.appendChild(_buildTabSwitchBlock(settings, onSave));
     containerEl.appendChild(_buildIdleBlock(settings, onSave));

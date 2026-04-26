@@ -401,11 +401,11 @@ saveRules(rules)
 SNAPSHOT_KEYS — the set of user-configurable keys captured into a site rule:
 
 ```
-blur_radius     — from m.settings.blur_radius
+blur_radius     — from m.global_default_settings.blur_radius
 blur_mode       — from m.blur_all.settings.blur_mode
-reveal_mode     — from m.settings.reveal_mode
-thorough_blur   — from m.settings.thorough_blur
-blur_categories — from m.settings.blur_categories (object, deep copy)
+reveal_mode     — from m.global_default_settings.reveal_mode
+thorough_blur   — from m.global_default_settings.thorough_blur
+blur_categories — from m.global_default_settings.blur_categories (object, deep copy)
 pick_blur_type  — from m.pick_and_blur.settings.blur_type
 pick_blur_color — from m.pick_and_blur.settings.blur_color (object, deep copy)
 pii_mode        — from m.auto_detect_pii.settings.pii_mode

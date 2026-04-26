@@ -28,8 +28,8 @@ describe('blsi.Actions (action registry)', () => {
     expect(typeof blsi.Actions.defaultBindings).toBe('function');
   });
 
-  test('contains exactly 4 actions', () => {
-    expect(blsi.Actions.ids()).toHaveLength(4);
+  test('contains exactly 5 actions', () => {
+    expect(blsi.Actions.ids()).toHaveLength(5);
   });
 
   test('all core actions are registered', () => {
@@ -37,6 +37,7 @@ describe('blsi.Actions (action registry)', () => {
     expect(blsi.Actions.get('toggle-picker')).toBeDefined();
     expect(blsi.Actions.get('clear-all')).toBeDefined();
     expect(blsi.Actions.get('screenshot')).toBeDefined();
+    expect(blsi.Actions.get('blur-selection')).toBeDefined();
   });
 
   // USER IMPACT: settings UI shows correct human-readable labels and descriptions for every action row
@@ -99,11 +100,21 @@ describe('blsi.Actions (action registry)', () => {
   });
 
   // USER IMPACT: background.js message routing is unambiguous — each action dispatches to exactly one handler
-  test.each(['messageType', 'chromeCommand'])('%s is unique across all actions', (prop) => {
+  test('messageType is unique across all actions', () => {
     const seen = new Set();
     for (const action of blsi.Actions.list()) {
-      expect(seen.has(action[prop])).toBe(false);
-      seen.add(action[prop]);
+      expect(seen.has(action.messageType)).toBe(false);
+      seen.add(action.messageType);
+    }
+  });
+
+  // chromeCommand can be null for actions with no browser-level command; null is not unique
+  test('non-null chromeCommand is unique across all actions', () => {
+    const seen = new Set();
+    for (const action of blsi.Actions.list()) {
+      if (action.chromeCommand === null) continue;
+      expect(seen.has(action.chromeCommand)).toBe(false);
+      seen.add(action.chromeCommand);
     }
   });
 

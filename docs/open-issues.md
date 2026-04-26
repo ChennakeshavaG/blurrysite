@@ -42,7 +42,6 @@ Consolidated from code-review audits. Verified against current source as of 2026
 
 | Issue | File | Detail |
 |---|---|---|
-| Unused i18n keys in `popup.json` | `_locales/en/popup.json` | `section_general`, `section_advanced`, `section_experimental` present but never used |
 
 ---
 

@@ -6,9 +6,6 @@ const BlurrySitePopupUI = (() => {
   const LOGO_LIGHT    = '../icons/logo-light.png';
   const LOGO_FALLBACK = '../icons/icon48.png';
 
-  const _SVG_SUN  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
-  const _SVG_MOON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>';
-
   function _setLogoSrc(img, isDark) {
     if (!img) return;
     img.src = isDark ? LOGO_DARK : LOGO_LIGHT;
@@ -18,8 +15,6 @@ const BlurrySitePopupUI = (() => {
   function applyTheme(theme) {
     const isDark = theme !== 'light';
     document.documentElement.setAttribute('data-theme', isDark ? '' : 'light');
-    const btn = document.getElementById('bl-theme-toggle');
-    if (btn) btn.innerHTML = isDark ? _SVG_SUN : _SVG_MOON;
     _setLogoSrc(document.getElementById('bl-logo'), isDark);
     _setLogoSrc(document.getElementById('bl-logo-off'), isDark);
   }
@@ -34,19 +29,37 @@ const BlurrySitePopupUI = (() => {
   // ── Toast ────────────────────────────────────────────────────────────────
   let _toastTimer = null;
 
+  function _dismissToast() {
+    const el = document.getElementById('bl-toast');
+    if (!el) return;
+    if (_toastTimer) clearTimeout(_toastTimer);
+    el.classList.remove('is-visible');
+    _toastTimer = setTimeout(() => { el.hidden = true; }, 220);
+  }
+
   function showToast(key, substitutions) {
     const el = document.getElementById('bl-toast');
     if (!el) return;
-    const msg = chrome.i18n.getMessage(key, substitutions) || key;
-    el.textContent = msg;
+    const msg = (blsi && blsi.ContentI18n)
+      ? blsi.ContentI18n.t(key)
+      : (chrome.i18n.getMessage(key, substitutions) || key);
+    const msgEl = document.getElementById('bl-toast-msg');
+    if (msgEl) msgEl.textContent = msg;
+    else el.textContent = msg;
     el.hidden = false;
     el.classList.add('is-visible');
     if (_toastTimer) clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => {
       el.classList.remove('is-visible');
       _toastTimer = setTimeout(() => { el.hidden = true; }, 220);
-    }, 2200);
+    }, 15000);
   }
+
+  // Wire close button once DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    const closeBtn = document.getElementById('bl-toast-close');
+    if (closeBtn) closeBtn.addEventListener('click', _dismissToast);
+  });
 
   // ── Host / version / i18n ────────────────────────────────────────────────
   function setHost(hostname) {
@@ -62,17 +75,24 @@ const BlurrySitePopupUI = (() => {
 
   function applyI18n() {
     document.querySelectorAll('[data-i18n]').forEach((el) => {
-      const msg = chrome.i18n.getMessage(el.dataset.i18n);
+      const key = el.dataset.i18n;
+      const msg = (blsi && blsi.ContentI18n)
+        ? blsi.ContentI18n.t(key)
+        : (chrome.i18n.getMessage(key) || key);
       if (msg) el.textContent = msg;
     });
   }
 
   // ── Power button ─────────────────────────────────────────────────────────
+  function _t(key) {
+    return (blsi && blsi.ContentI18n) ? blsi.ContentI18n.t(key) : (chrome.i18n.getMessage(key) || key);
+  }
+
   function renderPowerButton(enabled) {
     const btn = document.getElementById('bl-power');
     if (btn) {
       btn.classList.toggle('is-off', !enabled);
-      btn.title = enabled ? 'Disable Blurry Site' : 'Enable Blurry Site';
+      btn.title = enabled ? _t('tt_power_disable') : _t('tt_power_enable');
     }
     const mainView = document.getElementById('bl-view-main');
     if (mainView) mainView.hidden = !enabled;
@@ -86,6 +106,7 @@ const BlurrySitePopupUI = (() => {
     'bl-view-automate-modify',
     'bl-view-shortcuts',
     'bl-view-site-rules',
+    'bl-view-general',
   ];
 
   function showView(viewId, isEnabled) {

@@ -303,15 +303,18 @@ describe('blsi.SelectorUtils', () => {
       }
     });
 
-    test('every selector in the array uniquely matches the element', () => {
+    test('every selector in the array either uniquely matches the element or is a class combo hint', () => {
+      // Class combo selectors are stored even when non-unique (for intersection-based
+      // highlight fallback). All other strategies only emit unique selectors.
       const div = document.createElement('div');
       div.id = 'roundTrip';
       document.body.appendChild(div);
       const selectors = blsi.SelectorUtils.getSelectors(div);
       for (const sel of selectors) {
         const matches = document.querySelectorAll(sel);
-        expect(matches.length).toBe(1);
-        expect(matches[0]).toBe(div);
+        // Every stored selector must at minimum match the target element.
+        const matchArray = Array.from(matches);
+        expect(matchArray).toContain(div);
       }
     });
 
@@ -332,6 +335,61 @@ describe('blsi.SelectorUtils', () => {
       const selectors = blsi.SelectorUtils.getSelectors(div);
       const unique = [...new Set(selectors)];
       expect(selectors.length).toBe(unique.length);
+    });
+  });
+
+  // ── class-based selector strategy ─────────────────────────────────────────
+
+  // USER IMPACT: class combo stored even when non-unique so the highlight fallback
+  // (querySelectorAll(combo) ∩ [data-bl-si-pick-blur]) can find the element on SPA
+  // pages where multiple list items share the same CSS classes.
+  describe('class-based selector strategy', () => {
+    test('stores class combo even when non-unique', () => {
+      // Two divs with identical class → class combo is non-unique, but must still be stored.
+      const a = document.createElement('div');
+      const b = document.createElement('div');
+      a.className = 'chat-item preview';
+      b.className = 'chat-item preview';
+      document.body.appendChild(a);
+      document.body.appendChild(b);
+      const selectors = blsi.SelectorUtils.getSelectors(a);
+      expect(selectors.some(s => s === 'div.chat-item.preview')).toBe(true);
+      document.body.removeChild(a);
+      document.body.removeChild(b);
+    });
+
+    test('stores parent-id scoped combo when it is unique', () => {
+      const parent = document.createElement('div');
+      parent.id = 'sidebar';
+      const child = document.createElement('span');
+      child.className = 'label';
+      parent.appendChild(child);
+      document.body.appendChild(parent);
+      const selectors = blsi.SelectorUtils.getSelectors(child);
+      // Parent-scoped form preferred when unique.
+      expect(selectors.some(s => s.startsWith('#sidebar') && s.includes('span.label'))).toBe(true);
+      document.body.removeChild(parent);
+    });
+
+    test('omits bl-si-* classes from the combo', () => {
+      const el = document.createElement('div');
+      el.className = 'real-class bl-si-blurred bl-si-frosted';
+      document.body.appendChild(el);
+      const selectors = blsi.SelectorUtils.getSelectors(el);
+      const classSel = selectors.find(s => s.includes('real-class'));
+      expect(classSel).toBeDefined();
+      expect(classSel).not.toContain('bl-si-');
+      document.body.removeChild(el);
+    });
+
+    test('does not include class selector when element has no classes', () => {
+      const el = document.createElement('div');
+      el.id = 'no-class-el';
+      document.body.appendChild(el);
+      const selectors = blsi.SelectorUtils.getSelectors(el);
+      // No class-based selector; only structural and id selectors.
+      expect(selectors.every(s => !s.includes('.'))).toBe(true);
+      document.body.removeChild(el);
     });
   });
 

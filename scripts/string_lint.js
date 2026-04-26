@@ -94,6 +94,8 @@ const ALLOW_LIST = [
   { file: 'popup/popup.html', contains: 'aria-label="PII blur mode"' },
   { file: 'popup/popup.html', contains: 'aria-label="Settings"' },
   { file: 'popup/popup.html', contains: 'aria-label="Close"' },
+  { file: 'popup/popup.html', contains: 'aria-label="Dismiss"' },
+  { file: 'src/shortcut_handler.js', contains: "setAttribute('aria-label', 'Dismiss')" },
 ];
 
 // Patterns whose RHS is an i18n call — always OK.

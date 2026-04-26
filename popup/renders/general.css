@@ -1,0 +1,81 @@
+.bl-gen-block {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--bl-divider);
+}
+
+.bl-gen-block:last-of-type {
+  border-bottom: none;
+}
+
+.bl-gen-block__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bl-gen-block__label-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bl-gen-block__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bl-text-primary);
+}
+
+.bl-gen-block__hint {
+  font-size: 11px;
+  color: var(--bl-text-muted);
+  line-height: 1.4;
+}
+
+.bl-gen-select {
+  flex-shrink: 0;
+  appearance: none;
+  background: var(--bl-raised);
+  border: 1px solid var(--bl-divider);
+  border-radius: 6px;
+  color: var(--bl-text-primary);
+  font-size: 11.5px;
+  padding: 4px 24px 4px 8px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  max-width: 120px;
+}
+
+.bl-gen-select:focus {
+  outline: 2px solid var(--bl-sky);
+  outline-offset: 1px;
+}
+
+.bl-gen-btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bl-gen-btn {
+  appearance: none;
+  background: var(--bl-raised);
+  border: 1px solid var(--bl-divider);
+  border-radius: 6px;
+  color: var(--bl-text-primary);
+  font-size: 11.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bl-gen-btn:hover {
+  background: color-mix(in srgb, var(--bl-raised) 70%, var(--bl-text-primary) 30%);
+}
+
+.bl-gen-btn:focus-visible {
+  outline: 2px solid var(--bl-sky);
+  outline-offset: 1px;
+}

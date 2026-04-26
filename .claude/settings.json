@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/contract_guard.sh",
+            "timeout": 5,
+            "statusMessage": "Checking module contract..."
+          }
+        ]
+      }
+    ]
+  }
+}

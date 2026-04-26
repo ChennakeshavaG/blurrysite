@@ -153,7 +153,17 @@ describe('tab_privacy.js', () => {
     expect(hrefs).toContain('https://example.com/apple.png');
   });
 
-  // MISSING: no test for title change between enable() and disable() — page updates title while privacy is on; disable() should restore pre-enable title, not the updated one
+  // USER IMPACT: SPA (Gmail unread counter, Slack, Twitter) tries to rewrite document.title while user is screen-sharing — extension's placeholder must hold; on disable, the latest page-attempted title is restored so the user does not see a stale title
+  test('page-side writes to document.title cannot leak through while active', () => {
+    blsi.TabPrivacy.enable();
+    document.title = '(3) Inbox — Sensitive Project';
+    expect(document.title).toBe('Tab');
+    document.title = '(5) Inbox — Sensitive Project';
+    expect(document.title).toBe('Tab');
+    blsi.TabPrivacy.disable();
+    expect(document.title).toBe('(5) Inbox — Sensitive Project');
+  });
+
   // MISSING: no test for enable()/disable()/enable() cycle — state machine consistency across multiple activations is unverified
   // MISSING: no test for favicon with missing or empty href attribute — module should not crash when restoring a corrupt link element
 });

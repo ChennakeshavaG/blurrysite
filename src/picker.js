@@ -55,8 +55,8 @@ const Picker = (() => {
 
   /** Active settings snapshot: { blurRadius, highlightColor, pickerMode, … } */
   let activeSettings = {
-    blurRadius: blsi.DEFAULT_MODEL.settings.blur_radius,
-    highlightColor: blsi.DEFAULT_MODEL.settings.highlight_color,
+    blurRadius: blsi.DEFAULT_MODEL.global_default_settings.blur_radius,
+    highlightColor: blsi.DEFAULT_MODEL.global_default_settings.highlight_color,
   };
 
   /** Callbacks provided by content_script: { onBlur, onUnblur, onStickyBlur, onStickyUnblur, onDeactivate, onModeChange } */

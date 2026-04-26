@@ -76,8 +76,8 @@ const BlurrySitePopupRenderHtb = (() => {
 
           // Save setting
           var patch = isBlurAll
-            ? { blur_mode: type }
-            : { pick_blur_type: type };
+            ? { blur_all: { settings: { blur_mode: type } } }
+            : { pick_and_blur: { settings: { blur_type: type } } };
           onSave(patch);
 
           // Update sibling visibility based on new type
@@ -141,7 +141,8 @@ const BlurrySitePopupRenderHtb = (() => {
 
         var cb = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked = !!(settings.blur_categories && settings.blur_categories[def.key]);
+        var _cats = settings.blur_all && settings.blur_all.settings && settings.blur_all.settings.blur_categories;
+        cb.checked = !!(_cats && _cats[def.key]);
         cb.addEventListener('change', function () {
           // Read live DOM state from every checkbox in the grid so sequential
           // changes don't overwrite each other via a stale settings closure.
@@ -153,7 +154,7 @@ const BlurrySitePopupRenderHtb = (() => {
           // At least one category must remain selected.
           var anyOn = Object.keys(merged).some(function (k) { return merged[k]; });
           if (!anyOn) { cb.checked = true; return; }
-          onSave({ blur_categories: merged });
+          onSave({ blur_all: { settings: { blur_categories: merged } } });
         });
 
         var span = document.createElement('span');
@@ -189,7 +190,7 @@ const BlurrySitePopupRenderHtb = (() => {
     slider.min   = '2';
     slider.max   = '32';
     slider.step  = '1';
-    slider.value = String(settings.blur_radius || 6);
+    slider.value = String((settings.global_default_settings && settings.global_default_settings.blur_radius) || 6);
 
     var valEl = document.createElement('span');
     valEl.className = 'bl-slider-val';
@@ -202,7 +203,7 @@ const BlurrySitePopupRenderHtb = (() => {
       var v = +slider.value;
       valEl.textContent = v + 'px';
       _updateFill(slider);
-      onSave({ blur_radius: v });
+      onSave({ global_default_settings: { blur_radius: v } });
     });
 
     wrap.appendChild(slider);
@@ -239,7 +240,7 @@ const BlurrySitePopupRenderHtb = (() => {
       { value: 'none',  labelKey: 'reveal_none'  },
     ];
 
-    var current = settings.reveal_mode || 'hover';
+    var current = (settings.global_default_settings && settings.global_default_settings.reveal_mode) || 'hover';
 
     for (var i = 0; i < opts.length; i++) {
       (function (opt) {
@@ -255,7 +256,7 @@ const BlurrySitePopupRenderHtb = (() => {
           for (var j = 0; j < allOpts.length; j++) {
             allOpts[j].classList.toggle('is-active', allOpts[j] === btn);
           }
-          onSave({ reveal_mode: opt.value });
+          onSave({ global_default_settings: { reveal_mode: opt.value } });
         });
 
         seg.appendChild(btn);
@@ -282,9 +283,9 @@ const BlurrySitePopupRenderHtb = (() => {
     labelText.textContent = _t('setting_thorough_blur');
     labelWrap.appendChild(labelText);
 
-    var tog = _makeToggle('bl-htb-thorough-toggle', !!settings.thorough_blur, _t('setting_thorough_blur'));
+    var tog = _makeToggle('bl-htb-thorough-toggle', !!(settings.global_default_settings && settings.global_default_settings.thorough_blur), _t('setting_thorough_blur'));
     tog.input.addEventListener('change', function () {
-      onSave({ thorough_blur: tog.input.checked });
+      onSave({ global_default_settings: { thorough_blur: tog.input.checked } });
     });
 
     row.appendChild(labelWrap);
@@ -315,13 +316,12 @@ const BlurrySitePopupRenderHtb = (() => {
     labelText.textContent = _t('setting_transition');
     labelWrap.appendChild(labelText);
 
-    var isSmooth = (typeof settings.transition_duration === 'number')
-      ? settings.transition_duration > 0
-      : true;
+    var _td = settings.global_default_settings && settings.global_default_settings.transition_duration;
+    var isSmooth = (typeof _td === 'number') ? _td > 0 : true;
 
     var tog = _makeToggle('bl-htb-transition-toggle', isSmooth, _t('setting_transition'));
     tog.input.addEventListener('change', function () {
-      onSave({ transition_duration: tog.input.checked ? 150 : 0 });
+      onSave({ global_default_settings: { transition_duration: tog.input.checked ? 150 : 0 } });
     });
 
     row.appendChild(labelWrap);
@@ -344,10 +344,9 @@ const BlurrySitePopupRenderHtb = (() => {
     group.className = 'bl-htb-group';
     group.appendChild(_makeLabel(_t('htb_label_color')));
 
-    var colorCurrent  = (settings.pick_blur_color && settings.pick_blur_color.hex)     || '#000000';
-    var opacityCurrent = (settings.pick_blur_color && typeof settings.pick_blur_color.opacity === 'number')
-      ? settings.pick_blur_color.opacity
-      : 1.0;
+    var _bc = settings.pick_and_blur && settings.pick_and_blur.settings && settings.pick_and_blur.settings.blur_color;
+    var colorCurrent   = (_bc && _bc.hex) || '#000000';
+    var opacityCurrent = (_bc && typeof _bc.opacity === 'number') ? _bc.opacity : 1.0;
 
     // Color swatch row
     var colorRow = document.createElement('div');
@@ -359,7 +358,7 @@ const BlurrySitePopupRenderHtb = (() => {
     colorInput.value = colorCurrent;
     colorInput.addEventListener('input', function () {
       // Read opacity from the live slider to avoid stale closure overwriting user's change.
-      onSave({ pick_blur_color: { hex: colorInput.value, opacity: +opSlider.value / 100 } });
+      onSave({ pick_and_blur: { settings: { blur_color: { hex: colorInput.value, opacity: +opSlider.value / 100 } } } });
     });
 
     var colorLabel = document.createElement('span');
@@ -399,7 +398,7 @@ const BlurrySitePopupRenderHtb = (() => {
       opValEl.textContent = pct + '%';
       _updateFill(opSlider);
       var hexVal = colorInput.value;
-      onSave({ pick_blur_color: { hex: hexVal, opacity: pct / 100 } });
+      onSave({ pick_and_blur: { settings: { blur_color: { hex: hexVal, opacity: pct / 100 } } } });
     });
 
     opWrap.appendChild(opSlider);
@@ -424,9 +423,9 @@ const BlurrySitePopupRenderHtb = (() => {
     var colorInput = document.createElement('input');
     colorInput.type = 'color';
     colorInput.className = 'bl-color-input';
-    colorInput.value = settings.redaction_color || '#000000';
+    colorInput.value = (settings.global_default_settings && settings.global_default_settings.redaction_color) || '#000000';
     colorInput.addEventListener('input', function () {
-      onSave({ redaction_color: colorInput.value });
+      onSave({ global_default_settings: { redaction_color: colorInput.value } });
     });
 
     var colorLabel = document.createElement('span');
@@ -452,10 +451,12 @@ const BlurrySitePopupRenderHtb = (() => {
    * @param {function} onSave      - Called with a partial settings patch
    */
   function renderBody(containerEl, settings, onSave, isBlurAll) {
-    containerEl.innerHTML = '';
+    containerEl.replaceChildren();
 
     if (isBlurAll === undefined) isBlurAll = true;
-    var activeType = isBlurAll ? (settings.blur_mode || 'blur') : (settings.pick_blur_type || 'blur');
+    var activeType = isBlurAll
+      ? ((settings.blur_all && settings.blur_all.settings && settings.blur_all.settings.blur_mode) || 'blur')
+      : ((settings.pick_and_blur && settings.pick_and_blur.settings && settings.pick_and_blur.settings.blur_type) || 'blur');
 
     var hideCats           = !isBlurAll;
     var hideStrength       = (activeType === 'redacted' || activeType === 'censored' || activeType === 'color');

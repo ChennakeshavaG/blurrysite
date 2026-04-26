@@ -4,6 +4,8 @@
   const State = window.BlurrySitePopupState;
   const UI    = window.BlurrySitePopupUI;
 
+  let _highlightedRowKey = null;
+
   // ── Scroll arrows ─────────────────────────────────────────────────────────
   function _updateScrollArrows() {
     const main   = document.getElementById('bl-view-main');
@@ -24,16 +26,39 @@
     if (downEl) downEl.classList.toggle('is-visible', bodyEl.scrollTop + bodyEl.clientHeight < bodyEl.scrollHeight - 2);
   }
 
+  // ── Open Site Rules sub-page ──────────────────────────────────────────────
+  function _openSiteRulesPage() {
+    const bodyEl = document.getElementById('bl-site-rules-body');
+    UI.showView('bl-view-site-rules', true);
+    BlurrySitePopupRenderSiteRules.renderBody(bodyEl, State.get().settings, {
+      onSaveSettings:   _onSave,
+      onSaveRules:      (newRules) => State.saveRules(newRules),
+      captureSnapshot:  () => State.captureSnapshot(),
+      saveSiteSnapshot: (hv, ht, snap) => State.saveSiteSnapshot(hv, ht, snap),
+      getRules:         () => State.getRules(),
+    });
+    _updateSubpageArrows(bodyEl);
+  }
+
   // ── Render coordinator ────────────────────────────────────────────────────
   function _renderCurrent() {
-    const { settings, blurItems, isPageBlurred } = State.get();
-    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _onSave, _onClearAutomate);
+    const { settings, blurItems, isPageBlurred, activeRule } = State.get();
+    BlurrySitePopupRender.renderAll(settings, blurItems, isPageBlurred, _onSave, _onClearAutomate, _onClearScreenShareBlur, activeRule, _openSiteRulesPage);
     UI.updateClearAll(settings, blurItems, isPageBlurred);
     _updateScrollArrows();
   }
 
   async function _saveAndApply(patch) {
     await State.saveSettings(patch);
+    if (patch.global_default_settings && patch.global_default_settings.language !== undefined) {
+      await blsi.ContentI18n.init(patch.global_default_settings.language);
+      UI.applyI18n();
+      const generalView = document.getElementById('bl-view-general');
+      if (generalView && !generalView.hidden) {
+        const bodyEl = document.getElementById('bl-general-body');
+        BlurrySitePopupRenderGeneral.renderBody(bodyEl, State.get().settings, _generalCallbacks());
+      }
+    }
     _renderCurrent();
   }
 
@@ -46,6 +71,11 @@
     _renderCurrent();
   }
 
+  async function _onClearScreenShareBlur() {
+    await State.clearScreenShareBlur();
+    _renderCurrent();
+  }
+
   // ── Open HTB sub-page ─────────────────────────────────────────────────────
   function _openHtbModify(isBlurAll) {
     const bodyEl = document.getElementById('bl-htb-modify-body');
@@ -54,41 +84,93 @@
     _updateSubpageArrows(bodyEl);
   }
 
+  // ── General subpage callbacks ─────────────────────────────────────────────
+  function _generalCallbacks() {
+    return {
+      onSave:        _onSave,
+      debugEnabled:  blsi.Logger.enabled,
+      onToggleDebug: (on) => { on ? blsi.Logger.enable() : blsi.Logger.disable(); },
+      onExport: () => {
+        const model = State.exportModel();
+        const date  = new Date().toISOString().slice(0, 10);
+        const blob  = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' });
+        const url   = URL.createObjectURL(blob);
+        const a     = document.createElement('a');
+        a.href      = url;
+        a.download  = `blurrysite-settings-${date}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      },
+      onImport: async (text) => {
+        try {
+          if (text === null) throw new Error('read error');
+          const parsed = JSON.parse(text);
+          const valid  = blsi.validate_model(parsed);
+          await State.importSettings(valid);
+          _renderCurrent();
+          UI.showToast('toast_import_success');
+        } catch (_) {
+          UI.showToast('toast_import_error');
+        }
+      },
+    };
+  }
+
+  // ── Picker activation helper ─────────────────────────────────────────────
+  // Query picker state first; if already active just close popup (preserve
+  // the live picker session). Only send toggle_picker when picker is off.
+  function _activatePicker(mode) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0]) return;
+      chrome.tabs.sendMessage(
+        tabs[0].id,
+        { type: blsi.popup.get_status },
+        { frameId: 0 },
+        (response) => {
+          void chrome.runtime.lastError;
+          if (response && response.isPickerActive) {
+            window.close();
+          } else {
+            chrome.tabs.sendMessage(
+              tabs[0].id,
+              { type: blsi.command.toggle_picker, picker_mode: mode },
+              { frameId: 0 },
+              () => { void chrome.runtime.lastError; window.close(); }
+            );
+          }
+        }
+      );
+    });
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────
   async function init() {
     chrome.storage.local.get('blsi_popup_theme', (data) => {
       UI.applyTheme(data.blsi_popup_theme || 'dark');
     });
 
+    await blsi.ContentI18n.init('auto');
     UI.applyI18n();
     UI.setVersion();
 
     const tab = await new Promise((res) =>
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => res(tabs && tabs[0]))
     );
+    let hostname = '';
     if (tab && tab.url) {
       try {
-        const hostname = new URL(tab.url).hostname;
-        State.setHostname(hostname);
+        hostname = new URL(tab.url).hostname;
         UI.setHost(hostname);
       } catch (_) {}
     }
 
-    // Initialise the model cache then load site-specific state
-    await blsi.Model.init_cache();
+    await State.load(hostname, tab && tab.url ? tab.url : '');
+    await blsi.ContentI18n.init(State.get().settings.global_default_settings.language);
+    UI.applyI18n();
 
-    const { hostname } = State.get();
-    const model = blsi.Model.get();
-    State.setModel(model);
-
-    const [items] = await Promise.all([
-      hostname ? blsi.Model.get_blur_items(hostname) : Promise.resolve([]),
-    ]);
-    const pageBlurred = hostname ? blsi.Model.get_cached_blur_state(hostname) : false;
-    State.setBlurItems(items || []);
-    State.setPageBlurred(!!pageBlurred);
-
-    UI.renderPowerButton(State.get().settings.enabled);
+    UI.renderPowerButton(State.get().settings.global_default_settings.enabled);
     _renderCurrent();
 
     // ── Live reactivity via external storage changes ─────────────────────
@@ -98,7 +180,12 @@
       // refreshFromStorage() re-derives _model + hostname-specific state from the cache.
       // When _hostname is empty (no-URL tab), only _model and _isPageBlurred are updated.
       State.refreshFromStorage();
-      _renderCurrent();
+      const newLang = State.get().settings.global_default_settings.language;
+      if (newLang !== blsi.ContentI18n.currentLang) {
+        blsi.ContentI18n.init(newLang).then(() => { UI.applyI18n(); _renderCurrent(); });
+      } else {
+        _renderCurrent();
+      }
     });
 
     // ── Media tooltip ────────────────────────────────────────────────────
@@ -190,15 +277,15 @@
     document.getElementById('bl-theme-toggle').addEventListener('click', UI.toggleTheme);
 
     document.getElementById('bl-power').addEventListener('click', async () => {
-      await _saveAndApply({ enabled: !State.get().settings.enabled });
+      await _saveAndApply({ global_default_settings: { enabled: !State.get().settings.global_default_settings.enabled } });
       const { settings } = State.get();
-      UI.renderPowerButton(settings.enabled);
-      UI.showToast(settings.enabled ? 'toast_enabled' : 'toast_disabled');
+      UI.renderPowerButton(settings.global_default_settings.enabled);
+      UI.showToast(settings.global_default_settings.enabled ? 'toast_enabled' : 'toast_disabled');
     });
 
     // ── Off-state turn-on ─────────────────────────────────────────────────
     document.getElementById('bl-turn-on').addEventListener('click', async () => {
-      await _saveAndApply({ enabled: true });
+      await _saveAndApply({ global_default_settings: { enabled: true } });
       UI.renderPowerButton(true);
       UI.showToast('toast_enabled');
     });
@@ -207,15 +294,13 @@
     document.getElementById('bl-modes').addEventListener('change', async (e) => {
       if (e.target.id === 'bl-blur-all-toggle') {
         const checked = e.target.checked;
-        const { hostname } = State.get();
-        if (hostname) await blsi.Model.save_blur_state(hostname, checked);
-        State.refreshFromStorage();
+        await State.saveBlurState(checked);
         _renderCurrent();
         UI.showToast(checked ? 'toast_blur_all' : 'toast_cleared');
         return;
       }
       if (e.target.id === 'bl-pick-blur-toggle') {
-        await _onSave({ pick_blur_enabled: e.target.checked });
+        await _onSave({ pick_and_blur: { status: e.target.checked } });
         return;
       }
     });
@@ -226,47 +311,40 @@
       const removeBtn = e.target.closest('[data-item-id]');
       if (removeBtn) {
         const itemId = removeBtn.dataset.itemId;
-        const { hostname } = State.get();
-        if (itemId && hostname) {
-          await blsi.Model.remove_blur_item(hostname, itemId);
-          State.refreshFromStorage();
+        if (itemId) {
+          await State.removeBlurItem(itemId);
+          _highlightedRowKey = null;
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+              chrome.tabs.sendMessage(
+                tabs[0].id,
+                { type: blsi.popup.clear_highlight },
+                { frameId: 0 },
+                () => { void chrome.runtime.lastError; }
+              );
+            }
+          });
           _renderCurrent();
         }
         return;
       }
 
-      // Picker mode chip — save mode and activate picker; popup stays open
+      // Picker mode chip — save mode, activate picker, then close popup
       const pickerModeChip = e.target.closest('[data-picker-mode]');
       if (pickerModeChip) {
         const mode = pickerModeChip.dataset.pickerMode;
         if (mode) {
-          await blsi.Model.patch_section('pick_and_blur', { settings: { picker_mode: mode } });
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0]) {
-              chrome.tabs.sendMessage(
-                tabs[0].id,
-                { type: blsi.command.toggle_picker, picker_mode: mode },
-                () => { void chrome.runtime.lastError; }
-              );
-            }
-          });
+          await State.saveSettings({ pick_and_blur: { settings: { picker_mode: mode } } });
+          _activatePicker(mode);
         }
         return;
       }
 
-      // Open Picker button — toggle picker; popup stays open
+      // Open Picker button — activate picker then close popup
       const openPickerBtn = e.target.closest('[data-action="open-picker"]');
       if (openPickerBtn) {
         const { settings } = State.get();
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]) {
-            chrome.tabs.sendMessage(
-              tabs[0].id,
-              { type: blsi.command.toggle_picker, picker_mode: settings.picker_mode || 'sticky-page' },
-              () => { void chrome.runtime.lastError; }
-            );
-          }
-        });
+        _activatePicker((settings.pick_and_blur.settings.picker_mode) || 'sticky-page');
         return;
       }
 
@@ -275,9 +353,9 @@
       if (typeChip) {
         const type = typeChip.dataset.type;
         if (typeChip.closest('.bl-mode-block--blur-all')) {
-          await _onSave({ blur_mode: type });
+          await _onSave({ blur_all: { settings: { blur_mode: type } } });
         } else {
-          await _onSave({ pick_blur_type: type });
+          await _onSave({ pick_and_blur: { settings: { blur_type: type } } });
         }
         return;
       }
@@ -294,31 +372,85 @@
       const clearBtn = e.target.closest('[data-action="clear-all"]');
       if (clearBtn) {
         const mode = clearBtn.dataset.mode;
-        const { hostname } = State.get();
         if (mode === 'blur-all') {
-          if (hostname) await blsi.Model.save_blur_state(hostname, false);
+          await State.saveBlurState(false);
         } else {
-          if (hostname) await blsi.Model.clear_host(hostname);
+          await State.clearHost();
         }
-        State.refreshFromStorage();
         _renderCurrent();
         UI.showToast('toast_cleared');
         return;
       }
     });
 
+    // ── Pick-blur item hover highlight ───────────────────────────────────
+    document.getElementById('bl-modes').addEventListener('mouseover', (e) => {
+      const row = e.target.closest('.bl-item-row[data-highlight-type]');
+      const key = row
+        ? (row.dataset.highlightType === 'dynamic' ? row.dataset.highlightSelectors : row.dataset.highlightId)
+        : null;
+      if (key === _highlightedRowKey) return;
+      _highlightedRowKey = key;
+      if (!row) return;
+      let selectors;
+      try { selectors = JSON.parse(row.dataset.highlightSelectors || '[]'); } catch (_e) { selectors = []; }
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(
+            tabs[0].id,
+            { type: blsi.popup.highlight_item, item_type: row.dataset.highlightType, selectors, id: row.dataset.highlightId },
+            { frameId: 0 },
+            () => { void chrome.runtime.lastError; }
+          );
+        }
+      });
+    });
+
+    document.getElementById('bl-modes').addEventListener('mouseout', (e) => {
+      if (!_highlightedRowKey) return;
+      const row = e.target.closest('.bl-item-row[data-highlight-type]');
+      if (!row) return;
+      const toRow = e.relatedTarget && e.relatedTarget.closest('.bl-item-row[data-highlight-type]');
+      if (toRow === row) return;
+      _highlightedRowKey = null;
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(
+            tabs[0].id,
+            { type: blsi.popup.clear_highlight },
+            { frameId: 0 },
+            () => { void chrome.runtime.lastError; }
+          );
+        }
+      });
+    });
+
+    window.addEventListener('unload', () => {
+      if (!_highlightedRowKey) return;
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(
+            tabs[0].id,
+            { type: blsi.popup.clear_highlight },
+            { frameId: 0 },
+            () => { void chrome.runtime.lastError; }
+          );
+        }
+      });
+    });
+
     // ── PII master toggle ─────────────────────────────────────────────────
     document.getElementById('bl-pii').addEventListener('change', async (e) => {
       if (e.target.id !== 'bl-pii-master') return;
       const on = e.target.checked;
-      await _saveAndApply({ pii_enabled: on, pii_email: on, pii_numeric: on });
+      await _saveAndApply({ auto_detect_pii: { settings: { email: on, numeric: on } } });
     });
 
     // ── PII mode chip click ───────────────────────────────────────────────
     document.getElementById('bl-pii-chips').addEventListener('click', async (e) => {
       const chip = e.target.closest('[data-pii-mode]');
       if (!chip) return;
-      await _saveAndApply({ pii_mode: chip.dataset.piiMode });
+      await _saveAndApply({ auto_detect_pii: { settings: { pii_mode: chip.dataset.piiMode } } });
     });
 
     // ── Automate modify sub-page ──────────────────────────────────────────
@@ -338,13 +470,13 @@
     });
 
     // ── Site Rules sub-page ───────────────────────────────────────────────
-    document.getElementById('bl-nav-site-rules').addEventListener('click', () => {
-      const bodyEl = document.getElementById('bl-site-rules-body');
-      UI.showView('bl-view-site-rules', true);
-      BlurrySitePopupRenderSiteRules.renderBody(bodyEl, State.get().settings, {
-        onSaveSettings: _onSave,
-        onSaveRules: (newRules) => blsi.Model.save_rules(newRules),
-      });
+    document.getElementById('bl-nav-site-rules').addEventListener('click', _openSiteRulesPage);
+
+    // ── General sub-page ──────────────────────────────────────────────────
+    document.getElementById('bl-nav-general').addEventListener('click', () => {
+      const bodyEl = document.getElementById('bl-general-body');
+      BlurrySitePopupRenderGeneral.renderBody(bodyEl, State.get().settings, _generalCallbacks());
+      UI.showView('bl-view-general', true);
       _updateSubpageArrows(bodyEl);
     });
 
@@ -358,7 +490,7 @@
 
     // ── Back buttons ──────────────────────────────────────────────────────
     document.querySelectorAll('.bl-back-btn').forEach((btn) => {
-      btn.addEventListener('click', () => UI.showView('bl-view-main', State.get().settings.enabled));
+      btn.addEventListener('click', () => UI.showView('bl-view-main', State.get().settings.global_default_settings.enabled));
     });
 
     // ── Click outside sub-page modal closes it ────────────────────────────
@@ -366,7 +498,7 @@
     if (mid) {
       mid.addEventListener('click', (e) => {
         if (e.target === mid && document.body.classList.contains('bl-has-subpage')) {
-          UI.showView('bl-view-main', State.get().settings.enabled);
+          UI.showView('bl-view-main', State.get().settings.global_default_settings.enabled);
         }
       });
     }

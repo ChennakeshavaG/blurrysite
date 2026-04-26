@@ -2,6 +2,7 @@ const BlurrySitePopupShared = (() => {
   'use strict';
 
   function t(key) {
+    if (blsi && blsi.ContentI18n) return blsi.ContentI18n.t(key);
     return chrome.i18n.getMessage(key) || key;
   }
 

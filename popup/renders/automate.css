@@ -146,6 +146,36 @@
   color: var(--bl-amber);
   font-size: var(--bl-text-xs);
   font-weight: 500;
-  padding: 5px 9px;
+  padding: 6px 9px;
   margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bl-automate-banner-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bl-automate-clear-btn {
+  background: color-mix(in srgb, var(--bl-amber) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl-amber) 40%, transparent);
+  border-radius: 4px;
+  color: var(--bl-amber);
+  font-size: var(--bl-text-xs);
+  font-weight: 500;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bl-automate-clear-btn:hover {
+  background: color-mix(in srgb, var(--bl-amber) 28%, transparent);
+}
+.bl-automate-clear-btn--ss {
+  background: color-mix(in srgb, var(--bl-sky) 15%, transparent);
+  border-color: color-mix(in srgb, var(--bl-sky) 40%, transparent);
+  color: var(--bl-sky);
+}
+.bl-automate-clear-btn--ss:hover {
+  background: color-mix(in srgb, var(--bl-sky) 25%, transparent);
 }

@@ -90,6 +90,9 @@
   "section_general": {
     "message": "General"
   },
+  "nav_general_desc": {
+    "message": "Language, tab privacy, and more"
+  },
   "section_advanced": {
     "message": "Advanced"
   },
@@ -132,6 +135,24 @@
   "section_rules_title": {
     "message": "Site Rules"
   },
+  "section_automate_title": {
+    "message": "Automate"
+  },
+  "section_pii_desc": {
+    "message": "Detects emails and numeric patterns"
+  },
+  "section_automate_desc": {
+    "message": "Blur on a timer, after idle, or when switching tabs"
+  },
+  "nav_shortcuts_desc": {
+    "message": "Customize keyboard shortcuts for blur actions"
+  },
+  "nav_rules_desc": {
+    "message": "Configure per-site blur rules and overrides"
+  },
+  "subpage_htb_title": {
+    "message": "How to Blur"
+  },
   "setting_blur_radius": {
     "message": "Blur Strength"
   },
@@ -173,6 +194,30 @@
   },
   "setting_tab_privacy_hint": {
     "message": "Replace the browser tab title and favicon with a generic placeholder. Great for screen sharing."
+  },
+  "setting_debug_logging": {
+    "message": "Debug Logging"
+  },
+  "setting_debug_logging_hint": {
+    "message": "Log extension internals to the DevTools console."
+  },
+  "setting_backup": {
+    "message": "Backup & Restore"
+  },
+  "setting_backup_hint": {
+    "message": "Export or restore all settings as a JSON file."
+  },
+  "btn_export": {
+    "message": "Export"
+  },
+  "btn_import": {
+    "message": "Import"
+  },
+  "toast_import_success": {
+    "message": "Settings imported"
+  },
+  "toast_import_error": {
+    "message": "Invalid settings file"
   },
   "setting_auto_blur_tab": {
     "message": "Blur on Tab Switch"
@@ -291,6 +336,12 @@
   "shortcut_screenshot_hint": {
     "message": "Capture the visible page with all blurs applied and download as PNG."
   },
+  "shortcut_blur_selection": {
+    "message": "Blur Selected Text"
+  },
+  "shortcut_blur_selection_hint": {
+    "message": "Blur the text currently selected on the page."
+  },
   "shortcut_customize": {
     "message": "Change"
   },
@@ -318,6 +369,15 @@
   "shortcut_reset_done": {
     "message": "Shortcut reset"
   },
+  "shortcut_reset_all": {
+    "message": "Reset All"
+  },
+  "shortcut_reserved_known": {
+    "message": "Reserved: {label} — saving anyway will override it."
+  },
+  "shortcut_reserved_browser": {
+    "message": "This chord is reserved by the browser."
+  },
   "rule_add": {
     "message": "+ Add Site Rule"
   },
@@ -337,7 +397,7 @@
     "message": "Matches URL"
   },
   "rule_pattern_placeholder": {
-    "message": "*.bank.com/*"
+    "message": "youtube.com"
   },
   "rule_pattern_type": {
     "message": "Match type"
@@ -393,11 +453,110 @@
   "rule_delete_btn": {
     "message": "Remove"
   },
+  "rule_edit_pattern": {
+    "message": "Edit pattern"
+  },
+  "rule_add_for_site": {
+    "message": "+ Save current settings as site rule"
+  },
+  "rule_pattern_exact": {
+    "message": "Exact hostname"
+  },
+  "rule_pattern_help_wildcard": {
+    "message": "youtube.com matches all YouTube pages (incl. subdomains). *.youtube.com matches subdomains only. github.com/settings/* matches a path prefix."
+  },
+  "rule_pattern_help_regex": {
+    "message": "Full regular expression matched against the URL. Example: github\\.com/[a-z]+/settings or (mail|inbox)\\.google\\.com"
+  },
+  "rule_pattern_help_exact": {
+    "message": "Matches only the exact hostname — no subdomains, no path. Example: www.youtube.com"
+  },
+  "rule_snapshot_label": {
+    "message": "Settings snapshot"
+  },
+  "rule_snapshot_preview": {
+    "message": "Snapshot preview"
+  },
+  "rule_snapshot_empty": {
+    "message": "No snapshot saved — inherits global settings"
+  },
+  "rule_snapshot_recapture": {
+    "message": "Recapture"
+  },
+  "rule_snapshot_saved_note": {
+    "message": "saved"
+  },
+  "rule_snap_blur_radius": {
+    "message": "Blur radius"
+  },
+  "rule_snap_blur_mode": {
+    "message": "Blur mode"
+  },
+  "rule_snap_reveal_mode": {
+    "message": "Reveal mode"
+  },
+  "rule_snap_thorough_blur": {
+    "message": "Thorough blur"
+  },
+  "rule_snap_blur_categories": {
+    "message": "Blur categories"
+  },
+  "rule_snap_pick_blur_type": {
+    "message": "Pick & blur type"
+  },
+  "rule_snap_pick_blur_enabled": {
+    "message": "Pick & Blur"
+  },
+  "rule_snap_val_blur": {
+    "message": "Blur"
+  },
+  "rule_snap_val_frosted": {
+    "message": "Frosted"
+  },
+  "rule_snap_val_color": {
+    "message": "Color"
+  },
+  "rule_snap_val_redacted": {
+    "message": "Redacted"
+  },
+  "rule_snap_val_censored": {
+    "message": "Censored"
+  },
+  "rule_snap_val_starred": {
+    "message": "Starred"
+  },
+  "rule_snap_val_reveal_hover": {
+    "message": "Hover"
+  },
+  "rule_snap_val_reveal_click": {
+    "message": "Click"
+  },
+  "rule_snap_val_reveal_none": {
+    "message": "None"
+  },
+  "rule_snap_val_on": {
+    "message": "On"
+  },
+  "rule_snap_val_off": {
+    "message": "Off"
+  },
+  "rule_snap_val_none": {
+    "message": "None"
+  },
+  "rule_active_banner": {
+    "message": "Site rule active"
+  },
+  "rule_active_view": {
+    "message": "View rule"
+  },
   "item_type_dynamic": {
     "message": "Element"
   },
-  "item_type_sticky": {
-    "message": "Zone"
+  "item_type_sticky_page": {
+    "message": "Area on page"
+  },
+  "item_type_sticky_screen": {
+    "message": "Area on screen"
   },
   "item_remove_aria": {
     "message": "Remove"
@@ -459,6 +618,15 @@
   "footer_clear_all": {
     "message": "Clear every site"
   },
+  "footer_feedback": {
+    "message": "Feedback"
+  },
+  "footer_export": {
+    "message": "Export"
+  },
+  "footer_logs": {
+    "message": "Logs"
+  },
   "theme_toggle": {
     "message": "Switch light / dark theme"
   },
@@ -479,6 +647,12 @@
   },
   "tt_theme": {
     "message": "Switch to light or dark"
+  },
+  "tt_power_enable": {
+    "message": "Enable Blurry Site"
+  },
+  "tt_power_disable": {
+    "message": "Disable Blurry Site"
   },
   "tt_blur_all": {
     "message": "Blur everything on this page"
@@ -684,11 +858,26 @@
   "automate_screen_share": {
     "message": "Screen Share"
   },
+  "automate_screen_share_desc": {
+    "message": "Auto-blur when screen sharing is detected"
+  },
   "automate_triggered_by": {
     "message": "Active:"
   },
   "automate_turn_off": {
     "message": "Turn Off"
+  },
+  "automate_stop_screen_share": {
+    "message": "Stop Screen Share Blur"
+  },
+  "automate_stop_per_tab": {
+    "message": "This tab"
+  },
+  "automate_stop_per_domain": {
+    "message": "This site"
+  },
+  "automate_disable_feature": {
+    "message": "Disable"
   },
   "automate_toast_screen_share": {
     "message": "Blur applied — screen share active"

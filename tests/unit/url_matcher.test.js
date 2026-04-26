@@ -68,7 +68,7 @@ function buildStubSource() {
       try { return new URL(url).hostname.endsWith(pattern); } catch (_) { return false; }
     }
     function resolveSettings(url, globals, rules) {
-      return blsi.deep_merge(blsi.DEFAULT_MODEL.settings, globals || {});
+      return blsi.deep_merge(blsi.DEFAULT_MODEL.global_default_settings, globals || {});
     }
     blsi.UrlMatcher = { matchesPattern: matchesPattern, resolveSettings: resolveSettings, MAX_PATTERN_LENGTH: 500 };
   })();

@@ -78,6 +78,9 @@ body {
 .bl-icon-btn:hover { color: var(--bl-text-primary); background: var(--bl-raised); }
 
 #bl-theme-toggle { margin-left: 6px; }
+#bl-theme-toggle .bl-icon-moon { display: none; }
+html[data-theme="light"] #bl-theme-toggle .bl-icon-sun  { display: none; }
+html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 
 .bl-icon-btn--power {
   color: var(--bl-amber);
@@ -240,8 +243,60 @@ body {
   transition: background 0.2s, box-shadow 0.2s;
 }
 .bl-mode-block__dot.is-on {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  background: var(--bl-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bl-green) 25%, transparent);
+}
+
+/* ── Notification area (site-rule + automate active pills) ────────────── */
+#bl-notif-area:empty { display: none; }
+#bl-notif-area { margin-bottom: 6px; }
+
+.bl-notif-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--bl-green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl-green) 28%, transparent);
+  border-radius: 6px;
+  padding: 5px 9px;
+  margin-bottom: 5px;
+  font-size: var(--bl-text-xs);
+  font-weight: 500;
+  color: var(--bl-green);
+}
+.bl-notif-pill:last-child { margin-bottom: 0; }
+
+.bl-notif-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bl-green);
+  flex-shrink: 0;
+}
+
+.bl-notif-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bl-notif-btn {
+  background: color-mix(in srgb, var(--bl-green) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl-green) 35%, transparent);
+  border-radius: 4px;
+  color: var(--bl-green);
+  font-size: var(--bl-text-xs);
+  font-weight: 500;
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.bl-notif-btn:hover {
+  background: color-mix(in srgb, var(--bl-green) 26%, transparent);
 }
 
 .bl-mode-block__title {
@@ -799,17 +854,45 @@ body {
   background: var(--bl-raised);
   color: var(--bl-text-primary);
   font-size: var(--bl-text-base);
-  padding: 6px 16px;
+  padding: 6px 12px 6px 10px;
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--bl-text-muted) 30%, transparent);
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
   opacity: 0;
   transition: opacity 0.2s;
   z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 .bl-toast[hidden] { display: none; }
-.bl-toast.is-visible { opacity: 1; }
+.bl-toast.is-visible { opacity: 1; display: flex; }
+.bl-toast__logo {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: block;
+  opacity: 0.85;
+}
+.bl-toast__msg { flex: 1; }
+.bl-toast__close {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  margin-left: 2px;
+  cursor: pointer;
+  color: var(--bl-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.bl-toast__close:hover {
+  color: var(--bl-text-primary);
+  background: color-mix(in srgb, var(--bl-text-muted) 15%, transparent);
+}
 
 
 /* ── Item list ───────────────────────────────────────────────────────── */
@@ -826,9 +909,15 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 0;
+  padding: 5px 4px;
   border-bottom: 1px solid var(--bl-raised);
   font-size: var(--bl-text-sm);
+  border-radius: 4px;
+  transition: background-color 0.12s;
+  cursor: default;
+}
+.bl-item-row:hover {
+  background-color: color-mix(in srgb, var(--bl-mode-accent, var(--bl-violet)) 8%, transparent);
 }
 .bl-item-row:last-child { border-bottom: none; }
 .bl-item-dot {
@@ -853,10 +942,11 @@ body {
   border: none;
   cursor: pointer;
   color: var(--bl-text-dim);
-  font-size: var(--bl-text-lg);
   line-height: 1;
   padding: 0 2px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
   transition: color 0.15s;
 }
 .bl-item-remove:hover { color: var(--bl-danger); }

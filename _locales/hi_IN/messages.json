@@ -90,6 +90,9 @@
   "section_general": {
     "message": "सामान्य"
   },
+  "nav_general_desc": {
+    "message": "भाषा, टैब गोपनीयता, और अधिक"
+  },
   "section_advanced": {
     "message": "उन्नत"
   },
@@ -132,6 +135,24 @@
   "section_rules_title": {
     "message": "साइट नियम"
   },
+  "section_automate_title": {
+    "message": "स्वचालित"
+  },
+  "section_pii_desc": {
+    "message": "ईमेल और संख्यात्मक पैटर्न का पता लगाता है"
+  },
+  "section_automate_desc": {
+    "message": "टाइमर पर, निष्क्रियता पर, या टैब स्विच पर धुंधला करें"
+  },
+  "nav_shortcuts_desc": {
+    "message": "ब्लर क्रियाओं के लिए कीबोर्ड शॉर्टकट अनुकूलित करें"
+  },
+  "nav_rules_desc": {
+    "message": "प्रति-साइट ब्लर नियम और ओवरराइड कॉन्फ़िगर करें"
+  },
+  "subpage_htb_title": {
+    "message": "धुंधला कैसे करें"
+  },
   "setting_blur_radius": {
     "message": "धुंधलापन की तीव्रता"
   },
@@ -173,6 +194,30 @@
   },
   "setting_tab_privacy_hint": {
     "message": "स्क्रीन शेयरिंग के लिए टैब शीर्षक और फ़ेविकॉन को सामान्य प्लेसहोल्डर से बदलें।"
+  },
+  "setting_debug_logging": {
+    "message": "डीबग लॉगिंग"
+  },
+  "setting_debug_logging_hint": {
+    "message": "DevTools कंसोल में एक्सटेंशन की आंतरिक जानकारी लॉग करें।"
+  },
+  "setting_backup": {
+    "message": "बैकअप और पुनर्स्थापना"
+  },
+  "setting_backup_hint": {
+    "message": "सभी सेटिंग्स को JSON फ़ाइल के रूप में निर्यात या पुनर्स्थापित करें।"
+  },
+  "btn_export": {
+    "message": "निर्यात करें"
+  },
+  "btn_import": {
+    "message": "आयात करें"
+  },
+  "toast_import_success": {
+    "message": "सेटिंग्स आयात की गईं"
+  },
+  "toast_import_error": {
+    "message": "अमान्य सेटिंग्स फ़ाइल"
   },
   "setting_auto_blur_tab": {
     "message": "टैब बदलने पर धुंधला करें"
@@ -291,6 +336,12 @@
   "shortcut_screenshot_hint": {
     "message": "सभी धुंधलापन लागू करके दृश्य पेज कैप्चर करें और PNG के रूप में डाउनलोड करें।"
   },
+  "shortcut_blur_selection": {
+    "message": "चयनित टेक्स्ट धुंधला करें"
+  },
+  "shortcut_blur_selection_hint": {
+    "message": "पेज पर वर्तमान में चयनित टेक्स्ट को धुंधला करें।"
+  },
   "shortcut_customize": {
     "message": "बदलें"
   },
@@ -318,6 +369,15 @@
   "shortcut_reset_done": {
     "message": "शॉर्टकट रीसेट हुआ"
   },
+  "shortcut_reset_all": {
+    "message": "सभी रीसेट करें"
+  },
+  "shortcut_reserved_known": {
+    "message": "आरक्षित: {label} — फिर भी सहेजने पर ओवरराइड होगा।"
+  },
+  "shortcut_reserved_browser": {
+    "message": "यह कुंजी संयोजन ब्राउज़र द्वारा आरक्षित है।"
+  },
   "rule_add": {
     "message": "+ साइट नियम जोड़ें"
   },
@@ -337,7 +397,7 @@
     "message": "URL पैटर्न"
   },
   "rule_pattern_placeholder": {
-    "message": "*.bank.com/*"
+    "message": "youtube.com"
   },
   "rule_pattern_type": {
     "message": "मिलान प्रकार"
@@ -393,11 +453,110 @@
   "rule_delete_btn": {
     "message": "हटाएँ"
   },
+  "rule_edit_pattern": {
+    "message": "पैटर्न संपादित करें"
+  },
+  "rule_add_for_site": {
+    "message": "+ वर्तमान सेटिंग्स को साइट नियम के रूप में सहेजें"
+  },
+  "rule_pattern_exact": {
+    "message": "सटीक होस्टनाम"
+  },
+  "rule_pattern_help_wildcard": {
+    "message": "youtube.com सभी YouTube पृष्ठों से मेल खाता है (सबडोमेन सहित)। *.youtube.com केवल सबडोमेन से। github.com/settings/* पथ उपसर्ग से।"
+  },
+  "rule_pattern_help_regex": {
+    "message": "URL के विरुद्ध मिलाया गया पूर्ण नियमित अभिव्यक्ति। उदाहरण: github\\.com/[a-z]+/settings या (mail|inbox)\\.google\\.com"
+  },
+  "rule_pattern_help_exact": {
+    "message": "केवल सटीक होस्टनाम से मेल खाता है — कोई सबडोमेन नहीं, कोई पथ नहीं। उदाहरण: www.youtube.com"
+  },
+  "rule_snapshot_label": {
+    "message": "सेटिंग्स स्नैपशॉट"
+  },
+  "rule_snapshot_preview": {
+    "message": "स्नैपशॉट पूर्वावलोकन"
+  },
+  "rule_snapshot_empty": {
+    "message": "कोई स्नैपशॉट सहेजा नहीं — वैश्विक सेटिंग्स का उपयोग होगा"
+  },
+  "rule_snapshot_recapture": {
+    "message": "पुनः कैप्चर करें"
+  },
+  "rule_snapshot_saved_note": {
+    "message": "सहेजा गया"
+  },
+  "rule_snap_blur_radius": {
+    "message": "ब्लर त्रिज्या"
+  },
+  "rule_snap_blur_mode": {
+    "message": "ब्लर मोड"
+  },
+  "rule_snap_reveal_mode": {
+    "message": "प्रकट मोड"
+  },
+  "rule_snap_thorough_blur": {
+    "message": "गहरा ब्लर"
+  },
+  "rule_snap_blur_categories": {
+    "message": "ब्लर श्रेणियाँ"
+  },
+  "rule_snap_pick_blur_type": {
+    "message": "पिक & ब्लर प्रकार"
+  },
+  "rule_snap_pick_blur_enabled": {
+    "message": "पिक & ब्लर"
+  },
+  "rule_snap_val_blur": {
+    "message": "ब्लर"
+  },
+  "rule_snap_val_frosted": {
+    "message": "फ्रॉस्टेड"
+  },
+  "rule_snap_val_color": {
+    "message": "रंग"
+  },
+  "rule_snap_val_redacted": {
+    "message": "रिडैक्टेड"
+  },
+  "rule_snap_val_censored": {
+    "message": "सेंसर्ड"
+  },
+  "rule_snap_val_starred": {
+    "message": "तारांकित"
+  },
+  "rule_snap_val_reveal_hover": {
+    "message": "होवर"
+  },
+  "rule_snap_val_reveal_click": {
+    "message": "क्लिक"
+  },
+  "rule_snap_val_reveal_none": {
+    "message": "कोई नहीं"
+  },
+  "rule_snap_val_on": {
+    "message": "चालू"
+  },
+  "rule_snap_val_off": {
+    "message": "बंद"
+  },
+  "rule_snap_val_none": {
+    "message": "कोई नहीं"
+  },
+  "rule_active_banner": {
+    "message": "साइट नियम सक्रिय"
+  },
+  "rule_active_view": {
+    "message": "नियम देखें"
+  },
   "item_type_dynamic": {
     "message": "तत्व"
   },
-  "item_type_sticky": {
-    "message": "ज़ोन"
+  "item_type_sticky_page": {
+    "message": "पेज क्षेत्र"
+  },
+  "item_type_sticky_screen": {
+    "message": "स्क्रीन क्षेत्र"
   },
   "item_remove_aria": {
     "message": "हटाएं"
@@ -459,6 +618,15 @@
   "footer_clear_all": {
     "message": "हर साइट साफ़ करें"
   },
+  "footer_feedback": {
+    "message": "प्रतिक्रिया"
+  },
+  "footer_export": {
+    "message": "निर्यात"
+  },
+  "footer_logs": {
+    "message": "लॉग्स"
+  },
   "theme_toggle": {
     "message": "लाइट / डार्क थीम बदलें"
   },
@@ -479,6 +647,12 @@
   },
   "tt_theme": {
     "message": "लाइट या डार्क पर स्विच करें"
+  },
+  "tt_power_enable": {
+    "message": "Blurry Site सक्षम करें"
+  },
+  "tt_power_disable": {
+    "message": "Blurry Site अक्षम करें"
   },
   "tt_blur_all": {
     "message": "इस पेज पर सब कुछ धुंधला करें"
@@ -514,103 +688,103 @@
     "message": "इस नियम को मिटाएँ"
   },
   "off_state_message": {
-    "message": "Blurry Site is off"
+    "message": "Blurry Site बंद है"
   },
   "off_state_hint": {
-    "message": "All blur is paused on every site"
+    "message": "हर साइट पर सभी ब्लर रुका हुआ है"
   },
   "power_turn_on": {
-    "message": "Turn On"
+    "message": "चालू करें"
   },
   "htb_chip_blur": {
-    "message": "Blur"
+    "message": "धुंधला"
   },
   "htb_chip_frosted": {
-    "message": "Frosted"
+    "message": "फ्रॉस्टेड"
   },
   "htb_chip_redacted": {
-    "message": "Redacted"
+    "message": "संपादित"
   },
   "htb_chip_censored": {
-    "message": "Censored"
+    "message": "सेंसर किया"
   },
   "htb_chip_color": {
-    "message": "Color"
+    "message": "रंग"
   },
   "htb_label_mode": {
-    "message": "Mode"
+    "message": "मोड"
   },
   "htb_label_covers": {
-    "message": "Covers"
+    "message": "कवर करता है"
   },
   "htb_label_strength": {
-    "message": "Strength"
+    "message": "तीव्रता"
   },
   "htb_label_reveal": {
-    "message": "Reveal"
+    "message": "प्रकट करें"
   },
   "htb_label_color": {
-    "message": "Color"
+    "message": "रंग"
   },
   "htb_strength_subtle": {
-    "message": "Subtle"
+    "message": "हल्का"
   },
   "htb_strength_moderate": {
-    "message": "Moderate"
+    "message": "मध्यम"
   },
   "htb_strength_strong": {
-    "message": "Strong"
+    "message": "मजबूत"
   },
   "htb_pick_blur_note": {
-    "message": "Redacted & Censored available in Blur All mode."
+    "message": "Redacted और Censored, Blur All मोड में उपलब्ध हैं।"
   },
   "pii_chip_blur": {
-    "message": "Blur"
+    "message": "धुंधला"
   },
   "pii_chip_frosted": {
-    "message": "Frosted"
+    "message": "फ्रॉस्टेड"
   },
   "pii_chip_redacted": {
-    "message": "Redacted"
+    "message": "संपादित"
   },
   "pii_chip_starred": {
-    "message": "Starred"
+    "message": "तारांकित"
   },
   "automate_idle": {
-    "message": "Idle"
+    "message": "निष्क्रिय"
   },
   "automate_tab_switch": {
-    "message": "Tab Switch"
+    "message": "टैब स्विच"
   },
   "automate_off": {
-    "message": "Off"
+    "message": "बंद"
   },
   "automate_on": {
-    "message": "On"
+    "message": "चालू"
   },
   "automate_unit_sec": {
-    "message": "sec"
+    "message": "से."
   },
   "automate_unit_min": {
-    "message": "min"
+    "message": "मि."
   },
   "automate_unit_hr": {
-    "message": "hr"
+    "message": "घं."
   },
   "mode_blur_all_active_desc": {
-    "message": "All matching categories are blurred on this page."
+    "message": "इस पेज पर सभी मेल खाने वाली श्रेणियाँ धुंधली हैं।"
   },
   "mode_blur_all_off_hint": {
-    "message": "Off — page is visible."
+    "message": "बंद — पेज दिख रहा है।"
   },
   "mode_pick_blur_empty": {
-    "message": "No elements picked yet. Open the picker to start."
+    "message": "अभी तक कोई तत्व नहीं चुना। शुरू करने के लिए पिकर खोलें।"
   },
   "mode_pick_off_hint": {
-    "message": "Pick & Blur is off. Toggle on to blur specific elements."
+    "message": "Pick & Blur बंद है। विशिष्ट तत्वों को धुंधला करने के लिए चालू करें।"
   },
   "mode_pick_off_paused": {
-    "message": "$COUNT$ items · paused",
+    "message": "$COUNT$ आइटम · रुका हुआ",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -619,13 +793,13 @@
     }
   },
   "mode_open_picker": {
-    "message": "Open Picker"
+    "message": "पिकर खोलें"
   },
   "mode_blur_all_cats": {
-    "message": "categories"
+    "message": "श्रेणियाँ"
   },
   "htb_opacity": {
-    "message": "Opacity"
+    "message": "अपारदर्शिता"
   },
   "mode_switch_confirm": {
     "message": "मोड बदलने से $COUNT$ सहेजा गया धुंधलापन हट जाएगा। जारी रखें?",
@@ -676,30 +850,45 @@
     "message": "स्क्रीन पर स्थिर धुंधला क्षेत्र बनाएं"
   },
   "automate_idle_max_warn": {
-    "message": "Max is 50 min (Chrome API limit)"
+    "message": "अधिकतम 50 मिनट (Chrome API सीमा)"
   },
   "automate_footer": {
-    "message": "When triggered → applies current blur mode settings"
+    "message": "ट्रिगर होने पर → वर्तमान ब्लर मोड सेटिंग्स लागू होती हैं"
   },
   "automate_screen_share": {
-    "message": "Screen Share"
+    "message": "स्क्रीन शेयर"
+  },
+  "automate_screen_share_desc": {
+    "message": "स्क्रीन शेयरिंग का पता चलने पर स्वचालित ब्लर"
   },
   "automate_triggered_by": {
-    "message": "Active:"
+    "message": "सक्रिय:"
   },
   "automate_turn_off": {
-    "message": "Turn Off"
+    "message": "बंद करें"
+  },
+  "automate_stop_screen_share": {
+    "message": "स्क्रीन शेयर ब्लर रोकें"
+  },
+  "automate_stop_per_tab": {
+    "message": "यह टैब"
+  },
+  "automate_stop_per_domain": {
+    "message": "यह साइट"
+  },
+  "automate_disable_feature": {
+    "message": "अक्षम करें"
   },
   "automate_toast_screen_share": {
-    "message": "Blur applied — screen share active"
+    "message": "ब्लर लागू — स्क्रीन शेयर सक्रिय"
   },
   "automate_toast_idle": {
-    "message": "Blur applied — idle detected"
+    "message": "ब्लर लागू — निष्क्रियता का पता चला"
   },
   "automate_toast_tab_switch": {
-    "message": "Blur applied — tab switch"
+    "message": "ब्लर लागू — टैब स्विच"
   },
   "automate_toast_skipped": {
-    "message": "Blur already active — automate skipped"
+    "message": "ब्लर पहले से सक्रिय — स्वचालन छोड़ा"
   }
 }

@@ -22,9 +22,9 @@ Which activation states apply to which fixture.
 | State | Description | Storage config |
 |---|---|---|
 | **Vanilla** | Plain Chrome, no extension loaded. True baseline. | N/A — separate `chromium.launch()` |
-| **Ext Idle** | Extension loaded, blur_all off, pii off, pick_and_blur off. Extension overhead at rest. | `blur_all.status: false, auto_detect_pii.status: false, pick_and_blur.status: false` |
+| **Ext Idle** | Extension loaded, blur_all off, pii off, pick_and_blur off. Extension overhead at rest. | `blur_all.status: false, auto_detect_pii.settings: { email: false, numeric: false }, pick_and_blur.status: false` |
 | **Blur-All** | All 5 blur categories on. Full blur cost. | `blur_all.status: true` |
-| **PII Only** | Auto-detect PII enabled (email + numeric). PII independent of blur-all. | `auto_detect_pii.status: true, settings: { email: true, numeric: true }` |
+| **PII Only** | Auto-detect PII enabled (email + numeric). PII independent of blur-all. | `auto_detect_pii.settings: { email: true, numeric: true }` |
 | **Pick & Blur** | Pick & Blur mode active. Zone drawing enabled. | `pick_and_blur.status: true` |
 | **All Active** | blur_all + pii + pick_and_blur all on simultaneously. Worst-case overhead. | all three status: true |
 

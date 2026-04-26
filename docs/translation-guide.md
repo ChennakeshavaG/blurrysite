@@ -2,16 +2,13 @@
 
 Everything a human translator (or future-you) needs to add a new language to Blurry Site.
 
-## Two files per locale, one job each
+## One file per locale
 
-Every locale directory holds two JSON files that serve different contexts:
+Every locale directory holds one JSON file:
 
 | File | Shape | Used by |
 |---|---|---|
-| `popup.json` | Flat `{ "key": "string" }` | Popup UI — loaded by `popup/popup_i18n.js` via `fetch(chrome.runtime.getURL(...))`. The popup calls `I18n.t('key')` at render time. |
-| `messages.json` | Chrome shape `{ "key": { "message": "string" } }` | 1. `manifest.json` `__MSG_appName__` substitution (read from the OS locale on install, **not** from the popup Display Language setting). 2. `background.js` context menus. 3. Content scripts — picker toolbar + badges — loaded by `src/content_i18n.js` in sync with the popup's Display Language. |
-
-Yes, the shapes differ. This is intentional. `messages.json` follows Chrome's native spec; `popup.json` is a leaner format loaded by the popup-only custom loader because the popup never touches `chrome.i18n.getMessage`.
+| `messages.json` | Chrome shape `{ "key": { "message": "string" } }` | Everything — popup UI (`chrome.i18n.getMessage`), `manifest.json` `__MSG_appName__` substitution, `background.js` context menus, and content scripts via `src/content_i18n.js`. |
 
 ## Locale folder naming
 
@@ -35,24 +32,23 @@ mkdir -p _locales/de
 ### 2. Seed from English
 
 ```bash
-cp _locales/en/popup.json _locales/de/popup.json
 cp _locales/en/messages.json _locales/de/messages.json
 ```
 
 ### 3. Translate every value
 
-Open both files. Translate the `value` side of each `"key": "value"` pair. Do **not** rename keys — the linter will fail if you do.
+Open the file. Translate the `"message"` value of each entry. Do **not** rename keys — the linter will fail if you do.
 
 ### 4. Preserve placeholders exactly
 
 Any `{{count}}`, `{{name}}`, etc. in an English string must appear in the translation, spelled the same way. Example:
 
 ```json
-// en/popup.json
-"site_elements_blurred": "{{count}} blurred",
+// en/messages.json
+"site_elements_blurred": { "message": "{{count}} blurred" },
 
-// de/popup.json
-"site_elements_blurred": "{{count}} unscharf",   // ✓ {{count}} preserved
+// de/messages.json
+"site_elements_blurred": { "message": "{{count}} unscharf" }   // ✓ {{count}} preserved
 ```
 
 The linter fails on placeholder drift.
@@ -73,22 +69,22 @@ Edit `popup/popup_configs.js` inside the `LANGUAGE` row's `options.values`:
 { value: 'de', i18nKey: 'lang_de' },
 ```
 
-### 7. Add `lang_de` label to **every** `popup.json`
+### 7. Add `lang_de` to **every** locale's `messages.json`
 
-Every existing locale's `popup.json` needs an entry for the new language's endonym — the name of the language in the language itself — so users can find their language in the picker no matter what the current UI language is.
+Every existing locale needs an entry for the new language's endonym so users can find their language in the picker regardless of the current UI language.
 
 ```json
-// en/popup.json
-"lang_de": "Deutsch (German)",
+// en/messages.json
+"lang_de": { "message": "Deutsch (German)" },
 
-// de/popup.json
-"lang_de": "Deutsch",
+// de/messages.json
+"lang_de": { "message": "Deutsch" },
 
-// hi_IN/popup.json
-"lang_de": "Deutsch (जर्मन)",
+// hi_IN/messages.json
+"lang_de": { "message": "Deutsch (जर्मन)" },
 
-// ta_IN/popup.json
-"lang_de": "Deutsch (ஜெர்மன்)",
+// ta_IN/messages.json
+"lang_de": { "message": "Deutsch (ஜெர்மன்)" }
 ```
 
 ### 8. Run the linters
@@ -106,7 +102,7 @@ Fix anything the linters flag. The errors are descriptive and point at the offen
 1. Load the extension unpacked at `chrome://extensions`.
 2. Open the popup → Settings → Look → Display Language → **Deutsch**.
 3. Verify every surface — header, action bar, settings, blur categories, shortcuts, rules modal, footer, all toasts — renders in German.
-4. Open any web page, press the picker shortcut, verify the picker pill is also in German (content-script i18n is separate — it reads from `messages.json`, not `popup.json`).
+4. Open any web page, press the picker shortcut, verify the picker pill is also in German.
 
 ### 10. Document in `UX_COPY_PLAN.md`
 
@@ -138,8 +134,6 @@ When adding a new key, follow the prefix convention so future translators can sc
 | `confirm_*` | Confirm dialog body text | `confirm_clear_all` |
 | `lang_*` | Language picker options | `lang_en`, `lang_hi_IN` |
 
-For `messages.json`, follow Chrome's camelCase convention with a topic prefix: `pickerClearBtn`, `pickerChipLabelDynamic`, `ctxBlurElement`. No underscores — the manifest substitution syntax `__MSG_...__` doesn't tolerate them well.
-
 ## Copy principles (from `docs/UX_COPY_PLAN.md`)
 
 Keep non-English translations laymen-friendly. The English source itself has been rewritten to avoid developer jargon — `element` → (dropped), `draw a zone` → `drag a box over an area`, `activity logs` → `see what the extension is doing`. Translations should match the tone, not literally render the jargon-free English into the target language's technical vocabulary.
@@ -148,22 +142,17 @@ Tooltips answer "what happens if I click?" in a single sentence, plain verb, no 
 
 ## Machine-drafted translations
 
-Hindi and Tamil ship today as machine-drafted translations with a `_meta` header in each `popup.json` flagging them for human review. If you're reviewing one of those:
+Hindi and Tamil ship today as machine-drafted translations. If you're reviewing one:
 
-1. Read the `_meta` line.
-2. Read the English source alongside the translation.
-3. Focus on flow and naturalness — a literal translation of a laymen-friendly English sentence often reads stilted.
-4. Replace `_meta` with `"_meta": "Human-reviewed by <name> on YYYY-MM-DD."` when done.
-
-The `_meta` key is skipped by the linter and by the popup loader, so it's a safe place to leave notes.
+1. Read the English source alongside the translation.
+2. Focus on flow and naturalness — a literal translation of a laymen-friendly English sentence often reads stilted.
 
 ## Files to touch when adding a locale — checklist
 
-- [ ] `_locales/<code>/popup.json`  — full translation
 - [ ] `_locales/<code>/messages.json` — full translation
 - [ ] `src/constants.js` `SUPPORTED_LANGUAGES` — append code
 - [ ] `popup/popup_configs.js` LANGUAGE select — append option
-- [ ] Every existing `popup.json` — add `lang_<code>` endonym label
+- [ ] Every existing `messages.json` — add `lang_<code>` endonym entry
 - [ ] `docs/UX_COPY_PLAN.md` — note human-reviewed vs machine-drafted
 - [ ] Run `npm run test:unit` — linters pass, Jest green
 - [ ] Manual popup smoke test in the new locale

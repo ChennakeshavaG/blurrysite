@@ -1,0 +1,42 @@
+# auto_blur Test Contract
+
+## Overview
+
+Tests for `src/auto_blur.js` (`blsi.AutoBlur`). Verifies idle-timeout triggering, user-activity timer reset, tab-visibility change detection (including the 150 ms debounce), destroy/cleanup semantics, double-init replacement, and mode isolation between `idle` and `tabSwitch` modes. The module protects sensitive data by auto-blurring the page when the user is idle or switches away.
+
+## Setup & Teardown
+
+- **`freshLoad()`** called in `beforeEach`: deletes `blsi.AutoBlur`, calls `jest.resetModules()`, then `jest.isolateModules(() => require(MODULE_PATH))` to get a clean module instance per test.
+- **`beforeEach`**: `jest.useFakeTimers()` to control `setTimeout` / `setInterval`.
+- **`afterEach`**: `blsi.AutoBlur.destroy()` to remove all listeners, then `jest.useRealTimers()`.
+- `document.hidden` is mutated via `Object.defineProperty` with `configurable: true` and manually restored to `false` after each visibility-related test.
+
+## Test Groups
+
+### auto_blur.js
+
+- `isIdle() returns false initially` — immediately after `freshLoad()` and before any `init()` call, `isIdle()` returns `false`.
+- `idle detection triggers onIdle after timeout` — after `init({ idleTimeout: 10, idle: true, tabSwitch: false, ... })`, advancing fake timers by 10 s fires `onIdle` once and sets `isIdle()` to `true`.
+- `user activity resets idle timer` — dispatching `mousemove` on `document` mid-countdown resets the idle timer; `onIdle` does not fire until a full timeout elapses after the activity event.
+- `user activity after idle triggers onActive` — after the idle timer fires (`isIdle() === true`), dispatching `mousemove` on `document` calls `onActive` once and resets `isIdle()` to `false`.
+- `tab switch triggers onIdle when hidden` — with `tabSwitch: true`, setting `document.hidden = true` and dispatching `visibilitychange` fires `onIdle` after the 150 ms debounce elapses (advancing fake timers by 150 ms).
+- `tab becoming visible triggers onActive` — after the 150 ms debounce has fired (page hidden), setting `document.hidden = false` and dispatching `visibilitychange` calls `onActive` once.
+- `brief hide-then-show (tab drag to new window) does not trigger callbacks` — if `visibilitychange` fires hidden then visible within less than 150 ms, neither `onIdle` nor `onActive` is called (debounce cancelled).
+- `destroy removes all listeners and resets state` — calling `destroy()` before the idle timeout elapses prevents `onIdle` from firing; `isIdle()` returns `false` after destroy.
+- `double init replaces previous listeners` — a second `init()` call discards the first set of callbacks; only `onIdle2` fires after the timeout, `onIdle1` is never called.
+- `idle-only mode does not respond to visibility changes` — with `tabSwitch: false`, dispatching `visibilitychange` does not call `onIdle` regardless of `document.hidden`.
+- `tab-switch-only mode does not set idle timer` — with `idle: false`, advancing fake timers by 10 s does not call `onIdle`.
+
+## Edge Cases Covered
+
+- **Brief tab drag / new-window creation**: hide → show cycle faster than 150 ms debounce produces no callbacks.
+- **Double init replacement**: second `init()` implicitly destroys the previous configuration; old callbacks are silently dropped.
+- **Mode isolation**: `idle` flag and `tabSwitch` flag are independently honoured; enabling one does not activate the other.
+
+## Coverage Gaps
+
+- Only `mousemove` activity event is tested; `keydown`, `scroll`, and `touchstart` are not verified to reset the idle timer.
+- No test for double `destroy()` — calling it twice should not throw.
+- No test for `init()` with missing `onIdle` or `onActive` callbacks — module should not crash on absent optional callbacks.
+- No test for edge-case `idleTimeout` values (`0`, negative, `Infinity`) — behavior on invalid input is unspecified.
+- No test for `init()` with both `idle: false` and `tabSwitch: false` — effectively a no-op configuration.

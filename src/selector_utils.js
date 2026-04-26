@@ -125,15 +125,17 @@ const SelectorUtils = (() => {
     if (classes.length === 0) return null;
 
     var classSelector = tag + '.' + classes.map(cssEscape).join('.');
-    if (isUnique(classSelector)) return classSelector;
 
-    // Try with parent #id context
+    // Prefer parent-id scoped selector when unique (more specific).
     var parent = element.parentElement;
     if (parent && parent.id) {
       var contextSelector = '#' + cssEscape(parent.id) + ' > ' + classSelector;
       if (isUnique(contextSelector)) return contextSelector;
     }
-    return null;
+
+    // Always include class combo even when non-unique — useful for intersection-
+    // based highlight fallback: querySelectorAll(combo) ∩ [data-bl-si-pick-blur].
+    return classSelector;
   }
 
   // ── Strategy 3: aria-label + tag ─────────────────────────────────────────
