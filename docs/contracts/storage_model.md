@@ -186,14 +186,14 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 **What**: Writes one automate trigger to session storage.  
 **Params**: `hostname` (string), `trigger` (`'idle'|'tab_switch'`), `bool` (boolean)  
 **Returns**: `Promise<void>`  
-**Handles**: `'screen_share'` and any other unknown trigger → no-op (rejected). Use `set_screen_share_active` / `set_screen_share_inactive` for screen-share state.
+**Handles**: `'screen_share'` and any other unknown trigger → no-op (rejected). Use `set_screen_share_active` / `set_screen_share_inactive` for screen-share state. **No-op short-circuit** — when the cached entry already matches the requested value the function returns without writing, preventing cross-tab `chrome.storage.onChanged` notifications that would otherwise re-enter `applyState` on every other tab.
 
 ### patch_automate_blur(hostname, patch)
 
 **What**: Batch-writes multiple triggers in one session storage write.  
 **Params**: `hostname` (string), `patch` (`{idle?, tab_switch?}`)  
 **Returns**: `Promise<void>`  
-**Handles**: Silently ignores invalid keys in patch (including `screen_share`).
+**Handles**: Silently ignores invalid keys in patch (including `screen_share`). **No-op short-circuit** — when the merged result equals the cached entry on both `idle` and `tab_switch`, the function returns without writing.
 
 ### clear_automate_blur(hostname)
 

@@ -158,6 +158,10 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `resolve: automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
 - `resolve: manual blur preserved after automate cleared` — after patching idle trigger to `false`, `blur_all_active` remains `true` from the persisted manual `blur_all: true`.
 - `clear_host also clears automate_blur for that hostname` — after `clear_host`, `get_automate_blur` returns the all-false default.
+- `save_automate_blur is a no-op when value already matches cache` — second call with the same `(hostname, trigger, value)` triple does not invoke `chrome.storage.session.set`.
+- `save_automate_blur writes when value flips back` — flipping `idle: true → false` issues exactly one session write.
+- `patch_automate_blur is a no-op when patch results in identical entry` — applying the same `{idle, tab_switch}` patch twice issues only one session write.
+- `patch_automate_blur writes when at least one trigger flips` — changing one trigger while leaving the other unchanged still issues a write.
 
 ### `capture_snapshot`
 

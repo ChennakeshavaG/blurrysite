@@ -904,8 +904,10 @@ const StorageModel = (() => {
     if (!_is_valid_hostname(hostname)) return;
     var valid = { idle: true, tab_switch: true };
     if (!valid[trigger]) return;
+    var existing = Object.assign({ idle: false, tab_switch: false }, (_automate_cache || {})[hostname] || {});
+    if (existing[trigger] === !!is_active) return;
     var ab = Object.assign({}, _automate_cache || {});
-    var entry = Object.assign({ idle: false, tab_switch: false }, ab[hostname] || {});
+    var entry = Object.assign({}, existing);
     entry[trigger] = !!is_active;
     ab[hostname] = entry;
     _automate_cache = ab; // update in-memory cache immediately (self-echo guard in onChanged)
@@ -914,13 +916,15 @@ const StorageModel = (() => {
 
   async function patch_automate_blur(hostname, patch) {
     if (!_is_valid_hostname(hostname)) return;
-    var ab = Object.assign({}, _automate_cache || {});
-    var entry = Object.assign({ idle: false, tab_switch: false }, ab[hostname] || {});
+    var existing = Object.assign({ idle: false, tab_switch: false }, (_automate_cache || {})[hostname] || {});
+    var next = Object.assign({}, existing);
     var valid = { idle: true, tab_switch: true };
     for (var k in patch) {
-      if (valid[k]) entry[k] = !!patch[k];
+      if (valid[k]) next[k] = !!patch[k];
     }
-    ab[hostname] = entry;
+    if (next.idle === existing.idle && next.tab_switch === existing.tab_switch) return;
+    var ab = Object.assign({}, _automate_cache || {});
+    ab[hostname] = next;
     _automate_cache = ab;
     await _session_write_automate(ab);
   }

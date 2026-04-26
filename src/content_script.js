@@ -66,6 +66,17 @@
   /** Last observed URL — SPA navigation change detection */
   let lastUrl = location.href;
 
+  // Gates AutoBlur.init/destroy so unrelated storage echoes don't restart the idle timer.
+  let _autoBlurCfgKey = null;
+
+  // Idle toast fires once per focused visit; reset on tab-switch-and-back.
+  let _idleToastShown = false;
+  if (IS_MAIN_FRAME) {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) _idleToastShown = false;
+    });
+  }
+
   // ── State helpers ──────────────────────────────────────────────────────────
 
   /**
@@ -547,29 +558,40 @@
         blsi.ScreenShare.destroy();
       }
 
-      if ((idle.enabled || tab_switch.enabled) && resolved.enabled) {
-        blsi.AutoBlur.init({
-          idleTimeout: _to_seconds(idle.value || 5, idle.unit || 'min'),
-          tabSwitch: !!tab_switch.enabled,
-          idle: !!idle.enabled,
-          onIdle: async ({ reason } = {}) => {
-            const trigger = reason || 'idle';
-            await Store.save_automate_blur(hostname, trigger, true);
-            await _sync();
-            const toastKey = trigger === 'tab_switch'
-              ? 'automate_toast_tab_switch'
-              : 'automate_toast_idle';
-            const ovKey = trigger === 'tab_switch' ? 'automate_tab_switch' : 'automate_idle';
-            if (settings.automate_blur_only)    Shortcuts.showToast(_toastMsg(toastKey, ovKey), 2500);
-            if (settings.automate_blur_skipped) Shortcuts.showToast(_toastMsg('automate_toast_skipped', ovKey), 2500);
-          },
-          onActive: async () => {
-            await Store.patch_automate_blur(hostname, { idle: false, tab_switch: false });
-            await _sync();
-          },
-        });
-      } else {
-        blsi.AutoBlur.destroy();
+      const cfgKey = JSON.stringify({
+        enabled: !!resolved.enabled,
+        idle:    { enabled: !!idle.enabled, value: idle.value, unit: idle.unit },
+        tab:     !!tab_switch.enabled,
+      });
+      if (cfgKey !== _autoBlurCfgKey) {
+        _autoBlurCfgKey = cfgKey;
+        if ((idle.enabled || tab_switch.enabled) && resolved.enabled) {
+          blsi.AutoBlur.init({
+            idleTimeout: _to_seconds(idle.value || 5, idle.unit || 'min'),
+            tabSwitch: !!tab_switch.enabled,
+            idle: !!idle.enabled,
+            onIdle: async ({ reason } = {}) => {
+              const trigger = reason || 'idle';
+              await Store.save_automate_blur(hostname, trigger, true);
+              await _sync();
+              const toastKey = trigger === 'tab_switch'
+                ? 'automate_toast_tab_switch'
+                : 'automate_toast_idle';
+              const ovKey = trigger === 'tab_switch' ? 'automate_tab_switch' : 'automate_idle';
+              if (trigger === 'idle' && _idleToastShown) return;
+              if (settings.automate_blur_only)    Shortcuts.showToast(_toastMsg(toastKey, ovKey), 2500);
+              if (settings.automate_blur_skipped) Shortcuts.showToast(_toastMsg('automate_toast_skipped', ovKey), 2500);
+              if (trigger === 'idle') _idleToastShown = true;
+            },
+            onActive: async () => {
+              await Store.patch_automate_blur(hostname, { idle: false, tab_switch: false });
+              await _sync();
+            },
+          });
+        } else {
+          blsi.AutoBlur.destroy();
+          _idleToastShown = false;
+        }
       }
     }
 

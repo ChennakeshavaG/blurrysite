@@ -49,6 +49,8 @@
 | `_ssCurrentlyBlurring` | `boolean` | Tracks whether this tab is currently rendering screen-share automate blur (per the resolved state). Used by the `SCREEN_SHARE_NOTIFY` handler to gate toast firing — only show on the non-blurred → blurred transition. Not persisted. |
 | `_topHostname` | `string` | Top-level page hostname used for blur_all lookup. Equals `location.hostname` in main frame; derived from `document.referrer` in iframes. Updated via postMessage. |
 | `lastUrl` | `string` | Last observed `location.href` for SPA navigation change detection |
+| `_autoBlurCfgKey` | `string\|null` | Stable JSON key of the last-applied AutoBlur config (`{enabled, idle.{enabled,value,unit}, tab}`). `applyState` only calls `AutoBlur.init`/`destroy` when this key changes; unrelated storage echoes leave the live idle timer untouched. |
+| `_idleToastShown` | `boolean` | True after the idle toast has fired for the current focused visit. Reset to `false` on `visibilitychange` → visible (registered once at module load, main frame only) and on `AutoBlur.destroy()`. Tab-switch toasts ignore this flag. |
 
 Module aliases (set at top of IIFE, not re-assigned):
 - `Engine` → `blsi.BlurEngine`
@@ -99,12 +101,12 @@ Module aliases (set at top of IIFE, not re-assigned):
 4. Tab privacy (main frame only): enables/disables `blsi.TabPrivacy` based on `resolved.tab_privacy && resolved.enabled`.
 5. Reveal: calls `Reveal.clearAll()` if `reveal_mode` changed or extension is disabled.
 6. Calls `await _sync(resolved)` — passes the snapshot through so engine does not re-resolve.
-7. AutoBlur (main frame only): manages `blsi.ScreenShare.init()`/`destroy()` for screen-share detection. Manages `blsi.AutoBlur.init(...)`/`destroy()` for idle and tab-switch triggers. AutoBlur callbacks write idle/tab_switch to `Store.save_automate_blur` and call `_sync()`. Screen-share state never goes through `save_automate_blur` — it lives in the global session record owned by background.
+7. AutoBlur (main frame only): manages `blsi.ScreenShare.init()`/`destroy()` for screen-share detection (always evaluated). Manages `blsi.AutoBlur.init(...)`/`destroy()` for idle and tab-switch triggers — **gated by `_autoBlurCfgKey`** so unrelated storage echoes don't tear down the live idle timer. AutoBlur callbacks write idle/tab_switch to `Store.save_automate_blur` and call `_sync()`. Screen-share state never goes through `save_automate_blur` — it lives in the global session record owned by background.
 8. PII detection: if any PII type enabled and extension enabled, calls `BlurEngine.injectPiiRules()`, `PiiDetector.scan()`, `PiiDetector.observeMutations()`. Otherwise, calls `BlurEngine.removePiiRules()`, `PiiDetector.stopObserving()`, `PiiDetector.clear()`.
 
 **Handles:**
 - Language change detection inside `handleStorageChange` (not inside `applyState` itself) triggers `ContentI18n.init(newLang)` and `Picker.rebuildToolbar()` before calling `applyState`.
-- AutoBlur `onIdle` callback uses `reason` field (`'idle'` or `'tab_switch'`) to write the right trigger key and display the right toast.
+- AutoBlur `onIdle` callback uses `reason` field (`'idle'` or `'tab_switch'`) to write the right trigger key and display the right toast. Idle-reason toast is suppressed when `_idleToastShown` is already `true`; tab-switch-reason toast always fires. The flag is reset on `visibilitychange` → visible so a tab-switch-and-back re-arms the idle toast.
 - AutoBlur `onActive` callback patches both `{ idle: false, tab_switch: false }` atomically via `patch_automate_blur`.
 
 ---

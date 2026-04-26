@@ -1048,6 +1048,34 @@ describe('automate_blur', () => {
     expect(entry.idle).toBe(false);
   });
 
+  test('save_automate_blur is a no-op when value already matches cache', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    chrome.storage.session.set.mockClear();
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    expect(chrome.storage.session.set).not.toHaveBeenCalled();
+  });
+
+  test('save_automate_blur writes when value flips back', async () => {
+    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    chrome.storage.session.set.mockClear();
+    await blsi.Model.save_automate_blur('example.com', 'idle', false);
+    expect(chrome.storage.session.set).toHaveBeenCalledTimes(1);
+  });
+
+  test('patch_automate_blur is a no-op when patch results in identical entry', async () => {
+    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: false });
+    chrome.storage.session.set.mockClear();
+    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: false });
+    expect(chrome.storage.session.set).not.toHaveBeenCalled();
+  });
+
+  test('patch_automate_blur writes when at least one trigger flips', async () => {
+    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: false });
+    chrome.storage.session.set.mockClear();
+    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: true });
+    expect(chrome.storage.session.set).toHaveBeenCalledTimes(1);
+  });
+
 });
 
 // ── screen_share session record + suppression ───────────────────────────────
