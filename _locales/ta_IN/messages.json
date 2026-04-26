@@ -1,10 +1,4 @@
 {
-  "appName": {
-    "message": "Blurry Site"
-  },
-  "appDescription": {
-    "message": "எந்த வலைப்பக்கத்திலும் முக்கியமான உரை, படங்கள் மற்றும் வீடியோக்களை விசைப்பலகை குறுக்குவழிகள் அல்லது கூறு தேர்வாளர் மூலம் மங்கச்செய்."
-  },
   "ctxBlurElement": {
     "message": "இந்தக் கூறை மங்கச்செய்"
   },
@@ -31,10 +25,12 @@
     "message": "பக்கத்தில் ஒரு கூறைத் தட்டினால் அது மங்கும். மங்கல் அந்தக் கூறைப் பின்தொடரும். மோடை மாற்ற கிளிக் செய்யவும்."
   },
   "pickerChipDescStickyPage": {
-    "message": "பக்கத்தின் ஒரு பகுதியில் ஒரு பெட்டியை வரையவும். உள்ளடக்கத்துடன் ஸ்க்ரோல் ஆகும். மோடை மாற்ற கிளிக் செய்யவும்."
+    "message": "பக்கத்தின் ஒரு பகுதியில் ஒரு பெட்டியை வரையவும். உள்ளடக்கத்துடன் ஸ்க்ரோல் ஆகும். மோடை மாற்ற கிளிக் செய்யவும்.",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Sketch' → 'Draw' (existing translation likely still valid)"
   },
   "pickerChipDescStickyScreen": {
-    "message": "உங்கள் திரையில் ஒரு நிலையான பெட்டியை வரையவும். ஸ்க்ரோல் செய்யும்போது இடம் மாறாது — திரைப் பகிர்வுக்கு சிறந்தது. மோடை மாற்ற கிளிக் செய்யவும்."
+    "message": "உங்கள் திரையில் ஒரு நிலையான பெட்டியை வரையவும். ஸ்க்ரோல் செய்யும்போது இடம் மாறாது — திரைப் பகிர்வுக்கு சிறந்தது. மோடை மாற்ற கிளிக் செய்யவும்.",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Sketch' → 'Draw' (existing translation likely still valid)"
   },
   "pickerChipAria": {
     "message": "பிக்கர் மோட் — மாற்ற கிளிக் செய்யவும்"
@@ -82,7 +78,8 @@
     "message": "அனைத்தையும் அழி"
   },
   "btn_modify": {
-    "message": "மாற்று →"
+    "message": "மாற்று →",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26 to 'Customize →'"
   },
   "btn_picker": {
     "message": "தேர்ந்து மங்கச்செய்"
@@ -92,18 +89,6 @@
   },
   "nav_general_desc": {
     "message": "மொழி, தாவல் தனியுரிமை மற்றும் பலவற்றை"
-  },
-  "section_advanced": {
-    "message": "மேம்பட்டது"
-  },
-  "section_experimental": {
-    "message": "சோதனை"
-  },
-  "section_blurred_elements": {
-    "message": "இந்தப் பக்கத்தில் மங்கியவை"
-  },
-  "blur_empty": {
-    "message": "இந்தப் பக்கத்தில் இன்னும் எதுவும் மங்கவில்லை."
   },
   "setting_language": {
     "message": "காட்சி மொழி"
@@ -127,10 +112,8 @@
     "message": "விசைப்பலகை குறுக்குவழிகள்"
   },
   "section_pii_title": {
-    "message": "PII தானாக கண்டறிதல்"
-  },
-  "section_settings_title": {
-    "message": "அமைப்புகள்"
+    "message": "PII தானாக கண்டறிதல்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Auto-Detect PII' → 'Auto-Detect Sensitive Data'"
   },
   "section_rules_title": {
     "message": "தள விதிகள்"
@@ -148,7 +131,8 @@
     "message": "மங்கல் செயல்களுக்கான விசைப்பலகை குறுக்குவழிகளை தனிப்பயனாக்கு"
   },
   "nav_rules_desc": {
-    "message": "தளம்-வாரியான மங்கல் விதிகள் மற்றும் மேலெழுதுதல்களை அமை"
+    "message": "தளம்-வாரியான மங்கல் விதிகள் மற்றும் மேலெழுதுதல்களை அமை",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'and overrides' (snapshot-based now)"
   },
   "subpage_htb_title": {
     "message": "மங்கலாக்குவது எப்படி"
@@ -156,14 +140,8 @@
   "setting_blur_radius": {
     "message": "மங்கல் வலிமை"
   },
-  "setting_blur_radius_hint": {
-    "message": "அதிகம் = படிக்கக் கடினம். 10+ OCR-ஐ மறைக்கும், 15+ AI-ஐ மறைக்கும்."
-  },
   "setting_reveal_mode": {
     "message": "மங்கியதை எட்டிப் பார்"
-  },
-  "setting_reveal_mode_hint": {
-    "message": "மங்கலை அகற்றாமல் சிறிது நேரம் பார்ப்பதற்கான வழி."
   },
   "setting_transition": {
     "message": "மென்மையான அசைவூட்டங்கள்"
@@ -171,20 +149,13 @@
   "setting_transition_hint": {
     "message": "மங்கலை திடீரென மாற்றாமல் மென்மையாக மாற்றுக."
   },
-  "setting_highlight_color": {
-    "message": "தேர்வு வெளிப்படை நிறம்"
-  },
-  "setting_highlight_color_hint": {
-    "message": "தேர்வு பயன்முறையில் கூறுக்கு மீது சுட்டியை நகர்த்தும்போது சிறப்பிக்கும் நிறம்."
-  },
   "setting_blur_mode": {
-    "message": "மங்கல் தோற்றம்"
-  },
-  "setting_blur_mode_hint": {
-    "message": "தரநிலை ஒரு எளிய மங்கல். ஃப்ராஸ்டெட் உரையை AI மற்றும் திரைப்பிடிப்பு கருவிகள் படிக்க முடியாதவாறு மறைக்கும், ஆனால் கொஞ்சம் அதிக ஆற்றலைப் பயன்படுத்தும்."
+    "message": "மங்கல் தோற்றம்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Blur Look' → 'Blur Style' (existing translation likely still valid)"
   },
   "setting_thorough_blur": {
-    "message": "தீவிர மங்கல்"
+    "message": "தீவிர மங்கல்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'Aggressive Blur' → 'Catch Hidden Layouts' (semantic shift — please re-translate)"
   },
   "setting_thorough_hint": {
     "message": "வெற்று கொள்கலன்களையும் மங்கச்செய். அதிகம் பிடிக்கும், ஆனால் தளவமைப்பை மறைக்கலாம்."
@@ -225,17 +196,8 @@
   "setting_auto_blur_tab_hint": {
     "message": "வேறு டேப்புக்கு மாறும்போது பக்கத்தை தானாக மங்கச்செய்."
   },
-  "setting_auto_blur_idle": {
-    "message": "செயலற்ற நிலையில் மங்கச்செய்"
-  },
   "setting_auto_blur_idle_hint": {
     "message": "செயலின்மை காலத்திற்குப் பிறகு பக்கத்தை தானாக மங்கச்செய்."
-  },
-  "setting_idle_timeout": {
-    "message": "செயலின்மை நேரம்"
-  },
-  "setting_idle_timeout_hint": {
-    "message": "தானியங்கி மங்கல் தூண்டப்படுவதற்கு முன் செயலின்மை வினாடிகள்."
   },
   "reveal_click": {
     "message": "க்ளிக் செய்து எட்டிப் பார்"
@@ -246,71 +208,30 @@
   "reveal_none": {
     "message": "நிறுத்து — ஒருபோதும் காட்டாதே"
   },
-  "blur_mode_frosted": {
-    "message": "ஃப்ராஸ்டெட் (AI-தடை)"
-  },
-  "blur_mode_redacted": {
-    "message": "மறைக்கப்பட்டது (திட தொகுதி)"
-  },
   "setting_redaction_color": {
     "message": "மறைப்பு நிறம்"
-  },
-  "setting_redaction_color_hint": {
-    "message": "மறைக்கப்பட்ட பயன்முறை தொகுதிகளுக்கான நிறம். கருப்பு மிகவும் பாதுகாப்பானது."
-  },
-  "group_appearance": {
-    "message": "தோற்றம்"
-  },
-  "group_behavior": {
-    "message": "நடத்தை"
   },
   "group_categories": {
     "message": "எதை மங்கச்செய்ய"
   },
-  "group_autodetect": {
-    "message": "உணர்திறன் தரவு தானியங்கி கண்டறிதல்"
-  },
-  "group_shortcuts": {
-    "message": "விசைப்பலகை குறுக்குவழிகள்"
-  },
-  "group_advanced": {
-    "message": "மேம்பட்டது"
-  },
   "detect_pii": {
-    "message": "உணர்திறன் தரவு (PII)"
-  },
-  "detect_pii_hint": {
-    "message": "மின்னஞ்சல்கள், தொலைபேசி எண்கள், SSN, கிரெடிட் கார்டுகள் மற்றும் நிதி புள்ளிவிவரங்களை தானாக மங்கச்செய்."
+    "message": "உணர்திறன் தரவு (PII)",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped '(PII)' suffix → 'Sensitive Data'"
   },
   "cat_text": {
     "message": "உரை"
   },
-  "cat_text_hint": {
-    "message": "தலைப்புகள், பத்திகள், இணைப்புகள் மற்றும் உள்வரி உரை."
-  },
   "cat_media": {
     "message": "படங்கள் & வீடியோ"
-  },
-  "cat_media_hint": {
-    "message": "புகைப்படங்கள், வீடியோக்கள், கேன்வாஸ்கள் மற்றும் SVG-க்கள்."
   },
   "cat_form": {
     "message": "உள்ளீடுகள் & படிவங்கள்"
   },
-  "cat_form_hint": {
-    "message": "உரை பெட்டிகள், பொத்தான்கள் மற்றும் கீழ்விழும் பட்டியல்கள்."
-  },
   "cat_table": {
     "message": "அட்டவணைகள்"
   },
-  "cat_table_hint": {
-    "message": "அட்டவணை கலங்கள் மற்றும் தலைப்புகள்."
-  },
   "cat_structure": {
     "message": "கொள்கலன்கள்"
-  },
-  "cat_structure_hint": {
-    "message": "பிரிவுகள், கட்டுரைகள் மற்றும் உரையை வைத்திருக்கும் ரேப்பர்கள்."
   },
   "shortcut_toggle_blur_all": {
     "message": "அனைத்தையும் மங்கச்செய்"
@@ -345,9 +266,6 @@
   "shortcut_customize": {
     "message": "மாற்று"
   },
-  "shortcut_modal_title": {
-    "message": "குறுக்குவழியை மாற்று"
-  },
   "shortcut_modal_prompt": {
     "message": "ஒரு மாற்றியை (Ctrl/Alt/Shift/Cmd) அழுத்திப் பிடிக்கவும், பின்னர் விரும்பிய விசையை அழுத்தவும்."
   },
@@ -357,17 +275,8 @@
   "shortcut_modal_no_modifier": {
     "message": "முதலில் ஒரு மாற்றியை அழுத்திப் பிடிக்கவும், பின்னர் விசையை அழுத்தவும்."
   },
-  "shortcut_modal_ctrl_alt": {
-    "message": "Ctrl + Alt மட்டும் ஐரோப்பிய விசைப்பலகைகளுடன் முரண்படும். Shift சேர்க்கவும்."
-  },
   "shortcut_reset": {
     "message": "இயல்புநிலைக்கு மீட்டமை"
-  },
-  "shortcut_saved": {
-    "message": "குறுக்குவழி சேமிக்கப்பட்டது"
-  },
-  "shortcut_reset_done": {
-    "message": "குறுக்குவழி மீட்டமைக்கப்பட்டது"
   },
   "shortcut_reset_all": {
     "message": "அனைத்தையும் மீட்டமை"
@@ -377,21 +286,6 @@
   },
   "shortcut_reserved_browser": {
     "message": "இந்த கீ சேர்மானம் உலாவியால் ஒதுக்கப்பட்டுள்ளது."
-  },
-  "rule_add": {
-    "message": "+ தள விதியைச் சேர்"
-  },
-  "rule_edit": {
-    "message": "தள விதியைத் திருத்து"
-  },
-  "rule_add_title": {
-    "message": "தள விதியைச் சேர்"
-  },
-  "rule_name": {
-    "message": "பெயர்"
-  },
-  "rule_name_placeholder": {
-    "message": "எ.கா. வங்கி தளங்கள்"
   },
   "rule_pattern": {
     "message": "URL வடிவம்"
@@ -408,47 +302,17 @@
   "rule_pattern_regex": {
     "message": "மேம்பட்ட (regex)"
   },
-  "rule_overrides": {
-    "message": "பொருந்தும் URL-களுக்கு இந்த அமைப்புகள் இயல்புநிலையை மீறும்."
-  },
-  "rule_category_overrides": {
-    "message": "வகை மீறல்கள்"
-  },
-  "rule_global_default": {
-    "message": "இயல்புநிலையைப் பயன்படுத்து"
-  },
-  "rule_override_on": {
-    "message": "இயக்கு"
-  },
-  "rule_override_off": {
-    "message": "நிறுத்து"
-  },
   "rule_pattern_required": {
     "message": "தயவுசெய்து ஒரு URL வடிவத்தை உள்ளிடவும்."
   },
   "rule_pattern_too_long": {
     "message": "வடிவம் மிக நீளமானது (அதிகபட்சம் 500 எழுத்துக்கள்)."
   },
-  "rule_name_too_long": {
-    "message": "பெயர் மிக நீளமானது (அதிகபட்சம் 100 எழுத்துக்கள்)."
-  },
-  "rule_saved": {
-    "message": "விதி சேமிக்கப்பட்டது"
-  },
-  "rule_deleted": {
-    "message": "விதி அகற்றப்பட்டது"
-  },
   "rule_no_rules": {
     "message": "இன்னும் தள விதிகள் இல்லை. குறிப்பிட்ட தளங்களில் மங்கல் எவ்வாறு செயல்படுகிறது என்பதை விதிகள் மாற்றுகின்றன."
   },
   "rule_hint": {
     "message": "குறிப்பிட்ட தளங்களில் அமைப்புகளை மாற்றவும். முதலில் பொருந்தும் விதி வெல்லும்."
-  },
-  "rule_untitled": {
-    "message": "தலைப்பற்ற விதி"
-  },
-  "rule_edit_btn": {
-    "message": "திருத்து"
   },
   "rule_delete_btn": {
     "message": "அகற்று"
@@ -486,17 +350,8 @@
   "rule_snapshot_saved_note": {
     "message": "சேமிக்கப்பட்டது"
   },
-  "rule_snap_blur_radius": {
-    "message": "மங்கல் ஆரம்"
-  },
   "rule_snap_blur_mode": {
     "message": "மங்கல் பயன்முறை"
-  },
-  "rule_snap_reveal_mode": {
-    "message": "வெளிப்படுத்தல் பயன்முறை"
-  },
-  "rule_snap_thorough_blur": {
-    "message": "ஆழமான மங்கல்"
   },
   "rule_snap_blur_categories": {
     "message": "மங்கல் வகைகள்"
@@ -525,15 +380,6 @@
   "rule_snap_val_starred": {
     "message": "நட்சத்திரம்"
   },
-  "rule_snap_val_reveal_hover": {
-    "message": "மேல்நிலை"
-  },
-  "rule_snap_val_reveal_click": {
-    "message": "கிளிக்"
-  },
-  "rule_snap_val_reveal_none": {
-    "message": "இல்லை"
-  },
   "rule_snap_val_on": {
     "message": "இயக்கு"
   },
@@ -547,25 +393,36 @@
     "message": "மறை"
   },
   "rule_snap_section_pii": {
-    "message": "PII"
+    "message": "PII",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'PII' → 'Sensitive Data'"
   },
   "rule_snap_section_automate": {
     "message": "தானியக்கம்"
   },
   "rule_snap_label_pii_email": {
-    "message": "PII: மின்னஞ்சல்"
+    "message": "PII: மின்னஞ்சல்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII:' prefix → 'Email'"
   },
   "rule_snap_label_pii_numeric": {
-    "message": "PII: எண்"
+    "message": "PII: எண்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII:' prefix → 'Numeric'"
   },
   "rule_snap_label_pii_mode": {
-    "message": "PII முறை"
+    "message": "PII முறை",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: 'PII mode' → 'Display mode'"
   },
   "rule_snap_label_pii_redaction_color": {
-    "message": "PII நிறம்"
+    "message": "PII நிறம்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: dropped 'PII' prefix → 'Redaction color'"
+  },
+  "rule_snap_label_pick_blur_items": {
+    "message": "உருப்படிகள்"
   },
   "rule_snap_label_automate_idle": {
     "message": "செயலற்ற தூண்டுதல்"
+  },
+  "rule_snap_label_automate_idle_threshold": {
+    "message": "செயலற்ற வரம்பு"
   },
   "rule_snap_label_automate_tab_switch": {
     "message": "தாவல்-மாற்று தூண்டுதல்"
@@ -612,48 +469,6 @@
   "toast_cleared": {
     "message": "பக்கம் அழிக்கப்பட்டது"
   },
-  "toast_all_sites_cleared": {
-    "message": "ஒவ்வொரு தளமும் அழிக்கப்பட்டது"
-  },
-  "toast_blur_removed": {
-    "message": "மங்கல் அகற்றப்பட்டது"
-  },
-  "toast_settings_saved": {
-    "message": "அமைப்புகள் சேமிக்கப்பட்டன"
-  },
-  "toast_failed_save_settings": {
-    "message": "அமைப்புகளைச் சேமிக்க முடியவில்லை"
-  },
-  "toast_failed_toggle_blur": {
-    "message": "மங்கலை மாற்ற முடியவில்லை"
-  },
-  "toast_failed_clear_host": {
-    "message": "இந்தப் பக்கத்தை அழிக்க முடியவில்லை"
-  },
-  "toast_failed_remove_item": {
-    "message": "அந்த மங்கலை அகற்ற முடியவில்லை"
-  },
-  "toast_failed_clear_all": {
-    "message": "எல்லா தளங்களையும் அழிக்க முடியவில்லை"
-  },
-  "toast_failed_save_rule": {
-    "message": "விதியைச் சேமிக்க முடியவில்லை"
-  },
-  "toast_failed_delete_rule": {
-    "message": "விதியை அகற்ற முடியவில்லை"
-  },
-  "toast_flow_logs_on": {
-    "message": "செயல்பாட்டு பதிவு: இயக்கம்"
-  },
-  "toast_flow_logs_off": {
-    "message": "செயல்பாட்டு பதிவு: நிறுத்தம்"
-  },
-  "confirm_clear_all": {
-    "message": "இது நீங்கள் பயன்படுத்திய ஒவ்வொரு தளத்திலிருந்தும் ஒவ்வொரு மங்கலையும் அகற்றும். தொடர வேண்டுமா?"
-  },
-  "footer_clear_all": {
-    "message": "ஒவ்வொரு தளமும் அழி"
-  },
   "footer_feedback": {
     "message": "கருத்து"
   },
@@ -664,10 +479,8 @@
     "message": "பதிவுகள்"
   },
   "theme_toggle": {
-    "message": "ஒளி / இருள் தீம் மாற்று"
-  },
-  "help_overlay_title": {
-    "message": "விசைப்பலகை குறுக்குவழிகள்"
+    "message": "ஒளி / இருள் தீம் மாற்று",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26 to 'Switch theme'"
   },
   "modal_cancel": {
     "message": "ரத்து"
@@ -675,53 +488,11 @@
   "modal_save": {
     "message": "சேமி"
   },
-  "modal_close": {
-    "message": "மூடு"
-  },
-  "tt_master_toggle": {
-    "message": "ப்ளர்ரி சைட்-ஐ எல்லா தளங்களிலும் இயக்கு அல்லது நிறுத்து"
-  },
-  "tt_theme": {
-    "message": "ஒளி அல்லது இருளுக்கு மாற்று"
-  },
   "tt_power_enable": {
     "message": "Blurry Site இயக்கு"
   },
   "tt_power_disable": {
     "message": "Blurry Site முடக்கு"
-  },
-  "tt_blur_all": {
-    "message": "இந்தப் பக்கத்தில் எல்லாவற்றையும் மங்கச்செய்"
-  },
-  "tt_clear_all": {
-    "message": "இந்தப் பக்கத்தின் மங்கலை நீக்கு"
-  },
-  "tt_picker": {
-    "message": "எதையும் மங்கச்செய்ய கிளிக் செய்யவும். அல்லது பகுதி மோடுக்கு மாறி ஒரு முழு பகுதியை மங்கச்செய்ய பெட்டியை இழுக்கவும்"
-  },
-  "tt_help": {
-    "message": "விசைப்பலகை குறுக்குவழிகளைப் பார்"
-  },
-  "tt_debug": {
-    "message": "நீட்டிப்பு என்ன செய்கிறது என்று பார் — சிக்கலைத் தீர்க்க உதவும்"
-  },
-  "tt_clear_all_sites": {
-    "message": "ஒவ்வொரு தளத்திலும் ஒவ்வொரு மங்கலையும் நீக்கு"
-  },
-  "tt_add_rule": {
-    "message": "ஒரு குறிப்பிட்ட தளத்திற்கு வேறு அமைப்புகளை உருவாக்கு"
-  },
-  "tt_customize_shortcut": {
-    "message": "வேறு ஒரு விசைப்பலகை குறுக்குவழியைத் தேர்ந்தெடு"
-  },
-  "tt_remove_blur_item": {
-    "message": "இதைத் தெளிவாக்கு"
-  },
-  "tt_rule_edit": {
-    "message": "இந்த விதியின் அமைப்புகளை மாற்று"
-  },
-  "tt_rule_delete": {
-    "message": "இந்த விதியை நீக்கு"
   },
   "off_state_message": {
     "message": "Blurry Site முடக்கப்பட்டுள்ளது"
@@ -771,9 +542,6 @@
   "htb_strength_strong": {
     "message": "வலிமையான"
   },
-  "htb_pick_blur_note": {
-    "message": "Redacted மற்றும் Censored, Blur All பயன்முறையில் கிடைக்கும்."
-  },
   "pii_chip_blur": {
     "message": "மங்கல்"
   },
@@ -807,9 +575,6 @@
   "automate_unit_hr": {
     "message": "மணி."
   },
-  "mode_blur_all_active_desc": {
-    "message": "இந்தப் பக்கத்தில் பொருந்தும் அனைத்து வகைகளும் மங்கலாக்கப்பட்டுள்ளன."
-  },
   "mode_blur_all_off_hint": {
     "message": "முடக்கு — பக்கம் தெரிகிறது."
   },
@@ -831,32 +596,8 @@
   "mode_open_picker": {
     "message": "பிக்கரைத் திறக்கவும்"
   },
-  "mode_blur_all_cats": {
-    "message": "வகைகள்"
-  },
   "htb_opacity": {
     "message": "ஒளிபுகாமை"
-  },
-  "mode_switch_confirm": {
-    "message": "பயன்முறை மாற்றினால் $COUNT$ சேமித்த மங்கல் நீக்கப்படும். தொடரவா?",
-    "placeholders": {
-      "count": {
-        "content": "$1",
-        "example": "3"
-      }
-    }
-  },
-  "mode_switch_btn": {
-    "message": "மாற்று"
-  },
-  "mode_nothing_blurred": {
-    "message": "இந்தப் பக்கத்தில் எதுவும் மங்கலாக்கப்படவில்லை"
-  },
-  "mode_pick_add_hint": {
-    "message": "பக்கத்திலிருந்து மேலும் சேர்க்கவும்"
-  },
-  "mode_pick_toolbar_hint": {
-    "message": "கருவிப்பட்டியிலிருந்து பிக்கர் பயன்முறையை மாற்றவும்"
   },
   "mode_badge_dynamic": {
     "message": "உறுப்பு"
@@ -867,26 +608,16 @@
   "mode_badge_sticky_screen": {
     "message": "திரையில் பகுதி"
   },
-  "mode_pick_item_count": {
-    "message": "$COUNT$ உருப்படிகள்",
-    "placeholders": {
-      "count": {
-        "content": "$1",
-        "example": "3"
-      }
-    }
-  },
   "tooltip_mode_dynamic": {
     "message": "எந்த உறுப்பையும் மங்கலாக்க தட்டவும்"
   },
   "tooltip_mode_sticky_page": {
-    "message": "பக்கத்தில் நிலைத்த மங்கல் பகுதி வரையவும்"
+    "message": "பக்கத்தில் நிலைத்த மங்கல் பகுதி வரையவும்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: now says 'scrolls with the page'"
   },
   "tooltip_mode_sticky_screen": {
-    "message": "திரையில் நிலைத்த மங்கல் பகுதி வரையவும்"
-  },
-  "automate_idle_max_warn": {
-    "message": "அதிகபட்சம் 50 நிமிடங்கள் (Chrome API வரம்பு)"
+    "message": "திரையில் நிலைத்த மங்கல் பகுதி வரையவும்",
+    "description": "TODO_TRANSLATE — English changed 2026-04-26: now says 'stays fixed when you scroll'"
   },
   "automate_footer": {
     "message": "தூண்டும்போது → தற்போதைய மங்கல் பயன்முறை அமைப்புகள் பயன்படுத்தப்படும்"
@@ -896,9 +627,6 @@
   },
   "automate_screen_share_desc": {
     "message": "திரை பகிர்வு கண்டறியும்போது தானாக மங்கலாக்கு"
-  },
-  "automate_triggered_by": {
-    "message": "செயலில்:"
   },
   "automate_turn_off": {
     "message": "முடக்கு"
@@ -947,5 +675,18 @@
   },
   "notif_suppressed_undo": {
     "message": "மீளமை"
+  },
+  "site_rule_managed_banner_title": {
+    "message": "தள விதியால் நிர்வகிக்கப்படுகிறது"
+  },
+  "site_rule_managed_banner_body": {
+    "message": "இந்த தளத்தின் அமைப்புகள் $HOSTNAME$ ($TYPE$) விதியால் கட்டுப்படுத்தப்படுகின்றன. தள விதிகளில் திருத்தவும்.",
+    "placeholders": {
+      "hostname": { "content": "$1", "example": "*.example.com" },
+      "type": { "content": "$2", "example": "wildcard" }
+    }
+  },
+  "site_rule_managed_edit_cta": {
+    "message": "தள விதிகளில் திருத்தவும்"
   }
 }
