@@ -474,12 +474,6 @@
   "footer_feedback": {
     "message": "கருத்து"
   },
-  "footer_export": {
-    "message": "ஏற்றுமதி"
-  },
-  "footer_logs": {
-    "message": "பதிவுகள்"
-  },
   "theme_toggle": {
     "message": "தீம் மாற்று"
   },
