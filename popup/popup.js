@@ -316,11 +316,11 @@
     }
 
     document.body.addEventListener('mouseover', (e) => {
-      const chip = e.target.closest('[data-tooltip-media]');
+      const chip = e.target.closest('[data-tooltip-media], [data-tooltip-caption]');
       if (chip) _showTip(chip);
     });
     document.body.addEventListener('mouseout', (e) => {
-      const chip = e.target.closest('[data-tooltip-media]');
+      const chip = e.target.closest('[data-tooltip-media], [data-tooltip-caption]');
       if (chip) _hideTip();
     });
 
