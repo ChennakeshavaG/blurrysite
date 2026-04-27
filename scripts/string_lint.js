@@ -76,26 +76,11 @@ const ALLOW_LIST = [
   // The textContent assignment holds executable code, not user-visible text.
   { file: 'src/screen_share.js', contains: 's.textContent' },
 
-  // PWA settings panel — shadow DOM elements injected by content_script.
-  // The close-button aria-label and one-time hint toast are not routed through
-  // ContentI18n because the panel is created imperatively (no DOM template).
-  { file: 'src/content_script.js', contains: 'Close Blurry Site settings' },
-  { file: 'src/content_script.js', contains: "'PWA — right-click or press '" },
-
-  // New popup scaffold (Plan 1) — aria-label and title attrs are English
-  // stubs. These will gain data-i18n attributes in Plan 2 when the i18n
-  // system is wired into the new popup.
-  { file: 'popup/popup.html', contains: 'aria-label="Toggle theme"' },
-  { file: 'popup/popup.html', contains: 'title="Toggle theme"' },
-  { file: 'popup/popup.html', contains: 'title="Toggle Blurry Site on/off"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Power on/off"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Blur type"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Auto-detect PII on/off"' },
-  { file: 'popup/popup.html', contains: 'aria-label="PII blur mode"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Settings"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Close"' },
-  { file: 'popup/popup.html', contains: 'aria-label="Dismiss"' },
-  { file: 'src/shortcut_handler.js', contains: "setAttribute('aria-label', 'Dismiss')" },
+  // popup.html aria-label / title attrs carry inline English fallbacks alongside
+  // their data-i18n-aria-label / data-i18n-title attributes. The fallback is
+  // visible only if BlurrySitePopupUI.applyI18n fails to run.
+  { file: 'popup/popup.html', contains: 'data-i18n-aria-label=' },
+  { file: 'popup/popup.html', contains: 'data-i18n-title=' },
 ];
 
 // Patterns whose RHS is an i18n call — always OK.

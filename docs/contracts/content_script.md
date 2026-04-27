@@ -463,6 +463,7 @@ Handles SPA navigation in the main frame only. Wraps `history.pushState` and `hi
 **Side effects:**
 - Creates `<div id="bl-si-pwa-panel-host">` with closed shadow DOM.
 - Shadow contains: scoped `<style>`, a wrapper `.w` div, a close button `.c`, and an `<iframe src="popup/popup.html">`.
+- Close-button `aria-label` is resolved via `chrome.i18n.getMessage('aria_close_pwa_panel')` with English fallback.
 - Registers `keydown` listener on `document` (capture phase) to close panel on Escape.
 - Panel is toggled by setting `_pwaPanelHost.hidden`.
 
@@ -473,7 +474,7 @@ Handles SPA navigation in the main frame only. Wraps `history.pushState` and `hi
 **Side effects:**
 - Reads `chrome.storage.local['blsi_pwa_hint_shown']`; no-op if already shown.
 - Sets `blsi_pwa_hint_shown: true` in local storage.
-- Calls `Shortcuts.showToast(...)` with the platform-appropriate shortcut label (Mac: `⌥⇧O`, others: `Alt+Shift+O`).
+- Calls `Shortcuts.showToast(...)` with the i18n message `toast_pwa_hint`, passing the platform-appropriate shortcut label (Mac: `⌥⇧O`, others: `Alt+Shift+O`) as the `$SHORTCUT$` placeholder. Falls back to English when `chrome.i18n.getMessage` returns empty.
 
 ---
 

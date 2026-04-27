@@ -60,6 +60,7 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 **Side effects**:
 - Removes and replaces any existing toast (one at a time)
 - Appends `<div class="bl-si-toast" role="status" aria-live="polite">` to `document.body`
+- Close button `aria-label` is resolved via `chrome.i18n.getMessage('aria_toast_dismiss')` with English fallback `'Dismiss'`
 - `actions` with `variant: 'warn'` renders with amber styling  
 **Handles**: Replaces existing toast synchronously; action items with missing `label` or non-function `onClick` are skipped; `chrome.runtime.getURL` guarded for test environments.
 

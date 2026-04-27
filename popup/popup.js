@@ -269,12 +269,24 @@
       clearTimeout(_tipHideTimer);
       const src     = chip.dataset.tooltipMedia   || '';
       const caption = chip.dataset.tooltipCaption || '';
-      if (!src) return;
+      if (!src && !caption) return;
 
       _positionTip(chip);
       _tipLabel.textContent = chip.dataset.tooltipLabel || '';
       _tipLabel.hidden = !chip.dataset.tooltipLabel;
       _tipCaption.textContent = caption;
+
+      _tipEl.classList.toggle('bl-media-tooltip--text-only', !src);
+
+      if (!src) {
+        _tipImg.hidden   = true;
+        _tipVideo.hidden = true;
+        _tipImg.src   = '';
+        _tipVideo.src = '';
+        _tipEl.classList.remove('bl-media-tooltip--loading');
+        _tipEl.classList.add('is-visible');
+        return;
+      }
 
       const isVideo = /\.(mp4|webm)$/i.test(src);
       _tipImg.hidden   = isVideo;

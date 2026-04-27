@@ -45,12 +45,12 @@ function createContextMenus() {
     });
     chrome.contextMenus.create({
       id:       'bl-si-settings-panel',
-      title:    'Open Settings Panel',
+      title:    chrome.i18n.getMessage('ctx_open_settings_panel') || 'Open Settings Panel',
       contexts: ['all'],
     });
     chrome.contextMenus.create({
       id:       'bl-si-settings-tab',
-      title:    'Open Settings in Tab',
+      title:    chrome.i18n.getMessage('ctx_open_settings_tab') || 'Open Settings in Tab',
       contexts: ['all'],
     });
   });

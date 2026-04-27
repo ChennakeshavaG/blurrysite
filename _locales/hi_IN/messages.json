@@ -223,7 +223,22 @@
     "message": "टेबल"
   },
   "cat_structure": {
-    "message": "कंटेनर"
+    "message": "लेआउट ब्लॉक"
+  },
+  "tooltip_cat_text": {
+    "message": "हेडिंग, पैराग्राफ, उद्धरण, सूचियाँ और कैप्शन"
+  },
+  "tooltip_cat_media": {
+    "message": "तस्वीरें, वीडियो, ऑडियो और ग्राफ़िक्स"
+  },
+  "tooltip_cat_form": {
+    "message": "टेक्स्ट फ़ील्ड, ड्रॉपडाउन, बटन और अन्य नियंत्रण"
+  },
+  "tooltip_cat_table": {
+    "message": "टेबल और उनके सेल"
+  },
+  "tooltip_cat_structure": {
+    "message": "सेक्शन और आर्टिकल जैसे पेज लेआउट ब्लॉक"
   },
   "shortcut_toggle_blur_all": {
     "message": "सब कुछ धुंधला करें"
@@ -479,6 +494,48 @@
   },
   "tt_power_disable": {
     "message": "Blurry Site बंद करें"
+  },
+  "aria_power_toggle": {
+    "message": "पावर चालू/बंद"
+  },
+  "aria_pii_toggle": {
+    "message": "ऑटो-डिटेक्ट PII चालू/बंद"
+  },
+  "aria_pii_blur_mode": {
+    "message": "PII धुंधलाने का तरीका"
+  },
+  "aria_settings_nav": {
+    "message": "सेटिंग्स"
+  },
+  "aria_subpage_close": {
+    "message": "बंद करें"
+  },
+  "aria_toast_dismiss": {
+    "message": "खारिज करें"
+  },
+  "aria_close_pwa_panel": {
+    "message": "Blurry Site सेटिंग्स बंद करें"
+  },
+  "toast_pwa_hint": {
+    "message": "PWA — सेटिंग्स खोलने के लिए राइट-क्लिक करें या $SHORTCUT$ दबाएँ",
+    "placeholders": {
+      "shortcut": {
+        "content": "$1",
+        "example": "Alt+Shift+O"
+      }
+    }
+  },
+  "ctx_open_settings_panel": {
+    "message": "सेटिंग्स पैनल खोलें"
+  },
+  "ctx_open_settings_tab": {
+    "message": "टैब में सेटिंग्स खोलें"
+  },
+  "manifest_description": {
+    "message": "क्या कोई आपके पीछे झाँक रहा है — जानबूझकर या ग़लती से? मीटिंग में अपनी कुत्ते-बिल्ली की तस्वीरें साझा करने से डर लगता है, या कुछ और भी? कभी सोचा है कि आप कितनी सामग्री साझा कर सकें, उस पर नियंत्रण रहे? कभी-कभी जवाब बस यही होता है — 'धुंधला कर दो'। यह टूल आपकी मदद के लिए है! किसी भी वेबसाइट पर जो चाहें धुंधला करें। कॉन्फ़िगर करें और भूल जाएँ..."
+  },
+  "manifest_cmd_open_settings_desc": {
+    "message": "Blurry Site सेटिंग्स पैनल खोलें (या सामान्य ब्राउज़र में सेटिंग्स टैब)"
   },
   "off_state_message": {
     "message": "Blurry Site बंद है"

@@ -160,7 +160,7 @@ toggleTheme()                                     // flip + persist to chrome.st
 showToast(key, substitutions?)                    // i18n toast, auto-hides after 15s; has logo + close button
 setHost(hostname)
 setVersion()
-applyI18n()                                       // walk [data-i18n] elements
+applyI18n()                                       // walk [data-i18n] (textContent), [data-i18n-aria-label], [data-i18n-title]
 renderPowerButton(enabled)                        // toggle power class + show/hide main/off views
 showView(viewId, isEnabled)                       // see Navigation section below
 updateClearAll(settings, blurItems, isPageBlurred)
@@ -309,7 +309,7 @@ Dot color: `.bl-mode-block__dot.is-on` = green (`#22c55e`); default = red (`#ef4
 No raw DOM manipulation outside media tooltip setup. All DOM changes via `BlurrySitePopupRender.renderAll()` or `BlurrySitePopupUI.*`. No new standalone helpers — add to `popup_ui.js` if DOM-only, render file if render-only.
 
 ### All i18n via chrome.i18n.getMessage
-No hardcoded user-visible strings. Keys in `_locales/en/messages.json` (source of truth). All locales must stay in sync — run `npm run i18n:lint` to verify.
+No hardcoded user-visible strings. Keys in `_locales/en/messages.json` (source of truth). All locales must stay in sync — run `npm run i18n:lint` to verify. In `popup.html`, use `data-i18n="key"` for textContent, `data-i18n-aria-label="key"` for aria-label, and `data-i18n-title="key"` for title attributes — `BlurrySitePopupUI.applyI18n()` populates all three. Inline English fallback (e.g. `aria-label="Close"` next to `data-i18n-aria-label="aria_subpage_close"`) is allowed for source readability and survives if i18n resolution fails.
 
 ### string_lint.js allow-list
 New file with `"v"` version prefix or toast key string triggering linter: add entry to `ALLOW_LIST` in `scripts/string_lint.js`. Don't suppress linter globally.

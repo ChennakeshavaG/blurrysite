@@ -54,6 +54,22 @@ Toggles `is-visible` on `#bl-scroll-up` / `#bl-scroll-down` based on `#bl-view-m
 ### `_updateSubpageArrows(bodyEl)`
 Toggles `.bl-sp-arrow--top` / `.bl-sp-arrow--bottom` in the nearest `.bl-subpage__scroll-wrap`.
 
+### Media tooltip (`_showTip` / `_hideTip` / `_positionTip`)
+Hover-triggered floating tooltip shared across the popup. A single `.bl-media-tooltip` element is appended to `<body>` and positioned beneath the hovered chip.
+
+Trigger: any element matching `[data-tooltip-media], [data-tooltip-caption]`. Listeners attached to `body` `mouseover` / `mouseout` (event delegation).
+
+Supported `data-*` attributes on the trigger:
+- `data-tooltip-media` — image/GIF/video URL. Optional. `.mp4` / `.webm` use `<video>`, all others use `<img>`.
+- `data-tooltip-caption` — caption text. Optional, but at least one of media/caption must be present (handler returns early if both empty).
+- `data-tooltip-label` — bold heading above the caption. Optional; label `<p>` is hidden when absent.
+
+Modes:
+- **Media mode** (default — `data-tooltip-media` set): shows shimmer placeholder, then loads image or video. Removes `bl-media-tooltip--loading` on `load` / `canplay`. On error, hides the failed media element so the tooltip falls back to label/caption only.
+- **Text-only mode** (`data-tooltip-caption` only, no media): adds `bl-media-tooltip--text-only` modifier class which hides shimmer + image + video via CSS. Used by the Blur All categories grid in `popup/renders/howtoblur.js`.
+
+Hide is debounced 80 ms via `_tipHideTimer` so the tooltip doesn't flicker when moving between adjacent chips.
+
 ## Module State
 
 | Variable | Type | Purpose |

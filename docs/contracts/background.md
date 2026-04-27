@@ -36,12 +36,14 @@ On every SW start:
 
 **What**: Removes all existing context menus and recreates the full set.  
 **Side effects**: Calls `chrome.contextMenus.removeAll()` then creates 6 items:
-- `bl-si-blur-element` — "Blur this element" (all contexts)
-- `bl-si-unblur-element` — "Unblur this element" (all contexts)
-- `bl-si-blur-selection` — "Blur selected text" (selection context only)
+- `bl-si-blur-element` — `ctxBlurElement` ("Blur this element") (all contexts)
+- `bl-si-unblur-element` — `ctxUnblurElement` ("Unblur this element") (all contexts)
+- `bl-si-blur-selection` — `ctxBlurSelection` ("Blur selected text") (selection context only)
 - `bl-si-settings-sep` — separator
-- `bl-si-settings-panel` — "Open Settings Panel" (all contexts)
-- `bl-si-settings-tab` — "Open Settings in Tab" (all contexts)
+- `bl-si-settings-panel` — `ctx_open_settings_panel` ("Open Settings Panel") (all contexts)
+- `bl-si-settings-tab` — `ctx_open_settings_tab` ("Open Settings in Tab") (all contexts)
+
+All titles are resolved via `chrome.i18n.getMessage(key) || 'English fallback'`. The fallback runs only if the locale lookup fails (e.g. unsupported locale + missing en).
 
 **Note**: Context menu blur/unblur sends message to tab but does not capture `targetElementId` — content script uses `lastContextMenuTarget` (set by `contextmenu` event listener in content_script.js).
 

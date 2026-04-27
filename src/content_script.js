@@ -644,7 +644,8 @@
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'c';
-    closeBtn.setAttribute('aria-label', 'Close Blurry Site settings');
+    closeBtn.setAttribute('aria-label',
+      chrome.i18n.getMessage('aria_close_pwa_panel') || 'Close Blurry Site settings');
     closeBtn.textContent = '✕';
     closeBtn.addEventListener('click', () => { host.hidden = true; });
 
@@ -670,7 +671,10 @@
     await chrome.storage.local.set({ blsi_pwa_hint_shown: true });
     const isMac = typeof navigator !== 'undefined' &&
       navigator.platform && navigator.platform.toLowerCase().includes('mac');
-    Shortcuts.showToast('PWA — right-click or press ' + (isMac ? '⌥⇧O' : 'Alt+Shift+O') + ' to open settings');
+    const shortcut = isMac ? '⌥⇧O' : 'Alt+Shift+O';
+    const msg = chrome.i18n.getMessage('toast_pwa_hint', shortcut)
+      || ('PWA — right-click or press ' + shortcut + ' to open settings');
+    Shortcuts.showToast(msg);
   }
 
   // ── iframe postMessage broadcast ──────────────────────────────────────────

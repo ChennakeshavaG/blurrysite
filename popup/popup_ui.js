@@ -2,21 +2,9 @@ const BlurrySitePopupUI = (() => {
   'use strict';
 
   // ── Theme ────────────────────────────────────────────────────────────────
-  const LOGO_DARK     = '../icons/logo-dark.png';
-  const LOGO_LIGHT    = '../icons/logo-light.png';
-  const LOGO_FALLBACK = '../icons/icon48.png';
-
-  function _setLogoSrc(img, isDark) {
-    if (!img) return;
-    img.src = isDark ? LOGO_DARK : LOGO_LIGHT;
-    img.onerror = () => { img.onerror = null; img.src = LOGO_FALLBACK; };
-  }
-
   function applyTheme(theme) {
     const isDark = theme !== 'light';
     document.documentElement.setAttribute('data-theme', isDark ? '' : 'light');
-    _setLogoSrc(document.getElementById('bl-logo'), isDark);
-    _setLogoSrc(document.getElementById('bl-logo-off'), isDark);
   }
 
   function toggleTheme() {
@@ -74,12 +62,21 @@ const BlurrySitePopupUI = (() => {
   }
 
   function applyI18n() {
+    const lookup = (key) => (blsi && blsi.ContentI18n)
+      ? blsi.ContentI18n.t(key)
+      : (chrome.i18n.getMessage(key) || key);
+
     document.querySelectorAll('[data-i18n]').forEach((el) => {
-      const key = el.dataset.i18n;
-      const msg = (blsi && blsi.ContentI18n)
-        ? blsi.ContentI18n.t(key)
-        : (chrome.i18n.getMessage(key) || key);
+      const msg = lookup(el.dataset.i18n);
       if (msg) el.textContent = msg;
+    });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
+      const msg = lookup(el.dataset.i18nAriaLabel);
+      if (msg) el.setAttribute('aria-label', msg);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+      const msg = lookup(el.dataset.i18nTitle);
+      if (msg) el.setAttribute('title', msg);
     });
   }
 

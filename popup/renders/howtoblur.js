@@ -126,11 +126,11 @@ const BlurrySitePopupRenderHtb = (() => {
     grid.className = 'bl-categories-grid';
 
     var catDefs = [
-      { key: 'text',      labelKey: 'cat_text' },
-      { key: 'media',     labelKey: 'cat_media' },
-      { key: 'table',     labelKey: 'cat_table' },
-      { key: 'structure', labelKey: 'cat_structure' },
-      { key: 'form',      labelKey: 'cat_form' },
+      { key: 'text',      labelKey: 'cat_text',      tipKey: 'tooltip_cat_text' },
+      { key: 'media',     labelKey: 'cat_media',     tipKey: 'tooltip_cat_media' },
+      { key: 'table',     labelKey: 'cat_table',     tipKey: 'tooltip_cat_table' },
+      { key: 'structure', labelKey: 'cat_structure', tipKey: 'tooltip_cat_structure' },
+      { key: 'form',      labelKey: 'cat_form',      tipKey: 'tooltip_cat_form' },
     ];
 
     for (var i = 0; i < catDefs.length; i++) {
@@ -138,6 +138,8 @@ const BlurrySitePopupRenderHtb = (() => {
         var label = document.createElement('label');
         label.className = 'bl-cat-item';
         label.dataset.blCatKey = def.key;
+        label.dataset.tooltipLabel   = _t(def.labelKey);
+        label.dataset.tooltipCaption = _t(def.tipKey);
 
         var cb = document.createElement('input');
         cb.type = 'checkbox';

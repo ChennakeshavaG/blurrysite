@@ -142,7 +142,8 @@ const Shortcuts = (() => {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'bl-si-toast__close';
     closeBtn.textContent = '✕';
-    closeBtn.setAttribute('aria-label', 'Dismiss');
+    closeBtn.setAttribute('aria-label',
+      chrome.i18n.getMessage('aria_toast_dismiss') || 'Dismiss');
     closeBtn.addEventListener('click', () => _dismissToast(toast));
     topRow.appendChild(closeBtn);
 
