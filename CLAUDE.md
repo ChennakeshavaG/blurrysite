@@ -237,7 +237,7 @@ ss_blur_for_me_raw   = ss.active
 ss_eff               = !tab_suppressed && ss_blur_for_me_raw
 
 automate_blur_active = idle_eff || tab_switch_eff || ss_eff
-blur_all_active      = manual_blur || (automate_blur_active && !blur_present)
+engage      = manual_blur || (automate_blur_active && !blur_present)
 ```
 
 Automate triggers NEVER write `blur_all`. `onActive()` only clears idle/tab_switch — manual blur survives idle return.

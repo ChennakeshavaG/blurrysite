@@ -136,8 +136,8 @@ When the picker is active, zone overlays become interactive:
 Created by `injectRules(root, categories, mode)`. Lives in `root.head ?? root` (document `<head>` for the main document; injected directly into the shadow root for shadow DOM). Destroyed by `removeRules(root)`.
 
 **Lifecycle:**
-- Created: when `handleMainDocument(settings)` runs with `blur_all_active === true`
-- Destroyed: when `handleMainDocument(settings)` runs with `blur_all_active === false`, or when `teardown(root)` runs
+- Created: when `handleMainDocument(settings)` runs with `engage === true`
+- Destroyed: when `handleMainDocument(settings)` runs with `engage === false`, or when `teardown(root)` runs
 
 ### The `EXCLUDE` `:not()` Chain
 

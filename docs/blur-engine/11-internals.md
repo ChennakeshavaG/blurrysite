@@ -74,7 +74,7 @@ All state lives in closure scope. No external code can read or write these direc
 ### `_isPageBlurred` — `boolean`
 Whether blur-all is currently active for this page. Managed exclusively by `handleSite()`. Read by the `isPageBlurred` getter and by the MutationObserver callback gate (`if (!_isPageBlurred) return`).
 
-Set to `true` when `settings.blur_all_active === true` inside `handleSite`. Set to `false` in the disabled path and when blur-all becomes inactive.
+Set to `true` when `settings.engage === true` inside `handleSite`. Set to `false` in the disabled path and when blur-all becomes inactive.
 
 **Do not confuse with `isBlurAllActive()`**, which is a DOM check (does `#bl-si-blur-styles` exist?). Both typically agree but can briefly diverge during async transitions.
 

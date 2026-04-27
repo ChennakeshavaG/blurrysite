@@ -111,11 +111,11 @@ call-count (via explicit `jest.clearAllMocks(); mockSet();` pair inside the test
 
 ### `resolve`
 
-- `returns flat object with all expected keys` — flat resolved object includes `blur_radius`, `enabled`, `reveal_mode`, `blur_categories`, `blur_mode`, `blur_all_active`, `blur_items`, `pick_blur_enabled`, `picker_mode`, `shortcuts`.
-- `global blur_all_active used when no rule matches` — global `blur_all.status: true` propagates to `blur_all_active`.
+- `returns flat object with all expected keys` — flat resolved object includes `blur_radius`, `enabled`, `reveal_mode`, `blur_categories`, `blur_mode`, `engage`, `blur_items`, `pick_blur_enabled`, `picker_mode`, `shortcuts`.
+- `global engage used when no rule matches` — global `blur_all.status: true` propagates to `engage`.
 - `exact hostname site_rule snapshot overrides global blur_mode` — a site rule with `snapshot.blur_all.settings.blur_mode: 'frosted'` overrides the global `blur_mode`.
-- `snapshot blur_all.status=true forces blur_all_active even when global is off` — snapshot can pin a host on regardless of global toggle.
-- `snapshot blur_all.status=false suppresses blur_all_active even when global is on` — snapshot can pin a host off regardless of global toggle.
+- `snapshot blur_all.status=true forces engage even when global is off` — snapshot can pin a host on regardless of global toggle.
+- `snapshot blur_all.status=false suppresses engage even when global is on` — snapshot can pin a host off regardless of global toggle.
 - `blur_items returns items for the exact hostname` — items saved under a hostname appear in `resolved.blur_items` when `pick_and_blur.status` is `true`.
 - `blur_items is empty when pick_and_blur.status is false` — items are gated on feature status; `pick_blur_enabled` is also `false`.
 - `wildcard site_rule snapshot overrides global blur_mode (first match wins)` — a wildcard rule snapshot with `blur_mode: 'redacted'` overrides the global default.
@@ -138,12 +138,12 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `patch_automate_blur updates multiple triggers atomically` — `{ idle: false, screen_share: true }` applied in one call updates both fields while leaving `tab_switch: false`.
 - `clear_automate_blur removes the hostname entry` — after clear, `get_automate_blur` returns the all-false default.
 - `resolve includes automate_blur_active and automate_blur_triggers` — after `save_automate_blur('example.com', 'idle', true)`, `resolved.automate_blur_active === true` and `resolved.automate_blur_triggers.idle === true`.
-- `resolve: blur_all_active is true when only automate fires (manual = false)` — `blur_all_active` is `true`; `automate_blur_only` is `true`; `automate_blur_skipped` is `false`.
+- `resolve: engage is true when only automate fires (manual = false)` — `engage` is `true`; `automate_blur_only` is `true`; `automate_blur_skipped` is `false`.
 - `resolve: automate_blur_only resets all blur-relevant keys to defaults from global settings` — when `automate_blur_only`, `blur_mode`, `blur_categories`, `blur_radius`, `thorough_blur`, `reveal_mode`, `transition_duration`, `redaction_color`, `highlight_color` all equal `DEFAULT_MODEL` values even when the user has customized them.
-- `resolve: automate_blur_skipped = true when blur_all is already enabled` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `blur_all_active` is still `true`.
-- `resolve: automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`; `blur_all_active` stays `false` (pick-blur handles it separately).
+- `resolve: automate_blur_skipped = true when blur_all is already enabled` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `engage` is still `true`.
+- `resolve: automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`; `engage` stays `false` (pick-blur handles it separately).
 - `resolve: automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
-- `resolve: manual blur preserved after automate cleared` — after patching idle trigger to `false`, `blur_all_active` remains `true` from the persisted manual `blur_all: true`.
+- `resolve: manual blur preserved after automate cleared` — after patching idle trigger to `false`, `engage` remains `true` from the persisted manual `blur_all: true`.
 - `clear_host also clears automate_blur for that hostname` — after `clear_host`, `get_automate_blur` returns the all-false default.
 - `save_automate_blur is a no-op when value already matches cache` — second call with the same `(hostname, trigger, value)` triple does not invoke `chrome.storage.session.set`.
 - `save_automate_blur writes when value flips back` — flipping `idle: true → false` issues exactly one session write.
@@ -200,7 +200,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `snapshot in exact site_rule overrides all snapshot sections in resolved output` — a full snapshot (`blur_all` + `pick_and_blur`) stored via `save_site_snapshot` causes `resolve` to return the saved `blur_mode`, `blur_categories`, `pick_blur_type`, `pick_blur_color`, and `pick_blur_enabled`.
 - `snapshot in wildcard site_rule overrides global snapshot keys` — a wildcard rule snapshot with `blur_mode: 'redacted'` overrides the global default for a matching subdomain.
 - `exact rule snapshot wins over wildcard snapshot (exact has higher priority)` — when both an exact rule (`blur_mode: 'redacted'`) and a wildcard rule (`blur_mode: 'frosted'`) match, the exact rule's value wins.
-- `non-snapshot keys in resolved output come from global/feature settings when no override` — keys not present in the snapshot (e.g. `blur_all_active`, `blur_items`) continue to be derived from the global model state.
+- `non-snapshot keys in resolved output come from global/feature settings when no override` — keys not present in the snapshot (e.g. `engage`, `blur_items`) continue to be derived from the global model state.
 - `snapshot.pick_and_blur.items REPLACE host-keyed items at resolve` — when the snapshot pins an items array, it overrides `pick_and_blur.items[hostname]` and stamps `_rule_overrides.blur_items`.
 - `snapshot.automate.idle.value/unit override global at resolve` — full idle shape (value + unit + enabled) flows from snapshot into `resolved.automate_idle`.
 - `PII fields in snapshot override global PII settings` — `pii_email`, `pii_numeric`, `pii_mode`, `pii_redaction_color` flow from snapshot into resolved + are flagged in `_rule_overrides`.

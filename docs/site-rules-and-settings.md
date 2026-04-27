@@ -53,7 +53,7 @@ Located at `src/storage_model.js`. Merge order (later wins):
 6. `shortcuts`
 7. First matching **wildcard/regex** rule's `.settings` (via `blsi.UrlMatcher.matchesPattern`)
 8. Exact **hostname** rule's `.settings` (always wins over wildcard)
-9. `blur_all_active` — `exact.blur_all ?? global blur_all.status` (null = inherit)
+9. `engage` — `exact.blur_all ?? global blur_all.status` (null = inherit)
 10. `blur_items` — `exact.items` if `pick_and_blur.status` is true, else `[]`
 
 Returns a flat object ready for the blur engine — no further resolution needed downstream.

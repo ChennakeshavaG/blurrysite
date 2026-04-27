@@ -2,7 +2,7 @@
 
 ## Overview
 
-Single source of truth for extension persistent state. Accesses `chrome.storage.local` (key: `blsi_model`) and `chrome.storage.session` (keys: `blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly — no background relay. Maintains in-memory caches (`_cache`, `_automate_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`) that mirror storage. `_write()` validates before persisting and rolls back the cache on failure. `resolve(hostname, url, tab_id?)` computes derived settings including `blur_all_active`, screen-share trigger state, and suppression flags. Single pub-sub subscriber via `on_change`.
+Single source of truth for extension persistent state. Accesses `chrome.storage.local` (key: `blsi_model`) and `chrome.storage.session` (keys: `blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly — no background relay. Maintains in-memory caches (`_cache`, `_automate_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`) that mirror storage. `_write()` validates before persisting and rolls back the cache on failure. `resolve(hostname, url, tab_id?)` computes derived settings including `engage` (page-wide engine gate; folds extension on/off + manual + automate), screen-share trigger state, and suppression flags. Single pub-sub subscriber via `on_change`.
 
 ## Module State
 
@@ -55,7 +55,7 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 6. Exact hostname site rule snapshot apply — same REPLACE / override semantics
 7. Automate blur state — `_automate_cache[hostname]` (idle/tab_switch) and `_screen_share_cache` (single global record) with per-tab and per-site suppression applied
 8. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
-9. Derived key computation: `manual_blur = !!resolved.blur_all_status`; `blur_all_active = manual_blur || (automate_blur_active && !blur_present)`
+9. Derived key computation: `manual_blur = !!resolved.blur_all_status`; `engage = (resolved.enabled !== false) && (manual_blur || (automate_blur_active && !blur_present))`
 
 **Screen-share trigger** (`automate_blur_triggers.screen_share`):
 
@@ -69,8 +69,8 @@ ss_blur_for_me     = !suppressed_tabs.includes(tab_id) && ss_blur_for_me_raw
 
 Per-tab suppression silences all three triggers for that tab; per-site suppression silences screen-share only.
 
-**Derived keys on output**: `blur_all_active`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab`, `_rule_overrides`, `_rule_match`.  
-**`blur_all_active`**: `manual_blur || (automate_blur_active && !blur_present)`.  
+**Derived keys on output**: `engage`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab`, `_rule_overrides`, `_rule_match`.  
+**`engage`**: `(resolved.enabled !== false) && (manual_blur || (automate_blur_active && !blur_present))`. The page-wide engine gate read by `engine.js handleMainDocument` / `handleShadowRoot` / `handleIframe`. Replaces the prior `blur_all_active` (which omitted the `enabled` fold).  
 **`automate_blur_skip_reason`**: `'site_rule' | 'manual' | 'pick_blur' | null`. Set when `automate_blur_skipped === true`; ordered priority site_rule > manual > pick_blur.  
 **`screen_share_state`**: `{ active, sharing_tab_id, started_at, is_sharing_tab }` — passed to popup notif card for the "sharing for Xm" label.  
 **`_rule_overrides`** / **`_rule_match`**: same as before; used by popup for "Managed by site rule" badges and deep-linking.

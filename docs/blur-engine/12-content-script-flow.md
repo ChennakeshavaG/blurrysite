@@ -355,7 +355,7 @@ history.pushState = function(...args) {
 | Broadcasts to child iframes | YES | NO |
 | Listens to parent postMessage | NO | YES |
 | `_topHostname` source | `location.hostname` | Derived from `document.referrer`; updated via postMessage |
-| `blur_all_active` lookup | `location.hostname` | `_topHostname` (parent's hostname) |
+| `engage` lookup | `location.hostname` | `_topHostname` (parent's hostname) |
 | SPA URL change tracking | YES | NO (iframes don't wrap history) |
 
 **Why iframes follow parent's hostname:**

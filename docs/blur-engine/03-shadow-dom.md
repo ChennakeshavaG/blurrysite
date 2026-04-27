@@ -141,7 +141,7 @@ The `!_observers.has(node.shadowRoot)` guard prevents double-initialization for 
 
 ```js
 function handleShadowRoot(settings, shadowRoot) {
-  const active = settings.enabled !== false && !!settings.blur_all_active;
+  const active = !!settings.engage;
   if (!active) {
     teardown(shadowRoot);
     return;

@@ -76,12 +76,33 @@ const Engine = (() => {
   // Mutex — prevents concurrent handleSite() calls from interleaving DOM mutations.
   let _handling = false;
 
-  // Fingerprint of the last reconcile inputs. Lets handleSite skip the page-wide
-  // nuke+rescan when only CSS vars (gaussian radius, highlight colour) changed,
-  // since those propagate via custom properties without DOM work. Frosted mode
-  // is the exception — its radius lives in an SVG attribute, so blur_radius is
-  // folded into the key under frosted.
-  let _lastReconcileKey = null;
+  // Last fully-applied settings snapshot. handleSite short-circuits when the
+  // incoming settings deep-equal this value. Cleared by teardown(document) so
+  // the next handleSite re-runs unconditionally after a full reset.
+  let localCache = null;
+
+  function _deep_equal(a, b) {
+    if (a === b) return true;
+    if (a == null || b == null) return a === b;
+    if (typeof a !== typeof b || typeof a !== "object") return false;
+    const a_arr = Array.isArray(a), b_arr = Array.isArray(b);
+    if (a_arr !== b_arr) return false;
+    if (a_arr) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!_deep_equal(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    const a_keys = Object.keys(a);
+    if (a_keys.length !== Object.keys(b).length) return false;
+    for (let k = 0; k < a_keys.length; k++) {
+      const key = a_keys[k];
+      if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+      if (!_deep_equal(a[key], b[key])) return false;
+    }
+    return true;
+  }
 
   function _setPickerActiveForObserver(v) {
     _State.setPickerActive(v);
@@ -109,7 +130,10 @@ const Engine = (() => {
    * turns off (matches the original _disablePageWide behaviour).
    */
   function teardown(root) {
-    if (root === document) Obs.removeShadowAttachListener();
+    if (root === document) {
+      Obs.removeShadowAttachListener();
+      localCache = null;
+    }
     // Cancel any pending idle work for this root — prevents stampElements
     // re-stamping elements after teardown has cleared all attributes.
     Obs.clearStampQueueForRoot(root);
@@ -158,7 +182,7 @@ const Engine = (() => {
    * EngineState.isPageBlurred is NOT set here — handleSite's responsibility.
    */
   function handleMainDocument(settings) {
-    const active = settings.enabled !== false && !!settings.blur_all_active;
+    const active = !!settings.engage;
     if (!active) {
       teardown(document);
       return;
@@ -188,7 +212,7 @@ const Engine = (() => {
    * EngineState.isPageBlurred is NOT set here — handleSite's responsibility.
    */
   function handleShadowRoot(settings, shadowRoot) {
-    const active = settings.enabled !== false && !!settings.blur_all_active;
+    const active = !!settings.engage;
     if (!active) {
       teardown(shadowRoot);
       return;
@@ -211,7 +235,7 @@ const Engine = (() => {
    */
   function handleIframe(settings, iframeEl) {
     if (!iframeEl || _isExtensionUI(iframeEl)) return;
-    const active = settings.enabled !== false && !!settings.blur_all_active;
+    const active = !!settings.engage;
 
     let isSameOrigin = false;
     try { isSameOrigin = !!iframeEl.contentDocument; } catch (_) {}
@@ -240,6 +264,11 @@ const Engine = (() => {
     if (_handling) return;
     _handling = true;
     try {
+      // Short-circuit when nothing changed since the last fully-applied call.
+      // teardown(document) clears localCache so post-reset calls always run.
+      if (_deep_equal(localCache, settings)) return;
+      localCache = settings;
+
       // Store FIRST — MO callback reads currentSettings for new shadow hosts.
       _State.setCurrentSettings(settings);
 
@@ -250,31 +279,19 @@ const Engine = (() => {
       _applyCssVars(settings);
 
       // ── Extension disabled — full teardown including items ──────────────────
+      // Call teardown directly: resolve() forces engage=false when enabled=false,
+      // but tests hand-craft settings and may not honour that invariant.
       if (settings.enabled === false) {
-        handleMainDocument(settings);
+        teardown(document);
         _State.setIsPageBlurred(false);
         _reconcileItems([]);
         removeAllZoneOverlays(); // safety net for orphaned zones
-        _lastReconcileKey = null;
         return;
       }
 
-      // ── Page-wide reconcile ─────────────────────────────────────────────────
-      // Skip DOM work when only CSS vars changed (blur_radius in blur mode,
-      // highlight_color). Those propagate instantly via custom properties and
-      // don't require a nuke+rescan. Frosted mode is the exception — its radius
-      // lives in an SVG attribute and needs a full filter rebuild.
-      const isActive = !!settings.blur_all_active;
-      const _rcCats = settings.blur_categories || DEFAULT_CATS;
-      const reconcileKey = isActive
-        ? `${settings.blur_mode}|${CATEGORY_ORDER.map(n => (_rcCats[n] ? '1' : '0')).join('')}|${settings.thorough_blur}|${settings.blur_mode === blsi.blur_modes.frosted ? settings.blur_radius : ''}`
-        : 'inactive';
-      const pageWideChanged = reconcileKey !== _lastReconcileKey;
-      _lastReconcileKey = reconcileKey;
+      const isActive = !!settings.engage;
 
-      if (pageWideChanged) {
-        handleMainDocument(settings);  // sync — schedules idle for stamp work
-      }
+      handleMainDocument(settings);  // sync — schedules idle for stamp work
       _State.setIsPageBlurred(isActive);
 
       // ── Item reconcile ──────────────────────────────────────────────────────
@@ -299,7 +316,6 @@ const Engine = (() => {
       if (blsi.Logger && blsi.Logger.enabled) {
         blsi.Logger.scope('engine').flow('handleSite', {
           active: isActive,
-          pageWideChanged,
           added,
           removed,
           totalActive: Targets.activeItemsSize(),

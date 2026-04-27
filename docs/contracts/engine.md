@@ -59,7 +59,7 @@ Settings shape (resolved by `blsi.Model.resolve(host, url, tabId)` before being 
 
 ```
 {
-  enabled, blur_all_active, blur_items,
+  enabled, engage, blur_items,
   blur_categories, blur_mode, thorough_blur,
   pick_blur_enabled, pick_blur_type, pick_blur_color,
   blur_radius, highlight_color, transition_duration, redaction_color,
@@ -67,22 +67,25 @@ Settings shape (resolved by `blsi.Model.resolve(host, url, tabId)` before being 
 }
 ```
 
+`engage` (boolean) is the page-wide engine gate — derived by `Model.resolve()` as `(enabled !== false) && (manual_blur || (automate_blur_active && !blur_present))`. `handleMainDocument` / `handleShadowRoot` / `handleIframe` read it directly; the `enabled` fold means callers don't need a separate `enabled` check.
+
 1. Mutex acquired (`_handling`). Concurrent calls dropped.
-2. `EngineState.setCurrentSettings(settings)` — MO callback reads this for new shadow / iframe stamping.
-3. `_applyCssVars(settings)` writes CSS custom properties on `:root`. Must run before `injectRules` (frosted mode reads radius via `_readCssRadius`).
-4. **Extension disabled** (`enabled === false`): full teardown including items + zone overlays, reset reconcile key, return.
-5. **Reconcile key change** (mode / categories / thorough / frosted-radius): `handleMainDocument` reinjects + restamps. `EngineState.setIsPageBlurred(blur_all_active)`.
-6. **Items** (always reconciled): `TargetEngine.reconcileItems(blur_items)`. Picker blurs and sticky zones persist when blur-all is off.
-7. **MO re-attach** if blur-all is off but a consumer still needs the document MO — either `getPickBlurDynamicActive()` is true OR `Observer.hasSubscribers()` (e.g. PII detector) returns true. `observeRoot(document)` is idempotent.
-8. **Pick-blur CSS** injected/removed based on `pick_blur_enabled` + non-empty items.
-9. Mutex released.
+2. **Deep-equals short-circuit**: if `settings` deep-equals `localCache`, return. Otherwise `localCache = settings` and continue. `teardown(document)` clears `localCache` so the next call always runs.
+3. `EngineState.setCurrentSettings(settings)` — MO callback reads this for new shadow / iframe stamping.
+4. `_applyCssVars(settings)` writes CSS custom properties on `:root`. Must run before `injectRules` (frosted mode reads radius via `_readCssRadius`).
+5. **Extension disabled** (`enabled === false`): full teardown including items + zone overlays, return.
+6. `handleMainDocument` reinjects + restamps unconditionally on the active path. `EngineState.setIsPageBlurred(engage)`.
+7. **Items** (always reconciled): `TargetEngine.reconcileItems(blur_items)`. Picker blurs and sticky zones persist when blur-all is off.
+8. **MO re-attach** if blur-all is off but a consumer still needs the document MO — either `getPickBlurDynamicActive()` is true OR `Observer.hasSubscribers()` (e.g. PII detector) returns true. `observeRoot(document)` is idempotent.
+9. **Pick-blur CSS** injected/removed based on `pick_blur_enabled` + non-empty items.
+10. Mutex released.
 
 ## State (owned here)
 
 | Var | Default | Notes |
 |---|---|---|
 | `_handling` | `false` | Mutex flag. |
-| `_lastReconcileKey` | `null` | Fingerprint of last inputs that drove a page-wide reconcile. Lets `handleSite` skip the nuke+rescan when only CSS vars changed (gaussian) but not for frosted (radius lives in SVG attribute). |
+| `localCache` | `null` | Last fully-applied settings snapshot. `handleSite` short-circuits when the incoming settings deep-equal this value. Cleared by `teardown(document)` so the next call always runs. Replaces the prior `_lastReconcileKey` fingerprint — slider drags on `blur_radius` / `highlight_color` now go through `handleMainDocument` instead of being skipped. |
 
 Cross-cutting state lives in `core/engine_state.js`.
 

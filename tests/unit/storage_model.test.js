@@ -572,21 +572,21 @@ describe('resolve', () => {
     expect(resolved.blur_categories).toBeDefined();
     // Feature settings
     expect(resolved.blur_mode).toBe('blur');
-    expect(resolved.blur_all_active).toBe(false);
+    expect(resolved.engage).toBe(false);
     expect(Array.isArray(resolved.blur_items)).toBe(true);
     expect(resolved.pick_blur_enabled).toBeDefined();
     expect(resolved.picker_mode).toBeDefined();
     expect(resolved.shortcuts).toBeDefined();
   });
 
-  test('global blur_all_active used when no rule matches', async () => {
+  test('global engage used when no rule matches', async () => {
     const stored = blsi.build_default_model();
     stored.blur_all.status = true;
     mockGet(stored);
     await blsi.Model.init_cache();
 
     const resolved = blsi.Model.resolve('noentry.com', 'https://noentry.com/');
-    expect(resolved.blur_all_active).toBe(true);
+    expect(resolved.engage).toBe(true);
   });
 
   test('exact hostname site_rule snapshot overrides global blur_mode', async () => {
@@ -600,7 +600,7 @@ describe('resolve', () => {
     expect(resolved.blur_mode).toBe('frosted');
   });
 
-  test('snapshot blur_all.status=true forces blur_all_active even when global is off', async () => {
+  test('snapshot blur_all.status=true forces engage even when global is off', async () => {
     const stored = blsi.build_default_model();
     stored.blur_all.status = false;
     mockGet(stored);
@@ -609,10 +609,10 @@ describe('resolve', () => {
     await blsi.Model.save_site_snapshot('example.com', blsi.pattern_types.exact,
       { blur_all: { status: true } });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.blur_all_active).toBe(true);
+    expect(resolved.engage).toBe(true);
   });
 
-  test('snapshot blur_all.status=false suppresses blur_all_active even when global is on', async () => {
+  test('snapshot blur_all.status=false suppresses engage even when global is on', async () => {
     const stored = blsi.build_default_model();
     stored.blur_all.status = true;
     mockGet(stored);
@@ -621,7 +621,7 @@ describe('resolve', () => {
     await blsi.Model.save_site_snapshot('example.com', blsi.pattern_types.exact,
       { blur_all: { status: false } });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.blur_all_active).toBe(false);
+    expect(resolved.engage).toBe(false);
   });
 
   test('blur_items returns items for the exact hostname', async () => {
@@ -821,13 +821,13 @@ describe('automate_blur', () => {
     expect(resolved.automate_blur_triggers.screen_share).toBe(false);
   });
 
-  test('resolve: blur_all_active is true when only automate fires (manual = false)', async () => {
+  test('resolve: engage is true when only automate fires (manual = false)', async () => {
     // Screen-share trigger comes from the global record, not per-hostname automate_blur.
     // The feature must be enabled in model.automate.settings.screen_share for ss to fire.
     await blsi.Model.patch_section('automate', { settings: { screen_share: { enabled: true } } });
     await blsi.Model.set_screen_share_active(99);
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(resolved.blur_all_active).toBe(true);
+    expect(resolved.engage).toBe(true);
     expect(resolved.automate_blur_only).toBe(true);
     expect(resolved.automate_blur_skipped).toBe(false);
   });
@@ -857,7 +857,7 @@ describe('automate_blur', () => {
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.automate_blur_skipped).toBe(true);
     expect(resolved.automate_blur_only).toBe(false);
-    expect(resolved.blur_all_active).toBe(true);
+    expect(resolved.engage).toBe(true);
   });
 
   test('resolve: automate_blur_skipped = true when pick_and_blur is enabled', async () => {
@@ -874,7 +874,7 @@ describe('automate_blur', () => {
     expect(resolved.automate_blur_skipped).toBe(true);
     expect(resolved.automate_blur_skip_reason).toBe('pick_blur');
     expect(resolved.automate_blur_only).toBe(false);
-    expect(resolved.blur_all_active).toBe(false); // blur-all stays off; pick-blur handles it
+    expect(resolved.engage).toBe(false); // blur-all stays off; pick-blur handles it
   });
 
   test('resolve: automate_blur_only and automate_blur_skipped are false when automate not firing', async () => {
@@ -888,7 +888,7 @@ describe('automate_blur', () => {
     await blsi.Model.save_automate_blur('example.com', 'idle', true);
     await blsi.Model.patch_automate_blur('example.com', { idle: false });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.blur_all_active).toBe(true); // global manual blur survives
+    expect(resolved.engage).toBe(true); // global manual blur survives
   });
 
   test('clear_host also clears automate_blur for that hostname', async () => {
@@ -1567,8 +1567,8 @@ describe('resolve with full snapshot overrides', () => {
     await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snapshot);
 
     const resolved = blsi.Model.resolve('github.com', 'https://github.com/');
-    // blur_all_active comes from global (not snapshot)
-    expect(typeof resolved.blur_all_active).toBe('boolean');
+    // engage comes from global (not snapshot)
+    expect(typeof resolved.engage).toBe('boolean');
     // blur_items comes from pick_and_blur.status gating (not snapshot, since
     // this snapshot has no items array — host-keyed items lookup kicks in)
     expect(Array.isArray(resolved.blur_items)).toBe(true);

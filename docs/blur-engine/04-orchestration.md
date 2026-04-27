@@ -27,7 +27,7 @@ async function handleSite(settings) {
     }
 
     // Phase 3: Page-wide reconcile (skip if only CSS vars changed)
-    const isActive = !!settings.blur_all_active;
+    const isActive = !!settings.engage;
     const reconcileKey = isActive
       ? `${settings.blur_mode}|${JSON.stringify(settings.blur_categories)}|${settings.thorough_blur}|${settings.blur_mode === blsi.blur_modes.frosted ? settings.blur_radius : ''}`
       : 'inactive';
@@ -118,7 +118,7 @@ const reconcileKey = isActive
 - `blur_radius` in non-frosted modes — CSS `var(--bl-si-radius)` propagates instantly; no DOM work needed
 - `highlight_color`, `transition_duration`, `redaction_color` — CSS var only
 - `reveal_mode` — managed by `reveal_controller.js`, not the engine
-- `blur_items`, `blur_all_active` — these drive phases 3 and 4 independently, not the page-wide structure
+- `blur_items`, `engage` — these drive phases 3 and 4 independently, not the page-wide structure
 
 **Key comparison:**
 ```js
@@ -131,7 +131,7 @@ if (pageWideChanged) {
 
 If the key matches the previous call's key, `handleMainDocument` is skipped entirely — no CSS rebuild, no MO re-registration, no stamp queue update. This makes rapid settings changes (slider dragging) very cheap for non-structural properties.
 
-**The inactive key:** When `blur_all_active` is false, the key is always `'inactive'`. Any transition from active to inactive triggers `handleMainDocument(settings)` (which runs `teardown(document)`). Subsequent inactive calls are no-ops (key is still `'inactive'`, no change). The transition from inactive back to active also triggers (key changes from `'inactive'` to the new active key).
+**The inactive key:** When `engage` is false, the key is always `'inactive'`. Any transition from active to inactive triggers `handleMainDocument(settings)` (which runs `teardown(document)`). Subsequent inactive calls are no-ops (key is still `'inactive'`, no change). The transition from inactive back to active also triggers (key changes from `'inactive'` to the new active key).
 
 ---
 
@@ -299,7 +299,7 @@ Re-projecting Y with the new `scrollHeight` would misplace the zone. The origina
 
 ```js
 function handleMainDocument(settings) {
-  const active = settings.enabled !== false && !!settings.blur_all_active;
+  const active = !!settings.engage;
   if (!active) {
     teardown(document);
     return;
@@ -351,7 +351,7 @@ All production paths go through `handleSite()`.
 ```js
 function handleIframe(settings, iframeEl) {
   if (!iframeEl || _isExtensionUI(iframeEl)) return;
-  const active = settings.enabled !== false && !!settings.blur_all_active;
+  const active = !!settings.engage;
 
   let isSameOrigin = false;
   try { isSameOrigin = !!iframeEl.contentDocument; } catch (_) {}

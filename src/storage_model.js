@@ -705,13 +705,16 @@ const StorageModel = (() => {
       is_sharing_tab: ss_is_sharing_tab,
     };
 
-    // blur_all_active — global status, possibly overridden by snapshot.blur_all.status.
+    // engage — gate for the page-wide engine layer. False when the extension is
+    // disabled OR when neither manual blur nor automate triggers want the layer.
+    // Folds the extension on/off check so engine.js call sites collapse to
+    // !!settings.engage.
     var manual_blur = !!resolved.blur_all_status;
     var pick_blur_present = !!resolved.pick_blur_enabled;
     var blur_present = manual_blur || pick_blur_present;
     var automate_needs_blur = resolved.automate_blur_active && !blur_present;
 
-    resolved.blur_all_active = manual_blur || automate_needs_blur;
+    resolved.engage = (resolved.enabled !== false) && (manual_blur || automate_needs_blur);
     resolved.automate_blur_only = !!automate_needs_blur;
     resolved.automate_blur_skipped =
       resolved.automate_blur_active && !!blur_present;

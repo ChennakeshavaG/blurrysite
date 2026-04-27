@@ -120,10 +120,10 @@ const BlurrySitePopupState = (() => {
       // Always load items so popup can render the "paused" count when pick-blur is off.
       // Application is gated downstream in storage_model.resolve() / content_script.
       _blurItems = blsi.Model.get_blur_items(_hostname);
-      // resolve() owns blur_all_active — combines global, snapshot overrides,
-      // and automate triggers (per-tab/per-site suppression included).
+      // resolve() owns engage — combines extension on/off, manual blur,
+      // snapshot overrides, and automate triggers (per-tab/per-site suppression included).
       const resolved = blsi.Model.resolve(_hostname, _url || '', _tabId);
-      _isPageBlurred = !!(resolved && resolved.blur_all_active);
+      _isPageBlurred = !!(resolved && resolved.engage);
     } else {
       _isPageBlurred = _model ? _model.blur_all.status : false;
     }

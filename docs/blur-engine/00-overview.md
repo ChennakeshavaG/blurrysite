@@ -36,7 +36,7 @@ The engine is the *sole owner* of DOM blur state. `content_script.js` resolves s
 │  │                      │  │                      │  │ CSS injected   │ │
 │  │ Lifecycle:           │  │ Lifecycle:           │  │ by engine:     │ │
 │  │  ON ↔ OFF via        │  │  persists even when  │  │  injectPii     │ │
-│  │  blur_all_active     │  │  blur-all is OFF     │  │  Rules()       │ │
+│  │  engage     │  │  blur-all is OFF     │  │  Rules()       │ │
 │  └──────────────────────┘  └─────────────────────┘  └────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```

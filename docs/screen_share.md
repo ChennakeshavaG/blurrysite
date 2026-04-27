@@ -514,7 +514,7 @@ Result: the port is the safety net for abnormal termination;
   │                                                                         │
   │    ②  await _sync()  ─────────────────────────────────────────────────  │
   │       │  (see diagram 6j for full _sync() chain)                        │
-  │       │  Result: blur_all_active=true, DOM stamped                      │
+  │       │  Result: engage=true, DOM stamped                      │
   │       └──────────────────────────────────────────────────────────────   │
   │                                                                         │
   │    ③  if (settings.automate_blur_only):                                 │
@@ -697,7 +697,7 @@ Result: the port is the safety net for abnormal termination;
   │    await _sync()                                                        │
   │       ↓ _sync resolves settings again                                   │
   │       ↓ automate_blur_active = false (screen_share=false)               │
-  │       ↓ blur_all_active = false (if no manual blur active)              │
+  │       ↓ engage = false (if no manual blur active)              │
   │       ↓ Engine.handleSite(resolved) → removes CSS + unstamps DOM        │
   │  })();                                                                  │
   │  return true;                                                           │
@@ -775,7 +775,7 @@ Result: the port is the safety net for abnormal termination;
            ▼                     ▼                            ▼
   ┌──────────────────────────────────────────────────────────────────────┐
   │  _sync() → Store.resolve() → Engine.handleSite(resolved)             │
-  │  blur_all_active=false → CSS removed → DOM unstamped → page unblurs  │
+  │  engage=false → CSS removed → DOM unstamped → page unblurs  │
   └──────────────────────────────────────────────────────────────────────┘
 
   Persistence comparison:
@@ -898,7 +898,7 @@ Result: the port is the safety net for abnormal termination;
             └─► Store.resolve() → settings updated
                 └─► applyState(resolved, prev)
                       └─► Engine.handleSite(resolved)
-                            └─► blur_all_active=false → DOM cleared
+                            └─► engage=false → DOM cleared
 ```
 
 ---
@@ -1034,9 +1034,9 @@ Result: the port is the safety net for abnormal termination;
 
   ─────────────────────────────────────────────────────────────────────────────
 
-  STEP 4: Compute blur_all_active
+  STEP 4: Compute engage
 
-    blur_all_active = manual_blur || automate_needs_blur
+    engage = manual_blur || automate_needs_blur
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1072,7 +1072,7 @@ Result: the port is the safety net for abnormal termination;
       automate_blur_triggers: { idle, tab_switch, screen_share },
 
       // Computed blur state
-      blur_all_active:        boolean,
+      engage:        boolean,
       automate_blur_only:     boolean,
       automate_blur_skipped:  boolean,
 
@@ -1109,7 +1109,7 @@ Result: the port is the safety net for abnormal termination;
     │     ├─ Reads _automate_cache (session state, from storage init)
     │     ├─ Applies URL rule matching (wildcard/regex site_rules)
     │     ├─ Merges exact hostname override
-    │     └─ Computes derived fields (blur_all_active, automate_blur_only, …)
+    │     └─ Computes derived fields (engage, automate_blur_only, …)
     │     Returns: resolved (full settings snapshot)
     │
     ├─ settings = resolved          ← updates the outer `settings` variable
@@ -1132,7 +1132,7 @@ Result: the port is the safety net for abnormal termination;
           │     ← page-wide settings changed
           │     handleMainDocument(resolved)
           │       │
-          │       ├─ If blur_all_active:
+          │       ├─ If engage:
           │       │    injectRules(document, categories, mode)
           │       │      ← injects <style id="bl-si-blur-styles"> into <head>
           │       │      ← CSS covers alwaysBlur selectors (tag + role based)
@@ -1144,11 +1144,11 @@ Result: the port is the safety net for abnormal termination;
           │       │      ← MutationObserver on document.body
           │       │      ← watches for new elements + new shadow hosts
           │       │
-          │       └─ If !blur_all_active:
+          │       └─ If !engage:
           │            teardown(document)
           │              ← removeRules + remove stamps + disconnect MO
           │
-          ├─ _isPageBlurred = blur_all_active
+          ├─ _isPageBlurred = engage
           │
           ├─ _reconcileItems(blur_items)
           │    ← diff _activeItems Map against desired items
@@ -1314,12 +1314,12 @@ Result: the port is the safety net for abnormal termination;
               automate_blur_active = true
               blur_present = false  (no manual blur)
               automate_needs_blur = true
-              blur_all_active = true
+              engage = true
               automate_blur_only = true
               Settings overridden to defaults
 
   ── 14  ── Engine.handleSite(resolved)  (Tab B)
-            blur_all_active = true → page-wide changed
+            engage = true → page-wide changed
             handleMainDocument(resolved)
               injectRules(document, categories, 'blur')
                 → <style id="bl-si-blur-styles"> injected in <head>
@@ -1372,7 +1372,7 @@ Result: the port is the safety net for abnormal termination;
   ── 21  ── await _sync()  (Tab B)
             automate_entry.screen_share === false
             automate_blur_active = false
-            blur_all_active = false
+            engage = false
             Engine.handleSite → teardown → CSS removed, stamps cleared
             Tab B is now unblurred.
 
@@ -1412,7 +1412,7 @@ function _ssBlurStopActions() {
         await Store.save_automate_blur(hostname, 'screen_share', false);
         //    ↑ Writes session storage. Unblurs this tab via _sync.
         await _sync();
-        //    ↑ Re-resolves. blur_all_active=false. DOM cleared.
+        //    ↑ Re-resolves. engage=false. DOM cleared.
       },
     },
 
@@ -1500,7 +1500,7 @@ chrome.storage.session = {
   },
 
   // Derived blur control
-  blur_all_active:        true,   // manual_blur OR automate_needs_blur
+  engage:        true,   // manual_blur OR automate_needs_blur
   automate_blur_only:     true,   // automate is the ONLY active blur source
   automate_blur_skipped:  false,  // would be true if manual blur was already on
 
