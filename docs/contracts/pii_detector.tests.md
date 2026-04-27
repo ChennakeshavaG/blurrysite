@@ -51,7 +51,9 @@ No external module dependencies are mocked — `pii_detector.js` operates purely
 - `NUMERIC — mixed-width space-separated phone (111 2222 333) wraps as one span` — count 1; span textContent is `'111 2222 333'`
 - `NUMERIC — space-separated phone (111 222 333) wraps as one span` — count 1; span textContent is `'111 222 333'`
 - `NUMERIC — space-separated credit card (4111 1111 1111 1111) wraps as one span` — count 1; span textContent is `'4111 1111 1111 1111'` (phone-like sub-pattern fires before 4+ bare, preventing four separate spans)
-- `NUMERIC — does NOT match two-group number (not enough groups)` — `'12 2024'` is not wrapped as a phone-like group (though `'2024'` may still match 4+ bare)
+- `NUMERIC — two-group ≥3-digit hyphen pair (792-792) wraps as one span` — count 1; span textContent is `'792-792'`
+- `NUMERIC — two-group ≥3-digit space pair (792 792) wraps as one span` — count 1; span textContent is `'792 792'`
+- `NUMERIC — does NOT match two-group number with <3-digit group` — `'12 2024'` is not wrapped as a phone-like group (group 1 has only 2 digits; though `'2024'` may still match 4+ bare)
 - `NUMERIC — does NOT match digit groups separated by words` — `'room 12 door 23 window 34'` returns count 0 (text between groups breaks the pattern)
 
 ### PII independence from blur-all

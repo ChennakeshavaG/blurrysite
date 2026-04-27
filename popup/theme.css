@@ -23,6 +23,10 @@
   /* ── Structural ── */
   --bl-divider:      #20233a;   /* explicit, no color-mix — clear layer boundary */
 
+  /* ── Themed assets ── swap by theme so callers stay theme-agnostic */
+  --bl-icon-32:      url('../icons/icon32.png');
+  --bl-logo:         url('../icons/logo-dark.png');
+
   /* ── Type scale ── */
   --bl-text-2xs: 9px;    /* ultra-small caps: option row labels */
   --bl-text-xs:  10px;   /* small caps, errors, range labels */
@@ -53,4 +57,7 @@
   --bl-text-dim:     #7c85a3;
 
   --bl-divider:      #cdd2e8;
+
+  --bl-icon-32:      url('../icons/icon32-light.png');
+  --bl-logo:         url('../icons/logo-light.png');
 }

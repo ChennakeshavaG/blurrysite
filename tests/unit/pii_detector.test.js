@@ -252,13 +252,25 @@ describe('pii_detector.js', () => {
     expect(span.textContent).toBe('4111 1111 1111 1111');
   });
 
-  test('NUMERIC — does NOT match two-group number (not enough groups)', () => {
-    // "12 2024" is a date fragment — only 2 groups, needs ≥3 for phone pattern.
+  test('NUMERIC — two-group ≥3-digit hyphen pair (792-792) wraps as one span', () => {
+    document.body.innerHTML = '<p>Code 792-792 today.</p>';
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
+    expect(count).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('792-792');
+  });
+
+  test('NUMERIC — two-group ≥3-digit space pair (792 792) wraps as one span', () => {
+    document.body.innerHTML = '<p>Code 792 792 today.</p>';
+    const count = blsi.PiiDetector.scan(document.body, { numeric: true });
+    expect(count).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('792 792');
+  });
+
+  test('NUMERIC — does NOT match two-group number with <3-digit group', () => {
+    // "12 2024" — group 1 has only 2 digits; phone pattern requires ≥3 per group.
     // "2024" alone still matches 4+ bare digits.
     document.body.innerHTML = '<p>Due: 12 2024</p>';
-    const spans = document.querySelectorAll('[data-bl-si-pii="numeric"]');
     blsi.PiiDetector.scan(document.body, { numeric: true });
-    // May match "2024" as bare 4+ but NOT "12 2024" as a phone-like group
     const texts = Array.from(document.querySelectorAll('[data-bl-si-pii="numeric"]')).map(s => s.textContent);
     expect(texts).not.toContain('12 2024');
   });

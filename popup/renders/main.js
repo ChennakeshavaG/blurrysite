@@ -150,14 +150,15 @@ const BlurrySitePopupRender = (() => {
     const modeVal    = (resolved && resolved.pii_mode) || settings.auto_detect_pii.settings.pii_mode;
     const colorVal   = (resolved && resolved.pii_redaction_color) || settings.auto_detect_pii.settings.pii_redaction_color || '#000000';
 
-    toggleEl.checked = !!(emailVal || numericVal);
+    const masterOn = !!(emailVal || numericVal);
+    toggleEl.checked = masterOn;
     toggleEl.disabled = piiManaged;
 
     chipsEl.replaceChildren();
     for (const t of ['blur', 'frosted', 'redacted', 'starred']) {
       const btn = document.createElement('button');
       const isActive = t === modeVal;
-      btn.className = 'bl-chip' + (isActive ? ' bl-chip--active bl-glow-active' : '');
+      btn.className = 'bl-chip' + (isActive ? ' bl-chip--active' + (masterOn ? ' bl-glow-active' : '') : '');
       btn.dataset.piiMode = t;
       btn.textContent = _t(_PII_KEY[t]);
       if (_MODE_ASSET[t]) btn.dataset.tooltipMedia = _MODE_ASSET[t];

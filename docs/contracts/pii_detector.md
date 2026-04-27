@@ -18,7 +18,7 @@ Scans text nodes for PII patterns (email, numeric) using `TreeWalker` and wraps 
 | Pattern | Description |
 |---|---|
 | `EMAIL_RE` | RFC-ish `\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g` — only run when text contains `@` (pre-filter) |
-| `NUMERIC_RE` | 5 ordered alternations: (1) currency-symbol prefix, (2) ISO currency-code suffix, (3) comma-grouped thousands, (4) space/hyphen digit groups ≥3 groups (phone-like), (5) 4+ bare digit sequence catch-all |
+| `NUMERIC_RE` | 5 ordered alternations: (1) currency-symbol prefix, (2) ISO currency-code suffix, (3) comma-grouped thousands, (4) space/hyphen digit groups (phone-like; ≥2 groups of ≥3 digits each — separators `[ \- ]` only — so `792 792` and `792-792` match but `12 2024` does not), (5) 4+ bare digit sequence catch-all |
 
 Order in `NUMERIC_RE` is critical: alternation 4 must precede alternation 5 so `"4111 1111 1111 1111"` wraps as one span.
 

@@ -62,7 +62,7 @@ Renders the "How to Blur" chip row and summary for either blur-all or pick-and-b
 Renders the list of saved pick-and-blur items into `#bl-pick-items`. Each row: colored dot (cyan for sticky, amber for dynamic) + item name + type badge + remove button.
 
 ### renderPiiSection(settings, onSave)
-Renders the PII detection sub-section into `#bl-pii-section` when master toggle is on.
+Renders the PII detection sub-section into `#bl-pii-section`. Master toggle reflects `email || numeric`. Mode chip for the active blur type carries `bl-chip--active` always; `bl-glow-active` is added **only when master toggle is on** — chips do not glow when the feature is disabled.
 
 ### renderNotifArea(activeRule, settings, onOpenSiteRules, onClearAutomate, ctx)
 Renders into `#bl-notif-area`: site-rule pill on top (when `activeRule` truthy) and an automate **card** below. Card has three states:

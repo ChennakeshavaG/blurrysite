@@ -34,15 +34,16 @@ const BlurrySitePiiDetector = (() => {
   //      Trailing decimal/K-suffix dropped: [\d,.'\u00A0]* already captures them.
   //   2. Currency code suffix    — 1234 USD   50000 EUR
   //   3. Comma-grouped thousands — 1,234,567  12,345  (US/UK format, no symbol)
-  //   4. Space/hyphen digit groups (phone-like) — 111-222-333  111 2222 333
+  //   4. Space/hyphen digit groups (phone-like) — 111-222-333  792 792  792-792
   //      MUST come before sub-5 so "4111 1111 1111 1111" wraps as ONE span.
-  //      Requires ≥3 groups of ≥2 digits each, separated by [ \-\u00A0] only
-  //      (no newline/tab — phone numbers don't span lines).
+  //      Requires ≥2 groups of ≥3 digits each, separated by [ \-\u00A0] only
+  //      (no newline/tab — phone numbers don't span lines). Min-3-per-group
+  //      lets short pairs like "792 792" match while still rejecting "12 2024".
   //   5. 4+ bare digit sequence  — 17150  account numbers  (catch-all)
   //
   // Intentionally broad: years 1000–2099 and versions are suppressed by isYear/isVersion in precise mode.
   const NUMERIC_RE =
-    /[$\u20AC\u00A3\u00A5\u20B9\u20A9\u20BF\u20BA\u20A8\u20B1\u0E3F]\s*\d[\d,.'\u00A0]*|\b\d[\d,.'\u00A0]*\s*(?:USD|EUR|GBP|JPY|INR|BTC|ETH)\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{2,}(?:[ \-\u00A0]\d{2,}){2,}\b|\b\d{4,}\b/g;
+    /[$\u20AC\u00A3\u00A5\u20B9\u20A9\u20BF\u20BA\u20A8\u20B1\u0E3F]\s*\d[\d,.'\u00A0]*|\b\d[\d,.'\u00A0]*\s*(?:USD|EUR|GBP|JPY|INR|BTC|ETH)\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{3,}(?:[ \-\u00A0]\d{3,})+\b|\b\d{4,}\b/g;
 
   const PATTERNS = Object.freeze({
     EMAIL: { regex: EMAIL_RE, label: "email" },
