@@ -5,10 +5,9 @@
  * Module exposes blsi.Model with:
  *   init_cache, on_change, get,
  *   patch_section, save_settings,
- *   get_all_site_rules, get_site_entry, set_site_entry,
  *   capture_snapshot, save_site_snapshot, get_site_snapshot,
  *   resolve,
- *   get_blur_items, get_cached_blur_state,
+ *   get_blur_items,
  *   save_blur_state, save_blur_item, remove_blur_item,
  *   clear_host,
  *   get_rules, save_rules,
@@ -45,15 +44,11 @@ function buildStubSource() {
       get:                    jest.fn(() => blsi.build_default_model()),
       patch_section:          jest.fn(),
       save_settings:          jest.fn(),
-      get_all_site_rules:     jest.fn(() => []),
-      get_site_entry:         jest.fn(() => null),
-      set_site_entry:         jest.fn(),
       capture_snapshot:       jest.fn(() => ({})),
       save_site_snapshot:     jest.fn(),
       get_site_snapshot:      jest.fn(() => null),
       resolve:                jest.fn(() => ({})),
       get_blur_items:         jest.fn(() => []),
-      get_cached_blur_state:  jest.fn(() => false),
       save_blur_state:        jest.fn(),
       save_blur_item:         jest.fn(),
       remove_blur_item:       jest.fn(),
@@ -242,140 +237,33 @@ describe('save_settings', () => {
   });
 });
 
-// ── get_site_entry / set_site_entry ───────────────────────────────────────────
+// ── save_blur_state ───────────────────────────────────────────────────────────
 
-// USER IMPACT: per-host blur state is stored in exact site_rules entries;
-// blur items are stored in pick_and_blur.items (hostname-keyed map).
-describe('get_site_entry / set_site_entry', () => {
-  test('get_site_entry returns null when hostname not in site_rules', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    expect(blsi.Model.get_site_entry('example.com')).toBeNull();
-  });
-
-  test('set_site_entry creates new exact entry', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.set_site_entry('example.com', { blur_all: true });
-    const entry = blsi.Model.get_site_entry('example.com');
-    expect(entry).not.toBeNull();
-    expect(entry.hostname_value).toBe('example.com');
-    expect(entry.hostname_type).toBe(blsi.pattern_types.exact);
-    expect(entry.blur_all).toBe(true);
-  });
-
-  test('set_site_entry upserts (second call merges)', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.set_site_entry('example.com', { blur_all: true });
-    await blsi.Model.set_site_entry('example.com', { snapshot: { blur_all: { settings: { blur_mode: 'frosted' } } } });
-    const entry = blsi.Model.get_site_entry('example.com');
-    expect(entry.blur_all).toBe(true);
-    expect(entry.snapshot.blur_all.settings.blur_mode).toBe('frosted');
-  });
-
-});
-
-// ── save_blur_state / get_blur_state / get_cached_blur_state ─────────────────
-
-// USER IMPACT: blur-all state persists across page navigations; null means inherit global default.
-describe('save_blur_state / get_blur_state / get_cached_blur_state', () => {
-  test('save_blur_state writes per-host blur_all flag', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_state('example.com', true);
-    const entry = blsi.Model.get_site_entry('example.com');
-    expect(entry.blur_all).toBe(true);
-  });
-
-  test('get_cached_blur_state returns per-host boolean after save', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_state('example.com', true);
-    const result = blsi.Model.get_cached_blur_state('example.com');
-    expect(result).toBe(true);
-  });
-
-  test('get_cached_blur_state inherits global blur_all.status when no per-host entry', async () => {
+// USER IMPACT: toggling blur-all anywhere flips the global blur_all.status —
+// every tab reflects the same state. No per-host overrides from the toggle.
+describe('save_blur_state', () => {
+  test('writes blur_all.status globally', async () => {
     const stored = blsi.build_default_model();
     stored.blur_all.status = false;
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    // No entry for 'noentry.com' — should inherit global
-    const result = blsi.Model.get_cached_blur_state('noentry.com');
-    expect(result).toBe(false);
+    await blsi.Model.save_blur_state(true);
+    expect(blsi.Model.get().blur_all.status).toBe(true);
   });
 
-  test('get_cached_blur_state returns per-host value when entry exists', async () => {
+  test('false flip is persisted to storage', async () => {
     const stored = blsi.build_default_model();
-    stored.blur_all.status = false;
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_state('example.com', true);
-    expect(blsi.Model.get_cached_blur_state('example.com')).toBe(true);
-  });
-
-  test('save_blur_state rejects empty hostname', async () => {
-    const stored = blsi.build_default_model();
+    stored.blur_all.status = true;
     mockGet(stored);
     await blsi.Model.init_cache();
     jest.clearAllMocks();
     mockSet();
 
-    await blsi.Model.save_blur_state('', true);
-    expect(chrome.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  test('save_blur_state writes per-host blur_all=false explicitly (turns off)', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_state('example.com', true);
-    await blsi.Model.save_blur_state('example.com', false);
-    const entry = blsi.Model.get_site_entry('example.com');
-    expect(entry.blur_all).toBe(false);
-  });
-
-  test('save_blur_state false is persisted to storage (write is not skipped)', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_state('example.com', true);
-    jest.clearAllMocks();
-    mockSet();
-
-    await blsi.Model.save_blur_state('example.com', false);
+    await blsi.Model.save_blur_state(false);
     expect(chrome.storage.local.set).toHaveBeenCalled();
     const writtenModel = chrome.storage.local.set.mock.calls[0][0].blsi_model;
-    const rule = writtenModel.site_rules.find(r => r.hostname_value === 'example.com');
-    expect(rule.blur_all).toBe(false);
-  });
-
-  test('save_blur_state false: existing items survive the write (validate_model must not strip them)', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: '#foo', name: 'Foo' });
-    // Toggling blur-all off must not strip items as a side-effect of the storage write
-    await blsi.Model.save_blur_state('example.com', false);
-    const items = await blsi.Model.get_blur_items('example.com');
-    expect(items).toHaveLength(1);
-    expect(items[0].selector).toBe('#foo');
+    expect(writtenModel.blur_all.status).toBe(false);
   });
 });
 
@@ -565,23 +453,18 @@ describe('remove_blur_item', () => {
 // USER IMPACT: user clicks "clear this site" — all blurs and blur-all for that host wiped;
 // other hosts unaffected.
 describe('clear_host', () => {
-  test('wipes items and blur_all for hostname, leaves other hosts intact', async () => {
+  test('wipes pick-blur items for hostname, leaves other hosts intact', async () => {
     const stored = blsi.build_default_model();
     mockGet(stored);
     await blsi.Model.init_cache();
 
     await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: '#a', name: 'A' });
-    await blsi.Model.save_blur_state('example.com', true);
     await blsi.Model.save_blur_item('other.com', { type: 'dynamic', selector: '#b', name: 'B' });
 
     await blsi.Model.clear_host('example.com');
 
-    const items = await blsi.Model.get_blur_items('example.com');
-    expect(items).toHaveLength(0);
-    expect(blsi.Model.get_cached_blur_state('example.com')).toBe(false); // null inherits global false
-
-    const otherItems = await blsi.Model.get_blur_items('other.com');
-    expect(otherItems).toHaveLength(1);
+    expect(await blsi.Model.get_blur_items('example.com')).toHaveLength(0);
+    expect(await blsi.Model.get_blur_items('other.com')).toHaveLength(1);
   });
 
   test('returns early for invalid hostname', async () => {
@@ -600,38 +483,35 @@ describe('clear_host', () => {
 
 // USER IMPACT: user creates URL-specific rules — they persist and apply on matching pages.
 describe('get_rules / save_rules', () => {
-  test('get_rules returns only wildcard/regex entries (not exact)', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.set_site_entry('exact.com', { blur_all: true }); // exact — should not appear
-    await blsi.Model.save_rules([{
-      hostname_value: '*.wildcard.com',
-      hostname_type: blsi.pattern_types.wildcard,
-      snapshot: {},
-    }]);
-
-    const rules = await blsi.Model.get_rules();
-    expect(rules).toHaveLength(1);
-    expect(rules[0].hostname_value).toBe('*.wildcard.com');
-  });
-
-  test('save_rules writes wildcard entries', async () => {
+  test('get_rules returns every site rule (exact, wildcard, regex)', async () => {
     const stored = blsi.build_default_model();
     mockGet(stored);
     await blsi.Model.init_cache();
 
     await blsi.Model.save_rules([
-      { hostname_value: '*.a.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} },
-      { hostname_value: 'b.com/.*', hostname_type: blsi.pattern_types.regex, snapshot: {} },
+      { hostname_value: 'exact.com',     hostname_type: blsi.pattern_types.exact,    snapshot: {} },
+      { hostname_value: '*.wildcard.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} },
     ]);
 
     const rules = await blsi.Model.get_rules();
     expect(rules).toHaveLength(2);
   });
 
-  test('save_rules clears previous wildcard/regex entries', async () => {
+  test('save_rules writes mixed entries', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    await blsi.Model.save_rules([
+      { hostname_value: 'exact.com',     hostname_type: blsi.pattern_types.exact,    snapshot: {} },
+      { hostname_value: '*.a.com',       hostname_type: blsi.pattern_types.wildcard, snapshot: {} },
+      { hostname_value: 'b.com/.*',      hostname_type: blsi.pattern_types.regex,    snapshot: {} },
+    ]);
+
+    expect((await blsi.Model.get_rules())).toHaveLength(3);
+  });
+
+  test('save_rules clears previous entries (full replace)', async () => {
     const stored = blsi.build_default_model();
     mockGet(stored);
     await blsi.Model.init_cache();
@@ -642,19 +522,6 @@ describe('get_rules / save_rules', () => {
     const rules = await blsi.Model.get_rules();
     expect(rules).toHaveLength(1);
     expect(rules[0].hostname_value).toBe('*.new.com');
-  });
-
-  test('save_rules preserves exact entries when replacing wildcard rules', async () => {
-    const stored = blsi.build_default_model();
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.set_site_entry('exact.com', { blur_all: true });
-    await blsi.Model.save_rules([{ hostname_value: '*.new.com', hostname_type: blsi.pattern_types.wildcard, snapshot: {} }]);
-
-    const entry = blsi.Model.get_site_entry('exact.com');
-    expect(entry).not.toBeNull();
-    expect(entry.blur_all).toBe(true);
   });
 
   test('save_rules ignores non-array input', async () => {
@@ -712,21 +579,9 @@ describe('resolve', () => {
     expect(resolved.shortcuts).toBeDefined();
   });
 
-  test('exact site_rule overrides global blur_all_active', async () => {
+  test('global blur_all_active used when no rule matches', async () => {
     const stored = blsi.build_default_model();
-    stored.blur_all.status = false; // global off
-    mockGet(stored);
-    await blsi.Model.init_cache();
-
-    await blsi.Model.save_blur_state('example.com', true); // per-host on
-
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.blur_all_active).toBe(true);
-  });
-
-  test('global blur_all_active used when no per-host entry', async () => {
-    const stored = blsi.build_default_model();
-    stored.blur_all.status = true; // global on
+    stored.blur_all.status = true;
     mockGet(stored);
     await blsi.Model.init_cache();
 
@@ -739,11 +594,34 @@ describe('resolve', () => {
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    await blsi.Model.set_site_entry('example.com', {
-      snapshot: { blur_all: { settings: { blur_mode: 'frosted' } } },
-    });
+    await blsi.Model.save_site_snapshot('example.com', blsi.pattern_types.exact,
+      { blur_all: { settings: { blur_mode: 'frosted' } } });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.blur_mode).toBe('frosted');
+  });
+
+  test('snapshot blur_all.status=true forces blur_all_active even when global is off', async () => {
+    const stored = blsi.build_default_model();
+    stored.blur_all.status = false;
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    await blsi.Model.save_site_snapshot('example.com', blsi.pattern_types.exact,
+      { blur_all: { status: true } });
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    expect(resolved.blur_all_active).toBe(true);
+  });
+
+  test('snapshot blur_all.status=false suppresses blur_all_active even when global is on', async () => {
+    const stored = blsi.build_default_model();
+    stored.blur_all.status = true;
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    await blsi.Model.save_site_snapshot('example.com', blsi.pattern_types.exact,
+      { blur_all: { status: false } });
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+    expect(resolved.blur_all_active).toBe(false);
   });
 
   test('blur_items returns items for the exact hostname', async () => {
@@ -944,7 +822,6 @@ describe('automate_blur', () => {
   });
 
   test('resolve: blur_all_active is true when only automate fires (manual = false)', async () => {
-    await blsi.Model.save_blur_state('example.com', false);
     // Screen-share trigger comes from the global record, not per-hostname automate_blur.
     // The feature must be enabled in model.automate.settings.screen_share for ss to fire.
     await blsi.Model.patch_section('automate', { settings: { screen_share: { enabled: true } } });
@@ -974,38 +851,12 @@ describe('automate_blur', () => {
     expect(resolved.highlight_color).toBe(ds.highlight_color);
   });
 
-  test('resolve: automate_blur_only resets all blur-relevant keys to defaults even when exact site_rule overrides them', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    // Per-site exact rule override — the bug: these leaked into automate blur
-    await blsi.Model.set_site_entry('example.com', {
-      blur_all: null,
-      settings: {
-        blur_categories: { text: false, media: false, form: true, table: false, structure: true },
-        thorough_blur: true,
-        blur_mode: 'redacted',
-        blur_radius: 30,
-        reveal_mode: 'none',
-      },
-    });
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.automate_blur_only).toBe(true);
-    const ds  = blsi.DEFAULT_MODEL.global_default_settings;
-    const dbs = blsi.DEFAULT_MODEL.blur_all.settings;
-    expect(resolved.blur_mode).toBe(dbs.blur_mode);
-    expect(resolved.blur_categories).toEqual(dbs.blur_categories);
-    expect(resolved.blur_radius).toBe(ds.blur_radius);
-    expect(resolved.thorough_blur).toBe(ds.thorough_blur);
-    expect(resolved.reveal_mode).toBe(ds.reveal_mode);
-    expect(resolved.transition_duration).toBe(ds.transition_duration);
-  });
-
   test('resolve: automate_blur_skipped = true when blur_all is already enabled', async () => {
-    await blsi.Model.save_blur_state('example.com', true); // manual blur on
+    await blsi.Model.save_blur_state(true); // manual blur on (global)
     await blsi.Model.save_automate_blur('example.com', 'idle', true);
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
     expect(resolved.automate_blur_skipped).toBe(true);
     expect(resolved.automate_blur_only).toBe(false);
-    // blur_all_active stays true from manual blur, not from automate
     expect(resolved.blur_all_active).toBe(true);
   });
 
@@ -1033,15 +884,14 @@ describe('automate_blur', () => {
   });
 
   test('resolve: manual blur preserved after automate cleared', async () => {
-    await blsi.Model.save_blur_state('example.com', true);
+    await blsi.Model.save_blur_state(true);
     await blsi.Model.save_automate_blur('example.com', 'idle', true);
     await blsi.Model.patch_automate_blur('example.com', { idle: false });
     const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.blur_all_active).toBe(true); // manual blur survives
+    expect(resolved.blur_all_active).toBe(true); // global manual blur survives
   });
 
   test('clear_host also clears automate_blur for that hostname', async () => {
-    await blsi.Model.save_blur_state('example.com', true);
     await blsi.Model.save_automate_blur('example.com', 'idle', true);
     await blsi.Model.clear_host('example.com');
     const entry = blsi.Model.get_automate_blur('example.com');
@@ -1184,9 +1034,9 @@ describe('screen_share session record', () => {
   });
 
   test('resolve: skip_reason is "site_rule" when an exact rule blurs and ss is also live', async () => {
-    await blsi.Model.set_site_entry('example.com', { blur_all: true });
-    // save_site_snapshot auto-fills from current global so screen_share stays enabled.
-    await blsi.Model.save_site_snapshot('example.com', 'exact', { blur_all: { settings: { blur_mode: 'redacted' } } });
+    // Snapshot pins blur_all on for the host; auto-fill carries global screen_share.enabled too.
+    await blsi.Model.save_site_snapshot('example.com', 'exact',
+      { blur_all: { status: true, settings: { blur_mode: 'redacted' } } });
     await blsi.Model.set_screen_share_active(7);
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 8);
     expect(r.automate_blur_skipped).toBe(true);
@@ -1342,13 +1192,16 @@ describe('save_site_snapshot', () => {
     expect(stored.pick_and_blur.items).toEqual([]);
   });
 
-  test('updates .snapshot on an existing exact rule', async () => {
-    await blsi.Model.set_site_entry('github.com', { blur_all: true });
-    const snap = blsi.Model.capture_snapshot();
-    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap);
-    const rule = blsi.Model.get_site_entry('github.com');
-    expect(rule.blur_all).toBe(true);                                // other fields preserved
-    expect(rule.snapshot.blur_all.settings.blur_mode).toBeDefined(); // snapshot applied
+  test('updates .snapshot on an existing rule (does not duplicate)', async () => {
+    const snap1 = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap1);
+    await blsi.Model.patch_section('blur_all', { settings: { blur_mode: 'frosted' } });
+    const snap2 = blsi.Model.capture_snapshot();
+    await blsi.Model.save_site_snapshot('github.com', blsi.pattern_types.exact, snap2);
+
+    const rules = blsi.Model.get_rules().filter(r => r.hostname_value === 'github.com');
+    expect(rules).toHaveLength(1);
+    expect(rules[0].snapshot.blur_all.settings.blur_mode).toBe('frosted');
   });
 
   test('replaces previous snapshot on a second save', async () => {
@@ -1411,16 +1264,6 @@ describe('save_site_snapshot', () => {
     expect(stored.automate).toBeDefined();
   });
 
-  test('empty {} snapshot stays empty (sentinel for blur_all-only rule)', async () => {
-    await blsi.Model.set_site_entry('newtab', { blur_all: true });
-    await blsi.Model.save_site_snapshot('newtab', blsi.pattern_types.exact, {});
-    // get_site_snapshot returns null when snapshot is {} per its contract.
-    const got = blsi.Model.get_site_snapshot('newtab', blsi.pattern_types.exact);
-    expect(got).toBeNull();
-    const entry = blsi.Model.get_site_entry('newtab');
-    expect(entry.snapshot).toEqual({});
-    expect(entry.blur_all).toBe(true);
-  });
 });
 
 // ── get_site_snapshot ─────────────────────────────────────────────────────────
@@ -1440,8 +1283,12 @@ describe('get_site_snapshot', () => {
     expect(blsi.Model.get_site_snapshot('nobody.com', blsi.pattern_types.exact)).toBeNull();
   });
 
-  test('returns null when rule exists but settings is empty', async () => {
-    await blsi.Model.set_site_entry('github.com', { blur_all: true });
+  test('returns null when rule exists but snapshot is empty', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: 'github.com',
+      hostname_type:  blsi.pattern_types.exact,
+      snapshot:       {},
+    }]);
     expect(blsi.Model.get_site_snapshot('github.com', blsi.pattern_types.exact)).toBeNull();
   });
 
@@ -1554,18 +1401,15 @@ describe('validate_model snapshot passthrough', () => {
     expect(snap.automate.settings.screen_share).toEqual({ enabled: d.automate.settings.screen_share.enabled });
   });
 
-  test('validate_model preserves empty {} snapshot as sentinel (no fill)', () => {
+  test('validate_model preserves empty {} snapshot as empty', () => {
     const model = blsi.build_default_model();
     model.site_rules = [{
       hostname_value: 'newtab',
       hostname_type:  blsi.pattern_types.exact,
-      blur_all:       true,
-      items:          [],
       snapshot:       {},
     }];
     const validated = blsi.validate_model(model);
     expect(validated.site_rules[0].snapshot).toEqual({});
-    expect(validated.site_rules[0].blur_all).toBe(true);
   });
 
   test('validate_model drops legacy snapshot.settings block entirely', () => {

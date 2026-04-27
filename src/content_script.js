@@ -250,7 +250,7 @@
     async 'clear-all'() {
       log.flow('trigger.clearAll', { source: 'shortcut', hostname });
       await Store.clear_host(hostname);
-      await Store.save_blur_state(hostname, false);
+      await Store.save_blur_state(false);
       await _sync();
     },
     async screenshot() {
@@ -324,12 +324,12 @@
     }
 
     switch (type) {
-      // ── Toggle blur-all mode ────────────────────────────────────────────
+      // ── Toggle blur-all mode (global) ───────────────────────────────────
       case blsi.command.toggle_blur_all: {
         const newState = !Engine.isPageBlurred;
-        log.flow('trigger.toggleBlurAll', { nextState: newState, hostname });
+        log.flow('trigger.toggleBlurAll', { nextState: newState });
         (async () => {
-          await Store.save_blur_state(hostname, newState);
+          await Store.save_blur_state(newState);
           await _sync();
           if (sendResponse) sendResponse({ isPageBlurred: newState });
         })();
@@ -381,7 +381,7 @@
         log.flow('trigger.clearAll', { source: 'message', hostname });
         (async () => {
           await Store.clear_host(hostname);
-          await Store.save_blur_state(hostname, false);
+          await Store.save_blur_state(false);
           await _sync();
           if (sendResponse) sendResponse({ ok: true });
         })();

@@ -58,7 +58,7 @@ The settings object returned by `get()` is extended with two fields read from `r
 - `settings._rule_overrides` — `{ [flat_key]: true }` — every resolved field set by a snapshot. Empty when no snapshot applies.
 
 ### `saveBlurState(checked) → Promise<void>`
-Writes blur-all status for `_hostname`. No-op when `_hostname` empty.
+Flips global `blur_all.status` via `blsi.Model.save_blur_state(checked)`. No `_hostname` arg — the toggle is global, every tab reflects the change.
 
 ### `removeBlurItem(itemId) → Promise<void>`
 Removes one pick-blur item. No-op when `_hostname` or `itemId` falsy.
@@ -97,10 +97,10 @@ Sequentially patches every top-level key of `model` via `patch_section`, then re
 Subscribes `cb(newModel, oldModel)` to `blsi.Model.on_change` — fires when storage mutates from another context (content script, other popup).
 
 ## Edge cases
-- `_hostname === ''` (e.g. `chrome://newtab`): `refreshFromStorage()` derives `_isPageBlurred` from `_model.blur_all.status` only; per-host writes (`saveBlurState`, `removeBlurItem`, `clearHost`, `clearAutomateBlur`) all no-op.
+- `_hostname === ''` (e.g. `chrome://newtab`): `refreshFromStorage()` derives `_isPageBlurred` from `_model.blur_all.status` only; per-host writes (`removeBlurItem`, `clearHost`, `clearAutomateBlur`) no-op. `saveBlurState` is global and works regardless of `_hostname`.
 - `_tabId == null`: `Store.resolve` treats the popup as a non-suppressible non-sharing tab — per-tab Undo state in the notif card silently won't fire (popup just always reads as "not suppressed").
 - `_model` null before `load()`: `get()` returns default model so renderers can run during boot.
-- Active rule precedence: regex/wildcard rules win over exact-host snapshot. Exact-host entries with empty snapshot don't count as "rules" — they're just per-host blur state.
+- Active rule precedence: `_computeActiveRule` iterates `site_rules[]` once — first non-empty-snapshot rule that matches wins (URL match for wildcard/regex; hostname equality for exact). Empty-snapshot rules don't count as "rules" — they have no overrides.
 
 ## Side effects
 All writes go to `chrome.storage.local` (model) or `chrome.storage.session` (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) via `blsi.Model`. No direct `chrome.storage.*` access in this module.

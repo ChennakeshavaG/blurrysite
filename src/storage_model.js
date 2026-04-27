@@ -325,38 +325,6 @@ const StorageModel = (() => {
     return -1;
   }
 
-  function get_all_site_rules() {
-    return (get().site_rules || []).slice();
-  }
-
-  function get_site_entry(hostname) {
-    var idx = _find_rule_idx(hostname, blsi.pattern_types.exact);
-    return idx >= 0 ? get().site_rules[idx] : null;
-  }
-
-  async function set_site_entry(hostname, patch) {
-    var current = get();
-    var rules = current.site_rules.slice();
-    var idx = _find_rule_idx(hostname, blsi.pattern_types.exact);
-    var base =
-      idx >= 0
-        ? rules[idx]
-        : {
-            hostname_value: hostname,
-            hostname_type: blsi.pattern_types.exact,
-            blur_all: null,
-            snapshot: {},
-          };
-    var merged = blsi.deep_merge(base, patch);
-    var next_rules =
-      idx >= 0
-        ? rules.map(function (r, i) {
-            return i === idx ? merged : r;
-          })
-        : rules.concat([merged]);
-    await _write(Object.assign({}, current, { site_rules: next_rules }));
-  }
-
   // ── Snapshot ───────────────────────────────────────────────────────────────
 
   /**
@@ -380,6 +348,7 @@ const StorageModel = (() => {
     }
     return {
       blur_all: {
+        status: m.blur_all.status,
         settings: {
           blur_mode: m.blur_all.settings.blur_mode,
           blur_categories: JSON.parse(
@@ -498,19 +467,24 @@ const StorageModel = (() => {
     if (!resolved._rule_overrides) resolved._rule_overrides = {};
     var ov = resolved._rule_overrides;
 
-    if (
-      snapshot.blur_all &&
-      snapshot.blur_all.settings &&
-      typeof snapshot.blur_all.settings === "object"
-    ) {
-      var ba = snapshot.blur_all.settings;
-      if (ba.blur_mode !== undefined) {
-        resolved.blur_mode = ba.blur_mode;
-        ov.blur_mode = true;
+    if (snapshot.blur_all && typeof snapshot.blur_all === "object") {
+      if (typeof snapshot.blur_all.status === "boolean") {
+        resolved.blur_all_status = snapshot.blur_all.status;
+        ov.blur_all_status = true;
       }
-      if (ba.blur_categories !== undefined) {
-        resolved.blur_categories = ba.blur_categories;
-        ov.blur_categories = true;
+      if (
+        snapshot.blur_all.settings &&
+        typeof snapshot.blur_all.settings === "object"
+      ) {
+        var ba = snapshot.blur_all.settings;
+        if (ba.blur_mode !== undefined) {
+          resolved.blur_mode = ba.blur_mode;
+          ov.blur_mode = true;
+        }
+        if (ba.blur_categories !== undefined) {
+          resolved.blur_categories = ba.blur_categories;
+          ov.blur_categories = true;
+        }
       }
     }
     if (snapshot.pick_and_blur) {
@@ -621,6 +595,7 @@ const StorageModel = (() => {
     Object.assign(resolved, m.global_default_settings);
 
     // ── 2. blur_all feature settings ──────────────────────────────────────
+    resolved.blur_all_status = m.blur_all.status;
     resolved.blur_mode = m.blur_all.settings.blur_mode;
     resolved.blur_categories = m.blur_all.settings.blur_categories;
 
@@ -676,23 +651,20 @@ const StorageModel = (() => {
     }
 
     // ── 8. exact hostname site_rule ────────────────────────────────────────
-    var exact = null;
     for (var j = 0; j < site_rules.length; j++) {
+      var er = site_rules[j];
       if (
-        site_rules[j].hostname_type === blsi.pattern_types.exact &&
-        site_rules[j].hostname_value === hostname
+        er.hostname_type === blsi.pattern_types.exact &&
+        er.hostname_value === hostname &&
+        er.snapshot && Object.keys(er.snapshot).length
       ) {
-        exact = site_rules[j];
+        _apply_snapshot(er.snapshot, resolved);
+        resolved._rule_match = {
+          hostname_value: er.hostname_value,
+          hostname_type: er.hostname_type,
+        };
         break;
       }
-    }
-    if (exact && exact.snapshot && Object.keys(exact.snapshot).length) {
-      _apply_snapshot(exact.snapshot, resolved);
-      // Exact snapshot trumps wildcard for the deep-link target.
-      resolved._rule_match = {
-        hostname_value: exact.hostname_value,
-        hostname_type: exact.hostname_type,
-      };
     }
 
     // ── 9. automate active state (session cache) ──────────────────────────
@@ -733,13 +705,9 @@ const StorageModel = (() => {
       is_sharing_tab: ss_is_sharing_tab,
     };
 
-    // blur_all_active — exact.blur_all overrides global; null = inherit global.
-    var manual_blur = exact
-      ? exact.blur_all !== null
-        ? !!exact.blur_all
-        : m.blur_all.status
-      : m.blur_all.status;
-    var pick_blur_present = m.pick_and_blur.status;
+    // blur_all_active — global status, possibly overridden by snapshot.blur_all.status.
+    var manual_blur = !!resolved.blur_all_status;
+    var pick_blur_present = !!resolved.pick_blur_enabled;
     var blur_present = manual_blur || pick_blur_present;
     var automate_needs_blur = resolved.automate_blur_active && !blur_present;
 
@@ -835,15 +803,8 @@ const StorageModel = (() => {
     return (items[hostname] || []).slice();
   }
 
-  function get_cached_blur_state(hostname) {
-    var entry = get_site_entry(hostname);
-    if (entry && typeof entry.blur_all === "boolean") return entry.blur_all;
-    return get().blur_all.status;
-  }
-
-  async function save_blur_state(hostname, is_active) {
-    if (!_is_valid_hostname(hostname)) return;
-    await set_site_entry(hostname, { blur_all: !!is_active });
+  async function save_blur_state(is_active) {
+    await patch_section("blur_all", { status: !!is_active });
   }
 
   async function save_blur_item(hostname, item) {
@@ -875,22 +836,9 @@ const StorageModel = (() => {
   async function clear_host(hostname) {
     if (!_is_valid_hostname(hostname)) return;
     var current = get();
-
-    // Reset blur_all in site entry (if one exists)
-    var rules = current.site_rules.slice();
-    var idx = _find_rule_idx(hostname, blsi.pattern_types.exact);
-    var next_rules = idx >= 0
-      ? rules.map(function(r, i) {
-          return i === idx ? Object.assign({}, r, { blur_all: null }) : r;
-        })
-      : rules;
-
-    // Remove items for this hostname from pick_and_blur.items
     var pb_items = Object.assign({}, current.pick_and_blur.items || {});
     delete pb_items[hostname];
-
     await _write(Object.assign({}, current, {
-      site_rules: next_rules,
       pick_and_blur: Object.assign({}, current.pick_and_blur, { items: pb_items }),
     }));
     await clear_automate_blur(hostname);
@@ -1068,18 +1016,17 @@ const StorageModel = (() => {
   // ── URL rules ──────────────────────────────────────────────────────────────
 
   function get_rules() {
-    return get().site_rules.filter(function (r) {
-      return r.hostname_type !== blsi.pattern_types.exact;
-    });
+    return (get().site_rules || []).slice();
   }
 
   async function save_rules(rules) {
     if (!Array.isArray(rules)) return;
     var current = get();
-    var exact_only = current.site_rules.filter(function (r) {
-      return r.hostname_type === blsi.pattern_types.exact;
-    });
-    var pattern_rules = rules
+    var valid_types = {};
+    valid_types[blsi.pattern_types.exact] = true;
+    valid_types[blsi.pattern_types.wildcard] = true;
+    valid_types[blsi.pattern_types.regex] = true;
+    var next_rules = rules
       .filter(function (r) {
         return (
           r &&
@@ -1090,15 +1037,11 @@ const StorageModel = (() => {
       })
       .slice(0, RULES_LIMIT)
       .map(function (r) {
-        var ht =
-          r.hostname_type === blsi.pattern_types.regex ||
-          r.hostname_type === blsi.pattern_types.wildcard
-            ? r.hostname_type
-            : blsi.pattern_types.wildcard;
         return {
           hostname_value: r.hostname_value.trim().slice(0, 500),
-          hostname_type: ht,
-          blur_all: null,
+          hostname_type: valid_types[r.hostname_type]
+            ? r.hostname_type
+            : blsi.pattern_types.wildcard,
           snapshot:
             r.snapshot &&
             typeof r.snapshot === "object" &&
@@ -1107,12 +1050,7 @@ const StorageModel = (() => {
               : {},
         };
       });
-    // Pattern rules come first so URL matching iterates them before exact entries
-    await _write(
-      Object.assign({}, current, {
-        site_rules: pattern_rules.concat(exact_only),
-      }),
-    );
+    await _write(Object.assign({}, current, { site_rules: next_rules }));
   }
 
   // ── Test utility ───────────────────────────────────────────────────────────
@@ -1132,10 +1070,6 @@ const StorageModel = (() => {
     // Model writes
     patch_section,
     save_settings,
-    // Site rules
-    get_all_site_rules,
-    get_site_entry,
-    set_site_entry,
     // Snapshot
     capture_snapshot,
     save_site_snapshot,
@@ -1144,7 +1078,6 @@ const StorageModel = (() => {
     resolve,
     // Blur items
     get_blur_items,
-    get_cached_blur_state,
     save_blur_state,
     save_blur_item,
     remove_blur_item,

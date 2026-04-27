@@ -71,22 +71,10 @@ call-count (via explicit `jest.clearAllMocks(); mockSet();` pair inside the test
 - `rejects null input — no storage write` — passing `null` must not call `chrome.storage.local.set`.
 - `rejects non-object input — no storage write` — passing a string must not call `chrome.storage.local.set`.
 
-### `get_site_entry / set_site_entry`
+### `save_blur_state`
 
-- `get_site_entry returns null when hostname not in site_rules` — returns `null` for an unseen hostname.
-- `set_site_entry creates new exact entry` — new entry has `hostname_value === 'example.com'`, `hostname_type === blsi.pattern_types.exact`, and any provided fields (e.g. `blur_all: true`).
-- `set_site_entry upserts (second call merges)` — a second call with different keys merges into the existing entry; prior keys are preserved.
-
-### `save_blur_state / get_blur_state / get_cached_blur_state`
-
-- `save_blur_state writes per-host blur_all flag` — after `save_blur_state('example.com', true)`, `get_site_entry` reports `blur_all: true`.
-- `get_cached_blur_state returns per-host boolean after save` — `get_cached_blur_state` returns `true` after a `true` write.
-- `get_cached_blur_state inherits global blur_all.status when no per-host entry` — when `blur_all.status` is `false` and the host has no entry, returns `false`.
-- `get_cached_blur_state returns per-host value when entry exists` — per-host `true` overrides global `false`.
-- `save_blur_state rejects empty hostname` — empty string hostname suppresses the storage write.
-- `save_blur_state writes per-host blur_all=false explicitly (turns off)` — writing `false` after `true` is correctly persisted (no short-circuit on falsy value).
-- `save_blur_state false is persisted to storage (write is not skipped)` — `chrome.storage.local.set` is called; the written `site_rules` entry has `blur_all: false`.
-- `save_blur_state false: existing items survive the write (validate_model must not strip them)` — toggling blur-all off after saving an item must not remove items from the stored site entry.
+- `writes blur_all.status globally` — `save_blur_state(true)` flips `model.blur_all.status` to `true`.
+- `false flip is persisted to storage` — `chrome.storage.local.set` is called with `model.blur_all.status === false`.
 
 ### `save_blur_item`
 
@@ -110,24 +98,24 @@ call-count (via explicit `jest.clearAllMocks(); mockSet();` pair inside the test
 
 ### `clear_host`
 
-- `wipes items and blur_all for hostname, leaves other hosts intact` — after clearing `example.com`, `get_blur_items` returns `[]` and `get_cached_blur_state` returns the global default; `other.com` items survive.
+- `wipes pick-blur items for hostname, leaves other hosts intact` — after clearing `example.com`, `get_blur_items` returns `[]`; `other.com` items survive.
 - `returns early for invalid hostname` — empty string suppresses the storage write.
 
 ### `get_rules / save_rules`
 
-- `get_rules returns only wildcard/regex entries (not exact)` — `set_site_entry` for an exact host does not appear in `get_rules`; only wildcard rules do.
-- `save_rules writes wildcard entries` — two rules (wildcard + regex) can be saved and retrieved.
-- `save_rules clears previous wildcard/regex entries` — a second `save_rules` replaces the previous wildcard set; old entry is gone.
-- `save_rules preserves exact entries when replacing wildcard rules` — exact entries created via `set_site_entry` survive a `save_rules` call.
+- `get_rules returns every site rule (exact, wildcard, regex)` — all entries surface regardless of `hostname_type`.
+- `save_rules writes mixed entries` — exact + wildcard + regex are all persisted.
+- `save_rules clears previous entries (full replace)` — second `save_rules` replaces the entire list; no auto-merge with prior state.
 - `save_rules ignores non-array input` — `null` and string input suppress the storage write.
 - `save_rules sanitizes entries — filters out items with empty hostname_value` — whitespace-only `hostname_value` is stripped; valid entries survive.
 
 ### `resolve`
 
 - `returns flat object with all expected keys` — flat resolved object includes `blur_radius`, `enabled`, `reveal_mode`, `blur_categories`, `blur_mode`, `blur_all_active`, `blur_items`, `pick_blur_enabled`, `picker_mode`, `shortcuts`.
-- `exact site_rule overrides global blur_all_active` — per-host `blur_all: true` overrides global `blur_all.status: false`.
-- `global blur_all_active used when no per-host entry` — global `blur_all.status: true` propagates to `blur_all_active`.
-- `exact hostname site_rule snapshot overrides global blur_mode` — a site entry with `snapshot.blur_all.settings.blur_mode: 'frosted'` overrides the global `blur_mode`.
+- `global blur_all_active used when no rule matches` — global `blur_all.status: true` propagates to `blur_all_active`.
+- `exact hostname site_rule snapshot overrides global blur_mode` — a site rule with `snapshot.blur_all.settings.blur_mode: 'frosted'` overrides the global `blur_mode`.
+- `snapshot blur_all.status=true forces blur_all_active even when global is off` — snapshot can pin a host on regardless of global toggle.
+- `snapshot blur_all.status=false suppresses blur_all_active even when global is on` — snapshot can pin a host off regardless of global toggle.
 - `blur_items returns items for the exact hostname` — items saved under a hostname appear in `resolved.blur_items` when `pick_and_blur.status` is `true`.
 - `blur_items is empty when pick_and_blur.status is false` — items are gated on feature status; `pick_blur_enabled` is also `false`.
 - `wildcard site_rule snapshot overrides global blur_mode (first match wins)` — a wildcard rule snapshot with `blur_mode: 'redacted'` overrides the global default.
@@ -152,8 +140,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `resolve includes automate_blur_active and automate_blur_triggers` — after `save_automate_blur('example.com', 'idle', true)`, `resolved.automate_blur_active === true` and `resolved.automate_blur_triggers.idle === true`.
 - `resolve: blur_all_active is true when only automate fires (manual = false)` — `blur_all_active` is `true`; `automate_blur_only` is `true`; `automate_blur_skipped` is `false`.
 - `resolve: automate_blur_only resets all blur-relevant keys to defaults from global settings` — when `automate_blur_only`, `blur_mode`, `blur_categories`, `blur_radius`, `thorough_blur`, `reveal_mode`, `transition_duration`, `redaction_color`, `highlight_color` all equal `DEFAULT_MODEL` values even when the user has customized them.
-- `resolve: automate_blur_only resets all blur-relevant keys to defaults even when exact site_rule overrides them` — per-site overrides (non-default `blur_mode`, `blur_radius`, `thorough_blur`, etc.) are also ignored under `automate_blur_only`.
-- `resolve: automate_blur_skipped = true when blur_all is already enabled` — manual `blur_all: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `blur_all_active` is still `true`.
+- `resolve: automate_blur_skipped = true when blur_all is already enabled` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `blur_all_active` is still `true`.
 - `resolve: automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`; `blur_all_active` stays `false` (pick-blur handles it separately).
 - `resolve: automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
 - `resolve: manual blur preserved after automate cleared` — after patching idle trigger to `false`, `blur_all_active` remains `true` from the persisted manual `blur_all: true`.
@@ -182,7 +169,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 This group uses its own `beforeEach` that seeds and inits a default model.
 
 - `creates a new exact rule with the snapshot in .snapshot` — `save_site_snapshot('github.com', exact, snap)` creates a rule; `get_site_snapshot` returns the stored snapshot with correct `blur_all.settings.blur_mode` and `pick_and_blur.items: []`.
-- `updates .snapshot on an existing exact rule` — saves snapshot onto a rule that already has `blur_all: true`; `blur_all` is preserved and `snapshot.blur_all.settings.blur_mode` is set.
+- `updates .snapshot on an existing rule (does not duplicate)` — second `save_site_snapshot` call mutates the existing rule's snapshot in place; `get_rules` shows one entry.
 - `replaces previous snapshot on a second save` — a second `save_site_snapshot` with a different `blur_mode` replaces the old snapshot; only the new value survives.
 - `works for wildcard rules created via save_rules` — wildcard rules created by `save_rules` can have snapshots saved and retrieved via `get_site_snapshot`.
 - `partial snapshot is auto-filled from current global before write` — caller-provided fields preserved; missing fields filled from current global (`automate.idle.value`/`unit`); all four sections present; no `settings` block.
@@ -194,7 +181,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 This group uses its own `beforeEach` that seeds and inits a default model.
 
 - `returns null when rule does not exist` — unknown hostname returns `null`.
-- `returns null when rule exists but settings is empty` — rule created by `set_site_entry` without a snapshot returns `null`.
+- `returns null when rule exists but snapshot is empty` — rule with `snapshot: {}` (set via `save_rules`) returns `null`.
 - `returns snapshot object after save_site_snapshot` — after save, the snapshot contains correct `blur_all.settings.blur_mode` and `blur_all.settings.blur_categories`.
 
 ### `validate_model snapshot passthrough`
@@ -226,13 +213,13 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 ## Edge Cases Covered
 
-- Empty or null hostname rejected across all write operations (`save_blur_state`, `save_blur_item`, `save_site_snapshot`, `clear_host`).
+- Empty or null hostname rejected across all per-host write operations (`save_blur_item`, `save_site_snapshot`, `clear_host`).
 - Prototype-pollution hostnames (`__proto__`, `constructor`) explicitly blocked in `save_blur_item` and `save_automate_blur`.
 - Per-host blur-all limit of 10 items enforced; 11th write is a no-op.
 - Dynamic items deduplicated by `selector` (legacy shape) and by `selectors[0]` (new array shape).
 - Sticky items deduplicated by `id`.
 - Items with `selectors: []` rejected.
-- `save_blur_state(host, false)` correctly persists `false` (not silently skipped as falsy).
+- `save_blur_state(false)` correctly persists `false` to global `blur_all.status` (not silently skipped as falsy).
 - Toggling blur-all off does not strip existing blur items (validate_model side-effect guard).
 - `save_rules(null)` and `save_rules('string')` are no-ops; whitespace-only `hostname_value` entries are filtered.
 - `save_rules` preserves exact entries; only wildcard/regex entries are replaced.
@@ -253,7 +240,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 ## Coverage Gaps
 
 - `debounced_patch` is not directly tested (only `patch_section` is exercised).
-- `get_all_site_rules` is not tested as a standalone call; site rules are queried indirectly via `get_site_entry` and `get_rules`.
+- Site rules are queried via `get_rules` (returns every entry).
 - `clear_all` (wipe all hosts and reset model) has no test; only single-host `clear_host` is covered.
 - `get_blur_items` is exercised as a side-effect of `save_blur_item` / `remove_blur_item` tests but has no dedicated isolation test (e.g. missing hostname, empty items array).
 - `save_automate_blur` with the `screen_share` trigger and `tab_switch` trigger are exercised only via `patch_automate_blur`; individual `save_automate_blur` calls for those two triggers are not tested in isolation.

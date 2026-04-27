@@ -218,8 +218,7 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
 - `clear_host(host)` — clears `blur_all` + items for the host in local storage, then calls `clear_automate_blur(host)` to clear session storage separately.
 - `clear_all()` — clears `blur_all` + items for all exact rules in local storage + resets session storage (`blsi_automate_blur: {}`) separately.
-- `get_cached_blur_state(host)` — synchronous; reads blur state from cache (no I/O). Use everywhere — `get_blur_state` was removed.
-- `save_blur_state(host, state)` — async blur-all state write.
+- `save_blur_state(is_active)` — flips `blur_all.status` globally (no per-host arg). Toggling anywhere reflects across every tab.
 - `get_automate_blur(hostname)` — synchronous; returns `{ idle, tab_switch, screen_share }` from `_automate_cache`. Use in popup to read current trigger state without going through model.
 - `save_automate_blur(hostname, trigger, bool)` — write one automate trigger (`'idle'|'tab_switch'|'screen_share'`) to `chrome.storage.session`.
 - `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one session storage write.

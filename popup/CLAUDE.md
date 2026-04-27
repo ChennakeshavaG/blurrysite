@@ -100,7 +100,7 @@ setNeutralAfterClear(bool)
 async saveSettings(patch)
 
 // Per-page blur writes (use internal _hostname — no hostname arg)
-async saveBlurState(checked)   // toggle blur-all for current hostname
+async saveBlurState(checked)   // toggle global blur_all.status (affects every tab)
 async removeBlurItem(itemId)   // remove a pick-blur item for current hostname
 async clearHost()              // clear all blur state for current hostname
 

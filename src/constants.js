@@ -517,12 +517,9 @@ const Constants = (() => {
           hostname_value: rule.hostname_value.trim().slice(0, 500),
           hostname_type: Object.values(pattern_types).includes(rule.hostname_type)
             ? rule.hostname_type : pattern_types.exact,
-          blur_all: (rule.blur_all === null || typeof rule.blur_all === 'boolean')
-            ? rule.blur_all : null,
           snapshot: (() => {
             const raw = (rule.snapshot && typeof rule.snapshot === 'object' && !Array.isArray(rule.snapshot))
               ? rule.snapshot : {};
-            // Empty {} stays empty — sentinel for "rule pins blur_all toggle only".
             if (Object.keys(raw).length === 0) return {};
             const out = {};
 
@@ -530,6 +527,7 @@ const Constants = (() => {
             if (raw.blur_all && typeof raw.blur_all === 'object') {
               const ba = raw.blur_all;
               const ba_out = {};
+              if (typeof ba.status === 'boolean') ba_out.status = ba.status;
               if (ba.settings && typeof ba.settings === 'object') {
                 const ba_s = ba.settings;
                 const ba_s_out = {};

@@ -89,20 +89,21 @@ const BlurrySitePopupState = (() => {
   }
 
   // ── Compute which site rule (if any) matches the current page ────────────
+  // Mirrors resolve() priority: wildcard/regex first, then exact hostname.
+  // Only rules with a non-empty snapshot count.
   function _computeActiveRule() {
-    if (!_hostname) return null;
-    // wildcard/regex rules first — mirrors resolve() priority
-    if (_url && blsi.UrlMatcher) {
-      const nonExact = blsi.Model.get_rules();
-      for (let i = 0; i < nonExact.length; i++) {
-        if (blsi.UrlMatcher.matchesPattern(_url, nonExact[i].hostname_value, nonExact[i].hostname_type)) {
-          return nonExact[i];
-        }
+    if (!_hostname && !_url) return null;
+    const rules = blsi.Model.get_rules();
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      if (!r.snapshot || Object.keys(r.snapshot).length === 0) continue;
+      if (r.hostname_type === blsi.pattern_types.exact) {
+        if (r.hostname_value === _hostname) return r;
+      } else if (_url && blsi.UrlMatcher
+                 && blsi.UrlMatcher.matchesPattern(_url, r.hostname_value, r.hostname_type)) {
+        return r;
       }
     }
-    // exact hostname — only entries with a non-empty snapshot are explicit site rules
-    const exact = blsi.Model.get_site_entry(_hostname);
-    if (exact && exact.snapshot && Object.keys(exact.snapshot).length > 0) return exact;
     return null;
   }
 
@@ -116,19 +117,14 @@ const BlurrySitePopupState = (() => {
     _model = blsi.Model.get();
     _activeRule = _computeActiveRule();
     if (_hostname) {
-      const entry = blsi.Model.get_site_entry(_hostname);
       // Always load items so popup can render the "paused" count when pick-blur is off.
       // Application is gated downstream in storage_model.resolve() / content_script.
       _blurItems = blsi.Model.get_blur_items(_hostname);
-      const manualBlur = (entry && entry.blur_all !== null)
-        ? !!entry.blur_all
-        : _model.blur_all.status;
-      // Derive automate-blur state via resolve() so per-tab + per-site
-      // suppression and the screen-share session record are factored in.
+      // resolve() owns blur_all_active — combines global, snapshot overrides,
+      // and automate triggers (per-tab/per-site suppression included).
       const resolved = blsi.Model.resolve(_hostname, _url || '', _tabId);
-      _isPageBlurred = manualBlur || !!(resolved && resolved.automate_blur_active);
+      _isPageBlurred = !!(resolved && resolved.blur_all_active);
     } else {
-      // No hostname (e.g. chrome://newtab): derive blur state from global default only.
       _isPageBlurred = _model ? _model.blur_all.status : false;
     }
   }
@@ -178,8 +174,7 @@ const BlurrySitePopupState = (() => {
 
   // ── Per-page blur writes ──────────────────────────────────────────────────
   async function saveBlurState(checked) {
-    if (!_hostname) return;
-    await blsi.Model.save_blur_state(_hostname, checked);
+    await blsi.Model.save_blur_state(checked);
     refreshFromStorage();
   }
 

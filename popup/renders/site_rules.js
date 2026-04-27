@@ -536,7 +536,6 @@ const BlurrySitePopupRenderSiteRules = (() => {
         var newRule = {
           hostname_value: pattern,
           hostname_type:  selectedType,
-          blur_all:       null,
           snapshot:       currentSnapshot,
         };
         updatedRules = rules.concat([newRule]);

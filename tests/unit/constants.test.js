@@ -467,31 +467,6 @@ describe('BlurrySite constants', () => {
       expect(result.shortcuts['toggle-blur-all'].binding[0].code).toBe('KeyK');
     });
 
-    // ── site_rules: blur_all invariants ───────────────────────────────────
-    // blur_all:false must survive — the popup toggle-off path writes this value
-    // and validate_model runs on every storage write. Coercing false→null would
-    // silently revert the user's "turn off blur" action.
-    test('site_rules: blur_all:false is preserved (not coerced to null)', () => {
-      const m = PB.build_default_model();
-      m.site_rules = [{ hostname_value: 'example.com', hostname_type: 'exact', blur_all: false }];
-      const result = PB.validate_model(m);
-      expect(result.site_rules[0].blur_all).toBe(false);
-    });
-
-    test('site_rules: blur_all:true is preserved', () => {
-      const m = PB.build_default_model();
-      m.site_rules = [{ hostname_value: 'example.com', hostname_type: 'exact', blur_all: true }];
-      const result = PB.validate_model(m);
-      expect(result.site_rules[0].blur_all).toBe(true);
-    });
-
-    test('site_rules: blur_all:null (inherit) is preserved', () => {
-      const m = PB.build_default_model();
-      m.site_rules = [{ hostname_value: 'example.com', hostname_type: 'exact', blur_all: null }];
-      const result = PB.validate_model(m);
-      expect(result.site_rules[0].blur_all).toBeNull();
-    });
-
     // ── pick_and_blur: items invariants ───────────────────────────────────
     // selectors[] shape was previously stripped by the items filter, causing
     // items to disappear as a side-effect of any storage write (including toggle-off).

@@ -49,13 +49,13 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 **Merge order** (later entries override earlier):
 1. `blsi.DEFAULT_MODEL` values
 2. `global_default_settings`
-3. Feature section settings (blur_all, pick_and_blur, auto_detect_pii, automate)
+3. Feature section settings (blur_all incl. `blur_all_status` from `blur_all.status`, pick_and_blur, auto_detect_pii, automate)
 4. `blur_items` for hostname (pulled from `pick_and_blur.items[hostname]`, gated on `pick_and_blur.status`)
-5. Wildcard/regex site rule snapshot apply (first match wins) — may REPLACE `blur_items` if the snapshot pins its own `pick_and_blur.items` array
-6. Exact hostname site rule snapshot apply — same items REPLACE semantics
+5. Wildcard/regex site rule snapshot apply (first match wins) — may REPLACE `blur_items` if the snapshot pins its own `pick_and_blur.items` array; may override `blur_all_status` if `snapshot.blur_all.status` is boolean
+6. Exact hostname site rule snapshot apply — same REPLACE / override semantics
 7. Automate blur state — `_automate_cache[hostname]` (idle/tab_switch) and `_screen_share_cache` (single global record) with per-tab and per-site suppression applied
 8. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
-9. Derived key computation
+9. Derived key computation: `manual_blur = !!resolved.blur_all_status`; `blur_all_active = manual_blur || (automate_blur_active && !blur_present)`
 
 **Screen-share trigger** (`automate_blur_triggers.screen_share`):
 
@@ -95,16 +95,10 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 **Returns**: `Promise<void>`  
 **Handles**: Non-object `patch` → logged warning, no-op.
 
-### get_cached_blur_state(host)
+### save_blur_state(is_active)
 
-**What**: Returns the current blur-all state for a host from cache.  
-**Params**: `host` (string)  
-**Returns**: `boolean|null` — `true`/`false` if explicitly set; `null` if no entry (means use global)
-
-### save_blur_state(host, state)
-
-**What**: Writes blur-all state for a host to storage.  
-**Params**: `host` (string), `state` (boolean)  
+**What**: Flips the global `blur_all.status`. Toggling on any tab affects every tab — there are no per-host blur-all overrides outside of explicit site rules created via the Site Rules form.  
+**Params**: `is_active` (boolean)  
 **Returns**: `Promise<void>`
 
 ### get_blur_items(host)
@@ -125,34 +119,11 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 **What**: Removes a blur item by ID.  
 **Returns**: `Promise<void>` — no-op if hostname not found.
 
-### get_all_site_rules()
-
-**What**: Returns all site rules from cache.  
-**Returns**: `Array` — `site_rules` from `_cache`
-
-### get_site_entry(hostname_value, hostname_type)
-
-**What**: Finds a site rule by composite key.  
-**Params**: `hostname_value` (string), `hostname_type` (`'exact'|'wildcard'|'regex'`)  
-**Returns**: `Object|null`
-
-### set_site_entry(hostname_value, hostname_type, patch)
-
-**What**: Creates or updates a site rule entry via deep-merge.  
-**Params**: `hostname_value`, `hostname_type`, `patch` (partial entry)  
-**Returns**: `Promise<void>`  
-**Handles**: Creates new entry if not found; uses `deep_merge` so callers can partial-patch.
-
-### remove_site_entry(hostname_value, hostname_type)
-
-**What**: Removes a site rule entry.  
-**Returns**: `Promise<void>` — no-op if not found.
-
 ### capture_snapshot(hostname?)
 
 **What**: Reads current global settings from cache and returns a nested snapshot object.  
 **Params**: `hostname` (string, optional) — when provided, captures the host's pick-blur items into `pick_and_blur.items`. Omitted/empty → `items: []`.  
-**Returns**: `{ blur_all, pick_and_blur, auto_detect_pii, automate }` — deep-copies `blur_categories`, `blur_color`, `pick_and_blur.items`. The `automate.settings.idle` block carries the full `{ value, unit, enabled }` shape; `tab_switch` and `screen_share` carry only `enabled`.  
+**Returns**: `{ blur_all, pick_and_blur, auto_detect_pii, automate }` — deep-copies `blur_categories`, `blur_color`, `pick_and_blur.items`. `blur_all` carries `{ status, settings }` (status from global `blur_all.status` so a saved snapshot can pin a host on/off). The `automate.settings.idle` block carries the full `{ value, unit, enabled }` shape; `tab_switch` and `screen_share` carry only `enabled`.  
 **Excludes**: site_rules, shortcuts, global_default_settings (entire section)
 
 ### save_site_snapshot(hostname_value, hostname_type, snapshot)
@@ -263,19 +234,15 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### clear_host(hostname)
 
-**What**: Clears `blur_all` + items for the host in local storage; clears automate_blur in session storage.  
+**What**: Clears pick-blur items for the host in local storage; clears automate_blur in session storage.  
 **Returns**: `Promise<void>`  
-**Note**: Preserves snapshots — does not clear `.snapshot` fields.
-
-### clear_all()
-
-**What**: Clears `blur_all` + items for ALL hosts in local storage; resets session storage to `{}`.  
-**Returns**: `Promise<void>`
+**Note**: Preserves site_rules entries — does not touch them. blur_all is global; clear it via `save_blur_state(false)` if needed.
 
 ### get_rules() / save_rules(rules)
 
-**What**: URL pattern rules CRUD. Pattern rules (wildcard/regex) always precede exact rules in `site_rules[]`.  
-**`save_rules`**: Preserves existing exact-type rules; prepends pattern rules; enforces `RULES_LIMIT`; normalizes `hostname_value` (trim/slice); strips exact-type entries from incoming.
+**What**: Site rules CRUD. Returns/accepts every entry in `site_rules[]` regardless of `hostname_type`.  
+**`get_rules`**: shallow copy of `_cache.site_rules`.  
+**`save_rules`**: full-replace. Validates each entry (`hostname_value` trimmed/sliced, `hostname_type` falls back to `wildcard` if invalid, `snapshot` defaults to `{}`); enforces `RULES_LIMIT`. No exact-preservation, no auto-merge with prior state.
 
 ### _reset_cache()
 
@@ -319,7 +286,7 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### _apply_snapshot(snapshot, resolved)
 
-**What**: In-place merge of snapshot into the resolved object; maps nested snapshot shape to flat resolved keys. Stamps `resolved._rule_overrides[flat_key] = true` for every key it writes so downstream UI can detect rule-driven fields without re-walking storage. Handles `blur_all.settings.*`, `pick_and_blur.{status, settings.*, items}`, `auto_detect_pii.settings.*`, and `automate.settings.{idle, tab_switch, screen_share}`. For `automate.settings.idle` the snapshot may carry any subset of `{ value, unit, enabled }` — each present field merges into the resolved `automate_idle` shape (`tab_switch` / `screen_share` still take `enabled` only). `pick_and_blur.items` is REPLACE semantics — when present (any array, including `[]`) it overwrites `resolved.blur_items`, gated on the post-snapshot `resolved.pick_blur_enabled`. Stamps `_rule_overrides.blur_items` when applied.
+**What**: In-place merge of snapshot into the resolved object; maps nested snapshot shape to flat resolved keys. Stamps `resolved._rule_overrides[flat_key] = true` for every key it writes so downstream UI can detect rule-driven fields without re-walking storage. Handles `blur_all.{status, settings.*}`, `pick_and_blur.{status, settings.*, items}`, `auto_detect_pii.settings.*`, and `automate.settings.{idle, tab_switch, screen_share}`. `blur_all.status` (boolean) overrides `resolved.blur_all_status`. For `automate.settings.idle` the snapshot may carry any subset of `{ value, unit, enabled }` — each present field merges into the resolved `automate_idle` shape (`tab_switch` / `screen_share` still take `enabled` only). `pick_and_blur.items` is REPLACE semantics — when present (any array, including `[]`) it overwrites `resolved.blur_items`, gated on the post-snapshot `resolved.pick_blur_enabled`. Stamps `_rule_overrides.blur_items` when applied.
 
 **Snapshot shape**: under the full-snapshot contract (enforced at write-time by `save_site_snapshot` and at load-time by `validate_model`), non-empty snapshots always carry every key produced by `capture_snapshot()` (no `settings` block — that was global_default_settings, dropped). Empty `{}` is the sentinel for "no setting overrides" — `_apply_snapshot` skips silently. Per-key existence checks remain in place for defense-in-depth in case callers bypass the contract.
 
