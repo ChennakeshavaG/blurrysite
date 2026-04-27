@@ -12,15 +12,17 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REL_PATH="${FILE_PATH#"$PROJECT_ROOT/"}"
 [ "$REL_PATH" = "$FILE_PATH" ] && exit 0
 
-# Match covered files and derive contract key
+# Match covered files and derive contract key.
+# Patterns mirror the docs/contracts/ tree: src/foo.js → docs/contracts/foo.md;
+# nested src/core/foo.js → docs/contracts/core/foo.md.
 CONTRACT_KEY=""
-if [[ "$REL_PATH" =~ ^src/([a-z_]+)\.js$ ]]; then
+if [[ "$REL_PATH" =~ ^src/(.+)\.js$ ]]; then
   CONTRACT_KEY="${BASH_REMATCH[1]}"
 elif [[ "$REL_PATH" =~ ^popup/renders/([a-z_]+)\.js$ ]]; then
   CONTRACT_KEY="popup_renders_${BASH_REMATCH[1]}"
 elif [[ "$REL_PATH" =~ ^popup/([a-z_]+)\.js$ ]]; then
   CONTRACT_KEY="popup_${BASH_REMATCH[1]}"
-elif [[ "$REL_PATH" =~ ^tests/unit/([a-z_]+)\.test\.js$ ]]; then
+elif [[ "$REL_PATH" =~ ^tests/unit/(.+)\.test\.js$ ]]; then
   CONTRACT_KEY="${BASH_REMATCH[1]}.tests"
 elif [ "$REL_PATH" = "background.js" ]; then
   CONTRACT_KEY="background"

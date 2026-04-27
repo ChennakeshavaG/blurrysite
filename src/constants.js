@@ -14,7 +14,7 @@
  * Exposed as globalThis.blsi (IIFE — no ES module syntax).
  * Uses globalThis so it works in both window (content scripts) and
  * self (service worker) contexts. Other modules attach to blsi:
- *   blsi.BlurEngine, blsi.Model, blsi.SelectorUtils, blsi.Shortcuts, blsi.Picker
+ *   blsi.Engine, blsi.Model, blsi.SelectorUtils, blsi.Shortcuts, blsi.Picker
  */
 
 const Constants = (() => {

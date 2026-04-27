@@ -15,7 +15,7 @@
  *  - Deactivation: removes all side-effects (toolbar, highlights, listeners)
  *  - Settings: can be updated while picker is active
  *
- * Tests mock blsi.BlurEngine and blsi.SelectorUtils as window globals
+ * Tests mock blsi.Engine and blsi.SelectorUtils as window globals
  * because picker.js depends on them being loaded first via manifest.json.
  */
 
@@ -177,7 +177,7 @@ function buildStubSource() {
 // ─── Mock dependencies ────────────────────────────────────────────────────────
 
 function setupGlobalMocks() {
-  blsi.BlurEngine = {
+  blsi.Engine = {
     applyBlur: jest.fn(),
     removeBlur: jest.fn(),
     isBlurred: jest.fn((el) => !!(el && el.dataset && el.dataset.blSiBlur)),

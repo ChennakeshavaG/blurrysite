@@ -51,17 +51,23 @@ Isolated world (run_at:"document_idle"):
  6. selector_utils.js     → blsi.SelectorUtils
  7. storage_model.js      → blsi.Model (direct chrome.storage access; single blsi_model key; resolve/patch/debounced_patch)
  8. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
- 9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/handleMutations — subscribes to blur_engine MO dispatcher)
+ 9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/handleMutations — subscribes to engine MO dispatcher)
 10. fonts.js              → blsi.Fonts (embedded WOFF2 font assets; FONT_FACE string for "bl-si-redact-asterisk")
-11. blur_engine.js        → blsi.BlurEngine (owns blur-all + item dispatch state)
-12. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
-13. screen_share.js       → blsi.ScreenShare (CustomEvent bridge; init/destroy — listens for '__blsi_screen_share' from MAIN world, opens port 'blsi-screen-share' + sends SCREEN_SHARE_STARTED/ENDED; port disconnect = crash-safety UNBLUR fan-out)
-15. reveal_controller.js  → blsi.Reveal
-16. shortcut_handler.js   → blsi.Shortcuts
-17. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
-18. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
-19. picker.js             → blsi.Picker
-20. content_script.js     → (no global, binds all above)
+11. core/engine_state.js  → blsi.EngineState (shared private state for engine sub-modules)
+12. core/categories.js    → blsi.Categories (frozen tag/role data; CATEGORY_SELECTORS / CATEGORY_ORDER / DEFAULT_CATS)
+13. core/css_manager.js   → blsi.CssManager (blur-all + pick-blur + PII rule injection; selector cache; SVG filter)
+14. core/marker_engine.js → blsi.MarkerEngine (element stamping; applyBlur/removeBlur/isBlurred; matchesActiveCategories)
+15. core/observer.js      → blsi.Observer (one MO per root + idle-batched drain + subscriber pub/sub)
+16. core/target_engine.js → blsi.TargetEngine (zones + dynamic items + popup-hover highlight; reconcileItems)
+17. engine.js             → blsi.Engine (facade + orchestrator; handleSite/teardown/unblurAll; re-exports core/*)
+18. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
+19. screen_share.js       → blsi.ScreenShare (CustomEvent bridge; init/destroy — listens for '__blsi_screen_share' from MAIN world, opens port 'blsi-screen-share' + sends SCREEN_SHARE_STARTED/ENDED; port disconnect = crash-safety UNBLUR fan-out)
+20. reveal_controller.js  → blsi.Reveal
+21. shortcut_handler.js   → blsi.Shortcuts
+22. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
+23. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
+24. picker.js             → blsi.Picker
+25. content_script.js     → (no global, binds all above)
 ```
 
 A module may only depend on modules loaded before it.
@@ -88,9 +94,21 @@ A module may only depend on modules loaded before it.
 - `handleMutations(mutations, root)` — subscriber to `blur_engine`'s mutation dispatcher. Handles `childList` (new TEXT_NODE → wrap; new ELEMENT_NODE → scan subtree) and `characterData` (text node whose `textContent` changed → wrap matches). Skips text nodes already inside a `[data-bl-si-pii]` wrapper. No-op when `_activeTypes` is null — `scan()` must run first to seed it. PII detector owns no observer; `content_script.applyState` calls `Engine.subscribeMutations('pii', handleMutations)` when PII is enabled.
 - `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — reveal_controller can find and reveal PII spans.
 
-### blur_engine.js
+### engine.js + core/*
 
-**Navigation**: run `grep -n "§" src/blur_engine.js` to get section positions. Read only the section matching your use case — do NOT read the entire file. Match test section with `grep -n "§<NAME>-TESTS" tests/unit/blur_engine.test.js`. See `docs/contracts/blur_engine.md` for the full section map.
+**Navigation**: the engine is split across `src/engine.js` (facade + orchestrator) and `src/core/*` (sub-modules). For any change, read the matching contract first:
+
+| Change | Contract |
+|---|---|
+| Category data (tags / roles) | `docs/contracts/core/categories.md` |
+| CSS injection (any of the three systems) | `docs/contracts/core/css_manager.md` |
+| Stamping / element queries / picker apply / reveal predicates | `docs/contracts/core/marker_engine.md` |
+| MutationObserver, idle drain, mutation dispatcher | `docs/contracts/core/observer.md` |
+| Zones, items, counters, popup highlight | `docs/contracts/core/target_engine.md` |
+| Cross-cutting state (`isPageBlurred`, `currentSettings`, etc.) | `docs/contracts/core/engine_state.md` |
+| Top-level handleSite / teardown / facade re-export | `docs/contracts/engine.md` |
+
+The original section markers (`§CATEGORY-SELECTORS`, `§CSS-INJECTION`, etc.) are preserved as comments at the top of each `core/*` file for orientation. Test groups in `tests/unit/engine.test.js` mirror those markers.
 
 - `applyBlur` is idempotent — guards via direct `element.dataset.blSiBlur` attribute check, NOT `isBlurred()`. `isBlurred()` is used by picker / context-menu unblur paths to check whether a clicked element has a stored item; those paths intentionally ignore role-only matches because there is no storage entry to remove.
 - Two blur checks:
@@ -247,13 +265,13 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 - Toolbar: `toolbarEl.id = "bl-si-picker-toolbar"` (tests use `getElementById`). It's a floating draggable pill, not a full-width bar. Position persisted at `chrome.storage.local.picker_toolbar_pos = { top, left, right, bottom }`. Drag handle is the `.bl-si-toolbar-drag` element; dragging attaches `mousemove`/`mouseup` at capture phase on `document` so it beats the picker's own mouse handlers.
 - Toolbar appended to `document.body`, not `document.documentElement`.
 - The `.bl-si-picker-active button` blanket `cursor: crosshair` rule in `styles/content.css` excludes toolbar buttons (`.bl-si-toolbar-btn`, `.bl-si-toolbar-btn--close`, `.bl-si-toolbar-drag`) and toolbar selects. Two explicit higher-specificity rules (`.bl-si-toolbar .bl-si-toolbar-btn`, `.bl-si-toolbar select`) re-assert `cursor: pointer` for the pill's interactive children.
-- Blur/unblur decision: use `blsi.BlurEngine.isBlurred(target)` to detect both data-attribute and CSS-tag-rule blurs.
+- Blur/unblur decision: use `blsi.Engine.isBlurred(target)` to detect both data-attribute and CSS-tag-rule blurs.
 - Do not call `blsi.SelectorUtils` inside picker — it is not picker's responsibility.
 - All event listeners at capture phase. `onClick` calls `stopPropagation` + `stopImmediatePropagation`.
 
 ### content_script.js
-- Thin orchestrator. State: `settings`, `isPickerActive`, `lastContextMenuTarget`, `hostname`, `lastUrl`, `_topHostname`. Per-blur state (counters, observer, `isPageBlurred`, reveal state, active items) lives in `blur_engine.js` / `reveal_controller.js` — do not re-introduce it here.
-- Module aliases: `Engine` (`blsi.BlurEngine`), `Store` (`blsi.Model`), `Selector` (`blsi.SelectorUtils`), `Picker` (`blsi.Picker`), `Shortcuts` (`blsi.Shortcuts`). `Reveal` (`blsi.Reveal`) is aliased at the very top of the IIFE. No `UrlMatcher` alias — settings resolution goes through `Store.resolve()`.
+- Thin orchestrator. State: `settings`, `isPickerActive`, `lastContextMenuTarget`, `hostname`, `lastUrl`, `_topHostname`. Per-blur state (counters, observer, `isPageBlurred`, reveal state, active items) lives in `src/engine.js` and the `src/core/*` sub-modules / `reveal_controller.js` — do not re-introduce it here.
+- Module aliases: `Engine` (`blsi.Engine`), `Store` (`blsi.Model`), `Selector` (`blsi.SelectorUtils`), `Picker` (`blsi.Picker`), `Shortcuts` (`blsi.Shortcuts`). `Reveal` (`blsi.Reveal`) is aliased at the very top of the IIFE. No `UrlMatcher` alias — settings resolution goes through `Store.resolve()`.
 - `_topHostname` — equals `location.hostname` in the main frame; derived from `document.referrer` in cross-origin iframes. Used for `blur_all_active` lookup so iframes follow the parent page's blur-all state rather than their own. Updated via `postMessage` from the main frame on every storage change.
 - Use the `setPickerActive(active)` helper for every picker state change — it's the single source of truth that updates the local flag, `Shortcuts._setPickerActive`, AND `Engine._setPickerActiveForObserver` together. Do NOT update any of those three directly from call sites (TOGGLE_PICKER handler, pickerCallbacks.onDeactivate, applyState disable path all go through the helper). Skipping the observer gate leaves the MutationObserver silent for new DOM nodes after the picker closes, which silently breaks dynamic content on the page.
 - Pass `resolved.shortcuts` directly to `Shortcuts.init()` — no flattening needed. Keys are kebab-case action ids (e.g. `'toggle-blur-all'`).

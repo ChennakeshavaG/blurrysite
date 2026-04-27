@@ -1,7 +1,9 @@
 /**
- * tests/unit/blur_engine.test.js
+ * tests/unit/engine.test.js
  *
- * Unit tests for src/blur_engine.js — hybrid CSS + data-attribute blur engine.
+ * Unit tests for src/engine.js (blsi.Engine facade) — hybrid CSS +
+ * data-attribute blur engine. Implementation lives in src/core/* sub-modules;
+ * this file tests behaviour through the public facade surface.
  */
 
 /* === TEST QUALITY ANNOTATIONS ===
@@ -36,23 +38,35 @@
 const fs = require('fs');
 const path = require('path');
 
-const MODULE_PATH = path.resolve(__dirname, '../../src/blur_engine.js');
+const MODULE_PATH = path.resolve(__dirname, '../../src/engine.js');
 const SELECTOR_PATH = path.resolve(__dirname, '../../src/selector_utils.js');
+const STATE_PATH = path.resolve(__dirname, '../../src/core/engine_state.js');
+const FONTS_PATH = path.resolve(__dirname, '../../src/fonts.js');
+const CATEGORIES_PATH = path.resolve(__dirname, '../../src/core/categories.js');
+const CSS_PATH = path.resolve(__dirname, '../../src/core/css_manager.js');
+const MARKER_PATH = path.resolve(__dirname, '../../src/core/marker_engine.js');
+const OBSERVER_PATH = path.resolve(__dirname, '../../src/core/observer.js');
+const TARGET_PATH = path.resolve(__dirname, '../../src/core/target_engine.js');
 
-function loadBlurEngine() {
-  // SelectorUtils is needed by the high-level applyItem dispatch (dynamic items).
-  if (!blsi.SelectorUtils && fs.existsSync(SELECTOR_PATH)) {
-    require(SELECTOR_PATH);
-  }
-  if (blsi.BlurEngine) return;
+function loadEngine() {
+  // Sub-modules of the engine — all must load before src/engine.js.
+  if (!blsi.SelectorUtils && fs.existsSync(SELECTOR_PATH)) require(SELECTOR_PATH);
+  if (!blsi.Fonts         && fs.existsSync(FONTS_PATH))   require(FONTS_PATH);
+  if (!blsi.EngineState   && fs.existsSync(STATE_PATH))   require(STATE_PATH);
+  if (!blsi.Categories    && fs.existsSync(CATEGORIES_PATH)) require(CATEGORIES_PATH);
+  if (!blsi.CssManager    && fs.existsSync(CSS_PATH))     require(CSS_PATH);
+  if (!blsi.MarkerEngine  && fs.existsSync(MARKER_PATH))  require(MARKER_PATH);
+  if (!blsi.Observer      && fs.existsSync(OBSERVER_PATH)) require(OBSERVER_PATH);
+  if (!blsi.TargetEngine  && fs.existsSync(TARGET_PATH))  require(TARGET_PATH);
+  if (blsi.Engine) return;
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
-    throw new Error('blur_engine.js not found');
+    throw new Error('engine.js not found');
   }
 }
 
-beforeAll(() => { loadBlurEngine(); });
+beforeAll(() => { loadEngine(); });
 
 // Test state carrier for handleSite() tests.
 // handleSite(settings) takes everything inline — no storage reads.
@@ -87,7 +101,7 @@ beforeEach(() => {
 afterEach(() => {
   fakeStorage.blurState = false;
   fakeStorage.items = [];
-  blsi.BlurEngine.unblurAll();
+  blsi.Engine.unblurAll();
 });
 
 // ── AGENT NAVIGATION ─────────────────────────────────────────────────────────
@@ -121,18 +135,18 @@ afterEach(() => {
 //   pick-blur injection
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('blsi.BlurEngine', () => {
+describe('blsi.Engine', () => {
 
   // ── §CSS-INJECTION-TESTS ─────────────────────────────────────────────────
   // USER IMPACT: blur-all toggle — CSS rules injected so all matching elements render blurred
   describe('injectRules', () => {
     test('creates style element in head', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
       expect(document.getElementById('bl-si-blur-styles')).not.toBeNull();
     });
 
     test('style contains always-blur tag selectors', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: true, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: true, form: false, table: false, structure: false });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('h1');
       expect(css).toContain('img');
@@ -140,37 +154,37 @@ describe('blsi.BlurEngine', () => {
     });
 
     test('includes data-bl-si-blur rule', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
       expect(document.getElementById('bl-si-blur-styles').textContent).toContain('[data-bl-si-blur]');
     });
 
     test('frosted mode uses SVG filter URL', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false }, 'frosted');
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false }, 'frosted');
       expect(document.getElementById('bl-si-blur-styles').textContent).toContain('url(#bl-si-frosted-filter)');
     });
 
     test('calling twice replaces previous', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
-      blsi.BlurEngine.injectRules(document, { text: false, media: true, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: false, media: true, form: false, table: false, structure: false });
       expect(document.querySelectorAll('#bl-si-blur-styles').length).toBe(1);
     });
 
     test('removeBlurRules removes style', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
-      blsi.BlurEngine.removeRules(document);
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.removeRules(document);
       expect(document.getElementById('bl-si-blur-styles')).toBeNull();
     });
 
     test('isBlurAllActive reflects state', () => {
-      expect(blsi.BlurEngine.isBlurAllActive()).toBe(false);
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
-      expect(blsi.BlurEngine.isBlurAllActive()).toBe(true);
-      blsi.BlurEngine.removeRules(document);
-      expect(blsi.BlurEngine.isBlurAllActive()).toBe(false);
+      expect(blsi.Engine.isBlurAllActive()).toBe(false);
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      expect(blsi.Engine.isBlurAllActive()).toBe(true);
+      blsi.Engine.removeRules(document);
+      expect(blsi.Engine.isBlurAllActive()).toBe(false);
     });
 
     test('excludes extension UI', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain(':not(#bl-si-picker-toolbar)');
     });
@@ -182,8 +196,8 @@ describe('blsi.BlurEngine', () => {
   describe('stampElements', () => {
     test('stamps text-check elements with direct text', () => {
       document.body.innerHTML = '<div>text</div><div></div>';
-      blsi.BlurEngine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
-      blsi.BlurEngine.stampElements(document, { text: false, media: false, form: false, table: false, structure: true }, false);
+      blsi.Engine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
+      blsi.Engine.stampElements(document, { text: false, media: false, form: false, table: false, structure: true }, false);
       const divs = document.querySelectorAll('div');
       expect(divs[0].dataset.blSiBlur).toBe('1');
       expect(divs[1].dataset.blSiBlur).toBeUndefined();
@@ -191,39 +205,39 @@ describe('blsi.BlurEngine', () => {
 
     test('thorough stamps inline elements without text', () => {
       document.body.innerHTML = '<span></span>';
-      blsi.BlurEngine.stampElements(document, { text: true, media: false, form: false, table: false, structure: false }, true);
+      blsi.Engine.stampElements(document, { text: true, media: false, form: false, table: false, structure: false }, true);
       expect(document.querySelector('span').dataset.blSiBlur).toBe('1');
     });
 
     test('thorough does not bypass text gate for structural containers', () => {
       document.body.innerHTML = '<div></div>';
-      blsi.BlurEngine.stampElements(document, { text: false, media: false, form: false, table: false, structure: true }, true);
+      blsi.Engine.stampElements(document, { text: false, media: false, form: false, table: false, structure: true }, true);
       // Empty div — structural container still requires direct text even in thorough mode
       expect(document.querySelector('div').dataset.blSiBlur).toBeUndefined();
     });
 
     test('structural container with direct text is stamped in any mode', () => {
       document.body.innerHTML = '<div>Direct text</div>';
-      blsi.BlurEngine.stampElements(document, { text: false, media: false, form: false, table: false, structure: true }, false);
+      blsi.Engine.stampElements(document, { text: false, media: false, form: false, table: false, structure: true }, false);
       expect(document.querySelector('div').dataset.blSiBlur).toBe('1');
     });
   });
 
   describe('tryBlurTextCheck', () => {
     test('stamps text-check with text', () => {
-      blsi.BlurEngine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
+      blsi.Engine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
       const div = document.createElement('div');
       div.textContent = 'hello';
       document.body.appendChild(div);
-      blsi.BlurEngine.tryBlurTextCheck(div, false);
+      blsi.Engine.tryBlurTextCheck(div, false);
       expect(div.dataset.blSiBlur).toBe('1');
     });
 
     test('skips empty', () => {
-      blsi.BlurEngine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
+      blsi.Engine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.tryBlurTextCheck(div, false);
+      blsi.Engine.tryBlurTextCheck(div, false);
       expect(div.dataset.blSiBlur).toBeUndefined();
     });
   });
@@ -234,12 +248,12 @@ describe('blsi.BlurEngine', () => {
     test('sets data-bl-si-blur', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.applyBlur(div);
+      blsi.Engine.applyBlur(div);
       expect(div.dataset.blSiBlur).toBe('1');
     });
 
     test('null safe', () => {
-      expect(() => blsi.BlurEngine.applyBlur(null)).not.toThrow();
+      expect(() => blsi.Engine.applyBlur(null)).not.toThrow();
     });
   });
 
@@ -247,13 +261,13 @@ describe('blsi.BlurEngine', () => {
     test('removes data-bl-si-blur', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.applyBlur(div);
-      blsi.BlurEngine.removeBlur(div);
+      blsi.Engine.applyBlur(div);
+      blsi.Engine.removeBlur(div);
       expect(div.dataset.blSiBlur).toBeUndefined();
     });
 
     test('null safe', () => {
-      expect(() => blsi.BlurEngine.removeBlur(null)).not.toThrow();
+      expect(() => blsi.Engine.removeBlur(null)).not.toThrow();
     });
   });
 
@@ -262,25 +276,25 @@ describe('blsi.BlurEngine', () => {
     test('true for data-bl-si-blur', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.applyBlur(div);
-      expect(blsi.BlurEngine.isBlurred(div)).toBe(true);
+      blsi.Engine.applyBlur(div);
+      expect(blsi.Engine.isBlurred(div)).toBe(true);
     });
 
     test('false for non-blurred', () => {
-      expect(blsi.BlurEngine.isBlurred(document.createElement('div'))).toBe(false);
+      expect(blsi.Engine.isBlurred(document.createElement('div'))).toBe(false);
     });
 
     test('false for null', () => {
-      expect(blsi.BlurEngine.isBlurred(null)).toBe(false);
+      expect(blsi.Engine.isBlurred(null)).toBe(false);
     });
 
     test('false after rules removed from always-blur tag', () => {
       const p = document.createElement('p');
       document.body.appendChild(p);
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
-      expect(blsi.BlurEngine.isBlurred(p)).toBe(true);
-      blsi.BlurEngine.removeRules(document);
-      expect(blsi.BlurEngine.isBlurred(p)).toBe(false);
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      expect(blsi.Engine.isBlurred(p)).toBe(true);
+      blsi.Engine.removeRules(document);
+      expect(blsi.Engine.isBlurred(p)).toBe(false);
     });
   });
 
@@ -289,10 +303,10 @@ describe('blsi.BlurEngine', () => {
     test('removes rules and data attrs', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
-      blsi.BlurEngine.applyBlur(div);
-      blsi.BlurEngine.unblurAll();
-      expect(blsi.BlurEngine.isBlurAllActive()).toBe(false);
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.applyBlur(div);
+      blsi.Engine.unblurAll();
+      expect(blsi.Engine.isBlurAllActive()).toBe(false);
       expect(div.dataset.blSiBlur).toBeUndefined();
     });
   });
@@ -305,29 +319,29 @@ describe('blsi.BlurEngine', () => {
       const p = document.createElement('p');
       p.textContent = 'x';
       document.body.appendChild(p);
-      expect(blsi.BlurEngine.shouldBlurElement(p, ALL, false)).toBe(true);
+      expect(blsi.Engine.shouldBlurElement(p, ALL, false)).toBe(true);
     });
 
     test('false for empty text-check', () => {
       const td = document.createElement('td');
       document.body.appendChild(td);
-      expect(blsi.BlurEngine.shouldBlurElement(td, ALL, false)).toBe(false);
+      expect(blsi.Engine.shouldBlurElement(td, ALL, false)).toBe(false);
     });
 
     test('thorough bypasses gate', () => {
       const td = document.createElement('td');
       document.body.appendChild(td);
-      expect(blsi.BlurEngine.shouldBlurElement(td, ALL, true)).toBe(true);
+      expect(blsi.Engine.shouldBlurElement(td, ALL, true)).toBe(true);
     });
 
     test('false for null', () => {
-      expect(blsi.BlurEngine.shouldBlurElement(null, ALL, false)).toBe(false);
+      expect(blsi.Engine.shouldBlurElement(null, ALL, false)).toBe(false);
     });
 
     test('false for img when MEDIA category is off', () => {
       const img = document.createElement('img');
       document.body.appendChild(img);
-      expect(blsi.BlurEngine.shouldBlurElement(img, { text: true, media: false, form: true, table: true, structure: true }, false)).toBe(false);
+      expect(blsi.Engine.shouldBlurElement(img, { text: true, media: false, form: true, table: true, structure: true }, false)).toBe(false);
     });
   });
 
@@ -335,8 +349,8 @@ describe('blsi.BlurEngine', () => {
   // ── §CATEGORY-SELECTORS-TESTS ────────────────────────────────────────────
   describe('CATEGORY_SELECTORS', () => {
     test('frozen with 5 categories', () => {
-      expect(Object.isFrozen(blsi.BlurEngine.CATEGORY_SELECTORS)).toBe(true);
-      expect(Object.keys(blsi.BlurEngine.CATEGORY_SELECTORS)).toHaveLength(5);
+      expect(Object.isFrozen(blsi.Engine.CATEGORY_SELECTORS)).toBe(true);
+      expect(Object.keys(blsi.Engine.CATEGORY_SELECTORS)).toHaveLength(5);
     });
   });
 
@@ -344,18 +358,18 @@ describe('blsi.BlurEngine', () => {
   describe('matchesActiveCategories', () => {
     test('true for img when media on', () => {
       const img = document.createElement('img');
-      expect(blsi.BlurEngine.matchesActiveCategories(img, { text: false, media: true, form: false, table: false, structure: false })).toBe(true);
+      expect(blsi.Engine.matchesActiveCategories(img, { text: false, media: true, form: false, table: false, structure: false })).toBe(true);
     });
 
     test('false for img when media off', () => {
       const img = document.createElement('img');
-      expect(blsi.BlurEngine.matchesActiveCategories(img, { text: true, media: false, form: false, table: false, structure: false })).toBe(false);
+      expect(blsi.Engine.matchesActiveCategories(img, { text: true, media: false, form: false, table: false, structure: false })).toBe(false);
     });
 
     test('false for custom element (hyphenated tag) when no category matches', () => {
       const el = document.createElement('my-widget');
       document.body.appendChild(el);
-      expect(blsi.BlurEngine.matchesActiveCategories(el, { text: true, media: true, form: true, table: true, structure: true })).toBe(false);
+      expect(blsi.Engine.matchesActiveCategories(el, { text: true, media: true, form: true, table: true, structure: true })).toBe(false);
     });
   });
 
@@ -368,15 +382,15 @@ describe('blsi.BlurEngine', () => {
     const stickyBase = { enabled: true, blur_all_active: true, blur_categories: { text: true, media: false, form: false, table: false, structure: false }, blur_mode: null, thorough_blur: false };
 
     test('returns all active overlays after handleSite applies sticky items', async () => {
-      await blsi.BlurEngine.handleSite({ ...stickyBase, blur_items: [
+      await blsi.Engine.handleSite({ ...stickyBase, blur_items: [
         { type: 'sticky', id: 's_a', name: 'A', anchor: 'page', x: 0, y: 0, width: 10, height: 10 },
         { type: 'sticky', id: 's_b', name: 'B', anchor: 'page', x: 20, y: 20, width: 10, height: 10 },
       ]});
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(2);
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(2);
     });
 
     test('returns empty array when none exist', () => {
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(0);
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(0);
     });
   });
 
@@ -384,8 +398,8 @@ describe('blsi.BlurEngine', () => {
     test('removes zone overlays along with data-bl-si-blur elements', async () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      blsi.BlurEngine.applyBlur(div);
-      await blsi.BlurEngine.handleSite({
+      blsi.Engine.applyBlur(div);
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: true, blur_items: [
           { type: 'sticky', id: 's_unblur', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 },
         ],
@@ -393,23 +407,23 @@ describe('blsi.BlurEngine', () => {
         blur_mode: null, thorough_blur: false,
       });
 
-      blsi.BlurEngine.unblurAll();
+      blsi.Engine.unblurAll();
       expect(div.dataset.blSiBlur).toBeUndefined();
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(0);
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(0);
     });
   });
 
   describe('_isExtensionUI excludes zones', () => {
     test('zone overlay not treated as blur target', async () => {
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: true, blur_items: [
           { type: 'sticky', id: 's_excl', name: 'S', anchor: 'page', x: 0, y: 0, width: 10, height: 10 },
         ],
         blur_categories: { text: true, media: false, form: false, table: false, structure: false },
         blur_mode: null, thorough_blur: false,
       });
-      const zone = blsi.BlurEngine.getZoneOverlays()[0];
-      blsi.BlurEngine.applyBlur(zone);
+      const zone = blsi.Engine.getZoneOverlays()[0];
+      blsi.Engine.applyBlur(zone);
       expect(zone.dataset.blSiBlur).toBeUndefined();
     });
   });
@@ -418,13 +432,13 @@ describe('blsi.BlurEngine', () => {
   // USER IMPACT: page restore on load — saved blur items re-applied when extension wakes up
   describe('blurAll — item reconcile', () => {
     beforeEach(() => {
-      blsi.BlurEngine.resetCounters();
+      blsi.Engine.resetCounters();
     });
 
     test('applies dynamic items from storage', async () => {
       document.body.innerHTML = '<div id="target">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#target' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('target').dataset.blSiPickBlur).toBe('1');
       expect(document.getElementById('target').dataset.blSiBlur).toBeUndefined();
     });
@@ -432,9 +446,9 @@ describe('blsi.BlurEngine', () => {
     test('removes items no longer in storage', async () => {
       document.body.innerHTML = '<div id="rm">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#rm' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.items = [];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('rm').dataset.blSiPickBlur).toBeUndefined();
     });
 
@@ -443,8 +457,8 @@ describe('blsi.BlurEngine', () => {
         type: 'sticky', id: 's_1', name: 'Sticky 1',
         x: 10, y: 20, width: 100, height: 50,
       }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(1);
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(1);
     });
 
     test('removes zone overlay when sticky drops from storage', async () => {
@@ -452,54 +466,54 @@ describe('blsi.BlurEngine', () => {
         type: 'sticky', id: 's_r', name: 'Sticky 1',
         x: 0, y: 0, width: 10, height: 10,
       }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.items = [];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(0);
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(0);
     });
 
     test('second call is idempotent when storage unchanged', async () => {
       document.body.innerHTML = '<div id="idem">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#idem' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('idem').dataset.blSiPickBlur).toBe('1');
     });
 
     test('applies dynamic item using new selectors[] array shape', async () => {
       document.body.innerHTML = '<div id="newshape">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selectors: ['body > div:nth-of-type(1)', '#newshape'] }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('newshape').dataset.blSiPickBlur).toBe('1');
     });
 
     test('falls back to second selector when first does not match', async () => {
       document.body.innerHTML = '<div id="fallback">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selectors: ['#stale-no-match', '#fallback'] }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('fallback').dataset.blSiPickBlur).toBe('1');
     });
 
     test('removes dynamic item using selectors[] shape', async () => {
       document.body.innerHTML = '<div id="rmsel">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selectors: ['#rmsel'] }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.items = [];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('rmsel').dataset.blSiPickBlur).toBeUndefined();
     });
     test('dynamic item with no DOM match is a no-op (does not throw)', async () => {
       document.body.innerHTML = '';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#does-not-exist' }];
       await expect(
-        blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items })
+        blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items })
       ).resolves.not.toThrow();
     });
 
     test('sticky item with anchor screen creates position:fixed overlay', async () => {
       fakeStorage.items = [{ type: 'sticky', id: 'ss_screen', name: 'Sticky 1', anchor: 'screen', x: 50, y: 80, width: 200, height: 100 }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      const overlays = blsi.BlurEngine.getZoneOverlays();
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      const overlays = blsi.Engine.getZoneOverlays();
       expect(overlays).toHaveLength(1);
       expect(overlays[0].style.position).toBe('fixed');
       expect(overlays[0].dataset.blSiZoneAnchor).toBe('screen');
@@ -509,50 +523,50 @@ describe('blsi.BlurEngine', () => {
   // USER IMPACT: blur item naming in popup — "Dynamic 1", "Sticky 2" labels in the saved items list
   describe('counters', () => {
     beforeEach(() => {
-      blsi.BlurEngine.resetCounters();
+      blsi.Engine.resetCounters();
     });
 
     test('allocateElementName increments', () => {
-      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 1');
-      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 2');
+      expect(blsi.Engine.allocateElementName()).toBe('Element 1');
+      expect(blsi.Engine.allocateElementName()).toBe('Element 2');
     });
 
     test('allocateStickyName page anchor increments', () => {
-      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 1');
-      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 2');
+      expect(blsi.Engine.allocateStickyName('page')).toBe('Area on page 1');
+      expect(blsi.Engine.allocateStickyName('page')).toBe('Area on page 2');
     });
 
     test('allocateStickyName screen anchor increments', () => {
-      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 1');
-      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 2');
+      expect(blsi.Engine.allocateStickyName('screen')).toBe('Area on screen 1');
+      expect(blsi.Engine.allocateStickyName('screen')).toBe('Area on screen 2');
     });
 
     test('allocateStickyName defaults to page when anchor missing', () => {
-      expect(blsi.BlurEngine.allocateStickyName()).toBe('Area on page 1');
+      expect(blsi.Engine.allocateStickyName()).toBe('Area on page 1');
     });
 
     test('resetCounters zeroes all three', () => {
-      blsi.BlurEngine.allocateElementName();
-      blsi.BlurEngine.allocateStickyName('page');
-      blsi.BlurEngine.allocateStickyName('screen');
-      blsi.BlurEngine.resetCounters();
-      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 1');
-      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 1');
-      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 1');
+      blsi.Engine.allocateElementName();
+      blsi.Engine.allocateStickyName('page');
+      blsi.Engine.allocateStickyName('screen');
+      blsi.Engine.resetCounters();
+      expect(blsi.Engine.allocateElementName()).toBe('Element 1');
+      expect(blsi.Engine.allocateStickyName('page')).toBe('Area on page 1');
+      expect(blsi.Engine.allocateStickyName('screen')).toBe('Area on screen 1');
     });
 
     test('seeds element counter from new-format item name', async () => {
       document.body.innerHTML = '<div id="seed">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Element 5', selector: '#seed' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 6');
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.allocateElementName()).toBe('Element 6');
     });
 
     test('seeds element counter from legacy Dynamic name (backward compat)', async () => {
       document.body.innerHTML = '<div id="seed">x</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 5', selector: '#seed' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateElementName()).toBe('Element 6');
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.allocateElementName()).toBe('Element 6');
     });
 
     test('seeds page area counter from new-format item name', async () => {
@@ -560,8 +574,8 @@ describe('blsi.BlurEngine', () => {
         type: 'sticky', id: 's_seed', name: 'Area on page 9',
         x: 0, y: 0, width: 10, height: 10,
       }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 10');
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.allocateStickyName('page')).toBe('Area on page 10');
     });
 
     test('seeds screen area counter from new-format item name', async () => {
@@ -569,8 +583,8 @@ describe('blsi.BlurEngine', () => {
         type: 'sticky', id: 's_seed2', name: 'Area on screen 3',
         anchor: 'screen', x: 0, y: 0, width: 10, height: 10,
       }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateStickyName('screen')).toBe('Area on screen 4');
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.allocateStickyName('screen')).toBe('Area on screen 4');
     });
 
     test('seeds page counter from legacy Sticky name (backward compat)', async () => {
@@ -578,8 +592,8 @@ describe('blsi.BlurEngine', () => {
         type: 'sticky', id: 's_seed', name: 'Sticky 9',
         x: 0, y: 0, width: 10, height: 10,
       }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.allocateStickyName('page')).toBe('Area on page 10');
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.allocateStickyName('page')).toBe('Area on page 10');
     });
   });
 
@@ -589,32 +603,32 @@ describe('blsi.BlurEngine', () => {
   describe('blurAll — page-wide reconcile', () => {
     test('storage blurState=true injects rules and flips isPageBlurred', async () => {
       fakeStorage.blurState = true;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.isPageBlurred).toBe(true);
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.isPageBlurred).toBe(true);
       expect(document.getElementById('bl-si-blur-styles')).not.toBeNull();
     });
 
     test('storage blurState=false after being true tears down rules', async () => {
       fakeStorage.blurState = true;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.blurState = false;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.isPageBlurred).toBe(false);
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.isPageBlurred).toBe(false);
       expect(document.getElementById('bl-si-blur-styles')).toBeNull();
     });
 
     test('no page-wide rules when blurState=false from the start', async () => {
       fakeStorage.blurState = false;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('bl-si-blur-styles')).toBeNull();
     });
 
     test('category change between calls rebuilds rules', async () => {
       fakeStorage.blurState = true;
       fakeStorage.settings.blur_categories = { text: true, media: false, form: false, table: false, structure: false };
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.settings.blur_categories = { text: false, media: true, form: false, table: false, structure: false };
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('img');
       expect(css).not.toContain('h1');
@@ -627,11 +641,11 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<span id="empty"></span>';
       fakeStorage.blurState = true;
       fakeStorage.settings.thorough_blur = true;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('empty').dataset.blSiBlur).toBeDefined();
 
       fakeStorage.settings.thorough_blur = false;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('empty').dataset.blSiBlur).toBeUndefined();
     });
 
@@ -639,10 +653,10 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<h1 id="h">x</h1><img id="i" src="x">';
       fakeStorage.blurState = true;
       fakeStorage.settings.blur_categories = { text: true, media: true, form: false, table: false, structure: false };
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
 
       fakeStorage.settings.blur_categories = { text: false, media: true, form: false, table: false, structure: false };
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       // h1 now comes from the style rules — after category switch the rule
       // no longer matches. Verify the rule set reflects the new categories.
       const css = document.getElementById('bl-si-blur-styles').textContent;
@@ -654,13 +668,13 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<div id="pick">x</div>';
       fakeStorage.blurState = true;
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#pick' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('pick').dataset.blSiPickBlur).toBe('1');
 
       // Trigger a refresh by flipping THOROUGH_BLUR — _enablePageWide nukes
       // all stamps, item reconcile must restore picker stamps.
       fakeStorage.settings.thorough_blur = true;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('pick').dataset.blSiPickBlur).toBe('1');
     });
 
@@ -668,10 +682,10 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<div id="gone">x</div>';
       fakeStorage.blurState = true;
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#gone' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.settings.enabled = false;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
-      expect(blsi.BlurEngine.isPageBlurred).toBe(false);
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      expect(blsi.Engine.isPageBlurred).toBe(false);
       expect(document.getElementById('bl-si-blur-styles')).toBeNull();
       expect(document.getElementById('gone').dataset.blSiPickBlur).toBeUndefined();
       expect(document.getElementById('gone').dataset.blSiBlur).toBeUndefined();
@@ -682,29 +696,29 @@ describe('blsi.BlurEngine', () => {
       fakeStorage.items = [
         { type: 'sticky', id: 'z1', name: 'Sticky 1', anchor: 'page', x: 0, y: 0, width: 100, height: 100 },
       ];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.querySelector('[data-bl-si-zone="z1"]')).not.toBeNull();
 
       fakeStorage.settings.enabled = false;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.querySelector('[data-bl-si-zone]')).toBeNull();
-      expect(blsi.BlurEngine.getZoneOverlays().length).toBe(0);
+      expect(blsi.Engine.getZoneOverlays().length).toBe(0);
     });
 
     test('_setPickerActiveForObserver is exposed', () => {
-      expect(typeof blsi.BlurEngine._setPickerActiveForObserver).toBe('function');
-      blsi.BlurEngine._setPickerActiveForObserver(true);
-      blsi.BlurEngine._setPickerActiveForObserver(false);
+      expect(typeof blsi.Engine._setPickerActiveForObserver).toBe('function');
+      blsi.Engine._setPickerActiveForObserver(true);
+      blsi.Engine._setPickerActiveForObserver(false);
     });
 
     test('frosted SVG filter is cleaned up on disable', async () => {
       fakeStorage.blurState = true;
       fakeStorage.settings.blur_mode = 'frosted';
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById(blsi.ids.svg_filters)).not.toBeNull();
 
       fakeStorage.blurState = false;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById(blsi.ids.svg_filters)).toBeNull();
     });
 
@@ -712,11 +726,11 @@ describe('blsi.BlurEngine', () => {
       // Stamp a div directly, then run blurAll twice with identical storage.
       // If the second call ran _enablePageWide, the nuke would clear the probe.
       fakeStorage.blurState = true;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       const probe = document.createElement('div');
       probe.dataset.blSiBlur = '1';
       document.body.appendChild(probe);
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(probe.dataset.blSiBlur).toBe('1');
     });
 
@@ -726,12 +740,12 @@ describe('blsi.BlurEngine', () => {
       fakeStorage.blurState = true;
       fakeStorage.settings.blur_mode = 'frosted';
       fakeStorage.settings.blur_radius = 6;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       const probe = document.createElement('div');
       probe.dataset.blSiBlur = '1';
       document.body.appendChild(probe);
       fakeStorage.settings.blur_radius = 12;
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       // Probe cleared by _enablePageWide nuke — proves the rebuild ran.
       expect(probe.dataset.blSiBlur).toBeUndefined();
     });
@@ -739,9 +753,9 @@ describe('blsi.BlurEngine', () => {
     test('sequential awaited blurAll() converges on the final storage state', async () => {
       document.body.innerHTML = '<div id="a">x</div><div id="b">y</div>';
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 1', selector: '#a' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       fakeStorage.items = [{ type: 'dynamic', name: 'Dynamic 2', selector: '#b' }];
-      await blsi.BlurEngine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
+      await blsi.Engine.handleSite({ ...fakeStorage.settings, blur_all_active: fakeStorage.blurState, blur_items: fakeStorage.items });
       expect(document.getElementById('a').dataset.blSiPickBlur).toBeUndefined();
       expect(document.getElementById('b').dataset.blSiPickBlur).toBe('1');
     });
@@ -757,7 +771,7 @@ describe('blsi.BlurEngine', () => {
     const onlyStructCats = { text: false, media: false, form: false, table: false, structure: true };
 
     test('hgroup is stamped when TEXT is on (alwaysBlur rule)', () => {
-      blsi.BlurEngine.injectRules(document,onlyTextCats);
+      blsi.Engine.injectRules(document,onlyTextCats);
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('hgroup');
     });
@@ -766,8 +780,8 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML =
         '<ruby id="ruby-filled">漢<rt id="rt-filled">kan</rt></ruby>' +
         '<ruby id="ruby-empty"></ruby>';
-      blsi.BlurEngine.injectRules(document,onlyTextCats);
-      blsi.BlurEngine.stampElements(document, { text: true, media: false, form: false, table: false, structure: false }, false);
+      blsi.Engine.injectRules(document,onlyTextCats);
+      blsi.Engine.stampElements(document, { text: true, media: false, form: false, table: false, structure: false }, false);
       expect(document.getElementById('ruby-filled').dataset.blSiBlur).toBe('1');
       expect(document.getElementById('rt-filled').dataset.blSiBlur).toBe('1');
       expect(document.getElementById('ruby-empty').dataset.blSiBlur).toBeUndefined();
@@ -775,30 +789,30 @@ describe('blsi.BlurEngine', () => {
 
     test('li covered by CSS alwaysBlur when STRUCTURE is on (not JS-stamped)', () => {
       // li moved to STRUCTURE.alwaysBlur — CSS injection covers it, not JS stamp.
-      blsi.BlurEngine.injectRules(document, onlyStructCats);
+      blsi.Engine.injectRules(document, onlyStructCats);
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('li');
       // confirm stampElements does NOT add data-bl-si-blur (CSS handles it)
       document.body.innerHTML = '<ul><li id="item">hello world text</li></ul>';
-      blsi.BlurEngine.stampElements(document, onlyStructCats, false);
+      blsi.Engine.stampElements(document, onlyStructCats, false);
       expect(document.getElementById('item').dataset.blSiBlur).toBeUndefined();
     });
 
     test('li not in CSS alwaysBlur and not JS-stamped when STRUCTURE is off', () => {
       document.body.innerHTML = '<ul><li id="item">hello world text</li></ul>';
-      blsi.BlurEngine.injectRules(document, onlyTextCats);
-      blsi.BlurEngine.stampElements(document, onlyTextCats, false);
+      blsi.Engine.injectRules(document, onlyTextCats);
+      blsi.Engine.stampElements(document, onlyTextCats, false);
       expect(document.getElementById('item').dataset.blSiBlur).toBeUndefined();
     });
 
     test('dt and dd covered by CSS alwaysBlur when STRUCTURE is on (not JS-stamped)', () => {
       // dt/dd moved to STRUCTURE.alwaysBlur — CSS injection covers them, not JS stamp.
-      blsi.BlurEngine.injectRules(document, onlyStructCats);
+      blsi.Engine.injectRules(document, onlyStructCats);
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('dt');
       expect(css).toContain('dd');
       document.body.innerHTML = '<dl><dt id="term">word</dt><dd id="def">meaning</dd></dl>';
-      blsi.BlurEngine.stampElements(document, onlyStructCats, false);
+      blsi.Engine.stampElements(document, onlyStructCats, false);
       expect(document.getElementById('term').dataset.blSiBlur).toBeUndefined();
       expect(document.getElementById('def').dataset.blSiBlur).toBeUndefined();
     });
@@ -812,7 +826,7 @@ describe('blsi.BlurEngine', () => {
     const formOff = { text: true, media: true, form: false, table: true, structure: true };
 
     test('alwaysBlur CSS rule contains [role="button"] when FORM is on', () => {
-      blsi.BlurEngine.injectRules(document,formOn);
+      blsi.Engine.injectRules(document,formOn);
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('[role="button"]');
       expect(css).toContain('[role="checkbox"]');
@@ -820,7 +834,7 @@ describe('blsi.BlurEngine', () => {
     });
 
     test('alwaysBlur CSS rule omits role selectors when FORM is off', () => {
-      blsi.BlurEngine.injectRules(document,formOff);
+      blsi.Engine.injectRules(document,formOff);
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).not.toContain('[role="button"]');
     });
@@ -829,7 +843,7 @@ describe('blsi.BlurEngine', () => {
       const div = document.createElement('div');
       div.setAttribute('role', 'button');
       document.body.appendChild(div);
-      expect(blsi.BlurEngine.matchesActiveCategories(div, formOn)).toBe(true);
+      expect(blsi.Engine.matchesActiveCategories(div, formOn)).toBe(true);
     });
 
     test('matchesActiveCategories returns false for role="button" when FORM is off', () => {
@@ -839,28 +853,28 @@ describe('blsi.BlurEngine', () => {
       const div = document.createElement('div');
       div.setAttribute('role', 'button');
       document.body.appendChild(div);
-      expect(blsi.BlurEngine.matchesActiveCategories(div, allOff)).toBe(false);
+      expect(blsi.Engine.matchesActiveCategories(div, allOff)).toBe(false);
     });
 
     test('matchesActiveCategories returns false for plain <div> with no role', () => {
       const div = document.createElement('div');
       document.body.appendChild(div);
-      expect(blsi.BlurEngine.matchesActiveCategories(div, formOn)).toBe(false);
+      expect(blsi.Engine.matchesActiveCategories(div, formOn)).toBe(false);
     });
 
     test('shouldBlurElement returns true for role-matched element', () => {
       const span = document.createElement('span');
       span.setAttribute('role', 'checkbox');
       document.body.appendChild(span);
-      expect(blsi.BlurEngine.shouldBlurElement(span, formOn, false)).toBe(true);
+      expect(blsi.Engine.shouldBlurElement(span, formOn, false)).toBe(true);
     });
 
     test('role set survives selector cache invalidation (toggle off then on)', () => {
-      blsi.BlurEngine.injectRules(document,formOn);
+      blsi.Engine.injectRules(document,formOn);
       expect(document.getElementById('bl-si-blur-styles').textContent).toContain('[role="button"]');
-      blsi.BlurEngine.injectRules(document,formOff);
+      blsi.Engine.injectRules(document,formOff);
       expect(document.getElementById('bl-si-blur-styles').textContent).not.toContain('[role="button"]');
-      blsi.BlurEngine.injectRules(document,formOn);
+      blsi.Engine.injectRules(document,formOn);
       expect(document.getElementById('bl-si-blur-styles').textContent).toContain('[role="button"]');
     });
     // MISSING: no test for role="listbox", "combobox", "switch" — only button/checkbox/slider covered
@@ -882,7 +896,7 @@ describe('blsi.BlurEngine', () => {
     // Without this, two consecutive handleSite(active, textCats) calls in
     // adjacent tests skip handleShadowRoot on the second call (key unchanged).
     afterEach(async () => {
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: false, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
@@ -901,20 +915,20 @@ describe('blsi.BlurEngine', () => {
 
     test('injectRules injects style into shadow root', () => {
       const sr = makeShadowRoot('<p>hello</p>');
-      blsi.BlurEngine.injectRules(sr, textCats, null);
+      blsi.Engine.injectRules(sr, textCats, null);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
     });
 
     test('injectRules style in shadow root does not appear in document head', () => {
       const sr = makeShadowRoot('<p>hello</p>');
-      blsi.BlurEngine.injectRules(sr, textCats, null);
+      blsi.Engine.injectRules(sr, textCats, null);
       expect(document.head.querySelector('#bl-si-blur-styles')).toBeNull();
     });
 
     test('removeRules removes style from shadow root', () => {
       const sr = makeShadowRoot('<p>hello</p>');
-      blsi.BlurEngine.injectRules(sr, textCats, null);
-      blsi.BlurEngine.removeRules(sr);
+      blsi.Engine.injectRules(sr, textCats, null);
+      blsi.Engine.removeRules(sr);
       expect(sr.querySelector('#bl-si-blur-styles')).toBeNull();
     });
 
@@ -922,7 +936,7 @@ describe('blsi.BlurEngine', () => {
 
     test('stampElements stamps text-check elements inside shadow root', () => {
       const sr = makeShadowRoot('<span>secret</span><span></span>');
-      blsi.BlurEngine.stampElements(sr, textCats, false, null);
+      blsi.Engine.stampElements(sr, textCats, false, null);
       const spans = sr.querySelectorAll('span');
       expect(spans[0].dataset.blSiBlur).toBe('1');
       expect(spans[1].dataset.blSiBlur).toBeUndefined();
@@ -933,13 +947,13 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(host);
       const sr = host.attachShadow({ mode: 'open' });
       sr.innerHTML = '<span>text</span>';
-      const found = blsi.BlurEngine.stampElements(document, textCats, false, null);
+      const found = blsi.Engine.stampElements(document, textCats, false, null);
       expect(found).toContain(sr);
     });
 
     test('stampElements returns empty array when no shadow roots present', () => {
       document.body.innerHTML = '<p>hello</p>';
-      const found = blsi.BlurEngine.stampElements(document, textCats, false, null);
+      const found = blsi.Engine.stampElements(document, textCats, false, null);
       expect(found).toEqual([]);
     });
 
@@ -948,14 +962,14 @@ describe('blsi.BlurEngine', () => {
     test('handleShadowRoot active path injects rules into shadow root', async () => {
       const sr = makeShadowRoot('<p>hello</p>');
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleShadowRoot(s, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
     });
 
     test('handleShadowRoot active path stamps text-check elements inside shadow root', async () => {
       const sr = makeShadowRoot('<span>secret</span>');
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleShadowRoot(s, sr);
       expect(sr.querySelector('span').dataset.blSiBlur).toBe('1');
     });
 
@@ -963,10 +977,10 @@ describe('blsi.BlurEngine', () => {
       const sr = makeShadowRoot('<span>secret</span>');
       const on  = { enabled: true, blur_all_active: true,  blur_categories: textCats, blur_mode: null, thorough_blur: false };
       const off = { enabled: true, blur_all_active: false, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleShadowRoot(on, sr);
+      await blsi.Engine.handleShadowRoot(on, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(sr.querySelector('span').dataset.blSiBlur).toBe('1');
-      await blsi.BlurEngine.handleShadowRoot(off, sr);
+      await blsi.Engine.handleShadowRoot(off, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).toBeNull();
       expect(sr.querySelector('span').dataset.blSiBlur).toBeUndefined();
     });
@@ -982,7 +996,7 @@ describe('blsi.BlurEngine', () => {
       nestedSr.innerHTML = '<span>nested secret</span>';
 
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleShadowRoot(s, sr);
 
       expect(nestedSr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBe('1');
@@ -1001,12 +1015,12 @@ describe('blsi.BlurEngine', () => {
       nestedSr.innerHTML = '<span>text</span>';
 
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleShadowRoot(s, sr);
       expect(nestedSr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBe('1');
 
       // Single teardown(sr) must clean up nestedSr too
-      blsi.BlurEngine.teardown(sr);
+      blsi.Engine.teardown(sr);
       expect(sr.querySelector('#bl-si-blur-styles')).toBeNull();
       expect(nestedSr.querySelector('#bl-si-blur-styles')).toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBeUndefined();
@@ -1023,7 +1037,7 @@ describe('blsi.BlurEngine', () => {
       const sr = host.attachShadow({ mode: 'open' });
       sr.innerHTML = '<span>secret content</span>';
 
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: true, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
@@ -1038,13 +1052,13 @@ describe('blsi.BlurEngine', () => {
       const sr = host.attachShadow({ mode: 'open' });
       sr.innerHTML = '<span>secret content</span>';
 
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: true, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
 
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: false, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
@@ -1057,8 +1071,8 @@ describe('blsi.BlurEngine', () => {
     test('handleShadowRoot called twice on same shadow root yields one style element', async () => {
       const sr = makeShadowRoot('<span>text</span>');
       const s = { enabled: true, blur_all_active: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.BlurEngine.handleShadowRoot(s, sr);
-      await blsi.BlurEngine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleShadowRoot(s, sr);
       expect(sr.querySelectorAll('#bl-si-blur-styles').length).toBe(1);
     });
     // ── __blsi_shadow_attached event (late attachShadow detection) ───────────
@@ -1070,7 +1084,7 @@ describe('blsi.BlurEngine', () => {
       const host = document.createElement('div');
       document.body.appendChild(host);
 
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: true, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
@@ -1091,7 +1105,7 @@ describe('blsi.BlurEngine', () => {
       const host = document.createElement('div');
       document.body.appendChild(host);
 
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: false, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
@@ -1110,7 +1124,7 @@ describe('blsi.BlurEngine', () => {
       const sr = host.attachShadow({ mode: 'open' });
       sr.innerHTML = '<span>text</span>';
 
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: true, blur_items: [],
         blur_categories: textCats, blur_mode: null, thorough_blur: false,
       });
@@ -1136,7 +1150,7 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(host);
       const el = host.querySelector('shreddit-foo');
       const cats = { text: true, media: false, form: false, table: false, structure: true };
-      blsi.BlurEngine.stampElements(document.body, cats, false, null);
+      blsi.Engine.stampElements(document.body, cats, false, null);
       expect(el.dataset.blSiBlur).toBe('1');
     });
 
@@ -1146,7 +1160,7 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(host);
       const el = host.querySelector('shreddit-bar');
       const cats = { text: true, media: false, form: false, table: false, structure: true };
-      blsi.BlurEngine.stampElements(document.body, cats, false, null);
+      blsi.Engine.stampElements(document.body, cats, false, null);
       expect(el.dataset.blSiBlur).toBeUndefined();
     });
 
@@ -1156,7 +1170,7 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(host);
       const el = host.querySelector('shreddit-baz');
       const cats = { text: true, media: false, form: false, table: false, structure: true };
-      blsi.BlurEngine.stampElements(document.body, cats, true, null);
+      blsi.Engine.stampElements(document.body, cats, true, null);
       expect(el.dataset.blSiBlur).toBe('1');
     });
 
@@ -1171,7 +1185,7 @@ describe('blsi.BlurEngine', () => {
       anchor.appendChild(slot);
       sr.appendChild(anchor);
       const cats = { text: true, media: false, form: false, table: false, structure: false };
-      blsi.BlurEngine.stampElements(sr, cats, false, null);
+      blsi.Engine.stampElements(sr, cats, false, null);
       expect(anchor.dataset.blSiBlur).toBe('1');
     });
 
@@ -1186,7 +1200,7 @@ describe('blsi.BlurEngine', () => {
       wrapper.appendChild(slot);
       sr.appendChild(wrapper);
       const cats = { text: true, media: false, form: false, table: false, structure: true };
-      blsi.BlurEngine.stampElements(sr, cats, false, null);
+      blsi.Engine.stampElements(sr, cats, false, null);
       expect(wrapper.dataset.blSiBlur).toBeUndefined();
     });
 
@@ -1196,7 +1210,7 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(host);
       const el = host.querySelector('shreddit-qux');
       const cats = { text: false, media: true, form: false, table: false, structure: false };
-      blsi.BlurEngine.stampElements(document.body, cats, false, null);
+      blsi.Engine.stampElements(document.body, cats, false, null);
       expect(el.dataset.blSiBlur).toBeUndefined();
     });
   });
@@ -1206,13 +1220,13 @@ describe('blsi.BlurEngine', () => {
   // USER IMPACT: pages with lists/definition terms — li/dt/dd blurred by CSS rule not JS stamp
   describe('CATEGORY_SELECTORS list element placement (RC-2)', () => {
     test('li is in STRUCTURE.alwaysBlur not textCheck', () => {
-      const cats = blsi.BlurEngine.CATEGORY_SELECTORS;
+      const cats = blsi.Engine.CATEGORY_SELECTORS;
       expect(cats.structure.alwaysBlur).toContain('li');
       expect(cats.structure.textCheck).not.toContain('li');
     });
 
     test('dt and dd are in STRUCTURE.alwaysBlur not textCheck', () => {
-      const cats = blsi.BlurEngine.CATEGORY_SELECTORS;
+      const cats = blsi.Engine.CATEGORY_SELECTORS;
       expect(cats.structure.alwaysBlur).toContain('dt');
       expect(cats.structure.alwaysBlur).toContain('dd');
       expect(cats.structure.textCheck).not.toContain('dt');
@@ -1220,7 +1234,7 @@ describe('blsi.BlurEngine', () => {
     });
 
     test('injectRules includes li in alwaysBlur CSS when STRUCTURE active', () => {
-      blsi.BlurEngine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
+      blsi.Engine.injectRules(document, { text: false, media: false, form: false, table: false, structure: true });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('li');
     });
@@ -1231,13 +1245,13 @@ describe('blsi.BlurEngine', () => {
   // USER IMPACT: reveal mode — clicking/hovering blurred container also reveals nested blurred children
   describe('reveal descendant cascade rule (RC-3)', () => {
     test('injectRules includes descendant-reveal cascade rule for data-bl-si-blur', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('[data-bl-si-reveal] [data-bl-si-blur]');
     });
 
     test('injectRules includes descendant-reveal cascade rule for data-bl-si-pii', () => {
-      blsi.BlurEngine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
+      blsi.Engine.injectRules(document, { text: true, media: false, form: false, table: false, structure: false });
       const css = document.getElementById('bl-si-blur-styles').textContent;
       expect(css).toContain('[data-bl-si-reveal] [data-bl-si-pii]');
     });
@@ -1256,7 +1270,7 @@ describe('blsi.BlurEngine', () => {
     }
 
     beforeEach(() => {
-      blsi.BlurEngine.removeRules(document);
+      blsi.Engine.removeRules(document);
     });
 
     test('handleIframe stamps cross-origin iframe with data-bl-si-blur when active', () => {
@@ -1268,7 +1282,7 @@ describe('blsi.BlurEngine', () => {
         configurable: true,
       });
       const s = { enabled: true, blur_all_active: true };
-      blsi.BlurEngine.handleIframe(s, f);
+      blsi.Engine.handleIframe(s, f);
       expect(f.dataset.blSiBlur).toBe('1');
     });
 
@@ -1280,7 +1294,7 @@ describe('blsi.BlurEngine', () => {
         configurable: true,
       });
       const s = { enabled: true, blur_all_active: false };
-      blsi.BlurEngine.handleIframe(s, f);
+      blsi.Engine.handleIframe(s, f);
       expect(f.dataset.blSiBlur).toBeUndefined();
     });
 
@@ -1288,7 +1302,7 @@ describe('blsi.BlurEngine', () => {
       const f = makeIframe();
       // jsdom iframes have a real (same-origin) contentDocument — handleIframe should skip.
       const s = { enabled: true, blur_all_active: true };
-      blsi.BlurEngine.handleIframe(s, f);
+      blsi.Engine.handleIframe(s, f);
       expect(f.dataset.blSiBlur).toBeUndefined();
     });
   });
@@ -1299,12 +1313,12 @@ describe('blsi.BlurEngine', () => {
   // picked elements instead of always falling back to blur.
   describe('pick & blur — data-bl-si-pick-blur attribute', () => {
     beforeEach(() => {
-      blsi.BlurEngine.resetCounters();
+      blsi.Engine.resetCounters();
     });
 
     test('_applyDynamicItem stamps data-bl-si-pick-blur, NOT data-bl-si-blur', async () => {
       document.body.innerHTML = '<p id="p1">text</p>';
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true, blur_all_active: false, blur_items: [{ type: 'dynamic', name: 'Dynamic 1', selector: '#p1' }],
         pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 },
       });
@@ -1317,15 +1331,15 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<p id="p2">text</p>';
       const item = { type: 'dynamic', name: 'Dynamic 1', selector: '#p2' };
       const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [item] });
       expect(document.getElementById('p2').dataset.blSiPickBlur).toBe('1');
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [] });
       expect(document.getElementById('p2').dataset.blSiPickBlur).toBeUndefined();
     });
 
     test('zone overlay (sticky item) stamps data-bl-si-pick-blur on overlay', async () => {
       const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [
+      await blsi.Engine.handleSite({ ...base, blur_items: [
         { type: 'sticky', id: 'z_pick', name: 'Z', anchor: 'page', x: 0, y: 0, width: 50, height: 50 },
       ]});
       const zone = document.querySelector('[data-bl-si-zone="z_pick"]');
@@ -1338,7 +1352,7 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(el);
       el.dataset.blSiBlur = '1';
       el.dataset.blSiPickBlur = '1';
-      blsi.BlurEngine.removeBlur(el);
+      blsi.Engine.removeBlur(el);
       expect(el.dataset.blSiBlur).toBeUndefined();
       expect(el.dataset.blSiPickBlur).toBeUndefined();
     });
@@ -1347,34 +1361,34 @@ describe('blsi.BlurEngine', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       el.dataset.blSiPickBlur = '1';
-      expect(blsi.BlurEngine.isBlurred(el)).toBe(true);
+      expect(blsi.Engine.isBlurred(el)).toBe(true);
     });
 
     test('isVisuallyBlurred returns true when only data-bl-si-pick-blur is set', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       el.dataset.blSiPickBlur = '1';
-      expect(blsi.BlurEngine.isVisuallyBlurred(el)).toBe(true);
+      expect(blsi.Engine.isVisuallyBlurred(el)).toBe(true);
     });
   });
 
   describe('pick & blur — injectPickBlurRules / removePickBlurRules', () => {
     afterEach(() => {
-      blsi.BlurEngine.removePickBlurRules(document);
+      blsi.Engine.removePickBlurRules(document);
     });
 
     test('blur mode injects nothing (static content.css covers it)', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'blur', { hex: '#ff0000', opacity: 1 });
+      blsi.Engine.injectPickBlurRules(document, 'blur', { hex: '#ff0000', opacity: 1 });
       expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
     });
 
     test('null/undefined type injects nothing', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, null, null);
+      blsi.Engine.injectPickBlurRules(document, null, null);
       expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
     });
 
     test('color mode injects background-color rule for dynamic elements', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#ff0000', opacity: 0.9 });
+      blsi.Engine.injectPickBlurRules(document, 'color', { hex: '#ff0000', opacity: 0.9 });
       const style = document.getElementById('bl-si-pick-blur-styles');
       expect(style).not.toBeNull();
       expect(style.textContent).toContain('background-color');
@@ -1383,36 +1397,36 @@ describe('blsi.BlurEngine', () => {
     });
 
     test('color mode injects zone overlay override', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
+      blsi.Engine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
       const css = document.getElementById('bl-si-pick-blur-styles').textContent;
       expect(css).toContain('bl-si-zone-overlay');
       expect(css).toContain('backdrop-filter: none');
     });
 
     test('color mode injects reveal cancel rule', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
+      blsi.Engine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
       const css = document.getElementById('bl-si-pick-blur-styles').textContent;
       expect(css).toContain('data-bl-si-reveal]');
       expect(css).toContain('background-color: transparent');
     });
 
     test('frosted mode injects filter:url rule', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'frosted', null);
+      blsi.Engine.injectPickBlurRules(document, 'frosted', null);
       const css = document.getElementById('bl-si-pick-blur-styles').textContent;
       expect(css).toContain('url(#bl-si-frosted-filter)');
       expect(css).toContain('data-bl-si-pick-blur');
     });
 
     test('removePickBlurRules removes bl-si-pick-blur-styles', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
+      blsi.Engine.injectPickBlurRules(document, 'color', { hex: '#000000', opacity: 1 });
       expect(document.getElementById('bl-si-pick-blur-styles')).not.toBeNull();
-      blsi.BlurEngine.removePickBlurRules(document);
+      blsi.Engine.removePickBlurRules(document);
       expect(document.getElementById('bl-si-pick-blur-styles')).toBeNull();
     });
 
     test('injectPickBlurRules is idempotent — re-inject replaces existing style', () => {
-      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#ff0000', opacity: 1 });
-      blsi.BlurEngine.injectPickBlurRules(document, 'color', { hex: '#00ff00', opacity: 1 });
+      blsi.Engine.injectPickBlurRules(document, 'color', { hex: '#ff0000', opacity: 1 });
+      blsi.Engine.injectPickBlurRules(document, 'color', { hex: '#00ff00', opacity: 1 });
       expect(document.querySelectorAll('#bl-si-pick-blur-styles')).toHaveLength(1);
       expect(document.getElementById('bl-si-pick-blur-styles').textContent).toContain('rgba(0,255,0,1)');
     });
@@ -1431,7 +1445,7 @@ describe('blsi.BlurEngine', () => {
       // MO idle drain can stamp elements inserted after page load.
       // jsdom fires MO callbacks as microtasks; setTimeout falls back for idle.
       document.body.innerHTML = '';
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         ...base,
         blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#late-load' }],
       });
@@ -1454,7 +1468,7 @@ describe('blsi.BlurEngine', () => {
 
     test('flag becomes true when dynamic item reconciled', async () => {
       document.body.innerHTML = '<p id="late">late</p>';
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#late' }] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#late' }] });
       // Verify via MO gate: element inserted after reconcile should be stamped by _tryPickBlurNode.
       // We test the flag indirectly through the function that consults it.
       expect(document.getElementById('late').dataset.blSiPickBlur).toBe('1');
@@ -1463,22 +1477,22 @@ describe('blsi.BlurEngine', () => {
     test('flag becomes false after all dynamic items removed', async () => {
       document.body.innerHTML = '<p id="late2">late</p>';
       const item = { type: 'dynamic', name: 'Element 1', selector: '#late2' };
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [item] });
       expect(document.getElementById('late2').dataset.blSiPickBlur).toBe('1');
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [] });
       // After removal the element is unstamped and flag is false.
       expect(document.getElementById('late2').dataset.blSiPickBlur).toBeUndefined();
     });
 
     test('sticky-only items do not set dynamic flag (no _tryPickBlurNode calls needed)', async () => {
       // Sticky items use zone overlays, not _tryPickBlurNode, so they don't need the MO path.
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [
+      await blsi.Engine.handleSite({ ...base, blur_items: [
         { type: 'sticky', id: 'z_flag', name: 'Area on page 1', anchor: 'page', x: 0, y: 0, width: 50, height: 50 },
       ]});
       // Zone overlay present (sticky path worked), no dynamic items so flag is false.
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(1);
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(1);
       // Cleanup
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [] });
     });
   });
 
@@ -1486,12 +1500,12 @@ describe('blsi.BlurEngine', () => {
     const base = { enabled: true, blur_all_active: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
 
     beforeEach(() => {
-      blsi.BlurEngine.resetCounters();
+      blsi.Engine.resetCounters();
     });
 
     test('stamps element that matches a stored dynamic item selector (unique match)', async () => {
       document.body.innerHTML = '<p id="dyn1">text</p>';
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#dyn1' }] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#dyn1' }] });
       // Element was in the DOM at reconcile time — confirm it was stamped.
       expect(document.getElementById('dyn1').dataset.blSiPickBlur).toBe('1');
     });
@@ -1501,14 +1515,14 @@ describe('blsi.BlurEngine', () => {
       const el = document.getElementById('dyn2');
       el.dataset.blSiPickBlur = '1';  // pre-stamp
       const item = { type: 'dynamic', name: 'Element 1', selector: '#dyn2' };
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [item] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [item] });
       // Should still be '1', not changed to anything else.
       expect(el.dataset.blSiPickBlur).toBe('1');
     });
 
     test('does not stamp when selector matches multiple elements (not unique)', async () => {
       document.body.innerHTML = '<p class="multi">a</p><p class="multi">b</p>';
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '.multi' }] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '.multi' }] });
       const els = document.querySelectorAll('.multi');
       // Non-unique — neither should be stamped.
       expect(els[0].dataset.blSiPickBlur).toBeUndefined();
@@ -1518,7 +1532,7 @@ describe('blsi.BlurEngine', () => {
     test('skips extension UI elements', async () => {
       // Elements with data-bl-si-zone attribute are extension UI.
       document.body.innerHTML = '<div id="ext-ui" data-bl-si-zone="z1">zone</div>';
-      await blsi.BlurEngine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#ext-ui' }] });
+      await blsi.Engine.handleSite({ ...base, blur_items: [{ type: 'dynamic', name: 'Element 1', selector: '#ext-ui' }] });
       expect(document.getElementById('ext-ui').dataset.blSiPickBlur).toBeUndefined();
     });
   });
@@ -1526,42 +1540,42 @@ describe('blsi.BlurEngine', () => {
   describe('highlightItem / clearItemHighlight', () => {
     beforeEach(() => {
       document.body.innerHTML = '<div id="hi-target">content</div>';
-      blsi.BlurEngine.clearItemHighlight();
+      blsi.Engine.clearItemHighlight();
     });
     afterEach(() => {
-      blsi.BlurEngine.clearItemHighlight();
+      blsi.Engine.clearItemHighlight();
       document.body.innerHTML = '';
     });
 
     test('applies bl-si-hover-highlight to resolved dynamic element', () => {
-      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
+      blsi.Engine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
       expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(true);
     });
 
     test('does not throw when selector resolves to nothing', () => {
       expect(() => {
-        blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#nonexistent-xyz'] });
+        blsi.Engine.highlightItem({ item_type: 'dynamic', selectors: ['#nonexistent-xyz'] });
       }).not.toThrow();
       expect(document.querySelector('.bl-si-hover-highlight')).toBeNull();
     });
 
     test('second highlightItem clears previous highlight before applying new one', () => {
       document.body.innerHTML += '<div id="hi-target-b">b</div>';
-      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
-      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target-b'] });
+      blsi.Engine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
+      blsi.Engine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target-b'] });
       expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(false);
       expect(document.getElementById('hi-target-b').classList.contains('bl-si-hover-highlight')).toBe(true);
     });
 
     test('clearItemHighlight removes the highlight class', () => {
-      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
+      blsi.Engine.highlightItem({ item_type: 'dynamic', selectors: ['#hi-target'] });
       expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(true);
-      blsi.BlurEngine.clearItemHighlight();
+      blsi.Engine.clearItemHighlight();
       expect(document.getElementById('hi-target').classList.contains('bl-si-hover-highlight')).toBe(false);
     });
 
     test('clearItemHighlight is safe when nothing is highlighted', () => {
-      expect(() => blsi.BlurEngine.clearItemHighlight()).not.toThrow();
+      expect(() => blsi.Engine.clearItemHighlight()).not.toThrow();
     });
 
     test('intersection fallback highlights element via non-unique class selector when data-bl-si-pick-blur is set', () => {
@@ -1575,7 +1589,7 @@ describe('blsi.BlurEngine', () => {
       document.body.appendChild(a);
       document.body.appendChild(b);
       // Pass only the non-unique class selector (restoreSelector returns null, triggers fallback).
-      blsi.BlurEngine.highlightItem({ item_type: 'dynamic', selectors: ['div.shared-row'] });
+      blsi.Engine.highlightItem({ item_type: 'dynamic', selectors: ['div.shared-row'] });
       expect(a.classList.contains('bl-si-hover-highlight')).toBe(true);
       expect(b.classList.contains('bl-si-hover-highlight')).toBe(false);
       document.body.removeChild(a);
@@ -1591,13 +1605,13 @@ describe('blsi.BlurEngine', () => {
         blur_items: [{ type: 'sticky', id: 'hl-zone-1', name: 'Zone 1', x: 0, y: 0, width: 50, height: 50 }],
         pick_and_blur: { status: true, settings: blsi.DEFAULT_MODEL.pick_and_blur.settings },
       };
-      await blsi.BlurEngine.handleSite(fakeSettings);
-      expect(blsi.BlurEngine.getZoneOverlays()).toHaveLength(1);
-      blsi.BlurEngine.highlightItem({ item_type: 'sticky', id: 'hl-zone-1' });
-      const overlay = blsi.BlurEngine.getZoneOverlays()[0];
+      await blsi.Engine.handleSite(fakeSettings);
+      expect(blsi.Engine.getZoneOverlays()).toHaveLength(1);
+      blsi.Engine.highlightItem({ item_type: 'sticky', id: 'hl-zone-1' });
+      const overlay = blsi.Engine.getZoneOverlays()[0];
       expect(overlay.classList.contains('bl-si-hover-highlight')).toBe(true);
       // Cleanup
-      await blsi.BlurEngine.handleSite({ ...fakeSettings, blur_items: [] });
+      await blsi.Engine.handleSite({ ...fakeSettings, blur_items: [] });
     });
   });
 
@@ -1615,7 +1629,7 @@ describe('blsi.BlurEngine', () => {
     }
 
     async function activate(blurAllActive = true) {
-      await blsi.BlurEngine.handleSite({
+      await blsi.Engine.handleSite({
         enabled: true,
         blur_all_active: blurAllActive,
         blur_items: [],
@@ -1629,25 +1643,25 @@ describe('blsi.BlurEngine', () => {
       // the observer, so test isolation requires us to re-attach explicitly.
       // observeRoot is idempotent, so this is a no-op when handleSite did
       // attach.
-      blsi.BlurEngine.observeRoot(document);
+      blsi.Engine.observeRoot(document);
     }
 
     afterEach(() => {
       // Subscribers persist on the module — clean up between tests.
-      blsi.BlurEngine.unsubscribeMutations('test-a');
-      blsi.BlurEngine.unsubscribeMutations('test-b');
-      blsi.BlurEngine.unsubscribeMutations('pii');
-      blsi.BlurEngine._setPickerActiveForObserver(false);
+      blsi.Engine.unsubscribeMutations('test-a');
+      blsi.Engine.unsubscribeMutations('test-b');
+      blsi.Engine.unsubscribeMutations('pii');
+      blsi.Engine._setPickerActiveForObserver(false);
     });
 
     test('subscribeMutations + unsubscribeMutations are exposed', () => {
-      expect(typeof blsi.BlurEngine.subscribeMutations).toBe('function');
-      expect(typeof blsi.BlurEngine.unsubscribeMutations).toBe('function');
+      expect(typeof blsi.Engine.subscribeMutations).toBe('function');
+      expect(typeof blsi.Engine.unsubscribeMutations).toBe('function');
     });
 
     test('subscriber receives childList MutationRecord[] for added node', async () => {
       const handler = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', handler);
+      blsi.Engine.subscribeMutations('test-a', handler);
       await activate();
 
       const p = document.createElement('p');
@@ -1666,7 +1680,7 @@ describe('blsi.BlurEngine', () => {
       document.body.innerHTML = '<p>seed</p>';
       const tn = document.body.querySelector('p').firstChild;
       const handler = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', handler);
+      blsi.Engine.subscribeMutations('test-a', handler);
       await activate();
 
       tn.textContent = 'mutated value';
@@ -1679,10 +1693,10 @@ describe('blsi.BlurEngine', () => {
 
     test('unsubscribeMutations stops further dispatch', async () => {
       const handler = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', handler);
+      blsi.Engine.subscribeMutations('test-a', handler);
       await activate();
 
-      blsi.BlurEngine.unsubscribeMutations('test-a');
+      blsi.Engine.unsubscribeMutations('test-a');
       const p = document.createElement('p');
       document.body.appendChild(p);
       await flushDispatch();
@@ -1693,8 +1707,8 @@ describe('blsi.BlurEngine', () => {
     test('re-registering same name replaces the handler', async () => {
       const first = jest.fn();
       const second = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', first);
-      blsi.BlurEngine.subscribeMutations('test-a', second);
+      blsi.Engine.subscribeMutations('test-a', first);
+      blsi.Engine.subscribeMutations('test-a', second);
       await activate();
 
       const p = document.createElement('p');
@@ -1708,8 +1722,8 @@ describe('blsi.BlurEngine', () => {
     test('subscriber error is caught — other subscribers still fire', async () => {
       const bad = jest.fn(() => { throw new Error('boom'); });
       const good = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', bad);
-      blsi.BlurEngine.subscribeMutations('test-b', good);
+      blsi.Engine.subscribeMutations('test-a', bad);
+      blsi.Engine.subscribeMutations('test-b', good);
       await activate();
 
       const p = document.createElement('p');
@@ -1725,10 +1739,10 @@ describe('blsi.BlurEngine', () => {
     // not PII rescans on character data.
     test('subscribers still fire when picker is active (engine drain skipped)', async () => {
       const handler = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', handler);
+      blsi.Engine.subscribeMutations('test-a', handler);
       await activate();
 
-      blsi.BlurEngine._setPickerActiveForObserver(true);
+      blsi.Engine._setPickerActiveForObserver(true);
       const p = document.createElement('p');
       p.textContent = 'while picker open';
       document.body.appendChild(p);
@@ -1741,13 +1755,13 @@ describe('blsi.BlurEngine', () => {
 
     test('subscribers still fire when blur-all is OFF', async () => {
       const handler = jest.fn();
-      blsi.BlurEngine.subscribeMutations('test-a', handler);
+      blsi.Engine.subscribeMutations('test-a', handler);
       await activate(true);
       // observeRoot attached. Now turn blur-all off — observer stays attached
       // since handleSite teardown disconnects, but subscribers should still
       // receive events for any subsequent observer attached by another path.
       // Easier check: re-attach observer manually (idempotent) after teardown.
-      blsi.BlurEngine.observeRoot(document);
+      blsi.Engine.observeRoot(document);
 
       const p = document.createElement('p');
       document.body.appendChild(p);
@@ -1757,9 +1771,9 @@ describe('blsi.BlurEngine', () => {
     });
 
     test('subscribeMutations rejects non-string name and non-function handler', () => {
-      expect(() => blsi.BlurEngine.subscribeMutations('', () => {})).not.toThrow();
-      expect(() => blsi.BlurEngine.subscribeMutations(null, () => {})).not.toThrow();
-      expect(() => blsi.BlurEngine.subscribeMutations('x', null)).not.toThrow();
+      expect(() => blsi.Engine.subscribeMutations('', () => {})).not.toThrow();
+      expect(() => blsi.Engine.subscribeMutations(null, () => {})).not.toThrow();
+      expect(() => blsi.Engine.subscribeMutations('x', null)).not.toThrow();
       // No subscriber installed → no dispatch ever.
     });
   });

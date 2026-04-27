@@ -45,6 +45,7 @@ const ROOT = path.resolve(__dirname, '..');
 const SCAN = [
   { dir: 'popup', exts: ['.js', '.html'] },
   { dir: 'src',   exts: ['.js'] },
+  { dir: 'src/core', exts: ['.js'] },  // engine sub-modules
   { file: 'background.js' },
 ];
 
