@@ -83,14 +83,16 @@
   user-select: auto !important;
 }
 
-/* Pick-blur reveal — static fallback for gaussian mode (injected pick-blur style
-   handles frosted/color with their own reveal overrides). */
+/* Pick-blur reveal — static fallback for blur and frosted modes.
+   Only clears the visual blur primitives (filter, visibility, user-select).
+   Does NOT touch background-color / color / font-family because blur and
+   frosted never set them — clearing here would strip legitimate page styles.
+   Color mode owns its own reveal rule in the injected bl-si-pick-blur-styles
+   <style> (background-color: transparent + color: inherit), which has equal
+   specificity but later source order, so it correctly wins for color mode. */
 [data-bl-si-pick-blur][data-bl-si-reveal] {
   filter: none !important;
-  background-color: transparent !important;
-  color: inherit !important;
   visibility: visible !important;
-  font-family: unset !important;
   user-select: auto !important;
 }
 

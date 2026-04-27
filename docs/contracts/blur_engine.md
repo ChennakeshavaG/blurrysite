@@ -251,6 +251,7 @@
 - Default (blur): `filter: blur(var(--bl-si-radius, 10px))` + transition.
 - Empty `alwaysBlurSelector` (all categories disabled): only `[data-bl-si-blur]` and reveal rules are emitted.
 - Reveal override rules are injected after blur rules in same stylesheet so they win source-order tiebreak.
+- Reveal descendant rule for `[data-bl-si-pick-blur]` clears `filter` and `user-select` only — does **not** touch `background-color`, `color`, or `font-family`. Blur and frosted pick-blur modes never set those properties; clearing would strip legitimate page styles. Color pick-blur mode owns its own targeted reveal rule (in `bl-si-pick-blur-styles`) that clears its own `background-color` + `color` for the `[data-bl-si-pick-blur][data-bl-si-reveal]` selector — `_revealElement` always stamps reveal directly on every pick-blur descendant, so the targeted rule fires (the descendant chain is the safety net).
 
 ---
 

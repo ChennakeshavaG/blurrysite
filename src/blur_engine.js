@@ -468,7 +468,14 @@ const BlurEngine = (() => {
     // a revealed ancestor. Also declared in content.css for the static (blur-all
     // OFF) case; both copies are needed for source-order correctness.
     rules.push(`[data-bl-si-reveal] [data-bl-si-blur] { filter: none !important; user-select: auto !important; }`);
-    rules.push(`[data-bl-si-reveal] [data-bl-si-pick-blur] { filter: none !important; background-color: transparent !important; color: inherit !important; font-family: unset !important; user-select: auto !important; }`);
+    // Pick-blur descendants of a revealed ancestor: clear filter only.
+    // background-color / color / font-family are NOT cleared here because blur
+    // and frosted pick-blur modes never set them; clearing would strip legit
+    // page styles. Color mode owns its own reveal rule in the injected
+    // bl-si-pick-blur-styles <style> for the targeted [...][reveal] selector,
+    // which fires whenever reveal_controller stamps data-bl-si-reveal directly
+    // on the pick-blur element (it always does — see _revealElement).
+    rules.push(`[data-bl-si-reveal] [data-bl-si-pick-blur] { filter: none !important; user-select: auto !important; }`);
     rules.push(`[data-bl-si-reveal] [data-bl-si-pii] { filter: none !important; user-select: auto !important; }`);
 
     if (rules.length === 0) return;
