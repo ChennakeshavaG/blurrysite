@@ -13,7 +13,10 @@ Fires idle/tab-switch callbacks without owning blur state — a pure event trigg
 | `_opts` | `Object\|null` — the options passed to `init()` |
 | `_onVisChange` | `Function\|null` — bound `visibilitychange` handler (for cleanup) |
 | `_onActivity` | `Function\|null` — bound activity event handler (for cleanup) |
+| `_onWindowBlur` | `Function\|null` — bound `window.blur` handler (for cleanup) |
+| `_onWindowFocus` | `Function\|null` — bound `window.focus` handler (for cleanup) |
 | `_hiddenTimer` | `TimeoutID\|null` — 150ms debounce for window-drag disambiguation |
+| `_windowBlurTimer` | `TimeoutID\|null` — 250ms debounce for window-blur (URL-bar / quick-focus-pull suppression) |
 
 ## Public API
 
@@ -29,6 +32,7 @@ Fires idle/tab-switch callbacks without owning blur state — a pure event trigg
 **Returns**: `void`  
 **Side effects**:
 - Registers `visibilitychange` on `document` if `opts.tabSwitch`
+- Registers `blur` and `focus` on `window` if `opts.tabSwitch` (catches alt-tab to other apps/windows where the page stays visible — `visibilitychange` does not fire then)
 - Registers `mousemove`, `keydown`, `scroll`, `touchstart` on `document` (passive) if `opts.idle`
 - Calls `_resetIdleTimer()` if `opts.idle`
 - Resets `_isIdle = false`  
@@ -39,7 +43,7 @@ Fires idle/tab-switch callbacks without owning blur state — a pure event trigg
 **What**: Removes all listeners, clears all timers, resets state.  
 **Params**: none  
 **Returns**: `void`  
-**Side effects**: Clears `_idleTimer`, `_hiddenTimer`; removes `visibilitychange` and activity listeners; nulls `_onVisChange`, `_onActivity`, `_opts`; resets `_isIdle = false`  
+**Side effects**: Clears `_idleTimer`, `_hiddenTimer`, `_windowBlurTimer`; removes `visibilitychange`, `window.blur`/`window.focus`, and activity listeners; nulls `_onVisChange`, `_onActivity`, `_onWindowBlur`, `_onWindowFocus`, `_opts`; resets `_isIdle = false`  
 **Handles**: Idempotent — safe to call when already destroyed or never initialized.
 
 ### isIdle()
@@ -67,13 +71,30 @@ Fires idle/tab-switch callbacks without owning blur state — a pure event trigg
 **What**: `visibilitychange` event handler for tab-switch detection, with 150ms debounce to distinguish tab drag from genuine tab switch.  
 **Side effects**:
 - On `document.hidden`: starts `_hiddenTimer` (150ms). If still hidden after 150ms → genuine tab switch → sets `_isIdle = true`, fires `onIdle({ reason: 'tab_switch' })`.
-- On `document.visible`: if `_hiddenTimer` still pending → was a window drag → cancel timer, reschedule idle timer, skip callbacks. If `_isIdle` → genuine return → sets `_isIdle = false`, fires `onActive()`.
+- On `document.visible`: if `_hiddenTimer` still pending → was a window drag → cancel timer, reschedule idle timer, **skip all callbacks unconditionally** (no `onActive` even if `_isIdle` is already true from an earlier event — the drag-cancel path always exits early). If no pending timer and `_isIdle` → genuine return → sets `_isIdle = false`, fires `onActive()`.
+
+### _handleWindowBlur()
+
+**What**: `window.blur` event handler for window/app-switch detection, with 250ms debounce. Catches alt-tab to another browser window or external app where the page stays visible (so `visibilitychange` does NOT fire). Reuses `reason: 'tab_switch'` — same user intent as same-window tab switch.  
+**Side effects**:
+- Starts `_windowBlurTimer` (250ms). If `document.hasFocus()` is still false after 250ms and `_isIdle` is false → fires `onIdle({ reason: 'tab_switch' })` and sets `_isIdle = true`.
+- No-op when `_opts.tabSwitch` is false.  
+**Handles**: When tab-switch within the same window also triggers `window.blur`, the `if (!_isIdle)` guard inside the timer callback prevents double-firing with `_handleVisChange`.
+
+### _handleWindowFocus()
+
+**What**: `window.focus` event handler — paired return for `_handleWindowBlur`.  
+**Side effects**:
+- If `_windowBlurTimer` still pending → cancel timer, reschedule idle timer, skip callbacks (focus returned within debounce window — URL-bar click, brief focus pull, etc.).
+- If no pending timer and `_isIdle && !document.hidden` → fires `onActive()` and sets `_isIdle = false`. The `!document.hidden` guard prevents firing when window focus returns but the tab is still hidden (e.g. focus moved to a different tab).
 
 ## Invariants
 
-- `onIdle` fires **at most once per idle period** — guarded by `if (!_isIdle)` in both the idle timer callback and `_handleVisChange`.
+- `onIdle` fires **at most once per idle period** — guarded by `if (!_isIdle)` in the idle timer callback, `_handleVisChange`, and `_handleWindowBlur`.
 - `onActive` fires **at most once per return** — only fires when `_isIdle === true`.
 - Activity events registered with `{ passive: true }` — no scroll/touch jank.
 - `_hiddenTimer` race condition: if a tab-switch fires while `_idleTimer` is pending, the idle-timer guard prevents duplicate `onIdle`.
+- Tab-switch within same window: `visibilitychange` and `window.blur` may both fire. `_isIdle` mutex prevents double `onIdle`. Symmetric on return — first event clears `_isIdle`, second is a no-op.
 - Module does NOT own blur state — it only fires callbacks.
 - `opts.idleTimeout` default is 300 seconds; Chrome idle API cap is ~3000s (`'hr'` unit is excluded).
+- Opening the extension popup pulls focus → fires `window.blur` → page blurs after 250ms. Acknowledged tradeoff: no clean way to detect own-extension focus from page context. See `CLAUDE.md` Known Limitations.

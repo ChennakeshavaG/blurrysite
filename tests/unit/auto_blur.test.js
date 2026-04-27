@@ -150,6 +150,113 @@ describe('auto_blur.js', () => {
     expect(onActive).not.toHaveBeenCalled();
   });
 
+  // ── window.blur / window.focus (alt-tab to other window/app) ──────────────
+
+  function setHasFocus(value) {
+    Object.defineProperty(document, 'hasFocus', { value: () => value, configurable: true });
+  }
+
+  // USER IMPACT: user alt-tabs to another browser window or external app — page blurs after 250ms even though visibilitychange did not fire
+  test('window.blur triggers onIdle({reason:tab_switch}) after 250ms when focus stays away', () => {
+    const onIdle = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive: jest.fn() });
+
+    setHasFocus(false);
+    window.dispatchEvent(new Event('blur'));
+    jest.advanceTimersByTime(249);
+    expect(onIdle).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(1);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    expect(onIdle).toHaveBeenCalledWith({ reason: 'tab_switch' });
+    expect(blsi.AutoBlur.isIdle()).toBe(true);
+
+    setHasFocus(true);
+  });
+
+  // USER IMPACT: user clicks browser URL bar then back to page — focus returns within 250ms, page must NOT blur
+  test('window.focus before 250ms cancels pending blur — no callbacks fire', () => {
+    const onIdle = jest.fn();
+    const onActive = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive });
+
+    setHasFocus(false);
+    window.dispatchEvent(new Event('blur'));
+    jest.advanceTimersByTime(100);
+    setHasFocus(true);
+    window.dispatchEvent(new Event('focus'));
+    jest.advanceTimersByTime(300);
+
+    expect(onIdle).not.toHaveBeenCalled();
+    expect(onActive).not.toHaveBeenCalled();
+  });
+
+  // USER IMPACT: user returns from another window after a real blur fired — page unblurs cleanly
+  test('window.focus after sustained blur fires onActive', () => {
+    const onIdle = jest.fn();
+    const onActive = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive });
+
+    setHasFocus(false);
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    window.dispatchEvent(new Event('blur'));
+    jest.advanceTimersByTime(250);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+
+    setHasFocus(true);
+    window.dispatchEvent(new Event('focus'));
+    expect(onActive).toHaveBeenCalledTimes(1);
+    expect(blsi.AutoBlur.isIdle()).toBe(false);
+  });
+
+  // USER IMPACT: same-window tab switch — visibilitychange and window.blur both fire, but onIdle must fire only once
+  test('visibilitychange + window.blur dedupe via _isIdle mutex', () => {
+    const onIdle = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive: jest.fn() });
+
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    setHasFocus(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+    jest.advanceTimersByTime(150);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new Event('blur'));
+    jest.advanceTimersByTime(250);
+    expect(onIdle).toHaveBeenCalledTimes(1); // still 1 — not double-fired
+
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    setHasFocus(true);
+  });
+
+  // USER IMPACT: user disables tab-switch trigger — window.blur listener removed, no stale fires
+  test('destroy removes window.blur and window.focus listeners', () => {
+    const onIdle = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: false, tabSwitch: true, onIdle, onActive: jest.fn() });
+
+    blsi.AutoBlur.destroy();
+    setHasFocus(false);
+    window.dispatchEvent(new Event('blur'));
+    jest.advanceTimersByTime(250);
+    expect(onIdle).not.toHaveBeenCalled();
+
+    setHasFocus(true);
+  });
+
+  // USER IMPACT: user enables idle-only mode — window blur events must not trigger blur (mode isolation)
+  test('idle-only mode does not respond to window.blur', () => {
+    const onIdle = jest.fn();
+    blsi.AutoBlur.init({ idleTimeout: 300, idle: true, tabSwitch: false, onIdle, onActive: jest.fn() });
+
+    setHasFocus(false);
+    window.dispatchEvent(new Event('blur'));
+    jest.advanceTimersByTime(250);
+    expect(onIdle).not.toHaveBeenCalled();
+
+    setHasFocus(true);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+
   // USER IMPACT: user disables auto-blur in settings — timer and listeners removed cleanly, no stale callbacks fire
   test('destroy removes all listeners and resets state', () => {
     const onIdle = jest.fn();

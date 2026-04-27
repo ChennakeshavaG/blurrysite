@@ -17,10 +17,17 @@ const BlurrySiteAutoBlur = (() => {
   // Bound handlers for cleanup
   let _onVisChange = null;
   let _onActivity = null;
+  let _onWindowBlur = null;
+  let _onWindowFocus = null;
 
   // Debounce timer for visibilitychange — prevents a tab drag-to-new-window
   // (hide→show within ~10ms) from being misread as a genuine tab switch.
   let _hiddenTimer = null;
+
+  // Debounce timer for window.blur — absorbs URL-bar clicks and other quick
+  // focus-pulls so only sustained focus loss (alt-tab, other window) fires.
+  let _windowBlurTimer = null;
+  const WINDOW_BLUR_DEBOUNCE_MS = 250;
 
   function _resetIdleTimer() {
     if (_idleTimer !== null) clearTimeout(_idleTimer);
@@ -71,6 +78,37 @@ const BlurrySiteAutoBlur = (() => {
     }
   }
 
+  function _handleWindowBlur() {
+    if (!_opts || !_opts.tabSwitch) return;
+    // Tab-switch within the same window already covered by visibilitychange;
+    // window.blur catches alt-tab to another app or browser window where the
+    // page stays visible. Debounced so URL-bar / quick-focus-pulls don't fire.
+    if (_windowBlurTimer !== null) clearTimeout(_windowBlurTimer);
+    _windowBlurTimer = setTimeout(() => {
+      _windowBlurTimer = null;
+      if (!_isIdle && !document.hasFocus()) {
+        _isIdle = true;
+        if (_opts.onIdle) _opts.onIdle({ reason: 'tab_switch' });
+      }
+    }, WINDOW_BLUR_DEBOUNCE_MS);
+  }
+
+  function _handleWindowFocus() {
+    if (!_opts || !_opts.tabSwitch) return;
+    if (_windowBlurTimer !== null) {
+      clearTimeout(_windowBlurTimer);
+      _windowBlurTimer = null;
+      // Focus returned within debounce — non-event, no callbacks.
+      _resetIdleTimer();
+      return;
+    }
+    if (_isIdle && !document.hidden) {
+      _isIdle = false;
+      if (_opts.onActive) _opts.onActive();
+    }
+    _resetIdleTimer();
+  }
+
   /**
    * Initialize auto-blur listeners.
    * @param {Object} opts
@@ -89,6 +127,10 @@ const BlurrySiteAutoBlur = (() => {
     if (opts.tabSwitch) {
       _onVisChange = _handleVisChange;
       document.addEventListener('visibilitychange', _onVisChange);
+      _onWindowBlur = _handleWindowBlur;
+      _onWindowFocus = _handleWindowFocus;
+      window.addEventListener('blur', _onWindowBlur);
+      window.addEventListener('focus', _onWindowFocus);
     }
 
     if (opts.idle) {
@@ -115,9 +157,24 @@ const BlurrySiteAutoBlur = (() => {
       _hiddenTimer = null;
     }
 
+    if (_windowBlurTimer !== null) {
+      clearTimeout(_windowBlurTimer);
+      _windowBlurTimer = null;
+    }
+
     if (_onVisChange) {
       document.removeEventListener('visibilitychange', _onVisChange);
       _onVisChange = null;
+    }
+
+    if (_onWindowBlur) {
+      window.removeEventListener('blur', _onWindowBlur);
+      _onWindowBlur = null;
+    }
+
+    if (_onWindowFocus) {
+      window.removeEventListener('focus', _onWindowFocus);
+      _onWindowFocus = null;
     }
 
     if (_onActivity) {

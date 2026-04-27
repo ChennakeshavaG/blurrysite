@@ -2,7 +2,7 @@
 
 ## Overview
 
-Tests for `src/auto_blur.js` (`blsi.AutoBlur`). Verifies idle-timeout triggering, user-activity timer reset, tab-visibility change detection (including the 150 ms debounce), destroy/cleanup semantics, double-init replacement, and mode isolation between `idle` and `tabSwitch` modes. The module protects sensitive data by auto-blurring the page when the user is idle or switches away.
+Tests for `src/auto_blur.js` (`blsi.AutoBlur`). Verifies idle-timeout triggering, user-activity timer reset, tab-visibility change detection (including the 150 ms debounce), window-blur/focus detection (including the 250 ms debounce for URL-bar / quick-focus-pull suppression), dedupe between visibilitychange and window.blur for same-window tab switches, destroy/cleanup semantics, double-init replacement, and mode isolation between `idle` and `tabSwitch` modes. The module protects sensitive data by auto-blurring the page when the user is idle or switches away (to another tab, another window, or another app).
 
 ## Setup & Teardown
 
@@ -10,6 +10,7 @@ Tests for `src/auto_blur.js` (`blsi.AutoBlur`). Verifies idle-timeout triggering
 - **`beforeEach`**: `jest.useFakeTimers()` to control `setTimeout` / `setInterval`.
 - **`afterEach`**: `blsi.AutoBlur.destroy()` to remove all listeners, then `jest.useRealTimers()`.
 - `document.hidden` is mutated via `Object.defineProperty` with `configurable: true` and manually restored to `false` after each visibility-related test.
+- `document.hasFocus` is replaced via `Object.defineProperty` with a function returning the desired boolean (helper `setHasFocus(value)`) and manually restored to `true` after each window-focus test. The window.blur timer callback inspects `document.hasFocus()` to confirm focus is still away before firing `onIdle`.
 
 ## Test Groups
 
@@ -27,11 +28,22 @@ Tests for `src/auto_blur.js` (`blsi.AutoBlur`). Verifies idle-timeout triggering
 - `idle-only mode does not respond to visibility changes` — with `tabSwitch: false`, dispatching `visibilitychange` does not call `onIdle` regardless of `document.hidden`.
 - `tab-switch-only mode does not set idle timer` — with `idle: false`, advancing fake timers by 10 s does not call `onIdle`.
 
+### Window blur / focus group (alt-tab to other window/app)
+
+- `window.blur triggers onIdle({reason:tab_switch}) after 250ms when focus stays away` — with `tabSwitch: true`, dispatching `blur` on `window` while `document.hasFocus()` returns `false` fires `onIdle({ reason: 'tab_switch' })` after a 250 ms debounce. Asserts no fire at 249 ms, fires at 250 ms.
+- `window.focus before 250ms cancels pending blur — no callbacks fire` — focus returning within the 250 ms debounce window cancels the pending blur (URL-bar click, brief focus pull). Neither `onIdle` nor `onActive` fires.
+- `window.focus after sustained blur fires onActive` — after a real window-blur fired `onIdle`, dispatching `focus` (with `document.hasFocus()` returning `true`, `document.hidden` `false`) fires `onActive` once and resets `isIdle()` to `false`.
+- `visibilitychange + window.blur dedupe via _isIdle mutex` — same-window tab switch fires both `visibilitychange` (after 150 ms) and `window.blur` (after 250 ms). The shared `_isIdle` mutex ensures `onIdle` fires exactly once.
+- `destroy removes window.blur and window.focus listeners` — after `destroy()`, dispatching `blur` on `window` does not fire `onIdle` even after the 250 ms debounce.
+- `idle-only mode does not respond to window.blur` — with `tabSwitch: false`, `window.blur` is ignored regardless of focus state.
+
 ## Edge Cases Covered
 
 - **Brief tab drag / new-window creation**: hide → show cycle faster than 150 ms debounce produces no callbacks.
+- **URL-bar / quick-focus-pull**: window blur → focus cycle faster than 250 ms produces no callbacks.
+- **Same-window tab switch double-event**: `visibilitychange` and `window.blur` both fire; `_isIdle` mutex prevents double `onIdle`.
 - **Double init replacement**: second `init()` implicitly destroys the previous configuration; old callbacks are silently dropped.
-- **Mode isolation**: `idle` flag and `tabSwitch` flag are independently honoured; enabling one does not activate the other.
+- **Mode isolation**: `idle` flag and `tabSwitch` flag are independently honoured; enabling one does not activate the other. `tabSwitch: false` disables both `visibilitychange` AND `window.blur`/`window.focus` listeners.
 
 ## Coverage Gaps
 
