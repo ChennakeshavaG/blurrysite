@@ -280,16 +280,37 @@ const BlurrySiteObserver = (() => {
     if (typeof name !== 'string' || !name) return;
     if (typeof handler !== 'function') return;
     _subscribers.set(name, handler);
+    // Guarantee a live document MO so the subscriber receives mutations even
+    // when no other engine state (blur-all / pick-blur-dynamic) keeps one
+    // attached. PII detector uses this path: it scans on subscribe, then
+    // relies on dispatched mutations for late-loading content. observeRoot
+    // is idempotent — no-op if already observing.
+    if (typeof document !== 'undefined') observeRoot(document);
   }
 
   function unsubscribeMutations(name) {
     _subscribers.delete(name);
+    // If nothing else needs the document MO, drop it so we don't leave a
+    // running observer with no consumer. Engine state must be re-checked here
+    // because blur-all / pick-blur paths attach via observeRoot directly.
+    if (
+      _subscribers.size === 0
+      && !State.getIsPageBlurred()
+      && !State.getPickBlurDynamicActive()
+      && typeof document !== 'undefined'
+    ) {
+      disconnectObserver(document);
+    }
   }
 
   // ── Helpers used by the orchestrator on teardown ──────────────────────────
   // Engine teardown clears observer-internal buffers for the root being torn
   // down. Exposed so engine.js teardown stays self-contained without reaching
   // into observer's private maps.
+
+  function hasSubscribers() {
+    return _subscribers.size > 0;
+  }
 
   function clearPendingMutations(root) {
     _pendingMutations.delete(root);
@@ -315,6 +336,7 @@ const BlurrySiteObserver = (() => {
     // Mutation dispatcher
     subscribeMutations,
     unsubscribeMutations,
+    hasSubscribers,
 
     // Used by orchestrator handleMainDocument / handleShadowRoot / teardown
     clearPendingMutations,

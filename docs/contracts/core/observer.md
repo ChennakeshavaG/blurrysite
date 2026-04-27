@@ -21,8 +21,9 @@ MutationObserver lifecycle, idle-batched drain, and subscriber pub/sub.
 
 | Method | Returns | Notes |
 |---|---|---|
-| `subscribeMutations(name, handler)` | — | `handler(MutationRecord[], root)` fired in registration order during the engine idle drain. Single subscriber per name (re-registering replaces). |
-| `unsubscribeMutations(name)` | — | |
+| `subscribeMutations(name, handler)` | — | `handler(MutationRecord[], root)` fired in registration order during the engine idle drain. Single subscriber per name (re-registering replaces). Side effect: calls `observeRoot(document)` so the subscriber is guaranteed to receive document mutations even when blur-all and pick-blur-dynamic are both off (idempotent — no-op if already observing). |
+| `unsubscribeMutations(name)` | — | Side effect: when the last subscriber is removed AND the engine has no other reason to keep the document MO (`!isPageBlurred && !pickBlurDynamicActive`), disconnects the document observer. Keeps the lifecycle symmetric with `subscribeMutations`. |
+| `hasSubscribers()` | `boolean` | True iff at least one subscriber is registered. Used by `engine.js` `handleSite` to decide whether to re-attach the document MO after a `handleMainDocument` teardown when subscribers (e.g. PII detector) still need it. |
 
 ### Shadow attach event bridge
 
@@ -66,6 +67,7 @@ MutationObserver lifecycle, idle-batched drain, and subscriber pub/sub.
 - **Ancestor-coverage filter**: nodes whose subtree is already covered by an ancestor in the same batch are dropped before stamping. Prevents double-walking when a SPA inserts a container in one MO tick and its children in another before the idle fires.
 - **Engine inactive sweep**: when both blur-all and pick-blur are off, the engine drain discards the node buffer for that idle tick (no stamping happens) but subscriber dispatch still runs.
 - **Lazy facade lookup**: `blsi.Engine` is read inside the MO callback / stamp drain at call time — `engine.js` loads after observer in manifest order, so the global does not exist at observer's IIFE init.
+- **Subscribe-driven document MO**: `subscribeMutations` attaches the document MO so subscribers (e.g. PII detector) receive mutations even when blur-all and pick-blur are both off. `unsubscribeMutations` disconnects it only if the engine has no other reason to keep it. Without this, a PII-only configuration would never see late-loading content because no caller would attach the MO.
 
 ## Why this module exists (Why)
 

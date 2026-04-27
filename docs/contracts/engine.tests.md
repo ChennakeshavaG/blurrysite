@@ -16,6 +16,7 @@ The test file mirrors the section markers (`§`) in the source. Run `grep -n "§
 | `§STAMP-OBSERVER-TESTS` | `stampElements` (custom elements, ARIA roles, `<slot>` projection, structural-container text gate); `tryBlurTextCheck`; `applyBlur`/`removeBlur` count bookkeeping; `isBlurred`/`isVisuallyBlurred`; `matchesActiveCategories`; `shouldBlurElement`; observer attach via `observeRoot`. |
 | `§ITEMS-ZONES-TESTS` | Counters; `applyItem`/`removeItem` for dynamic and sticky; zone overlay anchor (page vs screen); `getZoneOverlays`; popup-hover highlight. |
 | `§ORCHESTRATOR-TESTS` | `handleSite` reconcile (active / inactive paths); shadow-root recursion; iframe stamping; teardown; `unblurAll` clears zones; settings-shape happy paths. |
+| `mutation dispatcher` | `subscribeMutations` / `unsubscribeMutations` / `hasSubscribers`; subscriber-driven document-MO lifecycle (subscribe attaches, unsubscribe disconnects when no feature still needs the MO); blur-all toggle re-attach when subscribers exist; PII-only-mode regression (no engine-state holds the MO). |
 
 ## Test-level invariants
 

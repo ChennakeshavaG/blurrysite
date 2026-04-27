@@ -39,7 +39,7 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/core/categories.js` | `blsi.Categories` | `CATEGORY_SELECTORS`, `CATEGORY_ORDER`, `DEFAULT_CATS` — frozen tag/role data for the five blur categories. Pure data, no state. |
 | `src/core/css_manager.js` | `blsi.CssManager` | Three injection systems: `injectRules / removeRules / isBlurAllActive` (blur-all), `injectPickBlurRules / removePickBlurRules` (pick-blur), `injectPiiRules / removePiiRules` (PII). Plus `ensureSvgFilter`, `getSelectors / getLastSelectorCache`, and `SVG_FILTER_ID` (read by orchestrator teardown). |
 | `src/core/marker_engine.js` | `blsi.MarkerEngine` | Element stamping + match queries: `applyBlur`, `removeBlur`, `isBlurred`, `isVisuallyBlurred`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `rebuildTextCheckSet`, `_isExtensionUI`. |
-| `src/core/observer.js` | `blsi.Observer` | One MutationObserver per root + idle-batched drain + subscriber pub/sub: `observeRoot`, `disconnectObserver`, `subscribeMutations(name, handler)`, `unsubscribeMutations(name)`, `initShadowAttachListener` / `removeShadowAttachListener`, orchestrator helpers `clearPendingMutations`, `clearStampQueueForRoot`, `pushStampQueueItem`, `scheduleStampIdle`. MO config `{ childList, subtree, characterData }`. |
+| `src/core/observer.js` | `blsi.Observer` | One MutationObserver per root + idle-batched drain + subscriber pub/sub: `observeRoot`, `disconnectObserver`, `subscribeMutations(name, handler)` (also attaches `observeRoot(document)` so subscribers receive mutations regardless of feature state), `unsubscribeMutations(name)` (disconnects the document MO when no subscriber AND no feature still needs it), `hasSubscribers()`, `initShadowAttachListener` / `removeShadowAttachListener`, orchestrator helpers `clearPendingMutations`, `clearStampQueueForRoot`, `pushStampQueueItem`, `scheduleStampIdle`. MO config `{ childList, subtree, characterData }`. |
 | `src/core/target_engine.js` | `blsi.TargetEngine` | Pick-blur targets — zones, items, popup hover highlight: `reconcileItems`, `activeItemsSize`, `tryPickBlurNode`, `getZoneOverlays`, `removeAllZoneOverlays`, `resetCounters`, `allocateElementName`, `allocateStickyName(anchor)`, `highlightItem`, `clearItemHighlight`. |
 | `src/engine.js` | `blsi.Engine` | Facade + orchestrator. Re-exports the public surface of every `core/*` module. Owns `handleSite` (single async entry, mutex-guarded), `handleShadowRoot`, `handleIframe`, `teardown`, `unblurAll`, `_setPickerActiveForObserver`, and getters for `isPageBlurred` / `blurredCount`. External callers (`content_script`, `picker`, `reveal_controller`, popup, tests) talk only to this surface. |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
@@ -313,7 +313,7 @@ Sub-agents get CLAUDE.md loaded but task prompt overrides attention to rules. Fo
 
 ### Running tests
 ```bash
-npm run test:unit          # 743 unit tests, fast
+npm run test:unit          # 805 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -403,4 +403,5 @@ Docs are load-bearing references used by humans and Claude. Code changes → rel
 | Keyboard shortcuts don't fire when focus inside cross-origin iframe | Browser delivers keydown to focused frame; shortcut handler is main-frame only | Phase 2 |
 | Cross-origin iframes with strict `Referrer-Policy` may not blur on initial load | `document.referrer` empty → `_topHostname` starts empty → blur-all state unknown until postMessage from main frame arrives | Acceptable — resolves within milliseconds once main frame init completes |
 | SPA navigation inside iframes not tracked | `history.pushState` wrapping and popstate/hashchange listeners are main-frame only — URL rule overrides don't update if iframe does SPA navigation | Phase 2 |
+| Opening the extension popup briefly blurs the page when `automate.tab_switch` is on | `window.blur` fires when focus moves to the popup; auto_blur cannot detect own-extension focus from page context. 250 ms debounce filters short focus-pulls but the popup stays open longer. | Acceptable tradeoff — consistent with privacy intent (anyone shoulder-surfing during settings adjustment sees blurred content) |
 ```

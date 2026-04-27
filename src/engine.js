@@ -283,10 +283,11 @@ const Engine = (() => {
       const { added, removed } = _reconcileItems(settings.blur_items || []);
 
       // When blur-all is OFF, handleMainDocument tears down the observer.
-      // If dynamic pick-blur items exist, re-attach the MO so late-loading
-      // elements are still caught by _tryPickBlurNode in the idle drain.
+      // Re-attach if any consumer still needs the document MO:
+      //   - dynamic pick-blur items → caught by _tryPickBlurNode in the idle drain
+      //   - registered subscribers (e.g. PII detector) → fed via the dispatcher
       // observeRoot is idempotent — no-op if blur-all already attached it.
-      if (_State.getPickBlurDynamicActive()) observeRoot(document);
+      if (_State.getPickBlurDynamicActive() || Obs.hasSubscribers()) observeRoot(document);
 
       // idempotent: re-inject on every call so mode/color changes take effect without a DOM pass
       if (settings.pick_blur_enabled && (settings.blur_items || []).length > 0) {
@@ -371,6 +372,7 @@ const Engine = (() => {
     // Mutation dispatcher — subscribers receive raw MutationRecord[] per root.
     subscribeMutations,
     unsubscribeMutations,
+    hasSubscribers: Obs.hasSubscribers,
     get isPageBlurred() {
       return _State.getIsPageBlurred();
     },

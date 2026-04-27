@@ -49,7 +49,7 @@ Read the sub-module contract for the section you're modifying — this file docu
 |---|---|
 | `applyBlur`, `removeBlur`, `isBlurred`, `isVisuallyBlurred`, `stampElements`, `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement` | `marker_engine.js` |
 | `injectRules`, `removeRules`, `isBlurAllActive`, `injectPickBlurRules`, `removePickBlurRules`, `injectPiiRules`, `removePiiRules`, `ensureSvgFilter` | `css_manager.js` |
-| `observeRoot`, `subscribeMutations`, `unsubscribeMutations` | `observer.js` |
+| `observeRoot`, `subscribeMutations`, `unsubscribeMutations`, `hasSubscribers` | `observer.js` |
 | `getZoneOverlays`, `resetCounters`, `allocateElementName`, `allocateStickyName`, `highlightItem`, `clearItemHighlight` | `target_engine.js` |
 | `CATEGORY_SELECTORS` | `categories.js` |
 
@@ -73,7 +73,7 @@ Settings shape (resolved by `blsi.Model.resolve(host, url, tabId)` before being 
 4. **Extension disabled** (`enabled === false`): full teardown including items + zone overlays, reset reconcile key, return.
 5. **Reconcile key change** (mode / categories / thorough / frosted-radius): `handleMainDocument` reinjects + restamps. `EngineState.setIsPageBlurred(blur_all_active)`.
 6. **Items** (always reconciled): `TargetEngine.reconcileItems(blur_items)`. Picker blurs and sticky zones persist when blur-all is off.
-7. **MO re-attach** if blur-all is off but ≥ 1 dynamic item exists — `observeRoot(document)` is idempotent.
+7. **MO re-attach** if blur-all is off but a consumer still needs the document MO — either `getPickBlurDynamicActive()` is true OR `Observer.hasSubscribers()` (e.g. PII detector) returns true. `observeRoot(document)` is idempotent.
 8. **Pick-blur CSS** injected/removed based on `pick_blur_enabled` + non-empty items.
 9. Mutex released.
 

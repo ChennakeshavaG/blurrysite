@@ -7,7 +7,7 @@ Test contract for `tests/unit/core/observer.test.js` (planned).
 | Section / describe | What it asserts |
 |---|---|
 | `observeRoot / disconnectObserver` | Idempotent attach; per-root WeakMap entry; observation target is `root.body ?? root`. |
-| `subscribeMutations / unsubscribeMutations` | Single subscriber per name (re-register replaces); insertion order preserved. |
+| `subscribeMutations / unsubscribeMutations` | Single subscriber per name (re-register replaces); insertion order preserved. Subscribe attaches `observeRoot(document)` so a PII-only configuration receives mutations even when no feature holds the MO. Unsubscribe disconnects the document MO only when the last subscriber is removed AND no engine state (`isPageBlurred`, `pickBlurDynamicActive`) still needs it. `hasSubscribers()` returns the boolean state. |
 | `MO callback gates` | `pickerActive=true` suppresses engine drain; subscriber dispatch still runs while picker open. |
 | `Engine drain` | Ancestor-coverage filter drops nested nodes; calls `MarkerEngine.tryBlurTextCheck` for blur-all; `TargetEngine.tryPickBlurNode` for dynamic pick-blur; recurses into shadow roots + iframes via `Engine.handleShadowRoot` / `handleIframe`. |
 | `Subscriber dispatch` | Buckets per root; clears `_pendingMutations` after dispatch; subscriber error in one handler doesn't stall others (caught + logged). |

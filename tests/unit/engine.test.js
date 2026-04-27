@@ -1776,5 +1776,106 @@ describe('blsi.Engine', () => {
       expect(() => blsi.Engine.subscribeMutations('x', null)).not.toThrow();
       // No subscriber installed → no dispatch ever.
     });
+
+    // USER IMPACT (regression for "PII not applied after page reload"): a
+    // PII-only configuration (blur-all OFF, pick-blur OFF) loads with no
+    // engine-driven MO on document. Subscriber must attach its own document
+    // MO at subscribe time so late-loading content reaches the handler.
+    test('subscribeMutations attaches document MO when no engine state holds one', async () => {
+      // Outer afterEach has already called unblurAll() — observer is gone.
+      // No prior handleSite call → blur-all OFF, pick-blur OFF.
+      const handler = jest.fn();
+      blsi.Engine.subscribeMutations('test-a', handler);
+
+      const p = document.createElement('p');
+      p.textContent = 'late content';
+      document.body.appendChild(p);
+      await flushDispatch();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    // USER IMPACT: with PII subscribed and blur-all toggled OFF, handleSite
+    // must re-attach the document MO so late-loading PII still reaches the
+    // handler. Without the re-attach, every subsequent mutation would be lost.
+    test('handleSite re-attaches document MO when subscribers exist after blur-all toggle off', async () => {
+      const handler = jest.fn();
+      blsi.Engine.subscribeMutations('test-a', handler);
+      await activate(true);            // blur-all ON — MO attached via handleMainDocument
+      handler.mockClear();
+
+      // Force pageWideChanged → handleMainDocument inactive → teardown(document).
+      // After teardown, line 289 must re-attach because hasSubscribers() is true.
+      await blsi.Engine.handleSite({
+        enabled: true,
+        blur_all_active: false,
+        blur_items: [],
+        blur_categories: { text: true, media: false, form: false, table: false, structure: false },
+        blur_mode: null,
+        thorough_blur: false,
+      });
+
+      const p = document.createElement('p');
+      p.textContent = 'after toggle off';
+      document.body.appendChild(p);
+      await flushDispatch();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    // USER IMPACT: when the last subscriber leaves and no engine feature still
+    // needs the MO, it must disconnect — leaving an idle MO running on every
+    // page would be a slow leak across tabs.
+    test('unsubscribeMutations disconnects document MO when no consumer remains', async () => {
+      const handler = jest.fn();
+      blsi.Engine.subscribeMutations('test-a', handler);
+      // blur-all OFF, pick-blur OFF — only the subscriber holds the MO.
+      handler.mockClear();
+      blsi.Engine.unsubscribeMutations('test-a');
+
+      const p = document.createElement('p');
+      document.body.appendChild(p);
+      await flushDispatch();
+
+      // No MO attached anywhere → no dispatch.
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    // USER IMPACT: turning PII off while blur-all is on must keep the engine
+    // MO alive — blur-all still needs it to stamp newly inserted text-check
+    // elements. Premature disconnect would silently break dynamic blurring.
+    test('unsubscribeMutations keeps document MO while blur-all is on', async () => {
+      const handler = jest.fn();
+      blsi.Engine.subscribeMutations('test-a', handler);
+      await activate(true);            // blur-all ON
+      blsi.Engine.unsubscribeMutations('test-a');
+
+      // Re-subscribe and append a node — if the document MO survived the
+      // unsubscribe (because blur-all still needs it), the new subscriber
+      // fires. If unsubscribeMutations had wrongly disconnected it,
+      // subscribeMutations would re-attach but the MO config gate would only
+      // pick up nodes added AFTER the new attach — which is what we just did,
+      // so this still passes either way. Stronger probe: stamp the node via
+      // engine drain. <span>text</span> is a text-check tag with meaningful
+      // content; if the MO is alive, the idle drain stamps it.
+      const span = document.createElement('span');
+      span.textContent = 'sample text';
+      document.body.appendChild(span);
+      await flushDispatch();
+
+      expect(span.dataset.blSiBlur).toBeDefined();
+    });
+
+    test('hasSubscribers reflects subscriber count', () => {
+      expect(blsi.Engine.hasSubscribers()).toBe(false);
+      blsi.Engine.subscribeMutations('test-a', () => {});
+      expect(blsi.Engine.hasSubscribers()).toBe(true);
+      blsi.Engine.subscribeMutations('test-b', () => {});
+      expect(blsi.Engine.hasSubscribers()).toBe(true);
+      blsi.Engine.unsubscribeMutations('test-a');
+      expect(blsi.Engine.hasSubscribers()).toBe(true);
+      blsi.Engine.unsubscribeMutations('test-b');
+      expect(blsi.Engine.hasSubscribers()).toBe(false);
+    });
   });
 });
