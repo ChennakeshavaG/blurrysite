@@ -21,7 +21,7 @@
 
   // ── Module aliases (synchronous — loaded before this script by manifest) ──
 
-  const Engine    = blsi.BlurEngine;
+  const Engine    = blsi.Engine;
   const Store     = blsi.Model;
   const Selector  = blsi.SelectorUtils;
   const Picker    = blsi.Picker;
@@ -603,12 +603,12 @@
     // is detected without a reload.
     const anyDetect = resolved.pii_email || resolved.pii_numeric;
     if (anyDetect && resolved.enabled) {
-      blsi.BlurEngine.injectPiiRules(resolved.pii_mode, resolved.pii_redaction_color);
+      blsi.Engine.injectPiiRules(resolved.pii_mode, resolved.pii_redaction_color);
       blsi.PiiDetector.scan(document.body, { email: resolved.pii_email, numeric: resolved.pii_numeric });
-      blsi.BlurEngine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
+      blsi.Engine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
     } else {
-      blsi.BlurEngine.unsubscribeMutations('pii');
-      blsi.BlurEngine.removePiiRules();
+      blsi.Engine.unsubscribeMutations('pii');
+      blsi.Engine.removePiiRules();
       // document.body can be momentarily null in early-disable paths during
       // teardown — guard so a throw here doesn't leak the unsubscribe state
       // (already done above) and leave stale [data-bl-si-pii] spans on screen.

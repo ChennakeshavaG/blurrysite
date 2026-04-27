@@ -5,7 +5,7 @@
  *
  * Owns all state for the reveal subsystem (click mode + hover mode, plus
  * ancestor-chain unblur and sticky zone overlay hit-testing). Depends on
- * blsi.BlurEngine for isBlurred() and getZoneOverlays(); otherwise stateless
+ * blsi.Engine for isBlurred() and getZoneOverlays(); otherwise stateless
  * relative to the rest of the extension.
  *
  * Wiring from content_script.js:
@@ -18,7 +18,7 @@
 const BlurrySiteReveal = (() => {
   'use strict';
 
-  const Engine = blsi.BlurEngine;
+  const Engine = blsi.Engine;
   const RM = blsi.reveal_modes;
 
   // Tests cannot set e.isTrusted (jsdom non-configurable). Any test event that

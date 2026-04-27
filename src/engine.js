@@ -1,0 +1,384 @@
+/**
+ * engine.js — Blurry Site core blur engine (facade + orchestrator).
+ *
+ * Hybrid CSS + data-attribute blur system. Sub-modules live under src/core/:
+ *   - core/categories.js    — frozen tag/role data
+ *   - core/css_manager.js   — three style-injection systems (blur-all, pick, PII)
+ *   - core/marker_engine.js — element stamping + match queries
+ *   - core/observer.js      — MutationObserver lifecycle + dispatcher
+ *   - core/target_engine.js — zones, items, popup-hover highlight
+ *   - core/engine_state.js  — shared private state across the above
+ *
+ * This file owns top-level lifecycle (handleSite, handleShadowRoot,
+ * handleIframe, teardown, unblurAll) and exposes the unified blsi.Engine
+ * facade by re-exporting public methods from each core/* sub-module.
+ *
+ * Attribute-based stamping survives framework class-mutation churn (React /
+ * Vue rerenders) better than class-based approaches.
+ *
+ * Exposed as blsi.Engine (IIFE — no ES module syntax).
+ */
+
+const Engine = (() => {
+  "use strict";
+
+  // ── Sub-module aliases ────────────────────────────────────────────────────
+  // Each alias keeps call sites in the body short. The public return block
+  // below re-exports the same names so external callers (picker, content_script,
+  // reveal_controller, popup, tests) talk to a single blsi.Engine surface.
+
+  const CATEGORY_SELECTORS = blsi.Categories.CATEGORY_SELECTORS;
+  const CATEGORY_ORDER     = blsi.Categories.CATEGORY_ORDER;
+  const DEFAULT_CATS       = blsi.Categories.DEFAULT_CATS;
+
+  const Css = blsi.CssManager;
+  const SVG_FILTER_ID    = Css.SVG_FILTER_ID;
+  const ensureSvgFilter  = Css.ensureSvgFilter;
+  const injectRules      = Css.injectRules;
+  const removeRules      = Css.removeRules;
+  const isBlurAllActive  = Css.isBlurAllActive;
+  const injectPickBlurRules = Css.injectPickBlurRules;
+  const removePickBlurRules = Css.removePickBlurRules;
+  const injectPiiRules   = Css.injectPiiRules;
+  const removePiiRules   = Css.removePiiRules;
+
+  const Marker = blsi.MarkerEngine;
+  const _State = blsi.EngineState;
+
+  const _isExtensionUI       = Marker._isExtensionUI;
+  const stampElements        = Marker.stampElements;
+  const tryBlurTextCheck     = Marker.tryBlurTextCheck;
+  const applyBlur            = Marker.applyBlur;
+  const removeBlur           = Marker.removeBlur;
+  const isBlurred            = Marker.isBlurred;
+  const isVisuallyBlurred    = Marker.isVisuallyBlurred;
+  const matchesActiveCategories = Marker.matchesActiveCategories;
+  const shouldBlurElement    = Marker.shouldBlurElement;
+
+  const Obs = blsi.Observer;
+  const observeRoot           = Obs.observeRoot;
+  const disconnectObserver    = Obs.disconnectObserver;
+  const subscribeMutations    = Obs.subscribeMutations;
+  const unsubscribeMutations  = Obs.unsubscribeMutations;
+
+  const Targets = blsi.TargetEngine;
+  const getZoneOverlays      = Targets.getZoneOverlays;
+  const removeAllZoneOverlays = Targets.removeAllZoneOverlays;
+  const _reconcileItems      = Targets.reconcileItems;
+  const resetCounters        = Targets.resetCounters;
+  const allocateElementName  = Targets.allocateElementName;
+  const allocateStickyName   = Targets.allocateStickyName;
+  const highlightItem        = Targets.highlightItem;
+  const clearItemHighlight   = Targets.clearItemHighlight;
+
+  // ── Orchestration ─────────────────────────────────────────────────────────
+
+  // Mutex — prevents concurrent handleSite() calls from interleaving DOM mutations.
+  let _handling = false;
+
+  // Fingerprint of the last reconcile inputs. Lets handleSite skip the page-wide
+  // nuke+rescan when only CSS vars (gaussian radius, highlight colour) changed,
+  // since those propagate via custom properties without DOM work. Frosted mode
+  // is the exception — its radius lives in an SVG attribute, so blur_radius is
+  // folded into the key under frosted.
+  let _lastReconcileKey = null;
+
+  function _setPickerActiveForObserver(v) {
+    _State.setPickerActive(v);
+  }
+
+  function _applyCssVars(settings) {
+    if (!document.documentElement) return;
+    const s = document.documentElement.style;
+    // Skip writes for missing fields — setProperty(name, undefined) serialises
+    // as the literal string "undefined" and disables the var fallback in
+    // content.css. Resolved settings always include defaults; this guards the
+    // early-init / partial-settings path.
+    if (settings.blur_radius != null) s.setProperty('--bl-si-radius', `${settings.blur_radius}px`);
+    if (settings.highlight_color != null) s.setProperty('--bl-si-highlight-color', settings.highlight_color);
+    if (settings.transition_duration != null) s.setProperty('--bl-si-transition-duration', `${settings.transition_duration}ms`);
+    if (settings.redaction_color != null) s.setProperty('--bl-si-redaction-color', settings.redaction_color);
+  }
+
+  /**
+   * Remove all blur state from `root` and recursively from any open shadow
+   * roots found within it. One pass: clear stamps + find shadow hosts.
+   *
+   * PII-stamped elements (data-bl-si-pii) are intentionally skipped —
+   * they own their own blur lifecycle and must stay blurred when blur-all
+   * turns off (matches the original _disablePageWide behaviour).
+   */
+  function teardown(root) {
+    if (root === document) Obs.removeShadowAttachListener();
+    // Cancel any pending idle work for this root — prevents stampElements
+    // re-stamping elements after teardown has cleared all attributes.
+    Obs.clearStampQueueForRoot(root);
+    // Drop any buffered mutations for this root — the observer is going away
+    // and subscribers must not receive records for a torn-down root.
+    Obs.clearPendingMutations(root);
+
+    disconnectObserver(root);
+    removeRules(root);
+    removePickBlurRules(root);
+
+    // ONE pass: clear stamps + collect shadow hosts for post-loop recursion.
+    // Recursing inside forEach risks processing a child's shadow root before
+    // the parent's stamps are cleared — collect-then-recurse avoids that.
+    const shadowHosts = [];
+    root.querySelectorAll('*').forEach(el => {
+      if (el.dataset.blSiBlur && !el.dataset.blSiPii) {
+        delete el.dataset.blSiBlur;
+        _State.decrementBlurredCount();
+      }
+      if (el.dataset.blSiPickBlur) {
+        delete el.dataset.blSiPickBlur;
+      }
+      if (el.shadowRoot) shadowHosts.push(el);
+    });
+
+    // Remove SVG filter if present in this root (stateless — no-op if absent).
+    const svg = root.querySelector && root.querySelector('#' + SVG_FILTER_ID);
+    if (svg && svg.parentNode) svg.parentNode.removeChild(svg);
+
+    // Recurse into shadow roots after this root is fully cleaned up.
+    shadowHosts.forEach(h => teardown(h.shadowRoot));
+  }
+
+  // Public alias — used by picker callbacks and tests.
+  function unblurAll() {
+    teardown(document);
+    removeAllZoneOverlays();
+  }
+
+  /**
+   * Apply or remove blur for the main document only.
+   * CSS injection is synchronous (alwaysBlur tags covered immediately).
+   * The querySelectorAll('*') stamp pass is deferred to requestIdleCallback
+   * via _flushStampQueue — never competes with layout / paint.
+   * EngineState.isPageBlurred is NOT set here — handleSite's responsibility.
+   */
+  function handleMainDocument(settings) {
+    const active = settings.enabled !== false && !!settings.blur_all_active;
+    if (!active) {
+      teardown(document);
+      return;
+    }
+
+    const cats = settings.blur_categories || DEFAULT_CATS;
+    const mode = settings.blur_mode || null;
+    const thorough = !!settings.thorough_blur;
+
+    injectRules(document, cats, mode);   // synchronous — alwaysBlur tags blurred now
+    observeRoot(document);               // synchronous — MO live before idle fires
+    Obs.initShadowAttachListener();      // catch shadow roots attached after idle stamp
+
+    // Replace queue (not append). Pending idle, if any, will use this new queue.
+    Obs.clearStampQueueForRoot(document);
+    Obs.pushStampQueueItem({ root: document, cats, thorough, mode });
+    Obs.scheduleStampIdle();  // no-op if already pending — existing idle uses new queue
+  }
+
+  /**
+   * Apply or remove blur for one shadow root.
+   * Active path: CSS + MO are immediate; stamp work is queued for idle.
+   * The active path is called from the MO callback for dynamically attached
+   * shadow roots. Initial shadow roots discovered at page load are handled
+   * entirely by _flushStampQueue (which calls injectRules + observeRoot eagerly
+   * before pushing to the queue, then stampElements when the item is dequeued).
+   * EngineState.isPageBlurred is NOT set here — handleSite's responsibility.
+   */
+  function handleShadowRoot(settings, shadowRoot) {
+    const active = settings.enabled !== false && !!settings.blur_all_active;
+    if (!active) {
+      teardown(shadowRoot);
+      return;
+    }
+
+    const cats = settings.blur_categories || DEFAULT_CATS;
+    const mode = settings.blur_mode || null;
+    const thorough = !!settings.thorough_blur;
+
+    injectRules(shadowRoot, cats, mode);
+    observeRoot(shadowRoot);
+    Obs.pushStampQueueItem({ root: shadowRoot, cats, thorough, mode });
+    Obs.scheduleStampIdle();
+  }
+
+  /**
+   * Stamp or unstamp a cross-origin <iframe> element as a blur black-box.
+   * Same-origin iframes are skipped — all_frames:true gives them their own
+   * content_script that handles blur independently.
+   */
+  function handleIframe(settings, iframeEl) {
+    if (!iframeEl || _isExtensionUI(iframeEl)) return;
+    const active = settings.enabled !== false && !!settings.blur_all_active;
+
+    let isSameOrigin = false;
+    try { isSameOrigin = !!iframeEl.contentDocument; } catch (_) {}
+    if (isSameOrigin) return;
+
+    if (active) {
+      if (!iframeEl.dataset.blSiBlur) { iframeEl.dataset.blSiBlur = '1'; _State.incrementBlurredCount(); }
+    } else {
+      if (iframeEl.dataset.blSiBlur) { delete iframeEl.dataset.blSiBlur; _State.decrementBlurredCount(); }
+    }
+  }
+
+  /**
+   * Single entry point — reconcile the entire page (document + all open shadow
+   * roots) to the provided settings snapshot.
+   *
+   * Settings must include:
+   *   BLUR_ALL_ACTIVE {boolean} — whether blur-all is on for this host
+   *   BLUR_ITEMS      {Array}   — per-host blur items (dynamic + sticky)
+   * Both are included by blsi.Model.resolve() before the caller passes them in.
+   *
+   * Storage reads live in content_script — handleSite is stateless/pure w.r.t.
+   * storage. Every caller MUST await — concurrent calls are dropped (mutex).
+   */
+  async function handleSite(settings) {
+    if (_handling) return;
+    _handling = true;
+    try {
+      // Store FIRST — MO callback reads currentSettings for new shadow hosts.
+      _State.setCurrentSettings(settings);
+
+      // CSS vars must be written before injectRules — frosted mode reads
+      // --bl-si-radius from :root inside ensureSvgFilter. content.css has
+      // per-var fallbacks so there is no flash of unstyled state before the
+      // first handleSite call.
+      _applyCssVars(settings);
+
+      // ── Extension disabled — full teardown including items ──────────────────
+      if (settings.enabled === false) {
+        handleMainDocument(settings);
+        _State.setIsPageBlurred(false);
+        _reconcileItems([]);
+        removeAllZoneOverlays(); // safety net for orphaned zones
+        _lastReconcileKey = null;
+        return;
+      }
+
+      // ── Page-wide reconcile ─────────────────────────────────────────────────
+      // Skip DOM work when only CSS vars changed (blur_radius in blur mode,
+      // highlight_color). Those propagate instantly via custom properties and
+      // don't require a nuke+rescan. Frosted mode is the exception — its radius
+      // lives in an SVG attribute and needs a full filter rebuild.
+      const isActive = !!settings.blur_all_active;
+      const _rcCats = settings.blur_categories || DEFAULT_CATS;
+      const reconcileKey = isActive
+        ? `${settings.blur_mode}|${CATEGORY_ORDER.map(n => (_rcCats[n] ? '1' : '0')).join('')}|${settings.thorough_blur}|${settings.blur_mode === blsi.blur_modes.frosted ? settings.blur_radius : ''}`
+        : 'inactive';
+      const pageWideChanged = reconcileKey !== _lastReconcileKey;
+      _lastReconcileKey = reconcileKey;
+
+      if (pageWideChanged) {
+        handleMainDocument(settings);  // sync — schedules idle for stamp work
+      }
+      _State.setIsPageBlurred(isActive);
+
+      // ── Item reconcile ──────────────────────────────────────────────────────
+      // Runs in both active and inactive paths: picker blurs + sticky zones
+      // persist when blur-all is off.
+      const { added, removed } = _reconcileItems(settings.blur_items || []);
+
+      // When blur-all is OFF, handleMainDocument tears down the observer.
+      // If dynamic pick-blur items exist, re-attach the MO so late-loading
+      // elements are still caught by _tryPickBlurNode in the idle drain.
+      // observeRoot is idempotent — no-op if blur-all already attached it.
+      if (_State.getPickBlurDynamicActive()) observeRoot(document);
+
+      // idempotent: re-inject on every call so mode/color changes take effect without a DOM pass
+      if (settings.pick_blur_enabled && (settings.blur_items || []).length > 0) {
+        injectPickBlurRules(document, settings.pick_blur_type, settings.pick_blur_color);
+      } else {
+        removePickBlurRules(document);
+      }
+
+      if (blsi.Logger && blsi.Logger.enabled) {
+        blsi.Logger.scope('engine').flow('handleSite', {
+          active: isActive,
+          pageWideChanged,
+          added,
+          removed,
+          totalActive: Targets.activeItemsSize(),
+        });
+      }
+    } finally {
+      _handling = false;
+    }
+  }
+
+
+  // ── Public API (blsi.Engine) ─────────────────────────────────────────────
+  // Re-exports primitives from each core/* module, plus the orchestration
+  // methods owned here. To add/remove a public method, edit this return block
+  // AND update CLAUDE.md Module Globals table + docs/contracts/engine.md.
+
+  return {
+    // The block below (injectRules through tryBlurTextCheck) is exposed for
+    // unit tests only — production callers must drive these via handleSite().
+    // Everything below this block is real public API.
+    injectRules,
+    removeRules,
+    injectPickBlurRules,
+    removePickBlurRules,
+    isBlurAllActive,
+    stampElements,
+    tryBlurTextCheck,
+
+    // Individual element (picker / context menu)
+    applyBlur,
+    removeBlur,
+    unblurAll,   // alias for teardown(document) + removeAllZoneOverlays
+    teardown,
+
+    // Popup hover highlight — highlights the page element corresponding to a blur item
+    highlightItem,
+    clearItemHighlight,
+
+    // Queries
+    isBlurred,
+    isVisuallyBlurred,
+    matchesActiveCategories,
+    shouldBlurElement,
+
+    // Sticky zones — create/remove/removeAll are internal (called via handleSite item reconcile)
+    getZoneOverlays,
+
+    // PII mode CSS injection
+    injectPiiRules,
+    removePiiRules,
+
+    // Utilities
+    ensureSvgFilter,
+    CATEGORY_SELECTORS,
+
+    // Counter allocation for picker callbacks
+    resetCounters,
+    allocateElementName,
+    allocateStickyName,
+
+    // Single orchestration entry point.
+    // Caller must fold BLUR_ALL_ACTIVE and BLUR_ITEMS into settings before calling.
+    handleSite,
+
+    // Per-root dispatch. Public for unit tests; all production callers go through handleSite.
+    handleShadowRoot,     // one shadow root, recurses into nested
+    handleIframe,         // cross-origin iframes only
+    observeRoot,
+
+    // Mutation dispatcher — subscribers receive raw MutationRecord[] per root.
+    subscribeMutations,
+    unsubscribeMutations,
+    get isPageBlurred() {
+      return _State.getIsPageBlurred();
+    },
+    get blurredCount() {
+      return _State.getBlurredCount();
+    },
+    _setPickerActiveForObserver,
+  };
+})();
+
+blsi.Engine = Engine;

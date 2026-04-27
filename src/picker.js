@@ -9,7 +9,7 @@
  *  - STICKY_SCREEN — sketch a box that stays in the same spot on the screen
  *
  * Activated/deactivated programmatically by content_script.js.
- * Depends on blsi.BlurEngine (loaded before this file via manifest.json).
+ * Depends on blsi.Engine (loaded before this file via manifest.json).
  */
 
 const Picker = (() => {
@@ -433,7 +433,7 @@ const Picker = (() => {
       if (typeof activeCallbacks.onUnblur === 'function') {
         activeCallbacks.onUnblur(el);
       } else {
-        blsi.BlurEngine.removeBlur(el);
+        blsi.Engine.removeBlur(el);
       }
     }
     selectedElements.clear();
@@ -678,7 +678,7 @@ const Picker = (() => {
     let target = resolveTarget(e.target);
     if (!target || target === toolbarEl || toolbarEl?.contains(target)) return;
 
-    if (!blsi.BlurEngine.isBlurred(target)) {
+    if (!blsi.Engine.isBlurred(target)) {
       target = findClassedParent(target);
     }
 
@@ -754,7 +754,7 @@ const Picker = (() => {
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    const alreadyBlurred = blsi.BlurEngine.isBlurred(target);
+    const alreadyBlurred = blsi.Engine.isBlurred(target);
     if (!alreadyBlurred) {
       target = findClassedParent(target);
     }
@@ -763,7 +763,7 @@ const Picker = (() => {
       if (typeof activeCallbacks.onUnblur === 'function') {
         activeCallbacks.onUnblur(target);
       } else {
-        blsi.BlurEngine.removeBlur(target);
+        blsi.Engine.removeBlur(target);
       }
       selectedElements.delete(target);
       flashElementIndicator(target, _t('pickerFlashUnblurred', 'Unblurred'));
@@ -771,7 +771,7 @@ const Picker = (() => {
       if (typeof activeCallbacks.onBlur === 'function') {
         activeCallbacks.onBlur(target);
       } else {
-        blsi.BlurEngine.applyBlur(target, activeSettings.blurRadius);
+        blsi.Engine.applyBlur(target, activeSettings.blurRadius);
       }
       selectedElements.add(target);
       flashElementIndicator(target, _t('pickerFlashBlurred', 'Blurred'));

@@ -37,12 +37,26 @@ const fs = require('fs');
 const path = require('path');
 
 const MODULE_PATH   = path.resolve(__dirname, '../../src/reveal_controller.js');
-const ENGINE_PATH   = path.resolve(__dirname, '../../src/blur_engine.js');
+const ENGINE_PATH   = path.resolve(__dirname, '../../src/engine.js');
 const SELECTOR_PATH = path.resolve(__dirname, '../../src/selector_utils.js');
+const STATE_PATH    = path.resolve(__dirname, '../../src/core/engine_state.js');
+const FONTS_PATH    = path.resolve(__dirname, '../../src/fonts.js');
+const CATEGORIES_PATH = path.resolve(__dirname, '../../src/core/categories.js');
+const CSS_PATH = path.resolve(__dirname, '../../src/core/css_manager.js');
+const MARKER_PATH = path.resolve(__dirname, '../../src/core/marker_engine.js');
+const OBSERVER_PATH = path.resolve(__dirname, '../../src/core/observer.js');
+const TARGET_PATH = path.resolve(__dirname, '../../src/core/target_engine.js');
 
 function loadDeps() {
   if (!blsi.SelectorUtils && fs.existsSync(SELECTOR_PATH)) require(SELECTOR_PATH);
-  if (!blsi.BlurEngine   && fs.existsSync(ENGINE_PATH))   require(ENGINE_PATH);
+  if (!blsi.Fonts         && fs.existsSync(FONTS_PATH))   require(FONTS_PATH);
+  if (!blsi.EngineState   && fs.existsSync(STATE_PATH))   require(STATE_PATH);
+  if (!blsi.Categories    && fs.existsSync(CATEGORIES_PATH)) require(CATEGORIES_PATH);
+  if (!blsi.CssManager    && fs.existsSync(CSS_PATH))     require(CSS_PATH);
+  if (!blsi.MarkerEngine  && fs.existsSync(MARKER_PATH))  require(MARKER_PATH);
+  if (!blsi.Observer      && fs.existsSync(OBSERVER_PATH)) require(OBSERVER_PATH);
+  if (!blsi.TargetEngine  && fs.existsSync(TARGET_PATH))  require(TARGET_PATH);
+  if (!blsi.Engine   && fs.existsSync(ENGINE_PATH))   require(ENGINE_PATH);
   if (!blsi.Reveal) {
     if (fs.existsSync(MODULE_PATH)) {
       require(MODULE_PATH);
@@ -76,7 +90,7 @@ function resetState() {
   document.body.innerHTML = '';
   document.head.querySelectorAll('#bl-si-blur-styles').forEach(e => e.remove());
   document.querySelectorAll('[data-bl-si-blur]').forEach(el => delete el.dataset.blSiBlur);
-  blsi.BlurEngine.unblurAll();
+  blsi.Engine.unblurAll();
   try { blsi.Reveal.destroy(); } catch (_) {}
   blsi.Reveal.init({
     getMode: () => mode,
@@ -107,7 +121,7 @@ describe('blsi.Reveal — click mode', () => {
     mode = 'click';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     expect(el.dataset.blSiReveal).toBe('1');
   });
@@ -116,7 +130,7 @@ describe('blsi.Reveal — click mode', () => {
     mode = 'click';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     fireClick(el);
     expect(el.dataset.blSiReveal).toBe('1');
@@ -126,7 +140,7 @@ describe('blsi.Reveal — click mode', () => {
     mode = 'click';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     const ev = fireClick(el);
     expect(ev.defaultPrevented).toBe(true);
   });
@@ -136,7 +150,7 @@ describe('blsi.Reveal — click mode', () => {
     const link = document.createElement('a');
     link.href = 'https://example.com';
     document.body.appendChild(link);
-    blsi.BlurEngine.applyBlur(link);
+    blsi.Engine.applyBlur(link);
     fireClick(link);
     const ev = fireClick(link);
     expect(ev.defaultPrevented).toBe(false);
@@ -146,7 +160,7 @@ describe('blsi.Reveal — click mode', () => {
     mode = 'click';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
     document.dispatchEvent(ev);
@@ -157,7 +171,7 @@ describe('blsi.Reveal — click mode', () => {
     mode = 'click';
     const input = document.createElement('input');
     document.body.appendChild(input);
-    blsi.BlurEngine.applyBlur(input);
+    blsi.Engine.applyBlur(input);
     // First click — intercept and reveal
     fireClick(input);
     expect(input.dataset.blSiReveal).toBe('1');
@@ -172,7 +186,7 @@ describe('blsi.Reveal — click mode', () => {
     pickerActive = true;
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
@@ -181,7 +195,7 @@ describe('blsi.Reveal — click mode', () => {
     mode = 'none';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
@@ -194,7 +208,7 @@ describe('blsi.Reveal — hover mode', () => {
     mode = 'hover';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireMouseOver(el);
     expect(el.dataset.blSiReveal).toBe('1');
   });
@@ -204,7 +218,7 @@ describe('blsi.Reveal — hover mode', () => {
     mode = 'hover';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireMouseOver(el);
     const out = new MouseEvent('mouseout', { bubbles: true });
     Object.defineProperty(out, 'target', { value: el });
@@ -226,7 +240,7 @@ describe('blsi.Reveal.clearAll', () => {
     mode = 'click';
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     expect(el.dataset.blSiReveal).toBe('1');
     blsi.Reveal.clearAll();
@@ -245,7 +259,7 @@ describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
     const innerEl = document.createElement('span');
     innerEl.textContent = 'shadow content';
     document.body.appendChild(innerEl);
-    blsi.BlurEngine.applyBlur(innerEl);
+    blsi.Engine.applyBlur(innerEl);
 
     const hostEl = document.createElement('div');
     document.body.appendChild(hostEl);
@@ -268,7 +282,7 @@ describe('blsi.Reveal — composedPath (shadow DOM pierce)', () => {
     const innerEl = document.createElement('span');
     innerEl.textContent = 'shadow content';
     document.body.appendChild(innerEl);
-    blsi.BlurEngine.applyBlur(innerEl);
+    blsi.Engine.applyBlur(innerEl);
 
     const hostEl = document.createElement('div');
     document.body.appendChild(hostEl);
@@ -292,7 +306,7 @@ describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
     mode = 'hover';
     const host = document.createElement('rpl-badge');
     document.body.appendChild(host);
-    blsi.BlurEngine.applyBlur(host);
+    blsi.Engine.applyBlur(host);
 
     const shadow = host.attachShadow({ mode: 'open' });
     const inner = document.createElement('span');
@@ -315,7 +329,7 @@ describe('blsi.Reveal — shadow host reveal (parentElement boundary)', () => {
     mode = 'hover';
     const wrapper = document.createElement('div');
     document.body.appendChild(wrapper);
-    blsi.BlurEngine.applyBlur(wrapper);
+    blsi.Engine.applyBlur(wrapper);
 
     const host = document.createElement('custom-el');
     wrapper.appendChild(host);
@@ -345,7 +359,7 @@ describe('blsi.Reveal.destroy', () => {
     blsi.Reveal.destroy();
     const el = document.createElement('div');
     document.body.appendChild(el);
-    blsi.BlurEngine.applyBlur(el);
+    blsi.Engine.applyBlur(el);
     fireClick(el);
     expect(el.dataset.blSiReveal).toBeUndefined();
   });
