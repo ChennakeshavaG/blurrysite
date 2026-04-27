@@ -664,9 +664,12 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   color: var(--bl-text-muted);
   padding: 2px 6px;
   border-radius: 4px;
+  text-decoration: none;
   transition: color 0.15s, background 0.15s;
 }
-.bl-footer__btn:hover { color: var(--bl-text-primary); background: var(--bl-raised); }
+.bl-footer__btn:hover,
+.bl-footer__btn:visited:hover { color: var(--bl-text-primary); background: var(--bl-raised); }
+.bl-footer__btn:visited { color: var(--bl-text-muted); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 .bl-btn-text {
