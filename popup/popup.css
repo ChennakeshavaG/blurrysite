@@ -643,6 +643,7 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
   padding: 8px 14px 10px;
   flex-wrap: wrap;
@@ -653,7 +654,6 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-footer__version {
   font-size: var(--bl-text-xs);
   color: var(--bl-text-dim);
-  margin-right: 4px;
 }
 
 .bl-footer__btn {
