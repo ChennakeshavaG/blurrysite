@@ -156,12 +156,7 @@ If you add a new file to `src/`, add a corresponding `tests/unit/xxx.test.js`.
 
 ## Documentation
 
-**Every test must be documented in `docs/TEST_VALIDATION.md`** with:
-- Test name (exact string from `test('...')`)
-- What it asserts
-- Step-by-step manual replication instructions for verifying in a real browser
-
-When adding, modifying, or removing tests, update `docs/TEST_VALIDATION.md` in the same commit.
+When adding, modifying, or removing tests, update the matching `docs/contracts/<module>.tests.md` in the same commit — describe groups, what they assert, edge cases covered, known gaps.
 
 ---
 

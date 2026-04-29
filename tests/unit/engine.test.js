@@ -8,9 +8,9 @@
 
 /* === TEST QUALITY ANNOTATIONS ===
  * COVERS: injectRules/removeRules, stampElements, tryBlurTextCheck, applyBlur/removeBlur,
- *         isBlurred, unblurAll, shouldBlurElement, matchesActiveCategories, CATEGORY_SELECTORS,
+ *         isBlurred, unblurAll, matchesActiveCategories, CATEGORY_SELECTORS,
  *         zone overlay queries (getZoneOverlays), handleSite reconciler (items + page-wide), counters,
- *         shadow DOM (injectRules/stampElements/handleShadowRoot/handleSite/teardown/observeRoot),
+ *         shadow DOM (injectRules/stampElements/handleDocument/handleSite/teardown/observeRoot),
  *         custom element stamping, ARIA role matching, reveal cascade rule, li/dt/dd placement.
  *
  * OPTIMIZE:
@@ -120,7 +120,6 @@ afterEach(() => {
 //
 // applyBlur / removeBlur /     → §ELEMENT-QUERIES-TESTS → §ELEMENT-QUERIES (implicit)
 //   isBlurred / unblurAll /
-//   shouldBlurElement /
 //   matchesActiveCategories
 //
 // CATEGORY_SELECTORS const /   → §CATEGORY-SELECTORS-TESTS → §CATEGORY-SELECTORS
@@ -240,6 +239,80 @@ describe('blsi.Engine', () => {
       blsi.Engine.tryBlurTextCheck(div, false);
       expect(div.dataset.blSiBlur).toBeUndefined();
     });
+
+    // Regression for the YouTube sidebar bug: MO drain must stamp custom-element
+    // hosts (yt-formatted-string, shreddit-*) inserted after the initial idle
+    // pass — not just text-check tags.
+    describe('custom element host (regression)', () => {
+      const FULL_CATS = { text: true, media: true, form: false, table: true, structure: true };
+
+      afterEach(() => { blsi.EngineState.setCurrentSettings(null); });
+
+      test('stamps custom-element host with direct text node', () => {
+        blsi.EngineState.setCurrentSettings({ blur_categories: FULL_CATS });
+        const el = document.createElement('yt-formatted-string');
+        el.textContent = 'Home';
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, false);
+        expect(el.dataset.blSiBlur).toBe('1');
+      });
+
+      test('skips custom-element host with no direct text node when not thorough', () => {
+        blsi.EngineState.setCurrentSettings({ blur_categories: FULL_CATS });
+        const el = document.createElement('yt-formatted-string');
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, false);
+        expect(el.dataset.blSiBlur).toBeUndefined();
+      });
+
+      test('stamps empty custom-element host in thorough mode', () => {
+        blsi.EngineState.setCurrentSettings({ blur_categories: FULL_CATS });
+        const el = document.createElement('shreddit-foo');
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, true);
+        expect(el.dataset.blSiBlur).toBe('1');
+      });
+
+      test('skips custom-element host when both TEXT and STRUCTURE are off', () => {
+        blsi.EngineState.setCurrentSettings({
+          blur_categories: { text: false, media: true, form: false, table: true, structure: false },
+        });
+        const el = document.createElement('yt-formatted-string');
+        el.textContent = 'Home';
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, false);
+        expect(el.dataset.blSiBlur).toBeUndefined();
+      });
+
+      test('does not re-stamp a host already owned by pick-blur', () => {
+        blsi.EngineState.setCurrentSettings({ blur_categories: FULL_CATS });
+        const el = document.createElement('yt-formatted-string');
+        el.textContent = 'Home';
+        el.dataset.blSiPickBlur = '1';
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, false);
+        expect(el.dataset.blSiBlur).toBeUndefined();
+      });
+
+      test('does not re-stamp a host already owned by PII detection', () => {
+        blsi.EngineState.setCurrentSettings({ blur_categories: FULL_CATS });
+        const el = document.createElement('yt-formatted-string');
+        el.textContent = 'Home';
+        el.dataset.blSiPii = '1';
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, false);
+        expect(el.dataset.blSiBlur).toBeUndefined();
+      });
+
+      test('falls back to DEFAULT_CATS when EngineState has no current settings', () => {
+        blsi.EngineState.setCurrentSettings(null);
+        const el = document.createElement('yt-formatted-string');
+        el.textContent = 'Home';
+        document.body.appendChild(el);
+        blsi.Engine.tryBlurTextCheck(el, false);
+        expect(el.dataset.blSiBlur).toBe('1');
+      });
+    });
   });
 
   // USER IMPACT: picker element click — selected element gets blur attribute applied
@@ -308,40 +381,6 @@ describe('blsi.Engine', () => {
       blsi.Engine.unblurAll();
       expect(blsi.Engine.isBlurAllActive()).toBe(false);
       expect(div.dataset.blSiBlur).toBeUndefined();
-    });
-  });
-
-  // USER IMPACT: blur-all toggle — determines per-element eligibility before stamping
-  describe('shouldBlurElement', () => {
-    const ALL = { text: true, media: true, form: true, table: true, structure: true };
-
-    test('true for always-blur', () => {
-      const p = document.createElement('p');
-      p.textContent = 'x';
-      document.body.appendChild(p);
-      expect(blsi.Engine.shouldBlurElement(p, ALL, false)).toBe(true);
-    });
-
-    test('false for empty text-check', () => {
-      const td = document.createElement('td');
-      document.body.appendChild(td);
-      expect(blsi.Engine.shouldBlurElement(td, ALL, false)).toBe(false);
-    });
-
-    test('thorough bypasses gate', () => {
-      const td = document.createElement('td');
-      document.body.appendChild(td);
-      expect(blsi.Engine.shouldBlurElement(td, ALL, true)).toBe(true);
-    });
-
-    test('false for null', () => {
-      expect(blsi.Engine.shouldBlurElement(null, ALL, false)).toBe(false);
-    });
-
-    test('false for img when MEDIA category is off', () => {
-      const img = document.createElement('img');
-      document.body.appendChild(img);
-      expect(blsi.Engine.shouldBlurElement(img, { text: true, media: false, form: true, table: true, structure: true }, false)).toBe(false);
     });
   });
 
@@ -862,13 +901,6 @@ describe('blsi.Engine', () => {
       expect(blsi.Engine.matchesActiveCategories(div, formOn)).toBe(false);
     });
 
-    test('shouldBlurElement returns true for role-matched element', () => {
-      const span = document.createElement('span');
-      span.setAttribute('role', 'checkbox');
-      document.body.appendChild(span);
-      expect(blsi.Engine.shouldBlurElement(span, formOn, false)).toBe(true);
-    });
-
     test('role set survives selector cache invalidation (toggle off then on)', () => {
       blsi.Engine.injectRules(document,formOn);
       expect(document.getElementById('bl-si-blur-styles').textContent).toContain('[role="button"]');
@@ -885,7 +917,7 @@ describe('blsi.Engine', () => {
   // ─── Shadow DOM support ───────────────────────────────────────────────────
   // Uses jsdom's attachShadow({ mode: 'open' }) to create real shadow roots.
   // Tests exercise the root-aware API (injectRules, removeRules, stampElements,
-  // handleShadowRoot, handleSite, teardown) in shadow root scope.
+  // handleDocument, handleSite, teardown) in shadow root scope.
   // USER IMPACT: web component sites (Slack/Discord/Figma) — blur penetrates shadow boundaries
   // OPTIMIZE: manual host+shadow+innerHTML setup repeated in every test; extend the shared makeShadowRoot() helper
   describe('shadow DOM', () => {
@@ -894,7 +926,7 @@ describe('blsi.Engine', () => {
     // Drive _lastReconcileKey to 'inactive' after each test so that the next
     // handleSite(BLUR_ALL_ACTIVE:true, textCats) call sees pageWideChanged=true.
     // Without this, two consecutive handleSite(active, textCats) calls in
-    // adjacent tests skip handleShadowRoot on the second call (key unchanged).
+    // adjacent tests skip handleDocument on the second call (key unchanged).
     afterEach(async () => {
       await blsi.Engine.handleSite({
         enabled: true, engage: false, blur_items: [],
@@ -957,35 +989,35 @@ describe('blsi.Engine', () => {
       expect(found).toEqual([]);
     });
 
-    // ── handleShadowRoot ───────────────────────────────────────────────────
+    // ── handleDocument ───────────────────────────────────────────────────
 
-    test('handleShadowRoot active path injects rules into shadow root', async () => {
+    test('handleDocument active path injects rules into shadow root', async () => {
       const sr = makeShadowRoot('<p>hello</p>');
       const s = { enabled: true, engage: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.Engine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleDocument(s, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
     });
 
-    test('handleShadowRoot active path stamps text-check elements inside shadow root', async () => {
+    test('handleDocument active path stamps text-check elements inside shadow root', async () => {
       const sr = makeShadowRoot('<span>secret</span>');
       const s = { enabled: true, engage: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.Engine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleDocument(s, sr);
       expect(sr.querySelector('span').dataset.blSiBlur).toBe('1');
     });
 
-    test('handleShadowRoot inactive path removes rules and stamps from shadow root', async () => {
+    test('handleDocument inactive path removes rules and stamps from shadow root', async () => {
       const sr = makeShadowRoot('<span>secret</span>');
       const on  = { enabled: true, engage: true,  blur_categories: textCats, blur_mode: null, thorough_blur: false };
       const off = { enabled: true, engage: false, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.Engine.handleShadowRoot(on, sr);
+      await blsi.Engine.handleDocument(on, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(sr.querySelector('span').dataset.blSiBlur).toBe('1');
-      await blsi.Engine.handleShadowRoot(off, sr);
+      await blsi.Engine.handleDocument(off, sr);
       expect(sr.querySelector('#bl-si-blur-styles')).toBeNull();
       expect(sr.querySelector('span').dataset.blSiBlur).toBeUndefined();
     });
 
-    test('handleShadowRoot recurses into nested shadow roots', async () => {
+    test('handleDocument recurses into nested shadow roots', async () => {
       // document.body → outerHost → sr → innerHost → nestedSr
       const outerHost = document.createElement('div');
       document.body.appendChild(outerHost);
@@ -996,7 +1028,7 @@ describe('blsi.Engine', () => {
       nestedSr.innerHTML = '<span>nested secret</span>';
 
       const s = { enabled: true, engage: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.Engine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleDocument(s, sr);
 
       expect(nestedSr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBe('1');
@@ -1015,7 +1047,7 @@ describe('blsi.Engine', () => {
       nestedSr.innerHTML = '<span>text</span>';
 
       const s = { enabled: true, engage: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.Engine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleDocument(s, sr);
       expect(nestedSr.querySelector('#bl-si-blur-styles')).not.toBeNull();
       expect(nestedSr.querySelector('span').dataset.blSiBlur).toBe('1');
 
@@ -1068,11 +1100,11 @@ describe('blsi.Engine', () => {
 
     // ── observeRoot idempotency ────────────────────────────────────────────
 
-    test('handleShadowRoot called twice on same shadow root yields one style element', async () => {
+    test('handleDocument called twice on same shadow root yields one style element', async () => {
       const sr = makeShadowRoot('<span>text</span>');
       const s = { enabled: true, engage: true, blur_categories: textCats, blur_mode: null, thorough_blur: false };
-      await blsi.Engine.handleShadowRoot(s, sr);
-      await blsi.Engine.handleShadowRoot(s, sr);
+      await blsi.Engine.handleDocument(s, sr);
+      await blsi.Engine.handleDocument(s, sr);
       expect(sr.querySelectorAll('#bl-si-blur-styles').length).toBe(1);
     });
     // ── __blsi_shadow_attached event (late attachShadow detection) ───────────
@@ -1097,7 +1129,7 @@ describe('blsi.Engine', () => {
         new CustomEvent('__blsi_shadow_attached', { bubbles: true, composed: true })
       );
 
-      // injectRules is synchronous inside handleShadowRoot — style injected immediately.
+      // injectRules is synchronous inside handleDocument — style injected immediately.
       expect(sr.querySelector('#bl-si-blur-styles')).not.toBeNull();
     });
 
@@ -1440,7 +1472,7 @@ describe('blsi.Engine', () => {
     const base = { enabled: true, engage: false, pick_blur_enabled: true, pick_blur_type: 'blur', pick_blur_color: { hex: '#000000', opacity: 1 } };
 
     test('late-loaded element is pick-blurred when blur-all is OFF (MO regression)', async () => {
-      // Regression: handleMainDocument tears down the observer when blur-all is OFF.
+      // Regression: handleDocument tears down the observer when blur-all is OFF.
       // handleSite must re-attach it after _reconcileItems via observeRoot() so the
       // MO idle drain can stamp elements inserted after page load.
       // jsdom fires MO callbacks as microtasks; setTimeout falls back for idle.
@@ -1801,10 +1833,10 @@ describe('blsi.Engine', () => {
     test('handleSite re-attaches document MO when subscribers exist after blur-all toggle off', async () => {
       const handler = jest.fn();
       blsi.Engine.subscribeMutations('test-a', handler);
-      await activate(true);            // blur-all ON — MO attached via handleMainDocument
+      await activate(true);            // blur-all ON — MO attached via handleDocument
       handler.mockClear();
 
-      // Force pageWideChanged → handleMainDocument inactive → teardown(document).
+      // Force pageWideChanged → handleDocument inactive → teardown(document).
       // After teardown, line 289 must re-attach because hasSubscribers() is true.
       await blsi.Engine.handleSite({
         enabled: true,

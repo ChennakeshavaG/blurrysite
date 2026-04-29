@@ -6,8 +6,7 @@
 Chrome/Firefox MV3 extension. Vanilla JS only — no bundler, no ES modules, no TypeScript.
 All source files IIFEs assigning single `window.BlurrySite*` global.
 
-Per-module contracts: `docs/contracts/<module>.md` (one per module — read during implementation).
-Full design ref: `docs/module-contracts.md` and `docs/architecture.md` (planning only — see rule 4).
+Per-module contracts: `docs/contracts/<module>.md` (one per module — read during implementation). Index: `docs/contracts/README.md`.
 
 ---
 
@@ -25,7 +24,7 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 
 | File | Namespace | Exposed API |
 |---|---|---|
-| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_MODEL` (no shortcuts — built lazily), `reveal_dfs_max_depth`, `modifier_codes`, `is_valid()`, `category_of()`, `build_default_model()`, `validate_model()`, `isValidShortcutEntry()`, `deep_merge()`. Enums: `reveal_modes`, `blur_modes`, `picker_modes`, `pick_blur_modes`, `pii_modes`, `idle_units`, `pattern_types`, `SUPPORTED_LANGUAGES`, `css`, `ids` |
+| `src/constants.js` | `globalThis.blsi` | Message types (`blsi.STORAGE.*`, `blsi.COMMAND.*`, `blsi.POPUP.*`), `DEFAULT_MODEL` (no shortcuts — built lazily), `reveal_dfs_max_depth`, `modifier_codes`, `is_valid()`, `category_of()`, `build_default_model()`, `validate_model()`, `isValidShortcutEntry()`, `deep_merge()`, `item_selectors(item) → string[]` (selector-list normalizer), `cat_key(categories) → string` (positional-bits fingerprint shared with `Css.getSelectors`). Enums: `reveal_modes`, `blur_modes`, `picker_modes`, `pick_blur_modes`, `pii_modes`, `idle_units`, `pattern_types`, `SUPPORTED_LANGUAGES`, `css`, `ids` |
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; all else gated. `scope(name)` returns tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action: `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding action = one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
@@ -38,10 +37,10 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/core/engine_state.js` | `blsi.EngineState` | Shared private state across the engine sub-modules: getters/setters for `isPageBlurred`, `pickerActive`, `currentSettings`, `pickBlurDynamicActive`, plus `getBlurredCount` / `incrementBlurredCount` / `decrementBlurredCount`. |
 | `src/core/categories.js` | `blsi.Categories` | `CATEGORY_SELECTORS`, `CATEGORY_ORDER`, `DEFAULT_CATS` — frozen tag/role data for the five blur categories. Pure data, no state. |
 | `src/core/css_manager.js` | `blsi.CssManager` | Three injection systems: `injectRules / removeRules / isBlurAllActive` (blur-all), `injectPickBlurRules / removePickBlurRules` (pick-blur), `injectPiiRules / removePiiRules` (PII). Plus `ensureSvgFilter`, `getSelectors / getLastSelectorCache`, and `SVG_FILTER_ID` (read by orchestrator teardown). |
-| `src/core/marker_engine.js` | `blsi.MarkerEngine` | Element stamping + match queries: `applyBlur`, `removeBlur`, `isBlurred`, `isVisuallyBlurred`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `shouldBlurElement`, `rebuildTextCheckSet`, `_isExtensionUI`. |
+| `src/core/marker_engine.js` | `blsi.MarkerEngine` | Element stamping + match queries: `applyBlur`, `removeBlur`, `isBlurred`, `isVisuallyBlurred`, `stampElements` (returns `ShadowRoot[]`), `tryBlurTextCheck`, `matchesActiveCategories`, `_stampIframeIfCrossOrigin`, `_isExtensionUI`. Per-element decision logic lives in private `_evaluateAndStamp`; both `stampElements` and `tryBlurTextCheck` delegate to it. Text-check tag set lives in shared `Css.getSelectors(cats).textCheckSet` — no parallel cache. |
 | `src/core/observer.js` | `blsi.Observer` | One MutationObserver per root + idle-batched drain + subscriber pub/sub: `observeRoot`, `disconnectObserver`, `subscribeMutations(name, handler)` (also attaches `observeRoot(document)` so subscribers receive mutations regardless of feature state), `unsubscribeMutations(name)` (disconnects the document MO when no subscriber AND no feature still needs it), `hasSubscribers()`, `initShadowAttachListener` / `removeShadowAttachListener`, orchestrator helpers `clearPendingMutations`, `clearStampQueueForRoot`, `pushStampQueueItem`, `scheduleStampIdle`. MO config `{ childList, subtree, characterData }`. |
 | `src/core/target_engine.js` | `blsi.TargetEngine` | Pick-blur targets — zones, items, popup hover highlight: `reconcileItems`, `activeItemsSize`, `tryPickBlurNode`, `getZoneOverlays`, `removeAllZoneOverlays`, `resetCounters`, `allocateElementName`, `allocateStickyName(anchor)`, `highlightItem`, `clearItemHighlight`. |
-| `src/engine.js` | `blsi.Engine` | Facade + orchestrator. Re-exports the public surface of every `core/*` module. Owns `handleSite` (single async entry, mutex-guarded), `handleShadowRoot`, `handleIframe`, `teardown`, `unblurAll`, `_setPickerActiveForObserver`, and getters for `isPageBlurred` / `blurredCount`. External callers (`content_script`, `picker`, `reveal_controller`, popup, tests) talk only to this surface. |
+| `src/engine.js` | `blsi.Engine` | Facade + orchestrator. Re-exports the public surface of every `core/*` module. Owns `handleSite` (single async entry, mutex-guarded), `handleDocument(settings, root)` (works for `document` and shadow roots), `handleIframe` (thin wrapper over `MarkerEngine._stampIframeIfCrossOrigin`), `teardown`, `unblurAll`, `_setPickerActiveForObserver`, and getters for `isPageBlurred` / `blurredCount`. External callers (`content_script`, `picker`, `reveal_controller`, popup, tests) talk only to this surface. |
 | `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
 | `src/main_world_bridge.js` | _(none — MAIN world)_ | No global; runs at `document_start` in page's MAIN world. Patches `navigator.mediaDevices.getDisplayMedia` (fires `'__blsi_screen_share'` on share start/stop) and `Element.prototype.attachShadow` (fires `'__blsi_shadow_attached'` on element for late shadow root discovery). No `chrome.*` access. |
 | `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()`, `whoAmI()`, `getTabId()` — isolated-world bridge; listens for `'__blsi_screen_share'` CustomEvents from MAIN world. On `init` fires `WHO_AM_I` round-trip so `Store.resolve(..., tab_id)` can identify the sharing tab. On share start opens port `'blsi-screen-share'` + sends `SCREEN_SHARE_STARTED`; on share end disconnects port + sends `SCREEN_SHARE_ENDED`. Background owns the session record (`blsi_screen_share`); content tabs subscribe via `chrome.storage.session.onChanged`. `SCREEN_SHARE_NOTIFY` broadcast is a UI ping for toast timing. |
@@ -316,7 +315,7 @@ Sub-agents get CLAUDE.md loaded but task prompt overrides attention to rules. Fo
 
 ### Running tests
 ```bash
-npm run test:unit          # 805 unit tests, fast
+npm run test:unit          # 792 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -342,7 +341,7 @@ Follow pattern in any existing `tests/unit/*.test.js`:
 2. Use `require(MODULE_PATH)` to load source (enables coverage)
 3. Provide `buildStubSource()` matching public contract exactly
 4. `afterEach` or `beforeEach` must clean DOM and call `destroy()` if applicable
-5. **Add every new test to `docs/test-validation.md`** with manual replication steps
+5. **Update the relevant `docs/contracts/<module>.tests.md`** when adding/removing/changing tests — describe groups, edge cases, known gaps
 
 ---
 
@@ -365,13 +364,13 @@ Docs are load-bearing references used by humans and Claude. Code changes → rel
 | What changed | Update |
 |---|---|
 | Added/removed/renamed public API method on any module | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` module-specific rules, `docs/contracts/<module>.md` contract |
-| Added/removed `chrome.runtime.sendMessage` type | `src/constants.js` (source of truth), `CLAUDE.md` Message Protocol tables, `docs/architecture.md §6` protocol table |
+| Added/removed `chrome.runtime.sendMessage` type | `src/constants.js` (source of truth), `CLAUDE.md` Message Protocol tables |
 | Changed default value (blur radius, chord keys, etc.) | `src/constants.js` DEFAULTS — all other files reference it |
 | Changed settings shape (new keys, renamed keys) | `CLAUDE.md` Settings Shape section, `docs/contracts/storage_model.md` |
 | Added/removed/renamed `blsi.Model` method or storage key | `CLAUDE.md` Module Globals table (`src/storage_model.js` row), `src/CLAUDE.md` storage_model.js rules, `docs/contracts/storage_model.md` contract |
 | Added new source file under `src/` | `CLAUDE.md` Module Globals table, `src/CLAUDE.md` load order, `manifest.json` content_scripts |
-| Added/modified/removed unit test | `docs/test-validation.md` — add entry with test name, assertion, manual replication steps |
-| Added new test file | `docs/test-validation.md` new section, `tests/CLAUDE.md` if test patterns differ |
+| Added/modified/removed unit test | `docs/contracts/<module>.tests.md` — describe groups, edge cases, known gaps |
+| Added new test file | `docs/contracts/<module>.tests.md` new file, `tests/CLAUDE.md` if test patterns differ |
 | Changed test loading pattern or setup | `CLAUDE.md` Testing section, `tests/CLAUDE.md` |
 | Changed keyboard shortcut handling | `CLAUDE.md` Settings Shape section, `src/CLAUDE.md` shortcut_handler rules |
 | Changed CSS class names or IDs | `CLAUDE.md` CSS class constants table |
@@ -383,8 +382,7 @@ Docs are load-bearing references used by humans and Claude. Code changes → rel
 1. **Same-commit rule** — doc updates go in same commit as code change. Never leave docs for follow-up.
 2. **Update, don't append** — behavior changes: find and update existing entry. Don't add contradicting entry.
 3. **Test count** — keep test count in Testing section current. Run `npm run test:unit`, update number.
-4. **TEST_VALIDATION.md** — every test needs: test name, what it asserts, step-by-step manual replication. Adding test → add entry. Modifying → update entry. Removing → remove entry.
-5. **Don't document internals** — only document things affecting how other code interacts with module (public API, message types, settings shapes, CSS classes). Private details in code comments, not docs.
+4. **Don't document internals** — only document things affecting how other code interacts with module (public API, message types, settings shapes, CSS classes). Private details in code comments, not docs.
 
 ---
 

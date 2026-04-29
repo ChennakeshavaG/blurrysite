@@ -245,6 +245,38 @@ const Constants = (() => {
     return result;
   }
 
+  // ── Item selectors ─────────────────────────────────────────────────────────
+  // Single source of truth for the legacy-vs-current `pick_and_blur.items`
+  // shape: dynamic items historically used `selector: string`, now use
+  // `selectors: string[]` (ordered structural→semantic). target_engine,
+  // selector_utils, and migration code all need to coalesce these into a
+  // canonical array. Kept here so a future migration that drops the legacy
+  // field touches one place.
+  //
+  // Returns string[] (never null). Empty for sticky items, malformed input,
+  // or dynamic items missing both fields.
+
+  function item_selectors(item) {
+    if (!item || typeof item !== 'object') return [];
+    if (Array.isArray(item.selectors) && item.selectors.length > 0) return item.selectors;
+    if (typeof item.selector === 'string' && item.selector.length > 0) return [item.selector];
+    return [];
+  }
+
+  // ── Category fingerprint key ───────────────────────────────────────────────
+  // Stable cache key for the active blur_categories map. Positional bits over
+  // CATEGORY_ORDER so two callers with the same active set always get the
+  // same string. CATEGORY_ORDER is owned by core/categories.js (loaded after
+  // constants.js), so we read it lazily off blsi.Categories at call time.
+
+  function cat_key(categories) {
+    const order = (globalThis.blsi && blsi.Categories && blsi.Categories.CATEGORY_ORDER) || [];
+    const cats = categories || {};
+    let key = '';
+    for (let i = 0; i < order.length; i++) key += cats[order[i]] ? '1' : '0';
+    return key;
+  }
+
   // ── Build mutable model clone ──────────────────────────────────────────────
   // Returns a deep-mutable copy of DEFAULT_MODEL with shortcuts lazily resolved
   // from blsi.Actions (available after action_registry.js loads).
@@ -710,6 +742,8 @@ const Constants = (() => {
     modifier_codes,
     // utilities
     deep_merge,
+    item_selectors,
+    cat_key,
     build_default_model,
     validate_model,
     is_valid_shortcut_entry,

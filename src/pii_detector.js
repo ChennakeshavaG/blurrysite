@@ -59,7 +59,7 @@ const BlurrySitePiiDetector = (() => {
   //   1. Write a function following the signature above.
   //   2. Add it to FALSE_POSITIVE_CHECKS.precise (and optionally .aggressive).
   //   3. Add unit tests: one true-positive case + one false-positive case.
-  //   4. Update docs/TEST_VALIDATION.md and docs/superpowers/specs/2026-04-18-pii-numeric-false-positives-design.md.
+  //   4. Update docs/contracts/pii_detector.tests.md.
 
   function isYear(matchText /*, _text, _index */) {
     if (!/^\d{4}$/.test(matchText)) return false;

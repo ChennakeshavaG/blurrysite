@@ -1,18 +1,24 @@
 /**
- * reveal_controller.js — Temporary reveal on click or hover
+ * reveal_controller.js — Temporary reveal of blurred elements via the
+ * `data-bl-si-reveal` attribute. Modes: hover, click, none.
  *
- * Exposed as blsi.Reveal (IIFE — no ES module syntax).
+ * Three DOM walks (all shadow-DOM aware via `_ancestorOrHost`):
+ *   - findBlurredNear        find the nearest blurred element at the cursor
+ *   - revealBlurredAncestors stamp every blurred ancestor (outer filter
+ *                            would otherwise keep blurring the reveal)
+ *   - _revealElement         stamp el + its blurred descendants
  *
- * Owns all state for the reveal subsystem (click mode + hover mode, plus
- * ancestor-chain unblur and sticky zone overlay hit-testing). Depends on
- * blsi.Engine for isBlurred() and getZoneOverlays(); otherwise stateless
- * relative to the rest of the extension.
+ * Cleanup mirrors:
+ *   - _unrevealElement / _unrevealAll  (target + descendants)
+ *   - clearAncestorReveals             (ancestor chain)
  *
  * Wiring from content_script.js:
  *   blsi.Reveal.init({
- *     getMode:       () => settings.REVEAL_MODE,
+ *     getMode:       () => settings.reveal_mode,
  *     isPickerActive: () => isPickerActive,
  *   });
+ *
+ * Exposed as blsi.Reveal (IIFE — no ES module syntax).
  */
 
 const BlurrySiteReveal = (() => {
@@ -21,182 +27,254 @@ const BlurrySiteReveal = (() => {
   const Engine = blsi.Engine;
   const RM = blsi.reveal_modes;
 
-  // Tests cannot set e.isTrusted (jsdom non-configurable). Any test event that
-  // should pass the trusted check must set this Symbol on the event object.
+  // Tests cannot set e.isTrusted (jsdom non-configurable). Test events that
+  // should pass the trust check set this Symbol instead.
   const _TRUST = Symbol.for('blsi_event_trusted');
 
-  // Derived from Engine.CATEGORY_SELECTORS — single source of truth.
-  // Joins every alwaysBlur tag across all categories into one CSS selector.
+  // Joined alwaysBlur tags + role attribute selectors from every category —
+  // derived from Engine.CATEGORY_SELECTORS so this stays the single source
+  // of truth. Roles MUST be included: descendant scans (find / stamp) need
+  // to match role-blurred elements (e.g. <div role="button"> under FORM)
+  // the same way blur-all CSS rules do — otherwise reveal misses them when
+  // they sit beneath a hovered wrapper.
   const ALWAYS_BLUR_SELECTOR = (function () {
-    var cats = Engine.CATEGORY_SELECTORS;
-    var tags = [];
-    var keys = Object.keys(cats);
-    for (var i = 0; i < keys.length; i++) {
-      var ab = cats[keys[i]].alwaysBlur;
-      for (var j = 0; j < ab.length; j++) tags.push(ab[j]);
+    const cats = Engine.CATEGORY_SELECTORS;
+    const parts = [];
+    for (const key of Object.keys(cats)) {
+      for (const t of cats[key].alwaysBlur) parts.push(t);
+      if (cats[key].roles) {
+        for (const r of cats[key].roles) parts.push('[role="' + r + '"]');
+      }
     }
-    return tags.join(',');
+    return parts.join(',');
   }());
 
   // ── State ────────────────────────────────────────────────────────────────
+
   let _getMode = () => null;
   let _getPickerActive = () => false;
   let _installed = false;
 
-  let revealedAncestors = [];
-  let clickRevealedEl = null;
-  let mouseoutTimer = null;
-  let _hoverRevealedEl = null;
-  const _revealedElements = new Set();
+  let _revealedAncestors = [];          // Element[] stamped by revealBlurredAncestors
+  let _clickRevealedEl = null;          // currently click-revealed element
+  let _hoverRevealedEl = null;          // currently hover-revealed element
+  const _revealedElements = new Set();  // every element with data-bl-si-reveal
+  let _hoverExitTimer = null;           // 50ms debounce before hover dismiss
 
-  // mousemove-based zone detection state
+  // mousemove → rAF zone-hover detection state
   let _rafPending = false;
   let _lastMouseX = -1;
   let _lastMouseY = -1;
   let _mouseMoveAttached = false;
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── Predicates / selectors ───────────────────────────────────────────────
 
   // Reveal walks need the broader "visually blurred" check so role-matched
-  // parents (e.g. <button role="tab"> under the FORM category) are cleared
-  // alongside tag-matched and data-attribute-stamped elements. Fall back to
-  // Engine.isBlurred for older builds of blur_engine that don't expose the
-  // helper yet.
-  const _isVisuallyBlurred = (el) =>
-    typeof Engine.isVisuallyBlurred === 'function'
-      ? Engine.isVisuallyBlurred(el)
-      : Engine.isBlurred(el);
+  // parents (e.g. <button role="tab"> under FORM) are cleared alongside
+  // tag-matched and data-attribute-stamped elements.
+  const _isVisuallyBlurred = (el) => Engine.isVisuallyBlurred(el);
 
-  function clearRevealedAncestors() {
-    for (let i = 0; i < revealedAncestors.length; i++) {
-      delete revealedAncestors[i].dataset.blSiReveal;
-    }
-    revealedAncestors = [];
+  const _isZoneOverlay = (el) => !!(el && el.dataset && el.dataset.blSiZone !== undefined);
+
+  // Single source of truth for "find any blurred element". Includes the
+  // tag-rule selector when blur-all is active; always includes the three
+  // data-attribute stamps.
+  function _allBlurredSelector() {
+    const stamps = '[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]';
+    return (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive())
+      ? ALWAYS_BLUR_SELECTOR + ',' + stamps
+      : stamps;
   }
 
-  function revealAncestorChain(el) {
-    clearRevealedAncestors();
-    let node = el.parentElement;
-    while (node && node !== document.documentElement) {
-      if (_isVisuallyBlurred(node)) {
-        node.dataset.blSiReveal = '1';
-        revealedAncestors.push(node);
-      }
-      node = node.parentElement;
-    }
-    // Cross shadow DOM boundaries: a host element with data-bl-si-blur still
-    // applies filter:blur() to its entire rendered subtree (including shadow
-    // root contents) even when inner elements have data-bl-si-reveal stamped.
-    // Walk up through each shadow host and its ancestors to clear outer blurs.
-    var root = el.getRootNode();
-    while (root instanceof ShadowRoot) {
-      var host = root.host;
-      if (_isVisuallyBlurred(host)) {
-        host.dataset.blSiReveal = '1';
-        revealedAncestors.push(host);
-      }
-      var hostParent = host.parentElement;
-      while (hostParent && hostParent !== document.documentElement) {
-        if (_isVisuallyBlurred(hostParent)) {
-          hostParent.dataset.blSiReveal = '1';
-          revealedAncestors.push(hostParent);
-        }
-        hostParent = hostParent.parentElement;
-      }
-      root = host.getRootNode();
-    }
+  // ── Shadow-aware walk primitive ──────────────────────────────────────────
+
+  // Walk-one-step upward. parentElement first; when null (shadow root edge)
+  // hops to the shadow host. Returns null past document root.
+  function _ancestorOrHost(node) {
+    if (!node) return null;
+    if (node.parentElement) return node.parentElement;
+    const root = node.getRootNode();
+    return (root instanceof ShadowRoot) ? root.host : null;
   }
 
-  function findBlurredTarget(el, clientX, clientY) {
-    // Walk UP — find the nearest blurred ancestor (or self).
-    let node = el;
+  // Walks up from `start` (inclusive) using _ancestorOrHost; returns the
+  // first blurred element, or null. Used by both findBlurredNear (cursor →
+  // nearest blurred) and revealBlurredAncestors (skip the loop when nothing
+  // blurred remains above).
+  function _findBlurredAncestor(start) {
+    let node = start;
     while (node && node !== document.documentElement) {
       if (node instanceof Element && _isVisuallyBlurred(node)) return node;
-      node = node.parentElement;
+      node = _ancestorOrHost(node);
     }
-    // parentElement stops at shadow root boundaries: for an element whose
-    // parent is a ShadowRoot (not an Element), parentElement returns null
-    // before we ever reach the shadow host. Walk up the host chain, then
-    // continue up light DOM from the outermost host if needed.
-    // Handles: <rpl-badge data-bl-si-blur> → #shadow-root → <span> (cursor here)
-    if (node === null && el instanceof Element) {
-      var root = el.getRootNode();
-      var lastHost = null;
-      while (root instanceof ShadowRoot) {
-        if (_isVisuallyBlurred(root.host)) return root.host;
-        lastHost = root.host;
-        root = root.host.getRootNode();
-      }
-      // Re-entered light DOM — keep walking up from the outermost host.
-      if (lastHost) {
-        var lightNode = lastHost.parentElement;
-        while (lightNode && lightNode !== document.documentElement) {
-          if (_isVisuallyBlurred(lightNode)) return lightNode;
-          lightNode = lightNode.parentElement;
-        }
+    return null;
+  }
+
+  // Collect every shadow root in `node`'s composed subtree. querySelectorAll
+  // does not pierce shadow boundaries — descendant walks for stamping /
+  // unstamping / hit-testing must iterate each shadow root explicitly.
+  // Recurses into nested shadow roots. Bounded by subtree size — `node` is
+  // a hover target, not the document root.
+  function _collectShadowRootsIn(node) {
+    const out = [];
+    if (node instanceof Element && node.shadowRoot) out.push(node.shadowRoot);
+    if (node.querySelectorAll) {
+      const descendants = node.querySelectorAll('*');
+      for (let i = 0; i < descendants.length; i++) {
+        if (descendants[i].shadowRoot) out.push(descendants[i].shadowRoot);
       }
     }
-    // Walk DOWN — fallback when hover target is a non-blurred wrapper.
-    // querySelectorAll scoped to el's subtree keeps the candidate set small
-    // (typically 5–50 elements; 300 is a safe upper bound on dense pages).
-    // Iterating in reverse DOM order returns the innermost match first when
-    // nested blurred elements overlap at the cursor position.
-    if (el && el instanceof Element) {
-      var hasSel = ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive();
-      var sel = hasSel
-        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]'
-        : '[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]';
-      var candidates = el.querySelectorAll(sel);
-      var useCoords = clientX !== undefined && clientY !== undefined;
-      for (var i = candidates.length - 1; i >= 0; i--) {
-        var c = candidates[i];
+    // Recurse into discovered roots for nested shadows.
+    for (let i = 0, len = out.length; i < len; i++) {
+      const nested = _collectShadowRootsIn(out[i]);
+      for (let j = 0; j < nested.length; j++) out.push(nested[j]);
+    }
+    return out;
+  }
+
+  // Stamp data-bl-si-reveal on every blurred element matched by `sel` inside
+  // `root` (Element or ShadowRoot). qSAll-bounded to the given root only —
+  // does NOT pierce shadow boundaries; the caller walks roots.
+  function _stampBlurredIn(root, sel) {
+    const matches = root.querySelectorAll(sel);
+    for (let i = 0; i < matches.length; i++) {
+      if (_isVisuallyBlurred(matches[i])) {
+        matches[i].dataset.blSiReveal = '1';
+        _revealedElements.add(matches[i]);
+      }
+    }
+  }
+
+  // Mirror of _stampBlurredIn for cleanup. Removes data-bl-si-reveal from
+  // every stamped element inside `root`.
+  function _unstampRevealsIn(root) {
+    const stamped = root.querySelectorAll('[data-bl-si-reveal]');
+    for (let i = 0; i < stamped.length; i++) {
+      delete stamped[i].dataset.blSiReveal;
+      _revealedElements.delete(stamped[i]);
+    }
+  }
+
+  // ── Walk 1: find nearest blurred element at cursor ───────────────────────
+
+  function findBlurredNear(el, clientX, clientY) {
+    // UP — covers light DOM and shadow boundaries in one walk.
+    const upHit = _findBlurredAncestor(el);
+    if (upHit) return upHit;
+    // DOWN — fallback when cursor is over a non-blurred wrapper.
+    const downHit = _findBlurredDescendantAt(el, clientX, clientY);
+    if (downHit) return downHit;
+    // STACK PIERCE — fallback for sibling overlays at the same coords
+    // (YouTube yt-touch-feedback-shape, MUI ripples, similar absolute-
+    // positioned decoratives that sit on top of a blurred sibling). The
+    // mouseover target is the overlay; tree walks miss the blurred sibling.
+    if (clientX !== undefined && clientY !== undefined) {
+      const stackHit = _findBlurredAtPoint(clientX, clientY);
+      if (stackHit) return stackHit;
+    }
+    return null;
+  }
+
+  function _findBlurredAtPoint(clientX, clientY) {
+    const hits = document.elementsFromPoint(clientX, clientY);
+    for (let i = 0; i < hits.length; i++) {
+      if (_isVisuallyBlurred(hits[i])) return hits[i];
+    }
+    // elementsFromPoint excludes `display: contents` elements (no layout
+    // box). Walk DOWN from each hit and Range-test every blurred descendant —
+    // catches phantom elements like YT's ytAttributedStringHost spans.
+    for (let i = 0; i < hits.length; i++) {
+      const inner = _findBlurredDescendantAt(hits[i], clientX, clientY);
+      if (inner) return inner;
+    }
+    return null;
+  }
+
+  function _findBlurredDescendantAt(el, clientX, clientY) {
+    if (!(el instanceof Element)) return null;
+    const sel = _allBlurredSelector();
+    const useCoords = clientX !== undefined && clientY !== undefined;
+    // Search light DOM + every shadow root in `el`'s composed subtree.
+    // Reverse DOM order within each root — innermost match wins on overlap.
+    const roots = [el].concat(_collectShadowRootsIn(el));
+    for (let r = roots.length - 1; r >= 0; r--) {
+      const candidates = roots[r].querySelectorAll(sel);
+      for (let i = candidates.length - 1; i >= 0; i--) {
+        const c = candidates[i];
         if (!_isVisuallyBlurred(c)) continue;
-        if (useCoords) {
-          var r = c.getBoundingClientRect();
-          if (clientX >= r.left && clientX <= r.right &&
-              clientY >= r.top  && clientY <= r.bottom) return c;
-        } else {
-          return c; // no coords — return innermost blurred descendant
-        }
+        if (!useCoords) return c;
+        const rect = _hitRectOf(c);
+        if (rect &&
+            clientX >= rect.left && clientX <= rect.right &&
+            clientY >= rect.top  && clientY <= rect.bottom) return c;
       }
     }
     return null;
   }
 
-  function _isZoneOverlay(el) {
-    return el && el.dataset && el.dataset.blSiZone !== undefined;
+  // Returns the visual hit-test rect for `el`. Falls back to a Range over the
+  // element's text content when the element itself has no layout box —
+  // happens for `display: contents` elements (e.g. YouTube's
+  // `ytAttributedStringHost` class), whose own getBoundingClientRect is 0×0
+  // even though their text renders in the parent's flow.
+  function _hitRectOf(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width !== 0 || rect.height !== 0) return rect;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const r = range.getBoundingClientRect();
+      return (r.width !== 0 || r.height !== 0) ? r : null;
+    } catch (_) {
+      return null;
+    }
   }
+
+  // ── Walk 2: stamp every blurred ancestor of `el` ─────────────────────────
+
+  // A shadow host with data-bl-si-blur applies filter:blur() to its entire
+  // composed subtree. Inner reveal won't show through unless every blurred
+  // ancestor (including across shadow boundaries) also has the reveal stamp.
+  function revealBlurredAncestors(el) {
+    clearAncestorReveals();
+    let node = _ancestorOrHost(el);
+    while (node && node !== document.documentElement) {
+      if (_isVisuallyBlurred(node)) {
+        node.dataset.blSiReveal = '1';
+        _revealedAncestors.push(node);
+      }
+      node = _ancestorOrHost(node);
+    }
+  }
+
+  function clearAncestorReveals() {
+    for (let i = 0; i < _revealedAncestors.length; i++) {
+      delete _revealedAncestors[i].dataset.blSiReveal;
+    }
+    _revealedAncestors = [];
+  }
+
+  // ── Walk 3: stamp `el` + every blurred descendant ────────────────────────
 
   function _revealElement(el) {
     el.dataset.blSiReveal = '1';
-    if (!_isZoneOverlay(el)) {
-      // Stamp reveal on all blurred children — tag-matched (CSS rule) and
-      // data-stamped (picker). querySelectorAll is browser-native and fast.
-      var sel = (ALWAYS_BLUR_SELECTOR && Engine.isBlurAllActive())
-        ? ALWAYS_BLUR_SELECTOR + ',[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]'
-        : '[data-bl-si-blur],[data-bl-si-pick-blur],[data-bl-si-pii]';
-      var children = el.querySelectorAll(sel);
-      for (var i = 0; i < children.length; i++) {
-        if (_isVisuallyBlurred(children[i])) {
-          children[i].dataset.blSiReveal = '1';
-          _revealedElements.add(children[i]);
-        }
-      }
-    }
     _revealedElements.add(el);
+    if (_isZoneOverlay(el)) return;       // zone overlays have no blurred children
+    const sel = _allBlurredSelector();
+    _stampBlurredIn(el, sel);
+    // Pierce shadow boundaries — each shadow root has its own filter rules
+    // (CSS injected per root) so descendants need their own reveal stamps.
+    const shadows = _collectShadowRootsIn(el);
+    for (let i = 0; i < shadows.length; i++) _stampBlurredIn(shadows[i], sel);
   }
 
   function _unrevealElement(el) {
     delete el.dataset.blSiReveal;
-    if (!_isZoneOverlay(el)) {
-      // Clean up by querying the reveal attr directly — no tag search needed
-      var revealed = el.querySelectorAll('[data-bl-si-reveal]');
-      for (var i = 0; i < revealed.length; i++) {
-        delete revealed[i].dataset.blSiReveal;
-        _revealedElements.delete(revealed[i]);
-      }
-    }
     _revealedElements.delete(el);
+    if (_isZoneOverlay(el)) return;
+    _unstampRevealsIn(el);
+    const shadows = _collectShadowRootsIn(el);
+    for (let i = 0; i < shadows.length; i++) _unstampRevealsIn(shadows[i]);
   }
 
   function _unrevealAll() {
@@ -206,20 +284,21 @@ const BlurrySiteReveal = (() => {
     _revealedElements.clear();
   }
 
-  function dismissClickReveal() {
-    if (clickRevealedEl) {
-      _unrevealElement(clickRevealedEl);
-      clickRevealedEl = null;
+  // ── Dismiss helpers ──────────────────────────────────────────────────────
+
+  function _dismissClick() {
+    if (_clickRevealedEl) {
+      _unrevealElement(_clickRevealedEl);
+      _clickRevealedEl = null;
     }
-    clearRevealedAncestors();
+    clearAncestorReveals();
   }
 
-  function _dismissHoverReveal() {
-    if (_hoverRevealedEl) {
-      _unrevealAll();
-      clearRevealedAncestors();
-      _hoverRevealedEl = null;
-    }
+  function _dismissHover() {
+    if (!_hoverRevealedEl) return;
+    _unrevealAll();
+    clearAncestorReveals();
+    _hoverRevealedEl = null;
   }
 
   // In click-reveal mode, pass-through clicks on `target="_blank"` links would
@@ -228,7 +307,7 @@ const BlurrySiteReveal = (() => {
   // new tab via a modifier key (Ctrl/Cmd/Shift) or a non-left-button click.
   function _redirectIfBlankLink(target, e) {
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-    var node = target;
+    let node = target;
     while (node && node !== document.documentElement) {
       if (node instanceof HTMLAnchorElement && node.href &&
           (node.target === '_blank' || node.target === '_new')) {
@@ -246,7 +325,7 @@ const BlurrySiteReveal = (() => {
       const z = zones[i];
       const rect = z.getBoundingClientRect();
       if (clientX >= rect.left && clientX <= rect.right &&
-          clientY >= rect.top && clientY <= rect.bottom) {
+          clientY >= rect.top  && clientY <= rect.bottom) {
         return z;
       }
     }
@@ -255,7 +334,8 @@ const BlurrySiteReveal = (() => {
 
   // ── Zone mousemove detection ─────────────────────────────────────────────
 
-  // Attached only when zones exist — detached when none. Zero cost on zone-free pages.
+  // Attached only when zones exist — detached when none. Zero cost on
+  // zone-free pages.
   function _syncMouseMoveListener() {
     const hasZones = Engine.getZoneOverlays().length > 0;
     if (hasZones && !_mouseMoveAttached) {
@@ -267,9 +347,9 @@ const BlurrySiteReveal = (() => {
     }
   }
 
-  // Thin handler — stores coordinates and schedules one rAF. Chrome 60+ already
-  // frame-aligns mousemove events (once per frame), so the rAF gate mainly guards
-  // older browsers and avoids queuing multiple frames when the layout is slow.
+  // Thin handler — stores coordinates and schedules one rAF. Chrome 60+
+  // already frame-aligns mousemove; the rAF gate guards older browsers and
+  // avoids queuing multiple frames when layout is slow.
   function onRevealMouseMove(e) {
     if (_getMode() !== RM.hover) return;
     if (!e.isTrusted && !e[_TRUST]) return;
@@ -281,29 +361,29 @@ const BlurrySiteReveal = (() => {
     requestAnimationFrame(_processZoneHover);
   }
 
-  // rAF callback — actual zone boundary detection. getBoundingClientRect() stays
-  // on the cheap path (~0.1ms) because fixed-position zone overlays are not
-  // invalidated by page content mutations.
+  // rAF callback — actual zone boundary detection. getBoundingClientRect()
+  // stays cheap (~0.1ms) because fixed-position zone overlays are not
+  // invalidated by page mutations.
   function _processZoneHover() {
     _rafPending = false;
-    if (!_installed) return; // guard: destroy() may have been called before rAF fired
+    if (!_installed) return;             // destroy() may have fired before rAF
     const zones = Engine.getZoneOverlays();
     if (!zones.length) return;
 
     const zone = _findZoneAtPoint(_lastMouseX, _lastMouseY);
 
     if (zone) {
-      if (mouseoutTimer) { clearTimeout(mouseoutTimer); mouseoutTimer = null; }
+      if (_hoverExitTimer) { clearTimeout(_hoverExitTimer); _hoverExitTimer = null; }
       if (_hoverRevealedEl === zone) return;
-      _dismissHoverReveal();
+      _dismissHover();
       _revealElement(zone);
       _hoverRevealedEl = zone;
     } else if (_hoverRevealedEl && _isZoneOverlay(_hoverRevealedEl)) {
-      // Cursor left zone area — start 50ms debounce (mirrors regular element behavior)
-      if (!mouseoutTimer) {
-        mouseoutTimer = setTimeout(() => {
-          mouseoutTimer = null;
-          _dismissHoverReveal();
+      // Cursor left zone — start 50ms debounce (mirrors regular element behavior).
+      if (!_hoverExitTimer) {
+        _hoverExitTimer = setTimeout(() => {
+          _hoverExitTimer = null;
+          _dismissHover();
         }, 50);
       }
     }
@@ -315,9 +395,8 @@ const BlurrySiteReveal = (() => {
     if (_getMode() !== RM.click) return;
     if (_getPickerActive()) return;
 
-    // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
-    // host when the click originates inside a shadow root. composedPath()[0] gives
-    // the actual element clicked (e.g. an SVG or blurred span inside shadow DOM).
+    // composedPath()[0] pierces shadow DOM retargeting — e.target is the
+    // shadow host when the click originates inside a shadow root.
     const target = (e.composedPath && e.composedPath()[0] instanceof Element)
       ? e.composedPath()[0]
       : e.target;
@@ -325,108 +404,89 @@ const BlurrySiteReveal = (() => {
 
     const zone = _findZoneAtPoint(e.clientX, e.clientY);
     if (zone) {
-      if (zone === clickRevealedEl) { _redirectIfBlankLink(target, e); return; } // already revealed — let click act
-      dismissClickReveal();
+      if (zone === _clickRevealedEl) { _redirectIfBlankLink(target, e); return; }
+      _dismissClick();
       _revealElement(zone);
-      clickRevealedEl = zone;
+      _clickRevealedEl = zone;
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
       return;
     }
 
-    const blurredEl = findBlurredTarget(target, e.clientX, e.clientY);
+    const blurredEl = findBlurredNear(target, e.clientX, e.clientY);
 
-    // Click is inside the currently revealed area (the element itself or any
-    // child) — pass through so links navigate, buttons fire, inputs focus.
-    // Override _blank links to navigate in-tab (modifier keys still open a new
-    // tab when the user explicitly intends it).
-    if (clickRevealedEl && (blurredEl === clickRevealedEl ||
-        (clickRevealedEl.contains && clickRevealedEl.contains(target)))) {
+    // Click inside the currently-revealed area — pass through so links navigate,
+    // buttons fire, inputs focus. Override _blank links to navigate in-tab
+    // (modifier keys still allow new-tab when explicitly intended).
+    if (_clickRevealedEl && (blurredEl === _clickRevealedEl ||
+        (_clickRevealedEl.contains && _clickRevealedEl.contains(target)))) {
       _redirectIfBlankLink(target, e);
       return;
     }
 
-    // Click outside any blurred element — dismiss reveal and pass through.
     if (!blurredEl) {
-      dismissClickReveal();
+      _dismissClick();
       return;
     }
 
     // First click on a blurred element — intercept: reveal instead of act.
-    // Listener runs at capture phase so preventDefault() is not yet too late
-    // for links (<a href>) and buttons.
-    dismissClickReveal();
+    // Capture phase keeps preventDefault() effective for links/buttons.
+    _dismissClick();
     _revealElement(blurredEl);
-    clickRevealedEl = blurredEl;
-    revealAncestorChain(blurredEl);
+    _clickRevealedEl = blurredEl;
+    revealBlurredAncestors(blurredEl);
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
   }
 
   function onRevealKeydown(e) {
-    if (e.key === 'Escape' && clickRevealedEl) {
-      dismissClickReveal();
-    }
+    if (e.key === 'Escape' && _clickRevealedEl) _dismissClick();
   }
 
   function onRevealMouseOver(e) {
     if (_getMode() !== RM.hover) return;
     if (!e.isTrusted && !e[_TRUST]) return;
     _syncMouseMoveListener();
-    // composedPath()[0] pierces shadow DOM retargeting — e.target is the shadow
-    // host when the mouseover originates inside a shadow root. composedPath()[0]
-    // gives the actual element under the cursor (e.g. svg or path inside shadow).
-    // findBlurredTarget then walks up within the shadow tree via parentElement,
-    // finds the blurred element, and _revealElement stamps it inside shadow DOM.
-    // The shadow root's injected [data-bl-si-reveal] CSS rule clears the filter.
+
     const target = (e.composedPath && e.composedPath()[0] instanceof Element)
       ? e.composedPath()[0]
       : e.target;
     if (!(target instanceof Element)) return;
 
-    // Zone detection moved to mousemove (_processZoneHover) — precise boundary
-    // detection without the "distance to travel" lag from pointer-events:none gaps.
+    // Zone hover is owned by _processZoneHover (mousemove). This handler
+    // covers regular blurred elements only.
+    const blurredRoot = findBlurredNear(target, e.clientX, e.clientY);
 
-    const blurredRoot = findBlurredTarget(target, e.clientX, e.clientY);
-
-    // Only act when we actually found a blurred element under the cursor.
-    // When blurredRoot is null — cursor is over a non-blurred wrapper or gap
-    // between elements — do NOT clear the mouseout timer and do NOT dismiss
-    // immediately. The 50ms debounce in onRevealMouseOut handles the case where
-    // the cursor genuinely leaves the reveal area. Clearing the timer here would
-    // prevent that debounce from firing, causing hover reveal to stick
-    // indefinitely when the cursor drifts into wrapper whitespace.
+    // When blurredRoot is null the cursor is over a non-blurred wrapper or
+    // gap — do NOT clear the exit timer. The 50ms debounce in onRevealMouseOut
+    // handles genuine cursor exits; clearing it here would let hover reveal
+    // stick when the cursor drifts into wrapper whitespace.
     if (!blurredRoot) return;
 
-    // Cursor is confirmed over a blurred element — safe to cancel the pending
-    // dismiss and transition to (or stay on) this element.
-    if (mouseoutTimer) { clearTimeout(mouseoutTimer); mouseoutTimer = null; }
+    // Confirmed over a blurred element — cancel pending dismiss.
+    if (_hoverExitTimer) { clearTimeout(_hoverExitTimer); _hoverExitTimer = null; }
 
-    if (_hoverRevealedEl && _hoverRevealedEl !== blurredRoot) {
-      _dismissHoverReveal();
-    }
+    if (_hoverRevealedEl && _hoverRevealedEl !== blurredRoot) _dismissHover();
     if (_hoverRevealedEl === blurredRoot) return;
 
     _revealElement(blurredRoot);
     _hoverRevealedEl = blurredRoot;
-    revealAncestorChain(blurredRoot);
+    revealBlurredAncestors(blurredRoot);
   }
 
   function onRevealMouseOut(e) {
     if (!e.isTrusted && !e[_TRUST]) return;
     if (!_hoverRevealedEl) return;
     _syncMouseMoveListener();
-    // Zone dismiss is owned by _processZoneHover (mousemove). mouseout on a zone
-    // overlay never fires because pointer-events:none makes them invisible to the
-    // event system — the browser delivers mouseout only when the cursor leaves an
-    // underlying website element, which may be well inside the zone boundary.
+    // Zone dismiss is owned by _processZoneHover — mouseout never fires
+    // reliably at zone boundaries (pointer-events: none).
     if (_isZoneOverlay(_hoverRevealedEl)) return;
-    if (mouseoutTimer) clearTimeout(mouseoutTimer);
-    mouseoutTimer = setTimeout(() => {
-      mouseoutTimer = null;
-      _dismissHoverReveal();
+    if (_hoverExitTimer) clearTimeout(_hoverExitTimer);
+    _hoverExitTimer = setTimeout(() => {
+      _hoverExitTimer = null;
+      _dismissHover();
     }, 50);
   }
 
@@ -436,29 +496,23 @@ const BlurrySiteReveal = (() => {
     if (_installed) return;
     if (opts && typeof opts.getMode === 'function') _getMode = opts.getMode;
     if (opts && typeof opts.isPickerActive === 'function') _getPickerActive = opts.isPickerActive;
-    // Capture phase for mouse events — SPAs like WhatsApp Web stop propagation
-    // at intermediate DOM levels for their own hover handling (timestamps, read
-    // receipts, chat item highlighting). Bubble-phase listeners on `document`
-    // never fire if any handler between the target and document calls
-    // stopPropagation(). Capture fires top-down before any target/bubble
-    // handler, so it always reaches us.
+    // Capture phase — SPAs (e.g. WhatsApp Web) stop propagation at intermediate
+    // levels for their own hover/click handling. Bubble-phase listeners on
+    // `document` would never fire. Capture also keeps preventDefault()
+    // effective for click intercepts on links/buttons.
     document.addEventListener('mouseover', onRevealMouseOver, true);
-    document.addEventListener('mouseout', onRevealMouseOut, true);
-    // Capture phase — must run before the target's own handlers so that
-    // preventDefault() is still effective for links and buttons. stopPropagation
-    // is only called when actively intercepting a first-click on a blurred
-    // element; clicks inside already-revealed areas pass through untouched.
-    document.addEventListener('click', onRevealClick, true);
-    document.addEventListener('keydown', onRevealKeydown);
+    document.addEventListener('mouseout',  onRevealMouseOut,  true);
+    document.addEventListener('click',     onRevealClick,     true);
+    document.addEventListener('keydown',   onRevealKeydown);
     _installed = true;
   }
 
   function destroy() {
     if (!_installed) return;
     document.removeEventListener('mouseover', onRevealMouseOver, true);
-    document.removeEventListener('mouseout', onRevealMouseOut, true);
-    document.removeEventListener('click', onRevealClick, true);
-    document.removeEventListener('keydown', onRevealKeydown);
+    document.removeEventListener('mouseout',  onRevealMouseOut,  true);
+    document.removeEventListener('click',     onRevealClick,     true);
+    document.removeEventListener('keydown',   onRevealKeydown);
     if (_mouseMoveAttached) {
       document.removeEventListener('mousemove', onRevealMouseMove, true);
       _mouseMoveAttached = false;
@@ -468,16 +522,16 @@ const BlurrySiteReveal = (() => {
   }
 
   function clearAll() {
-    if (mouseoutTimer) {
-      clearTimeout(mouseoutTimer);
-      mouseoutTimer = null;
+    if (_hoverExitTimer) {
+      clearTimeout(_hoverExitTimer);
+      _hoverExitTimer = null;
     }
     _rafPending = false;
     _lastMouseX = -1;
     _lastMouseY = -1;
     _unrevealAll();
-    clearRevealedAncestors();
-    clickRevealedEl = null;
+    clearAncestorReveals();
+    _clickRevealedEl = null;
     _hoverRevealedEl = null;
   }
 

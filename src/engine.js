@@ -9,7 +9,7 @@
  *   - core/target_engine.js — zones, items, popup-hover highlight
  *   - core/engine_state.js  — shared private state across the above
  *
- * This file owns top-level lifecycle (handleSite, handleShadowRoot,
+ * This file owns top-level lifecycle (handleSite, handleDocument,
  * handleIframe, teardown, unblurAll) and exposes the unified blsi.Engine
  * facade by re-exporting public methods from each core/* sub-module.
  *
@@ -28,7 +28,6 @@ const Engine = (() => {
   // reveal_controller, popup, tests) talk to a single blsi.Engine surface.
 
   const CATEGORY_SELECTORS = blsi.Categories.CATEGORY_SELECTORS;
-  const CATEGORY_ORDER     = blsi.Categories.CATEGORY_ORDER;
   const DEFAULT_CATS       = blsi.Categories.DEFAULT_CATS;
 
   const Css = blsi.CssManager;
@@ -53,7 +52,6 @@ const Engine = (() => {
   const isBlurred            = Marker.isBlurred;
   const isVisuallyBlurred    = Marker.isVisuallyBlurred;
   const matchesActiveCategories = Marker.matchesActiveCategories;
-  const shouldBlurElement    = Marker.shouldBlurElement;
 
   const Obs = blsi.Observer;
   const observeRoot           = Obs.observeRoot;
@@ -175,77 +173,56 @@ const Engine = (() => {
   }
 
   /**
-   * Apply or remove blur for the main document only.
-   * CSS injection is synchronous (alwaysBlur tags covered immediately).
-   * The querySelectorAll('*') stamp pass is deferred to requestIdleCallback
-   * via _flushStampQueue — never competes with layout / paint.
+   * Apply or remove blur for one root — `document` (main page) or any open
+   * shadow root. Single function for both because the active-path setup is
+   * identical in both cases (injectRules + observeRoot + stamp queue +
+   * scheduleStampIdle); only the document needs the shadow-attach listener
+   * and the queue replace-vs-append distinction.
+   *
+   * Active path: CSS injection is synchronous; the querySelectorAll('*')
+   * stamp pass is deferred to requestIdleCallback via _flushStampQueue.
    * EngineState.isPageBlurred is NOT set here — handleSite's responsibility.
+   *
+   * Document caller: handleSite (single call site).
+   * Shadow-root callers: observer.js MO drain (new shadow roots) +
+   *   shadow-attach listener + _flushStampQueue recursion + tests.
    */
-  function handleMainDocument(settings) {
+  function handleDocument(settings, root) {
     const active = !!settings.engage;
     if (!active) {
-      teardown(document);
+      teardown(root);
       return;
     }
 
+    const isMainDoc = (root === document);
     const cats = settings.blur_categories || DEFAULT_CATS;
     const mode = settings.blur_mode || null;
     const thorough = !!settings.thorough_blur;
 
-    injectRules(document, cats, mode);   // synchronous — alwaysBlur tags blurred now
-    observeRoot(document);               // synchronous — MO live before idle fires
-    Obs.initShadowAttachListener();      // catch shadow roots attached after idle stamp
+    injectRules(root, cats, mode);   // synchronous — alwaysBlur tags blurred now
+    observeRoot(root);               // synchronous — MO live before idle fires
 
-    // Replace queue (not append). Pending idle, if any, will use this new queue.
-    Obs.clearStampQueueForRoot(document);
-    Obs.pushStampQueueItem({ root: document, cats, thorough, mode });
-    Obs.scheduleStampIdle();  // no-op if already pending — existing idle uses new queue
-  }
-
-  /**
-   * Apply or remove blur for one shadow root.
-   * Active path: CSS + MO are immediate; stamp work is queued for idle.
-   * The active path is called from the MO callback for dynamically attached
-   * shadow roots. Initial shadow roots discovered at page load are handled
-   * entirely by _flushStampQueue (which calls injectRules + observeRoot eagerly
-   * before pushing to the queue, then stampElements when the item is dequeued).
-   * EngineState.isPageBlurred is NOT set here — handleSite's responsibility.
-   */
-  function handleShadowRoot(settings, shadowRoot) {
-    const active = !!settings.engage;
-    if (!active) {
-      teardown(shadowRoot);
-      return;
+    if (isMainDoc) {
+      Obs.initShadowAttachListener();    // catch shadow roots attached after idle
+      // Replace queue (not append). Pending idle, if any, uses this new queue.
+      Obs.clearStampQueueForRoot(document);
     }
 
-    const cats = settings.blur_categories || DEFAULT_CATS;
-    const mode = settings.blur_mode || null;
-    const thorough = !!settings.thorough_blur;
-
-    injectRules(shadowRoot, cats, mode);
-    observeRoot(shadowRoot);
-    Obs.pushStampQueueItem({ root: shadowRoot, cats, thorough, mode });
-    Obs.scheduleStampIdle();
+    Obs.pushStampQueueItem({ root, cats, thorough, mode });
+    Obs.scheduleStampIdle();             // no-op if already pending
   }
 
   /**
    * Stamp or unstamp a cross-origin <iframe> element as a blur black-box.
    * Same-origin iframes are skipped — all_frames:true gives them their own
    * content_script that handles blur independently.
+   *
+   * Thin wrapper over MarkerEngine._stampIframeIfCrossOrigin so the
+   * cross-origin probe + stamp logic has one source of truth (also used by
+   * stampElements' iframe branch during the initial idle pass).
    */
   function handleIframe(settings, iframeEl) {
-    if (!iframeEl || _isExtensionUI(iframeEl)) return;
-    const active = !!settings.engage;
-
-    let isSameOrigin = false;
-    try { isSameOrigin = !!iframeEl.contentDocument; } catch (_) {}
-    if (isSameOrigin) return;
-
-    if (active) {
-      if (!iframeEl.dataset.blSiBlur) { iframeEl.dataset.blSiBlur = '1'; _State.incrementBlurredCount(); }
-    } else {
-      if (iframeEl.dataset.blSiBlur) { delete iframeEl.dataset.blSiBlur; _State.decrementBlurredCount(); }
-    }
+    Marker._stampIframeIfCrossOrigin(iframeEl, !!settings.engage);
   }
 
   /**
@@ -291,7 +268,7 @@ const Engine = (() => {
 
       const isActive = !!settings.engage;
 
-      handleMainDocument(settings);  // sync — schedules idle for stamp work
+      handleDocument(settings, document);  // sync — schedules idle for stamp work
       _State.setIsPageBlurred(isActive);
 
       // ── Item reconcile ──────────────────────────────────────────────────────
@@ -299,7 +276,7 @@ const Engine = (() => {
       // persist when blur-all is off.
       const { added, removed } = _reconcileItems(settings.blur_items || []);
 
-      // When blur-all is OFF, handleMainDocument tears down the observer.
+      // When blur-all is OFF, handleDocument tears down the observer.
       // Re-attach if any consumer still needs the document MO:
       //   - dynamic pick-blur items → caught by _tryPickBlurNode in the idle drain
       //   - registered subscribers (e.g. PII detector) → fed via the dispatcher
@@ -358,7 +335,6 @@ const Engine = (() => {
     isBlurred,
     isVisuallyBlurred,
     matchesActiveCategories,
-    shouldBlurElement,
 
     // Sticky zones — create/remove/removeAll are internal (called via handleSite item reconcile)
     getZoneOverlays,
@@ -380,8 +356,10 @@ const Engine = (() => {
     // Caller must fold BLUR_ALL_ACTIVE and BLUR_ITEMS into settings before calling.
     handleSite,
 
-    // Per-root dispatch. Public for unit tests; all production callers go through handleSite.
-    handleShadowRoot,     // one shadow root, recurses into nested
+    // Per-root dispatch. Public for observer.js MO drain (new shadow roots) and
+    // tests. Production page-wide callers go through handleSite.
+    handleDocument,       // one root (document or shadow root); active path
+                          //   queues stamp work, inactive path tears down
     handleIframe,         // cross-origin iframes only
     observeRoot,
 

@@ -9,8 +9,7 @@
     "message": "चुने गए टेक्स्ट को धुंधला करें"
   },
   "pickerPrefixLabel": {
-    "message": "",
-    "description": "Empty in Hindi — the chip label is self-contained."
+    "message": ""
   },
   "pickerChipLabelDynamic": {
     "message": "तत्व"
@@ -524,9 +523,6 @@
   },
   "ctx_open_settings_tab": {
     "message": "टैब में सेटिंग्स खोलें"
-  },
-  "manifest_description": {
-    "message": "क्या कोई आपके पीछे झाँक रहा है — जानबूझकर या ग़लती से? मीटिंग में अपनी कुत्ते-बिल्ली की तस्वीरें साझा करने से डर लगता है, या कुछ और भी? कभी सोचा है कि आप कितनी सामग्री साझा कर सकें, उस पर नियंत्रण रहे? कभी-कभी जवाब बस यही होता है — 'धुंधला कर दो'। यह टूल आपकी मदद के लिए है! किसी भी वेबसाइट पर जो चाहें धुंधला करें। कॉन्फ़िगर करें और भूल जाएँ..."
   },
   "manifest_cmd_open_settings_desc": {
     "message": "Blurry Site सेटिंग्स पैनल खोलें (या सामान्य ब्राउज़र में सेटिंग्स टैब)"

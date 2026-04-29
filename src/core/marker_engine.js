@@ -7,17 +7,19 @@
  * use to decide whether an element is currently blurred.
  *
  * Cross-module reads:
- *   - blsi.Categories.{CATEGORY_SELECTORS, CATEGORY_ORDER, DEFAULT_CATS}
+ *   - blsi.Categories.{CATEGORY_SELECTORS, DEFAULT_CATS}
  *   - blsi.CssManager.{getSelectors, getLastSelectorCache, isBlurAllActive}
  * Cross-module writes:
  *   - blsi.EngineState.{incrementBlurredCount, decrementBlurredCount}
  *
  * Inbound calls:
- *   - css_manager.injectRules() → MarkerEngine.rebuildTextCheckSet(cats)
  *   - observer.js MO callback → MarkerEngine.tryBlurTextCheck, stampElements
  *   - target_engine.js → MarkerEngine._isExtensionUI (gates pick-blur stamps)
  *   - picker.js (via Engine facade) → applyBlur, removeBlur, isBlurred
  *   - reveal_controller.js (via Engine facade) → isVisuallyBlurred
+ *
+ * Text-check tag set: read from the shared CssManager.getSelectors(cats)
+ * cache (`textCheckSet` field). No parallel cache lives here.
  *
  * Exposed as blsi.MarkerEngine (IIFE — no ES module syntax).
  */
@@ -30,26 +32,7 @@ const BlurrySiteMarkerEngine = (() => {
   const State = blsi.EngineState;
 
   const CATEGORY_SELECTORS = Cats.CATEGORY_SELECTORS;
-  const CATEGORY_ORDER     = Cats.CATEGORY_ORDER;
   const DEFAULT_CATS       = Cats.DEFAULT_CATS;
-
-  /** Set of text-check tag names for O(1) lookup in MO callback */
-  let _textCheckSet = new Set();
-  let _lastTextCheckKey = null;
-
-  function rebuildTextCheckSet(categories) {
-    const cats = categories || DEFAULT_CATS;
-    const key = CATEGORY_ORDER.filter(n => cats[n]).join(',');
-    if (key === _lastTextCheckKey) return;
-    _lastTextCheckKey = key;
-    _textCheckSet = new Set();
-    for (const name of CATEGORY_ORDER) {
-      if (!cats[name]) continue;
-      const cat = CATEGORY_SELECTORS[name];
-      for (let i = 0; i < cat.textCheck.length; i++)
-        _textCheckSet.add(cat.textCheck[i]);
-    }
-  }
 
   /**
    * Structural container tags — wrappers that group content but rarely hold
@@ -80,11 +63,93 @@ const BlurrySiteMarkerEngine = (() => {
       element.classList.contains(blsi.css.toast) ||
       element.closest("." + blsi.css.toast) ||
       element.classList.contains(blsi.css.toolbar) ||
-      element.dataset.blSiZone !== undefined
+      // Body-level picker surfaces — siblings of the toolbar, not descendants.
+      element.classList.contains('bl-si-toolbar-tooltip') ||
+      element.classList.contains('bl-si-zone-drawing') ||
+      element.dataset.blSiZone !== undefined ||
+      // Zone descendants (e.g. .bl-si-zone-label) inherit nothing from the
+      // overlay's data-bl-si-zone attribute; cover the whole subtree.
+      element.closest('[data-bl-si-zone]')
     );
   }
 
+  // ── Cross-origin <iframe> stamp ────────────────────────────────────────────
+  // Single source of truth for the cross-origin probe + stamp/unstamp logic.
+  // Used by stampElements (initial idle pass — `active=true` always) and by
+  // engine.handleIframe (orchestrator — passes whatever the resolved settings
+  // says). Same-origin iframes self-handle via `all_frames: true` and are
+  // skipped here.
+  function _stampIframeIfCrossOrigin(el, active) {
+    if (!el || _isExtensionUI(el)) return;
+    let isSameOrigin = false;
+    try { isSameOrigin = !!el.contentDocument; } catch (_) { /* cross-origin */ }
+    if (isSameOrigin) return;
+    if (active) {
+      if (!el.dataset.blSiBlur) { el.dataset.blSiBlur = '1'; State.incrementBlurredCount(); }
+    } else {
+      if (el.dataset.blSiBlur) { delete el.dataset.blSiBlur; State.decrementBlurredCount(); }
+    }
+  }
+
   // ── Text-check element blur (scan + MO for new nodes) ─────────────────────
+
+  /**
+   * Single source of truth for per-element stamping decisions. Called by
+   * stampElements (full-document forEach) and tryBlurTextCheck (MO drain).
+   * Mutates `el.dataset.blSiBlur` and increments the engine count on stamp.
+   *
+   * Branches in order:
+   *   1. Competing-blur ownership guard (data-bl-si-blur / pick-blur / pii)
+   *   2. Extension UI guard
+   *   3. Custom-element host (tag.includes('-')) — gated on STRUCTURE|TEXT
+   *      active and (thorough || hasMeaningfulTextContent), return
+   *   4. Text-check tag — structural gate vs. inline-with-slot fallback
+   *
+   * <iframe> is intentionally NOT handled here: stampElements has an inline
+   * iframe branch (full-pass only) and observer.js MO drain calls
+   * Engine.handleIframe directly for newly-inserted IFRAMEs. Routing iframes
+   * through this helper would double-process them in the MO path.
+   *
+   * `textCheckSet` is the active text-check tag Set from
+   * CssManager.getSelectors(cats).textCheckSet. Callers fetch it once outside
+   * the per-element loop and pass it in to avoid repeated cache lookups.
+   */
+  function _evaluateAndStamp(el, cats, thorough, textCheckSet) {
+    if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return;
+    if (_isExtensionUI(el)) return;
+    const tag = el.tagName.toLowerCase();
+
+    if (tag.includes('-')) {
+      if ((cats.structure !== false || cats.text !== false) &&
+          (thorough || hasMeaningfulTextContent(el))) {
+        el.dataset.blSiBlur = '1';
+        State.incrementBlurredCount();
+      }
+      return;
+    }
+
+    if (!textCheckSet.has(tag)) return;
+    // Structural containers (div, section, etc.) always require the text gate —
+    // blurring wrappers creates nested blur that breaks hover reveal. Thorough
+    // mode only bypasses the gate for inline content elements.
+    const needsTextGate = _structuralTags.has(tag);
+    let shouldStamp;
+    if (needsTextGate) {
+      shouldStamp = hasMeaningfulTextContent(el);
+    } else {
+      // For inline/phrasing content (a, span, em, etc.): also stamp if the
+      // element contains a <slot> descendant — shadow DOM projection means the
+      // slot renders light-DOM content visually (text, images) even though the
+      // host has no direct text nodes. CSS filter on the stamped element blurs
+      // the projected slot content correctly.
+      shouldStamp = thorough || hasMeaningfulTextContent(el) ||
+        !!(el.querySelector && el.querySelector('slot'));
+    }
+    if (shouldStamp) {
+      el.dataset.blSiBlur = '1';
+      State.incrementBlurredCount();
+    }
+  }
 
   /**
    * Scan elements in `root`, stamp `data-bl-si-blur` on text-check elements
@@ -95,9 +160,12 @@ const BlurrySiteMarkerEngine = (() => {
    * dispatch into them after this root is fully processed. No shadowCb param —
    * the caller owns dispatch so shadow roots are never processed mid-loop.
    */
-  function stampElements(root, categories, thorough, mode) {
+  function stampElements(root, categories, thorough) {
     const cats = categories || DEFAULT_CATS;
-    rebuildTextCheckSet(cats);
+    // Snapshot the shared selector cache once — textCheckSet is keyed on cats
+    // so we avoid the per-element lookup. Cache also drives marker_engine's
+    // role/tag predicates elsewhere via getLastSelectorCache.
+    const textCheckSet = Css.getSelectors(cats).textCheckSet;
 
     // Collect shadow roots piggybacked on the stamp pass — no extra traversal.
     const shadowRoots = [];
@@ -105,6 +173,8 @@ const BlurrySiteMarkerEngine = (() => {
     root.querySelectorAll('*').forEach((el) => {
       // Inline stale-clear — avoids a separate querySelectorAll('[data-bl-si-blur]')
       // pre-pass. PII-stamped elements keep their stamp (they own their blur lifecycle).
+      // Only the full-document re-pass owns this teardown — the MO drain
+      // (tryBlurTextCheck) sees only newly-added nodes that have no prior stamp.
       if (el.dataset.blSiBlur && !el.dataset.blSiPii) { delete el.dataset.blSiBlur; State.decrementBlurredCount(); }
 
       // Shadow root discovery: collect for post-stamp dispatch by caller.
@@ -116,84 +186,35 @@ const BlurrySiteMarkerEngine = (() => {
 
       // Cross-origin iframe — stamp as a black-box. Same-origin iframes
       // self-handle via all_frames:true (they get their own content_script)
-      // so we skip them. Initial iframes at page load were previously missed
-      // because they're not in _textCheckSet and only the MO-fed handleIframe
-      // path used to stamp them — only fired for dynamically inserted iframes.
+      // so we skip them. The MO drain reaches dynamically-inserted iframes
+      // through facade.handleIframe; this branch covers iframes present at
+      // full-pass time.
       if (tag === 'iframe') {
-        if (!el.dataset.blSiBlur && !_isExtensionUI(el)) {
-          let isSameOrigin = false;
-          try { isSameOrigin = !!el.contentDocument; } catch (_) { /* cross-origin */ }
-          if (!isSameOrigin) {
-            el.dataset.blSiBlur = '1';
-            State.incrementBlurredCount();
-          }
-        }
+        _stampIframeIfCrossOrigin(el, true);
         return;
       }
 
-      // Custom element host stamping — hyphenated tag names never land in
-      // _textCheckSet (which only contains known HTML elements). Stamp the
-      // host itself so light-DOM-only custom elements (e.g. <shreddit-foo>)
-      // aren't invisible to blur. Shadow root content is handled separately
-      // via _flushStampQueue recursion. Gated on STRUCTURE or TEXT active.
-      if (tag.includes('-')) {
-        if (!el.dataset.blSiBlur && !el.dataset.blSiPickBlur && !el.dataset.blSiPii && !_isExtensionUI(el) &&
-            (cats.structure !== false || cats.text !== false) &&
-            (thorough || hasMeaningfulTextContent(el))) {
-          el.dataset.blSiBlur = '1';
-          State.incrementBlurredCount();
-        }
-        return;
-      }
-
-      // Text-check stamping
-      if (!_textCheckSet.has(tag)) return;
-      if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return; // already stamped or owned by a competing blur system
-      if (_isExtensionUI(el)) return;
-      // Structural containers (div, section, etc.) always require the text gate —
-      // blurring wrappers creates nested blur that breaks hover reveal.
-      // Thorough mode only bypasses the gate for inline content elements.
-      const needsTextGate = _structuralTags.has(tag);
-      let shouldStamp = false;
-      if (needsTextGate) {
-        shouldStamp = hasMeaningfulTextContent(el);
-      } else {
-        // For inline/phrasing content (a, span, em, etc.): also stamp if the
-        // element contains a <slot> descendant — shadow DOM projection means the
-        // slot renders light-DOM content visually (text, images) even though the
-        // shadow element itself has no direct text nodes. CSS filter on the
-        // stamped element blurs the projected slot content correctly.
-        shouldStamp = thorough || hasMeaningfulTextContent(el) ||
-          !!(el.querySelector && el.querySelector('slot'));
-      }
-      if (shouldStamp) {
-        el.dataset.blSiBlur = "1";
-        State.incrementBlurredCount();
-      }
+      _evaluateAndStamp(el, cats, thorough, textCheckSet);
     });
 
     return shadowRoots;
   }
 
   /**
-   * Check if a single text-check element should be blurred and stamp it.
-   * Used by MutationObserver for dynamically added elements.
+   * Check if a single dynamically-added element should be blurred and stamp
+   * it. Called by the MutationObserver drain in observer.js for every node
+   * added in a childList mutation and each of its descendants.
+   *
+   * Categories and thorough mode are read from EngineState.getCurrentSettings()
+   * (orchestrator-set during handleSite). Falls back to DEFAULT_CATS if no
+   * settings are seeded yet (defensive — should not normally happen).
    */
   function tryBlurTextCheck(element, thorough) {
     if (!element || !(element instanceof Element)) return;
-    if (element.dataset.blSiBlur || element.dataset.blSiPickBlur || element.dataset.blSiPii) return;
-    if (_isExtensionUI(element)) return;
-    const tag = element.tagName.toLowerCase();
-    if (!_textCheckSet.has(tag)) return;
-    const needsTextGate = _structuralTags.has(tag);
-    if (needsTextGate) {
-      if (hasMeaningfulTextContent(element)) { element.dataset.blSiBlur = "1"; State.incrementBlurredCount(); }
-    } else if (thorough || hasMeaningfulTextContent(element) ||
-               !!(element.querySelector && element.querySelector('slot'))) {
-      // slot check: dynamically added shadow DOM elements with <slot> descendants
-      // render projected light-DOM content — stamp them even without direct text.
-      element.dataset.blSiBlur = "1"; State.incrementBlurredCount();
-    }
+    const cs = State.getCurrentSettings();
+    const cats = (cs && cs.blur_categories) || DEFAULT_CATS;
+    const textCheckSet = Css.getSelectors(cats).textCheckSet;
+    _evaluateAndStamp(element, cats, thorough, textCheckSet);
   }
 
   // ── Individual element blur (picker / context menu) ────────────────────────
@@ -270,34 +291,7 @@ const BlurrySiteMarkerEngine = (() => {
     return role != null && roleSet.has(role);
   }
 
-  function shouldBlurElement(element, categories, thorough) {
-    if (!element || !(element instanceof Element)) return false;
-    const cats = categories || DEFAULT_CATS;
-    const tag = element.tagName.toLowerCase();
-
-    for (const name of CATEGORY_ORDER) {
-      if (!cats[name]) continue;
-      const cat = CATEGORY_SELECTORS[name];
-      if (cat.alwaysBlur.indexOf(tag) >= 0) return true;
-      if (cat.textCheck.indexOf(tag) >= 0) {
-        return thorough || hasMeaningfulTextContent(element);
-      }
-    }
-
-    // Role-based match: treated as alwaysBlur (no text gate). Checked after
-    // tag-based paths so a native <button> is matched by its tag first.
-    const { roleSet } = Css.getSelectors(cats);
-    if (roleSet.size > 0) {
-      const role = element.getAttribute("role");
-      if (role != null && roleSet.has(role)) return true;
-    }
-    return false;
-  }
-
   return {
-    // Text-check tag set sync (called by css_manager.injectRules).
-    rebuildTextCheckSet,
-
     // Element-level apply/remove (picker / context menu).
     applyBlur,
     removeBlur,
@@ -306,11 +300,13 @@ const BlurrySiteMarkerEngine = (() => {
     isBlurred,
     isVisuallyBlurred,
     matchesActiveCategories,
-    shouldBlurElement,
 
     // Page-wide + single-node stamp paths.
     stampElements,
     tryBlurTextCheck,
+
+    // Cross-origin iframe stamp/unstamp — used by engine.handleIframe.
+    _stampIframeIfCrossOrigin,
 
     // Utility — exported for target_engine to gate pick-blur stamps.
     _isExtensionUI,

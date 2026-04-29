@@ -11,11 +11,15 @@
  * Also owns the always-blur SVG filter (frosted glass) and the selector cache
  * that buildSelectors / getSelectors compose from blsi.Categories data.
  *
- * Cross-module calls at runtime:
- *   - injectRules() → blsi.MarkerEngine.rebuildTextCheckSet(cats) — keeps the
- *     marker engine's text-check tag set in sync after a category change.
- *     Manifest order guarantees MarkerEngine is loaded before any handleSite
- *     call, which is the only path that drives injectRules.
+ * Cross-module reads:
+ *   - blsi.cat_key(categories) — fingerprint helper used by getSelectors as
+ *     the cache key. Owned by constants.js so other caches can share format.
+ *
+ * Cache shape exposed via getSelectors / getLastSelectorCache:
+ *   { key, alwaysBlurSelector, textCheckSelector, alwaysBlurTags,
+ *     textCheckTags, tagSet, roleSet, textCheckSet }
+ *   marker_engine reads tagSet / roleSet (predicate queries) and textCheckSet
+ *   (stamp gate) directly from this cache — no parallel cache to keep in sync.
  *
  * Exposed as blsi.CssManager (IIFE — no ES module syntax).
  */
@@ -59,6 +63,7 @@ const BlurrySiteCssManager = (() => {
     const tagSet = new Set(alwaysBlurTags);
     for (let i = 0; i < textCheckTags.length; i++) tagSet.add(textCheckTags[i]);
     const roleSet = new Set(roles);
+    const textCheckSet = new Set(textCheckTags);
 
     // Role attribute selectors append to the alwaysBlur CSS rule — ARIA role
     // matches are treated as "always blur" (no text gate) since a semantic
@@ -68,21 +73,22 @@ const BlurrySiteCssManager = (() => {
       .filter((s) => s.length > 0)
       .join(",");
 
-    const key = CATEGORY_ORDER.map((n) => (categories[n] ? "1" : "0")).join("");
-
     return {
-      key,
+      key: blsi.cat_key(categories),
       alwaysBlurSelector,
       textCheckSelector: textCheckTags.join(","),
       alwaysBlurTags,
       textCheckTags,
       tagSet,
       roleSet,
+      // Owned here so marker_engine has a single source of truth for the
+      // active text-check tag set — no parallel cache to drift out of sync.
+      textCheckSet,
     };
   }
 
   function getSelectors(categories) {
-    const key = CATEGORY_ORDER.map((n) => (categories[n] ? "1" : "0")).join("");
+    const key = blsi.cat_key(categories);
     if (selectorCache && selectorCache.key === key) return selectorCache;
     selectorCache = buildSelectors(categories);
     return selectorCache;
@@ -165,6 +171,15 @@ const BlurrySiteCssManager = (() => {
     ":not(#bl-si-picker-toolbar):not(#bl-si-picker-toolbar *)" +
     ":not(.bl-si-toast):not(.bl-si-toast *)" +
     ":not(.bl-si-toolbar):not(.bl-si-toolbar *)" +
+    // Body-level picker UI: chip tooltip is a sibling of the toolbar (not a
+    // descendant), so the `.bl-si-toolbar *` exclusion above doesn't reach it.
+    ":not(.bl-si-toolbar-tooltip)" +
+    // Drag preview during sticky picker mode (transient, sibling of body).
+    ":not(.bl-si-zone-drawing)" +
+    // Zone overlays carry [data-bl-si-pick-blur], so they're covered by the
+    // attribute exclusion below — but zone *descendants* (e.g. .bl-si-zone-label)
+    // don't inherit that attribute. Cover the whole subtree explicitly.
+    ":not(.bl-si-zone-overlay):not(.bl-si-zone-overlay *)" +
     ":not(#" + SVG_FILTER_ID + ")" +
     ":not([data-bl-si-reveal])" +
     ":not([data-bl-si-pick-blur])" +
@@ -187,11 +202,10 @@ const BlurrySiteCssManager = (() => {
     if (mode === blsi.blur_modes.frosted) ensureSvgFilter(root);
 
     const cats = categories || DEFAULT_CATS;
+    // getSelectors populates the shared selectorCache (alwaysBlurSelector,
+    // tagSet, roleSet, textCheckSet) — marker_engine reads textCheckSet from
+    // the same cache, so no parallel rebuild call is needed here.
     const { alwaysBlurSelector } = getSelectors(cats);
-
-    // Marker-engine maintains a text-check tag set used by the MutationObserver
-    // path. Keep it in sync whenever blur-all rules change.
-    blsi.MarkerEngine.rebuildTextCheckSet(cats);
 
     // CSS var dependency: --bl-si-radius is set by the engine before
     // injectRules runs. Changing BLUR_RADIUS in gaussian mode propagates
@@ -314,11 +328,16 @@ const BlurrySiteCssManager = (() => {
     (root.head ?? root).appendChild(styleEl);
   }
 
-  function removeRules(root) {
+  // Single source of truth for `<style>` removal across the three injection
+  // systems (blur-all / pick-blur / PII). Container fallback is `root.head ??
+  // root` — handles document (head present) and shadow root (no head).
+  function _removeStyleRules(root, styleId) {
     const container = root.head ?? root;
-    const el = container.querySelector && container.querySelector('#' + STYLE_ID);
+    const el = container.querySelector && container.querySelector('#' + styleId);
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
+
+  function removeRules(root) { _removeStyleRules(root, STYLE_ID); }
 
   function isBlurAllActive() {
     return !!(document.head && document.head.querySelector('#' + STYLE_ID));
@@ -336,11 +355,7 @@ const BlurrySiteCssManager = (() => {
     return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
   }
 
-  function removePickBlurRules(root) {
-    const container = root.head ?? root;
-    const el = container.querySelector && container.querySelector('#' + PICK_STYLE_ID);
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-  }
+  function removePickBlurRules(root) { _removeStyleRules(root, PICK_STYLE_ID); }
 
   function injectPickBlurRules(root, type, color) {
     removePickBlurRules(root);
@@ -395,10 +410,7 @@ const BlurrySiteCssManager = (() => {
 
   // ── PII rule injection (CSS-only — detector logic is in src/pii_detector.js) ──
 
-  function removePiiRules() {
-    const el = document.head && document.head.querySelector('#' + PII_STYLE_ID);
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-  }
+  function removePiiRules() { _removeStyleRules(document, PII_STYLE_ID); }
 
   function injectPiiRules(mode, color) {
     removePiiRules();

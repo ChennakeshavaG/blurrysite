@@ -44,7 +44,7 @@ paths:
 1. Add constant to `src/constants.js` (source of truth)
 2. Add handler in `background.js`
 3. Add sender in the relevant source module
-4. Add row to protocol table in `docs/architecture.md §6`
+4. Update the protocol tables above in this file
 
 > `storage_model.js` (`blsi.Model`) accesses `chrome.storage` directly — no background relay for storage ops.
 > Old relay types (`GET_BLUR_ITEMS`, `SAVE_BLUR_ITEM`, `REMOVE_BLUR_ITEM`, `CLEAR_HOST`, `CLEAR_ALL`,

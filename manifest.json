@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Blurry Site",
   "version": "0.69",
-  "description": "__MSG_manifest_description__",
+  "description": "Blur anything you want on a website. Configure and forget...",
   "default_locale": "en",
 
   "permissions": ["storage", "activeTab", "tabs", "contextMenus"],
@@ -63,28 +63,28 @@
         "default": "Alt+Shift+B",
         "mac": "Alt+Shift+B"
       },
-      "description": "__MSG_shortcut_toggle_blur_all_hint__"
+      "description": "Blur every supported element on the current page."
     },
     "toggle-picker": {
       "suggested_key": {
         "default": "Alt+Shift+P",
         "mac": "Alt+Shift+P"
       },
-      "description": "__MSG_shortcut_toggle_picker_hint__"
+      "description": "Open the picker to blur a single element or draw a zone."
     },
     "clear-all-blur": {
       "suggested_key": {
         "default": "Alt+Shift+U",
         "mac": "Alt+Shift+U"
       },
-      "description": "__MSG_shortcut_clear_all_hint__"
+      "description": "Remove every blur on the current page."
     },
     "open-settings": {
       "suggested_key": {
         "default": "Alt+Shift+O",
         "mac": "Alt+Shift+O"
       },
-      "description": "__MSG_manifest_cmd_open_settings_desc__"
+      "description": "Open Blurry Site settings panel (or settings tab in normal browser)"
     }
   },
 
@@ -109,7 +109,12 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["_locales/*/*.json", "popup/popup.html", "fonts/*.woff2", "icons/*.png"],
+      "resources": [
+        "_locales/*/*.json",
+        "popup/popup.html",
+        "fonts/*.woff2",
+        "icons/*.png"
+      ],
       "matches": ["<all_urls>"]
     }
   ],

@@ -80,7 +80,7 @@ A module may only depend on modules loaded before it.
 ### pii_detector.js
 - `EMAIL` is boolean. `NUMERIC` is boolean. Gate with `Boolean(NUMERIC)` — no string enum.
 - `NUMERIC_PROFILE` (`'precise' | 'aggressive'`) is a developer-only constant inside the IIFE. Users only see on/off.
-- **falsePositivesCheck pattern**: each check is `(matchText, text, matchIndex) => boolean`. Return `true` to suppress. Adding a check: (1) write the function, (2) add to `FALSE_POSITIVE_CHECKS.precise` (and optionally `.aggressive`), (3) add tests, (4) update `docs/TEST_VALIDATION.md` and the design spec.
+- **falsePositivesCheck pattern**: each check is `(matchText, text, matchIndex) => boolean`. Return `true` to suppress. Adding a check: (1) write the function, (2) add to `FALSE_POSITIVE_CHECKS.precise` (and optionally `.aggressive`), (3) add tests, (4) update `docs/contracts/pii_detector.tests.md`.
 - `_falsePositivesCheck` runs the active profile's checks. Never put suppression logic directly in `_findMatches`.
 - Active profile checks: `precise` = [isYear, isVersion, isPublicPrice, isCountNoise]; `aggressive` = [isVersion].
 - `isYear` suppresses 4-digit numbers in 1000–2099 (dates, copyright years).
@@ -133,17 +133,17 @@ The original section markers (`§CATEGORY-SELECTORS`, `§CSS-INJECTION`, etc.) a
 #### Category-based blurring
 - `CATEGORY_SELECTORS` is a frozen constant mapping each category to `{ alwaysBlur: string[], textCheck: string[], roles?: string[] }`. Keys are UPPER_SNAKE_CASE: TEXT, MEDIA, FORM, TABLE, STRUCTURE. Element lists sourced from `docs/BLUR_CATEGORIES.md`.
 - Selector cache (`selectorCache`) stores pre-joined selector strings keyed by a category toggle string — rebuilds automatically on key miss via `getSelectors(cats)`, no manual invalidation needed. The cache entry carries both `tagSet` and `roleSet` for the JS consumers.
-- `matchesActiveCategories(element, categories)` and `shouldBlurElement(element, categories, thorough)` use the cached `tagSet` for O(1) tag lookup first, then fall through to a `getAttribute("role")` + `roleSet` check for ARIA role coverage (currently FORM only — `<div role="button">` etc.).
+- `matchesActiveCategories(element, categories)` uses the cached `tagSet` for O(1) tag lookup first, then falls through to a `getAttribute("role")` + `roleSet` check for ARIA role coverage (currently FORM only — `<div role="button">` etc.). `shouldBlurElement` was deleted — it had zero production callers and duplicated decision logic that lives in `_evaluateAndStamp`.
 - `CATEGORY_SELECTORS` entries may include an optional `roles` list. `buildSelectors` emits `[role="X"]` attribute selectors into the generated `alwaysBlurSelector` CSS string so the browser handles role matching natively; do NOT hand-edit the selector string — only mutate roles by editing the `CATEGORY_SELECTORS` data shape.
 - `_structuralTags` is derived from `STRUCTURE.textCheck` and prevents thorough-mode bypass for structural containers (`<div>`, `<section>`, etc.) to avoid nested-blur leaks on hover reveal. `<li>`/`<dt>`/`<dd>` were moved to `STRUCTURE.alwaysBlur` (not textCheck) so CSS injection covers `::marker` pseudo-elements unconditionally — they are no longer in `_structuralTags`.
 
 #### Single orchestration entry point: `handleSite(settings)`
 - `async handleSite(settings)` — one arg: the full resolved settings snapshot from `blsi.Model.resolve(hostname, url)`. The resolved object already includes `engage` and `blur_items` — no caller-side fold needed. Handles enable / disable / refresh / item diff / extension-disabled teardown in one pass. Safe to call from any path — init, storage onChange, shortcut, picker callback, SPA URL change.
 - `engage` (boolean) and `blur_items` (array) are included in the resolved settings by `blsi.Model.resolve()`. Engine never reads storage — all data arrives via the settings argument.
-- `handleSite` internally calls `handleMainDocument(settings)` (private) to get `shadowRoots[]`, then `Promise.all(shadowRoots.map(sr => handleShadowRoot(settings, sr)))`. Iframes: same-origin are self-managed via `all_frames:true`; cross-origin iframes are stamped by `handleIframe` in the MO callback when dynamically inserted.
-- `handleShadowRoot(settings, shadowRoot)` — one shadow root. Active path: injectRules + clear stale stamps + stampElements + observeRoot, recurses into nested shadow roots via `Promise.all`. Inactive path: `teardown(shadowRoot)`.
+- `handleSite` internally calls `handleDocument(settings, document)`; the MO drain calls `handleDocument(settings, sr)` for each newly-attached shadow root. One function, both root types — see `engine.js`. Iframes: same-origin are self-managed via `all_frames:true`; cross-origin iframes are stamped by `handleIframe` in the MO callback when dynamically inserted.
+- `handleDocument(settings, root)` — one root (document or shadow root). Active path: injectRules + observeRoot + queue stamp work. When `root === document` it also calls `Obs.initShadowAttachListener()` and replaces the stamp queue. Inactive path: `teardown(root)`.
 - `handleIframe(settings, iframeEl)` — cross-origin iframes only. Stamps `data-bl-si-blur='1'` on the `<iframe>` element itself when active (CSS filter blurs the rendered output as an opaque box). Skips same-origin iframes (their own content_script handles blur via `all_frames:true`). Called from the `observeRoot` MO callback when an iframe is dynamically inserted.
-- `teardown(root)` — disconnects observer, removes injected style, clears stamps, recurses into shadow roots. Used by `unblurAll()` (alias: `teardown(document)`) and the inactive path of the internal handleMainDocument / `handleShadowRoot`. The `querySelectorAll('*')` stamp-clearing pass already covers `<iframe>` elements — no separate cleanup needed.
+- `teardown(root)` — disconnects observer, removes injected style, clears stamps, recurses into shadow roots. Used by `unblurAll()` (alias: `teardown(document)`) and the inactive path of `handleDocument`. The `querySelectorAll('*')` stamp-clearing pass already covers `<iframe>` elements — no separate cleanup needed.
 - `injectRules(root, categories, mode)` — injects a `<style id="bl-si-blur-styles">` into `root.head ?? root`. Stateless — no DOM branch on root type. Calls `removeRules(root)` first (replace semantics).
 - `removeRules(root)` — removes the injected style from `root.head ?? root`.
 - `stampElements(root, categories, thorough, mode)` — single `querySelectorAll('*')` pass; stamps `data-bl-si-blur` on text-check elements, returns discovered `ShadowRoot[]`.
@@ -167,11 +167,11 @@ Three CSS systems can co-exist on one element: blur-all, pick-blur, PII. Each sy
 Root cause of past bugs: tag selectors (e.g. `p:not(...)`) have specificity `(0,7,1)` while attribute selectors (`[data-bl-si-pick-blur]`) have `(0,3,0)`. Without exclusion, the tag rule wins regardless of source order.
 
 **2. Stamp ownership guard**
-`stampElements` and `tryBlurTextCheck` must skip any element already carrying a competing blur attribute. Current guard (must stay in sync):
+Per-element stamping decisions (competing-blur guard, custom-element host, text-check tag with structural / inline-with-slot fallback) live in the private `_evaluateAndStamp` helper inside `core/marker_engine.js`. Both `stampElements` (full-document forEach) and `tryBlurTextCheck` (MO drain single-element entry) delegate to it — the previous divergence between the two paths (custom-element branch only on `stampElements`) is structurally prevented. Current guard at the top of `_evaluateAndStamp`:
 ```js
 if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return;
 ```
-Same check applies in the custom-element (`tag.includes('-')`) path.
+`<iframe>` is intentionally NOT routed through `_evaluateAndStamp` — `stampElements` has its own inline iframe branch (full-pass only) and the MO drain handles late-loading iframes through `Engine.handleIframe` directly. Adding a third entry-point that should share these decisions: call `_evaluateAndStamp(el, cats, thorough)` rather than re-implementing the gate.
 
 **Cascade priority (high → low)**: reveal > pick-blur / PII > blur-all
 
@@ -179,7 +179,7 @@ Same check applies in the custom-element (`tag.includes('-')`) path.
 
 **Adding a new competing blur system (new attribute)** — checklist:
 1. Add `:not([data-attr])` to `EXCLUDE`
-2. Add `el.dataset.blSiNewAttr` guard to `stampElements` (both tag paths) and `tryBlurTextCheck`
+2. Add `el.dataset.blSiNewAttr` guard to `_evaluateAndStamp` (one place — both stamp paths pick it up)
 3. Add reveal override for the new attribute in both `injectRules` reveal block and `content.css`
 
 ### url_matcher.js

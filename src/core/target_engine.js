@@ -109,9 +109,12 @@ const BlurrySiteTargetEngine = (() => {
   let _highlightedEl = null;
 
   function _itemId(item) {
-    return item && item.type === "dynamic"
-      ? (item.selectors ? item.selectors[0] : item.selector)
-      : item && item.id;
+    if (!item) return undefined;
+    if (item.type === "dynamic") {
+      const sels = blsi.item_selectors(item);
+      return sels[0];
+    }
+    return item.id;
   }
 
   function _isExtensionUI(el) {
@@ -119,7 +122,8 @@ const BlurrySiteTargetEngine = (() => {
   }
 
   function _applyDynamicItem(item) {
-    const el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector);
+    const sels = blsi.item_selectors(item);
+    const el = blsi.SelectorUtils.restoreSelector(sels);
     if (el && !_isExtensionUI(el)) {
       el.dataset.blSiPickBlur = '1';
     }
@@ -135,7 +139,7 @@ const BlurrySiteTargetEngine = (() => {
     if (_isExtensionUI(el)) return;
     for (const item of _activeItems.values()) {
       if (item.type !== 'dynamic') continue;
-      const sels = item.selectors || (item.selector ? [item.selector] : []);
+      const sels = blsi.item_selectors(item);
       for (let s = 0; s < sels.length; s++) {
         try {
           if (el.matches(sels[s]) && document.querySelectorAll(sels[s]).length === 1) {
@@ -148,7 +152,8 @@ const BlurrySiteTargetEngine = (() => {
   }
 
   function _removeDynamicItem(item) {
-    const el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector);
+    const sels = blsi.item_selectors(item);
+    const el = blsi.SelectorUtils.restoreSelector(sels);
     if (el) delete el.dataset.blSiPickBlur;
   }
 
@@ -278,12 +283,11 @@ const BlurrySiteTargetEngine = (() => {
     }
     var el = null;
     if (item && item.item_type === "dynamic") {
-      el = blsi.SelectorUtils.restoreSelector(item.selectors || item.selector || []);
+      var sels = blsi.item_selectors(item);
+      el = blsi.SelectorUtils.restoreSelector(sels);
       // Fallback: SPA position shifts make structural selectors non-unique or stale.
       // Class combo (now always stored) lets us find the right element among hits.
       if (!el) {
-        var sels = Array.isArray(item.selectors) ? item.selectors
-          : (item.selector ? [item.selector] : []);
         outer: for (var i = 0; i < sels.length; i++) {
           try {
             var hits = document.querySelectorAll(sels[i]);
