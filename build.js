@@ -27,7 +27,17 @@ const INCLUDE = [
   'popup/',
   'styles/',
   'icons/',
+  'fonts/',
   '_locales/',
+];
+
+// Glob patterns to exclude (passed to `zip -x`). Matches against full
+// archive paths, so `*.md` drops every markdown file at any depth.
+const EXCLUDE = [
+  '*.md',                          // dev docs (CLAUDE.md, README.md, CSS_REFERENCE.md, ...)
+  '*.DS_Store',                    // macOS metadata
+  'popup/assets/preview.html',     // unreferenced dev preview page
+  'icons/index.html',              // dev icon viewer
 ];
 
 if (!fs.existsSync(DIST)) {
@@ -39,8 +49,9 @@ if (fs.existsSync(OUT_FILE)) {
   fs.unlinkSync(OUT_FILE);
 }
 
-const args = INCLUDE.map(f => `"${f}"`).join(' ');
-execSync(`zip -r "${OUT_FILE}" ${args}`, { cwd: ROOT, stdio: 'inherit' });
+const args    = INCLUDE.map(f => `"${f}"`).join(' ');
+const exclArg = EXCLUDE.length ? ' -x ' + EXCLUDE.map(p => `"${p}"`).join(' ') : '';
+execSync(`zip -r "${OUT_FILE}" ${args}${exclArg}`, { cwd: ROOT, stdio: 'inherit' });
 
 const stat = fs.statSync(OUT_FILE);
 const kb = (stat.size / 1024).toFixed(1);

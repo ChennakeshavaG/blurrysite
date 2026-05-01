@@ -3,6 +3,7 @@ coverage/
 dist/
 *.zip
 .DS_Store
+.npmrc
 
 # Dev-only files
 debug.js
@@ -10,6 +11,7 @@ debug.js
 # Claude Code artifacts
 .claude/worktrees/
 .claude/settings.local.json
+.claude/launch.json
 
 # Chrome extension cache
 chrome-extension:/
