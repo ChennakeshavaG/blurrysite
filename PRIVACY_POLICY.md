@@ -1,54 +1,122 @@
 # Privacy Policy — BlurrySite
 
-**Last updated:** April 7, 2026
+**Last updated:** May 1, 2026
 
 ## Summary
 
-BlurrySite does not collect, transmit, or share any user data. All data is stored locally on your device.
+BlurrySite does not collect, transmit, or share any user data. The
+extension makes **zero network requests** of its own. All settings and
+state are stored locally on your device and never leave your browser.
 
 ## What data is stored
 
-BlurrySite stores the following data in your browser's local storage (`chrome.storage.local`):
+BlurrySite stores all state in your browser's local extension storage.
+Two namespaces are used:
 
-- **Blur settings** — Your preferences (blur radius, highlight color, keyboard shortcuts, reveal mode, blur categories).
-- **Blurred element selectors** — CSS selectors or coordinates identifying which elements you chose to blur on each website.
-- **URL rules** — Custom per-site rules you create to override global settings.
-- **Blur-all state** — Whether "blur all" mode was active on each website.
+### `chrome.storage.local` (persists across browser restarts)
+
+| Key | Contents | Why |
+|---|---|---|
+| `blsi_model` | Single object holding all your settings: blur radius, reveal mode, blur categories, keyboard shortcuts, blur-all status, pick-and-blur items per hostname, auto-detect-PII configuration, automate trigger configuration, and any custom site rules you create. | Core state — without it the extension can't restore your setup on the next page load. |
+| `blsi_debug` | Boolean — whether the extension's verbose logger is enabled. | Off by default. You can flip it for diagnostics. |
+| `picker_toolbar_pos` | Last position (top / left) of the in-page picker toolbar pill. | Remembers where you dragged it. |
+| `theme` | `'dark'` \| `'light'` for the popup. | UI preference. |
+
+### `chrome.storage.session` (cleared when the browser closes or crashes)
+
+| Key | Contents | Why |
+|---|---|---|
+| `blsi_automate_idle` | One of `'active'` \| `'idle'` \| `'locked'`. | Mirrors the OS idle state so blur applies when you step away. |
+| `blsi_automate_tab_switch_by_tab` | Map `{ [tab_id]: 'fired' }`. | Tracks which tabs have triggered the tab-switch automate rule for the current session. |
+| `blsi_screen_share` | `{ active, sharing_tab_id, started_at, suppressed_sites }`. | Tracks an in-progress screen-share so other tabs can blur while you present. |
+| `blsi_automate_suppressed_tabs` | Array of tab IDs you silenced via the "This tab" toast. | Per-session silence list. |
 
 This data never leaves your browser.
 
 ## What data is NOT collected
 
-- No personal information
-- No browsing history
-- No page content or screenshots
-- No analytics or telemetry
-- No cookies or tracking identifiers
+- No personal information.
+- No browsing history (hostnames are used **locally** as keys for
+  per-site state — never transmitted).
+- No page content, screenshots, or page text. The page text is read
+  in-memory for the optional auto-detect-PII feature, but matches are
+  wrapped locally and never copied off-device.
+- No analytics or telemetry.
+- No cookies, fingerprints, or tracking identifiers.
 
-## Data transmission
+## Network requests
 
-BlurrySite makes **zero network requests**. No data is transmitted to any server, third party, or external service. The extension operates entirely offline.
+BlurrySite issues **zero network requests** at runtime. The only
+network traffic involving the extension is the initial download of
+the extension package itself from the Chrome Web Store / Firefox AMO,
+which is governed by those vendors' privacy policies.
+
+There is no:
+- Telemetry endpoint.
+- Crash reporter.
+- Update check beyond the browser's built-in extension auto-update.
+- Remote configuration fetch.
+- CDN font / asset request — fonts are bundled and loaded from
+  `chrome-extension://` URLs.
 
 ## Permissions
 
-| Permission | Why it's needed |
+| Permission | Purpose |
 |---|---|
-| `storage` | Save your blur settings and blurred element selections locally |
-| `activeTab` | Apply blur to the current tab's page content |
-| `tabs` | Detect page navigation to restore blur state |
-| `contextMenus` | Add "Blur this element" / "Unblur this element" to the right-click menu |
-| `<all_urls>` | Allow blurring elements on any website you visit |
+| `storage` | Save your blur settings + state locally (the keys listed above). |
+| `activeTab` | Apply blur to the page in the currently active tab. |
+| `tabs` | Detect navigation + tab-switch events to restore blur on the right tab and to power the optional tab-switch automate rule. |
+| `contextMenus` | Add "Blur this element" / "Unblur this element" to the right-click menu. |
+| `scripting` | Re-inject the content scripts on existing tabs at install / update / reload. |
+| `idle` | Power the optional "blur when idle" automate rule via `chrome.idle.onStateChanged`. |
+| `<all_urls>` (host permission) | Required to apply blur on any website you visit — the extension does nothing on URLs you don't visit. Chrome / Firefox-blocked URLs (chrome://, the extension store, devtools, etc.) are never injected into. |
+
+## Page-level capabilities (no extra permissions required)
+
+For technical completeness:
+
+- A small bridge script runs in the page's main JavaScript world to
+  detect when **you** start screen-sharing via
+  `navigator.mediaDevices.getDisplayMedia`. The detection is local; no
+  data about the screen-share is recorded beyond the in-memory session
+  flag listed above. When you stop sharing, the flag is cleared.
+- The same bridge listens for `Element.prototype.attachShadow` calls
+  so the blur engine can find late-attached shadow roots. Nothing is
+  transmitted; this is purely a local DOM hook.
 
 ## Data deletion
 
-All stored data can be deleted by:
-- Clicking "Clear All Sites" in the extension popup
-- Uninstalling the extension (Chrome automatically removes all extension storage)
+Your data can be removed at any time:
+
+- **Selective**: "Clear All Sites" in the extension popup wipes blur
+  state for every site without touching your global settings.
+- **Total**: uninstalling the extension automatically removes every
+  storage key listed above. Nothing persists outside the browser.
+
+## Data sale or sharing
+
+We do not sell, rent, share, or transmit any user data. Ever. There
+is no party with whom data could be shared because data never leaves
+your device in the first place.
+
+## Source code + reproducibility
+
+BlurrySite is open source under [GPL-3.0-or-later](LICENSE). The
+source matches the published extension byte-for-byte because there is
+no build step that transforms code (vanilla JavaScript, no bundler).
+You can audit the published version against the tagged release commit
+in [the GitHub repository](https://github.com/ChennakeshavaG/blurrysite).
 
 ## Changes to this policy
 
-If this policy changes, the updated version will be published at the same URL.
+Material changes to this policy will be reflected by:
+- Bumping the "Last updated" date at the top of this file.
+- A note in the project [`CHANGELOG.md`](CHANGELOG.md) (when present).
 
 ## Contact
 
-For questions about this privacy policy, open an issue at: https://github.com/ChennakeshavaG/blurrysite/issues
+Questions, concerns, or reports about this privacy policy:
+
+- Open an issue: https://github.com/ChennakeshavaG/blurrysite/issues
+- Security-sensitive matters: see [`SECURITY.md`](SECURITY.md) for the
+  private disclosure channel.
