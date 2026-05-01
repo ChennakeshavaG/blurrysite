@@ -51,7 +51,13 @@ Isolated world (run_at:"document_idle"):
  6. selector_utils.js     → blsi.SelectorUtils
  7. storage_model.js      → blsi.Model (direct chrome.storage access; single blsi_model key; resolve/patch/debounced_patch)
  8. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
- 9. pii_detector.js       → blsi.PiiDetector (text-node PII scan; scan/clear/handleMutations — subscribes to engine MO dispatcher)
+ 9a. pii/pii_state.js      → blsi.PiiState (shared private state for PII sub-modules; PII_ATTR + match count + active types)
+ 9b. pii/pii_checksums.js  → blsi.PiiChecksums (pure-math checksum algos; Phase 0 stub)
+ 9c. pii/pii_pre_filter.js → blsi.PiiPreFilter (Stage 0 whole-node drops: isExtensionUI, isInsidePiiSpan, isInsideCodeBlock, hasDigit)
+ 9d. pii/pii_country.js    → blsi.PiiCountry (page-country signal; Phase 0 stub)
+ 9e. pii/pii_suppressors.js → blsi.PiiSuppressors (Stage 4 FP cascade: isYear/isVersion/isHexColor/isYearRange/isPercentage/isScientificNotation/isMeasurement/isResolution/isOrdinalLabel/isDateLike/isOrderRef/isPublicPrice/isCountNoise + falsePositivesCheck)
+ 9f. pii/pii_detectors.js  → blsi.PiiDetectors (EMAIL_RE/NUMERIC_RE/PATTERNS + findMatches)
+ 9g. pii/pii.js            → blsi.PiiDetector (facade; scan/clear/handleMutations/getMatchCount/getPatterns)
 10. fonts.js              → blsi.Fonts (embedded WOFF2 font assets; FONT_FACE string for "bl-si-redact-asterisk")
 11. core/engine_state.js  → blsi.EngineState (shared private state for engine sub-modules)
 12. core/categories.js    → blsi.Categories (frozen tag/role data; CATEGORY_SELECTORS / CATEGORY_ORDER / DEFAULT_CATS)
@@ -60,8 +66,10 @@ Isolated world (run_at:"document_idle"):
 15. core/observer.js      → blsi.Observer (one MO per root + idle-batched drain + subscriber pub/sub)
 16. core/target_engine.js → blsi.TargetEngine (zones + dynamic items + popup-hover highlight; reconcileItems)
 17. engine.js             → blsi.Engine (facade + orchestrator; handleSite/teardown/unblurAll; re-exports core/*)
-18. auto_blur.js          → blsi.AutoBlur (idle + tab-switch triggers; init/destroy/isIdle)
-19. screen_share.js       → blsi.ScreenShare (CustomEvent bridge; init/destroy — listens for '__blsi_screen_share' from MAIN world, opens port 'blsi-screen-share' + sends SCREEN_SHARE_STARTED/ENDED; port disconnect = crash-safety UNBLUR fan-out)
+18. screen_share.js       → blsi.ScreenShare (CustomEvent bridge; init/destroy — listens for '__blsi_screen_share' from MAIN world, opens port 'blsi-screen-share' + sends SCREEN_SHARE_STARTED/ENDED; port disconnect = crash-safety UNBLUR fan-out)
+18a. automate/state.js    → blsi.Automate.State (shared phase enums + KEYS + read/write helpers; both contexts)
+18b. automate/overlay.js  → blsi.Automate.Overlay (viewport overlay primitive; show/hide/update; content only)
+18c. automate/visibility.js → blsi.Automate.Visibility (per-tab Page Lifecycle observer; init({tab_id})/destroy)
 20. reveal_controller.js  → blsi.Reveal
 21. shortcut_handler.js   → blsi.Shortcuts
 22. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
@@ -77,21 +85,57 @@ A module may only depend on modules loaded before it.
 
 ## Module-Specific Rules
 
-### pii_detector.js
-- `EMAIL` is boolean. `NUMERIC` is boolean. Gate with `Boolean(NUMERIC)` — no string enum.
+### pii/pii_state.js
+- Shared private state for the PII sub-modules. Internal `_matchCount` (number) and `_activeTypes` (object | null) are private; only mutate via the exposed setters (`incrementMatchCount` / `resetMatchCount` / `setActiveTypes` / `clearActiveTypes`).
+- `PII_ATTR` is the single source of truth for the data attribute name used on PII spans (`data-bl-si-pii`). Every other PII module must read it from here — never hard-code the string.
+- `getActiveTypes()` returns the current `{ email, numeric }` object or `null` (= unseeded). Modules treat `null` as "no scan has run yet" and no-op accordingly.
+
+### pii/pii_checksums.js
+- Phase 0 stub — exposes `Object.freeze({})`. Phase 3 fills with Luhn / Verhoeff / mod-N / ISO 7064 / Base58Check / bech32 / letter-tables. Pure math only — no DOM, no storage.
+
+### pii/pii_pre_filter.js
+- `isExtensionUI(node)` enumerates the 6 extension-owned ancestor selectors and returns `true` for any descendant of those — so the PII scan skips toolbars, popups, picker UI, etc.
+- `isInsidePiiSpan(node)` reads `PII_ATTR` from `blsi.PiiState` (do NOT hard-code the attribute name) and returns `true` for any node already inside a PII wrapper — prevents re-wrapping during mutations.
+- Phase 1 will add `isInsideCodeBlock` + the M1 digit pre-screen here. Keep all whole-node drop heuristics in this module — pattern modules must not re-implement them.
+
+### pii/pii_country.js
+- Phase 0 placeholder. Phase 4 fills with page-level country signal (TLD + lang + meta + currency density) returning ISO 3166 alpha-2 or null.
+
+### pii/pii_suppressors.js
 - `NUMERIC_PROFILE` (`'precise' | 'aggressive'`) is a developer-only constant inside the IIFE. Users only see on/off.
-- **falsePositivesCheck pattern**: each check is `(matchText, text, matchIndex) => boolean`. Return `true` to suppress. Adding a check: (1) write the function, (2) add to `FALSE_POSITIVE_CHECKS.precise` (and optionally `.aggressive`), (3) add tests, (4) update `docs/contracts/pii_detector.tests.md`.
-- `_falsePositivesCheck` runs the active profile's checks. Never put suppression logic directly in `_findMatches`.
-- Active profile checks: `precise` = [isYear, isVersion, isPublicPrice, isCountNoise]; `aggressive` = [isVersion].
+- **falsePositivesCheck pattern**: each check is `(matchText, text, matchIndex) => boolean`. Return `true` to suppress.
+- **Adding a check**: (1) write the function, (2) decide which **cost tier** it belongs in and add to that tier array (`_CHECKS_STRUCTURAL` for match-self / ~1µs; `_CHECKS_TRAILING` for next 4–10 chars; `_CHECKS_PRECEDING` for back 30 chars; `_CHECKS_KEYWORD_50` for ±50-char window; `_CHECKS_KEYWORD_LARGE` for ±100/150-char window), (3) confirm it appears in the spread inside `FALSE_POSITIVE_CHECKS.precise` (added automatically since the array spreads the tier arrays), (4) add tests, (5) update `docs/contracts/pii/pii_suppressors.tests.md`.
+- `falsePositivesCheck` delegates to `falsePositivesCheckCascade` when profile is `'precise'`; cascade walks tiers in cost order with `||` short-circuit between tiers and `Array.some` short-circuit within each tier. Never put suppression logic in pattern modules — keep it here.
+- Active profile checks: `precise` runs all 13 (Phase 1 Tier-A added: isHexColor, isYearRange, isPercentage, isScientificNotation, isMeasurement, isResolution, isOrdinalLabel, isDateLike, isOrderRef alongside the original isYear/isVersion/isPublicPrice/isCountNoise); `aggressive` runs only `isVersion`.
 - `isYear` suppresses 4-digit numbers in 1000–2099 (dates, copyright years).
 - `isVersion` suppresses numbers preceded by `v`/`V` or followed by `.digit` (semver build numbers).
-- `isPublicPrice` suppresses matches near `/month`, `/year`, `cart`, `qty`, `quantity`, `units`, `rating`, `reviews`, `stars` (100-char window).
-- `isCountNoise` suppresses matches near `unread`, `notifications`, `messages`, `followers`, `following`, `likes`, `views`, `comments`, `results`, `items`, `members`, `subscribers`, `posts`, `connections` (150-char window).
+- `isHexColor` suppresses 3/6/8-hex strings preceded by `#`.
+- `isYearRange` suppresses `YYYY-YYYY` / `YYYY YYYY` with both endpoints in 1000–2099.
+- `isPercentage` / `isScientificNotation` — trailing `%` / `e[+-]?\d`.
+- `isMeasurement` — trailing unit token (`KB`/`MB`/`GHz`/`fps`/`°C`/`km`/`kg`/`sec`/`min`/`hr`/etc.).
+- `isResolution` — `\d+[ ]?[x×:][ ]?\d+` pattern.
+- `isOrdinalLabel` — preceding multilingual ordinal precursor (`Section`/`Chapter`/`Page`/`Step`/etc., 30-char window).
+- `isDateLike` — ISO 8601 / slash / dot / week / ordinal-date structural fingerprints + multilingual `date`/`posted`/`expires`/etc. keyword window (50 chars).
+- `isOrderRef` — multilingual `order`/`tracking`/`invoice`/`case`/`SKU`/`ISBN` keyword window (50 chars).
+- `isPublicPrice` suppresses matches near multilingual price keywords: `/month`/`cart`/`qty`/`quantity`/`units`/`rating`/`reviews`/`stars`/`price`/`cost`/`total`/`subtotal`/`sale`/`discount`/`MRP` + ES/FR/DE/IT/JA/ZH/HI equivalents (100-char window).
+- `isCountNoise` suppresses matches near multilingual engagement keywords: `unread`/`notifications`/`messages`/`followers`/`likes`/`views`/`comments`/`results`/`stock`/`available`/`inventory`/`page`/`of` + ES/FR/DE/JA/ZH/HI equivalents (150-char window).
+
+### pii/pii_detectors.js
+- Pattern catalog + match finder. `EMAIL_RE`, `NUMERIC_RE`, `PATTERNS`, `findMatches(text, types)`, `getPatterns()`.
+- **Pattern order matters in `NUMERIC_RE`**: alternation 4 must precede 5. Re-order at your peril.
+- `findMatches` clones each `RegExp` before iterating so `lastIndex` is always reset — never call `.exec()` on the live pattern object.
+- Calls `blsi.PiiSuppressors.falsePositivesCheck` only on the NUMERIC path — email matches are never suppressed.
+- Sorts and de-overlaps results before returning so the facade can splice text right-to-left without conflicts.
+- Phase 3 adds Stage 1 dedicated detectors + `runDetector` helper + `consumed[]` tracker here.
+
+### pii/pii.js
+- Facade — exposes `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()` as `blsi.PiiDetector`. Public global name preserved from the pre-split single file for backward compat.
 - PII spans carry `[data-bl-si-pii="email"|"numeric"]` only — no `[data-bl-si-blur]`. Independent of blur-all.
-- `scan(rootEl, types)` — `TreeWalker(NodeFilter.SHOW_TEXT)` collects all text nodes first, then processes each. Skips extension UI and already-wrapped nodes.
-- `_wrapTextNode(textNode, matches)` — processes matches right-to-left so earlier offsets stay valid after each `splitText`. Each match: `splitText(end)` then `splitText(start)` then `replaceChild(span, matchNode)`. Spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`.
-- `clear(rootEl)` — removes all `[data-bl-si-pii]` spans, restores text, resets `_matchCount`.
-- `handleMutations(mutations, root)` — subscriber to `blur_engine`'s mutation dispatcher. Handles `childList` (new TEXT_NODE → wrap; new ELEMENT_NODE → scan subtree) and `characterData` (text node whose `textContent` changed → wrap matches). Skips text nodes already inside a `[data-bl-si-pii]` wrapper. No-op when `_activeTypes` is null — `scan()` must run first to seed it. PII detector owns no observer; `content_script.applyState` calls `Engine.subscribeMutations('pii', handleMutations)` when PII is enabled.
+- `scan(rootEl, types)` — `TreeWalker(NodeFilter.SHOW_TEXT)` collects all text nodes first, then processes each. Skips extension UI (`PiiPreFilter.isExtensionUI`) and already-wrapped nodes (`PiiPreFilter.isInsidePiiSpan`).
+- `_wrapTextNode(textNode, matches)` — processes matches **right-to-left** so earlier offsets stay valid after each `splitText`. Each match: `splitText(end)` then `splitText(start)` then `replaceChild(span, matchNode)`. Spans carry `[data-bl-si-pii]` only — no `[data-bl-si-blur]`.
+- `clear(rootEl)` — removes all `[data-bl-si-pii]` spans, restores text, resets match count via `PiiState.resetMatchCount()`. Does NOT clear active types — a subsequent `handleMutations` after `clear` is still meaningful.
+- `handleMutations(mutations, root)` — subscriber to the engine's mutation dispatcher. Handles `childList` (new TEXT_NODE → wrap; new ELEMENT_NODE → scan subtree) and `characterData` (text node whose `textContent` changed → wrap matches). Skips text nodes already inside a `[data-bl-si-pii]` wrapper. **No-op when `PiiState.getActiveTypes()` returns `null`** — `scan()` must run first to seed it.
+- PII detector owns no observer; `content_script.applyState` calls `Engine.subscribeMutations('pii', handleMutations)` when PII is enabled.
 - `blur_engine.isVisuallyBlurred` returns `true` for `element.dataset.blSiPii` — reveal_controller can find and reveal PII spans.
 
 ### engine.js + core/*
@@ -208,28 +252,25 @@ if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return
 
 ### storage_model.js
 - Accesses `chrome.storage.local` (model) and `chrome.storage.session` (automate_blur) directly — no background relay. Model data lives under the single `blsi_model` key. Automate blur state lives under `blsi_automate_blur` in session storage (auto-cleared on browser close/crash).
-- `init_cache()` — must be called once (by content_script/popup init) before any `get()` or `patch_section()` calls. Loads `blsi_model` from local storage into `_cache` AND loads `blsi_automate_blur` from session storage into `_automate_cache`.
+- `init_cache()` — must be called once (by content_script/popup init) before any `get()` or `patch_section()` calls. Loads `blsi_model` from local storage into `_cache` AND loads screen-share + suppressed-tabs session keys. Idle + tab_switch caches live in `blsi.Automate.State` and self-hydrate.
 - `on_change(listener)` — registers a callback fired whenever the cached model changes (from storage `onChanged`). Single subscriber — calling twice replaces the first. Popup uses this to react to cross-context updates.
 - `get()` — returns the full cached model. Never reads storage directly after init; always returns from cache.
 - `patch_section(section, delta)` — deep-merges `delta` into the named section, writes the updated model back to storage, and updates cache. Use for deliberate user-triggered saves.
 - `debounced_patch(section, delta, delay?)` — same as `patch_section` but batches rapid calls (default **150 ms**). Use from popup inputs to avoid saturating storage writes.
 - `save_settings(patch)` — merges a partial settings patch into `model.global_default_settings`. Pass only the keys you want to update; unspecified keys are preserved.
-- `resolve(hostname, url)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `engage`, `blur_items`, `automate_blur_active`, and `automate_blur_triggers` in the output. Reads automate state from `_automate_cache` (session storage), not from the model.
+- `resolve(hostname, url, tab_id?)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `engage`, `blur_items`, `automate_blur_active`, and `automate_blur_triggers` in the output. Reads idle phase via `blsi.Automate.State.read_idle()` (gated by `automate.idle.enabled`) and tab_switch phase via `read_tab_switch(tab_id)` (gated by `automate.tab_switch.enabled`).
 - `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
-- `clear_host(host)` — clears `blur_all` + items for the host in local storage, then calls `clear_automate_blur(host)` to clear session storage separately.
+- `clear_host(host)` — clears items for the host in local storage. Does not touch automate trigger state (per-tab/global, not per-host).
 - `clear_all()` — clears `blur_all` + items for all exact rules in local storage + resets session storage (`blsi_automate_blur: {}`) separately.
 - `save_blur_state(is_active)` — flips `blur_all.status` globally (no per-host arg). Toggling anywhere reflects across every tab.
-- `get_automate_blur(hostname)` — synchronous; returns `{ idle, tab_switch, screen_share }` from `_automate_cache`. Use in popup to read current trigger state without going through model.
-- `save_automate_blur(hostname, trigger, bool)` — write one automate trigger (`'idle'|'tab_switch'|'screen_share'`) to `chrome.storage.session`.
-- `patch_automate_blur(hostname, patch)` — batch-write multiple triggers in one session storage write.
-- `clear_automate_blur(hostname)` — remove all automate_blur state for a hostname from session storage.
+- (legacy) `get_automate_blur` / `save_automate_blur` / `patch_automate_blur` / `clear_automate_blur` — REMOVED. Idle + tab_switch state moved to `blsi.Automate.State` (sibling module). Use `State.write_idle(phase)` / `write_tab_switch(tab_id, phase)` / `clear_tab_switch(tab_id)` directly.
 - `get_rules()` / `save_rules(rules)` — URL rules CRUD. Rules are an array of `{ hostname_value, hostname_type, blur_all, items, snapshot }` where `hostname_type` is `'wildcard'|'regex'` (non-exact entries only).
 - `capture_snapshot()` — reads current global settings from cache; returns a nested snapshot object `{ settings, blur_all, pick_and_blur, auto_detect_pii, automate }` mirroring the global model structure. Deep-copies `blur_categories` and `blur_color`. The `automate` section captures only `{ idle, tab_switch, screen_share }.enabled` (idle .value/.unit remain global-only). Excludes: site_rules, shortcuts, enabled, language, idle.value/.unit, pick_and_blur.items.
 - `resolve(hostname, url)` also exposes `_rule_overrides: { [flat_key]: true }` (every resolved field that came from a site rule snapshot) and `_rule_match: { hostname_value, hostname_type } | null` (the matching rule). Popup uses these for "Managed by site rule" badges + read-only controls + deep-linking; content_script uses them to append `(site rule)` to toasts.
 - `save_site_snapshot(hostname_value, hostname_type, snapshot)` — finds or creates the matching rule entry in `site_rules[]` and sets its `.snapshot` to the provided nested snapshot object `{ settings, blur_all, pick_and_blur }`. Works for all `hostname_type` values (`'exact'|'wildcard'|'regex'`). For wildcard/regex rules, ensure the rule exists via `save_rules()` first. Returns a Promise.
 - `clear_site_snapshot(hostname_value, hostname_type)` — resets `.snapshot` to `{}` for the matching rule. No-op if the rule doesn't exist. Returns a Promise.
 - `get_site_snapshot(hostname_value, hostname_type)` — returns the `.snapshot` object for the matching rule, or `null` if the rule doesn't exist or snapshot is empty `{}`. Synchronous.
-- `_reset_cache()` — test-only helper. Clears both `_cache` and `_automate_cache` so tests start from a clean slate.
+- `_reset_cache()` — test-only helper. Clears `_cache`, `_screen_share_cache`, and `_suppressed_tabs_cache` so tests start from a clean slate. Idle + tab_switch caches live in `blsi.Automate.State` — call `State._reset()` separately.
 
 ### action_registry.js
 - Single source of truth for every shortcut-driven action. `blsi.Actions`.

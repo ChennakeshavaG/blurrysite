@@ -197,6 +197,14 @@
     const tab = await new Promise((res) =>
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => res(tabs && tabs[0]))
     );
+    // Chrome blocks extensions from injecting content scripts on a fixed list
+    // of URLs (Web Store, chrome://*, etc.) regardless of host_permissions.
+    // Show a dedicated empty state instead of the normal UI — the popup's
+    // toggles cannot affect those tabs and silently failing UI looks broken.
+    if (blsi.UrlMatcher.isRestrictedUrl(tab && tab.url)) {
+      UI.showRestrictedView();
+      return;
+    }
     let hostname = '';
     if (tab && tab.url) {
       try {

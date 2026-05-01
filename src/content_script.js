@@ -66,16 +66,11 @@
   /** Last observed URL — SPA navigation change detection */
   let lastUrl = location.href;
 
-  // Gates AutoBlur.init/destroy so unrelated storage echoes don't restart the idle timer.
-  let _autoBlurCfgKey = null;
-
-  // Idle toast fires once per focused visit; reset on tab-switch-and-back.
-  let _idleToastShown = false;
-  if (IS_MAIN_FRAME) {
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) _idleToastShown = false;
-    });
-  }
+  // Tracks the prior automate phases so we only fire toasts on transitions.
+  // D10: per-instance state — resets on reload. Acceptable until the toast
+  // persistence redesign lands.
+  let _lastIdlePhase = 'active';
+  let _lastTabSwitchPhase = 'off';
 
   // ── State helpers ──────────────────────────────────────────────────────────
 
@@ -91,11 +86,6 @@
     isPickerActive = active;
     Shortcuts._setPickerActive(active);
     Engine._setPickerActiveForObserver(active);
-  }
-
-  function _to_seconds(value, unit) {
-    if (unit === 'min') return value * 60;
-    return value; // sec
   }
 
   // Builds an i18n toast string and appends "(site rule)" when the relevant
@@ -545,11 +535,12 @@
     // Single resolve — pass the snapshot through so _sync() doesn't re-resolve.
     await _sync(resolved);
 
-    // Auto-blur — main frame only (tab-level concerns)
+    // Automate triggers — main frame only (tab-level concerns).
+    // Visibility (tab_switch) writes its own per-tab phase to session storage;
+    // Idle writes from the background SW. Resolve folds both into resolved.*.
+    // Overlay show/hide is driven by engine.handleSite.
     if (IS_MAIN_FRAME) {
       const screen_share = resolved.automate_screen_share || {};
-      const idle = resolved.automate_idle || {};
-      const tab_switch = resolved.automate_tab_switch || {};
 
       // Screen share detection — inject getDisplayMedia wrapper if enabled.
       if (screen_share.enabled && resolved.enabled) {
@@ -558,40 +549,43 @@
         blsi.ScreenShare.destroy();
       }
 
-      const cfgKey = JSON.stringify({
-        enabled: !!resolved.enabled,
-        idle:    { enabled: !!idle.enabled, value: idle.value, unit: idle.unit },
-        tab:     !!tab_switch.enabled,
-      });
-      if (cfgKey !== _autoBlurCfgKey) {
-        _autoBlurCfgKey = cfgKey;
-        if ((idle.enabled || tab_switch.enabled) && resolved.enabled) {
-          blsi.AutoBlur.init({
-            idleTimeout: _to_seconds(idle.value || 5, idle.unit || 'min'),
-            tabSwitch: !!tab_switch.enabled,
-            idle: !!idle.enabled,
-            onIdle: async ({ reason } = {}) => {
-              const trigger = reason || 'idle';
-              await Store.save_automate_blur(hostname, trigger, true);
-              await _sync();
-              const toastKey = trigger === 'tab_switch'
-                ? 'automate_toast_tab_switch'
-                : 'automate_toast_idle';
-              const ovKey = trigger === 'tab_switch' ? 'automate_tab_switch' : 'automate_idle';
-              if (trigger === 'idle' && _idleToastShown) return;
-              if (settings.automate_blur_only)    Shortcuts.showToast(_toastMsg(toastKey, ovKey), 2500);
-              if (settings.automate_blur_skipped) Shortcuts.showToast(_toastMsg('automate_toast_skipped', ovKey), 2500);
-              if (trigger === 'idle') _idleToastShown = true;
-            },
-            onActive: async () => {
-              await Store.patch_automate_blur(hostname, { idle: false, tab_switch: false });
-              await _sync();
-            },
-          });
-        } else {
-          blsi.AutoBlur.destroy();
-          _idleToastShown = false;
+      // Per-tab visibility observer. Init is idempotent — only re-binds when
+      // tab_id changes. tab_switch.enabled gating is enforced by resolve();
+      // the listener can run continuously because absence === armed === no overlay.
+      const tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
+        ? blsi.ScreenShare.getTabId()
+        : null;
+      if (resolved.enabled && typeof tabId === 'number' &&
+          blsi.Automate && blsi.Automate.Visibility) {
+        blsi.Automate.Visibility.init({ tab_id: tabId });
+      } else if (blsi.Automate && blsi.Automate.Visibility) {
+        blsi.Automate.Visibility.destroy();
+      }
+
+      // Toast attribution (D8) — fire on idle/tab_switch transitions where
+      // this tab actually starts blurring. Splits idle vs tab_switch toasts so
+      // the user sees which trigger fired. Skipped when manual blur or
+      // pick_blur was already active (resolve flips automate_blur_skipped).
+      const State = blsi.Automate && blsi.Automate.State;
+      if (State && resolved.automate_blur_only) {
+        const idle_phase = State.read_idle();
+        if (resolved.automate_blur_triggers.idle &&
+            idle_phase !== _lastIdlePhase &&
+            (idle_phase === State.PHASES.idle.idle || idle_phase === State.PHASES.idle.locked)) {
+          Shortcuts.showToast(_toastMsg('automate_toast_idle', 'automate_idle'), 2500);
         }
+        const ts_phase = (typeof tabId === 'number') ? State.read_tab_switch(tabId) : 'off';
+        if (resolved.automate_blur_triggers.tab_switch &&
+            ts_phase !== _lastTabSwitchPhase &&
+            ts_phase === State.PHASES.tab_switch.fired) {
+          Shortcuts.showToast(_toastMsg('automate_toast_tab_switch', 'automate_tab_switch'), 2500);
+        }
+      }
+      if (State) {
+        _lastIdlePhase = State.read_idle();
+        _lastTabSwitchPhase = (typeof tabId === 'number')
+          ? State.read_tab_switch(tabId)
+          : 'off';
       }
     }
 
@@ -770,6 +764,11 @@
     //    Concurrently resolve our own tab id via background WHO_AM_I so
     //    Store.resolve() can apply per-tab automate suppression and identify
     //    the sharing tab on initial load (mid-share catch-up).
+    //    Also kick off font loading via FontFace API so censored / starred
+    //    modes work on pages whose CSP blocks chrome-extension:// font URLs.
+    if (blsi.Fonts && typeof blsi.Fonts.loadFonts === 'function') {
+      blsi.Fonts.loadFonts();
+    }
     try {
       await Promise.all([
         Store.init_cache(),
@@ -825,8 +824,11 @@
     }
 
     // 8–9. Apply all stored settings — single authoritative call that covers
-    //      blur restore, PII scan, AutoBlur, shortcuts, and CSS vars.
+    //      blur restore, PII scan, automate observers, shortcuts, and CSS vars.
     Engine.resetCounters();
+    if (IS_MAIN_FRAME && blsi.Automate && blsi.Automate.Overlay) {
+      blsi.Automate.Overlay.init(); // idempotent; mounts on first show()
+    }
     await applyState(resolved, null);
 
     // 9b. Catch-up toast for tabs opened mid-share. resolve() already factored

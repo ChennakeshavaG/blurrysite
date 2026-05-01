@@ -129,13 +129,17 @@ const BlurrySitePopupState = (() => {
     }
   }
 
-  // ── Clear automate blur for current hostname ──────────────────────────────
-  // Clears idle + tab_switch entries for this hostname AND removes per-tab
-  // suppression for the active tab so a "Turn off" click doesn't leave
-  // hidden state. Screen-share is global — leave that record alone.
+  // ── Clear automate blur for current tab ───────────────────────────────────
+  // Idle is global — there's nothing per-tab/per-host to clear (it auto-resolves
+  // when the OS reports active again). Tab-switch is per-tab — strip its
+  // 'fired' entry so the overlay drops on the active tab. Per-tab silence-all
+  // suppression is also cleared so toggling automate back on works as expected.
+  // Screen-share is global — leave that record alone.
   async function clearAutomateBlur() {
-    if (!_hostname) return;
-    await blsi.Model.clear_automate_blur(_hostname);
+    const State = blsi.Automate && blsi.Automate.State;
+    if (State && typeof _tabId === 'number') {
+      await State.clear_tab_switch(_tabId);
+    }
     if (typeof _tabId === 'number') {
       await blsi.Model.remove_suppressed_tab(_tabId);
     }

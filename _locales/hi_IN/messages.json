@@ -533,6 +533,12 @@
   "off_state_hint": {
     "message": "हर साइट पर सारा ब्लर रुका है"
   },
+  "restricted_state_title": {
+    "message": "यह पेज प्रतिबंधित है"
+  },
+  "restricted_state_message": {
+    "message": "Chrome वेब स्टोर, नए टैब पेज और chrome:// पेजों पर एक्सटेंशन को ब्लॉक करता है। किसी सामान्य वेबसाइट पर Blurry Site आज़माएँ।"
+  },
   "power_turn_on": {
     "message": "चालू करें"
   },

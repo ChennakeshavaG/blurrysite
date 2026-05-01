@@ -103,4 +103,4 @@ Subscribes `cb(newModel, oldModel)` to `blsi.Model.on_change` — fires when sto
 - Active rule precedence: `_computeActiveRule` iterates `site_rules[]` once — first non-empty-snapshot rule that matches wins (URL match for wildcard/regex; hostname equality for exact). Empty-snapshot rules don't count as "rules" — they have no overrides.
 
 ## Side effects
-All writes go to `chrome.storage.local` (model) or `chrome.storage.session` (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) via `blsi.Model`. No direct `chrome.storage.*` access in this module.
+All writes go to `chrome.storage.local` (model) or `chrome.storage.session` via `blsi.Model` (`blsi_screen_share`, `blsi_automate_suppressed_tabs`) and `blsi.Automate.State` (`blsi_automate_idle`, `blsi_automate_tab_switch_by_tab`). No direct `chrome.storage.*` access in this module.

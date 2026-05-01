@@ -48,6 +48,18 @@ The file uses a load-guard pattern: it calls `require(MODULE_PATH)` when the fil
 - `rule settings deep-merged (partial override preserves other keys)` — rule overrides `blur_radius: 50`; `reveal_mode: 'hover'` from globals is preserved.
 - `null/undefined rules array tolerated` — calling `resolveSettings` with `null` or `undefined` as the rules argument does not throw.
 
+### UrlMatcher.isRestrictedUrl
+
+- `chrome:// pages are restricted` — `chrome://newtab`, `chrome://extensions`, `chrome://settings/cookies` all return `true`.
+- `chrome-extension:// pages are restricted` — extension UI URLs return `true`.
+- `Chrome Web Store hosts are restricted` — both `chromewebstore.google.com` (any path) and `chrome.google.com/webstore*` legacy URL return `true`.
+- `chrome.google.com outside /webstore is NOT restricted` — `chrome.google.com/about` and `chrome.google.com/` return `false`.
+- `about: / view-source: / devtools: / moz-extension: / edge: / chrome-search: are restricted` — full set of platform-blocked schemes return `true`.
+- `regular https / http URLs are NOT restricted` — `example.com`, `news.ycombinator.com` return `false`.
+- `empty / null / undefined / non-string URLs are restricted` — all falsy + non-string inputs return `true` (covers PDF viewer, devtools tabs, mid-navigation tabs).
+- `malformed URLs are restricted` — un-parseable strings return `true`.
+- `hostname comparison is case-insensitive` — `ChromeWebStore.Google.Com` resolves to the lowercase host before comparison.
+
 ---
 
 ## Edge Cases Covered

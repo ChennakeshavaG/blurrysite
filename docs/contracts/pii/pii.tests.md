@@ -1,16 +1,16 @@
-# pii_detector Test Contract
+# pii Test Contract
 
 ## Overview
 
-Unit tests for `src/pii_detector.js`. The module exposes `blsi.PiiDetector` with five public members: `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()`.
+Unit tests for `src/pii/` — Phase 0 of the PII rewrite split the monolithic `src/pii_detector.js` into seven sub-modules under `src/pii/` (`pii_state.js`, `pii_checksums.js`, `pii_pre_filter.js`, `pii_country.js`, `pii_suppressors.js`, `pii_detectors.js`, `pii.js`). The facade `pii.js` still exposes the same public surface as the legacy detector under `blsi.PiiDetector` with five public members: `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()`.
 
 Tests verify pattern detection for two PII types (EMAIL and NUMERIC), false-positive suppression chains, DOM wrapping behaviour, multi-type detection, PII independence from the blur-all engine, `clear()` restoration, `getMatchCount()` accumulation, `getPatterns()` shape, and `handleMutations()` subscriber-style routing for both `childList` and `characterData` mutations.
 
-No external module dependencies are mocked — `pii_detector.js` operates purely on DOM text nodes and does not import other `blsi.*` modules.
+No external module dependencies are mocked — the `src/pii/` modules operate purely on DOM text nodes and do not import other `blsi.*` modules.
 
 ## Setup & Teardown
 
-- Module loading uses `freshLoad()` which deletes `blsi.PiiDetector`, calls `jest.resetModules()`, then `require()`s the real source file via `jest.isolateModules()` (or falls back to an inline `buildStubSource()` eval if the file is absent). Called in `beforeEach` so each test gets a clean module instance with zeroed state.
+- Module loading uses `freshLoad()` which deletes `blsi.PiiDetector`, calls `jest.resetModules()`, then `require()`s each of the seven `src/pii/*.js` files in load order via `jest.isolateModules()` (or falls back to an inline `buildStubSource()` eval if any file is absent). Load order: `pii_state.js`, `pii_checksums.js`, `pii_pre_filter.js`, `pii_country.js`, `pii_suppressors.js`, `pii_detectors.js`, `pii.js`. Called in `beforeEach` so each test gets a clean module instance with zeroed state.
 - `beforeEach` — resets `document.body.innerHTML` to `''` and calls `freshLoad()`.
 - `afterEach` — calls `blsi.PiiDetector.clear(document.body)`, resets `document.body.innerHTML` to `''`. (PII detector owns no observer — no `stopObserving` call needed.)
 
@@ -120,7 +120,53 @@ No external module dependencies are mocked — `pii_detector.js` operates purely
 - `isCountNoise — "unread" in window suppresses number` — `'12345 unread messages'` returns 0
 - `isCountNoise — "followers" in window suppresses number` — `'10234 followers'` returns 0
 - `isCountNoise — "results" in window suppresses number` — `'Showing 12345 results'` returns 0
-- `isCountNoise — no count context: number is detected` — `'Invoice total: 12345'` returns 1 and span textContent is `'12345'`
+- `isCountNoise — no count context: number is detected` — `'Hello there 12345 friend.'` returns 1 and span textContent is `'12345'` (fixture uses neutral text — `Invoice` and `total` would now match Phase 1's extended `isOrderRef` and `isPublicPrice`)
+
+### Phase 1 — STAGE 0 pre-filter (added)
+- `STAGE 0 — skips numbers inside <code>` — content inside `<code>` is not scanned; returns 0
+- `STAGE 0 — skips numbers inside <pre>` — content inside `<pre>` is not scanned; returns 0
+- `STAGE 0 — skips numbers inside <kbd>` — content inside `<kbd>` is not scanned; returns 0
+- `STAGE 0 — skips numbers inside <samp>` — content inside `<samp>` is not scanned; returns 0
+- `STAGE 0 — skips numbers inside .highlight (syntax-highlighter)` — `.highlight`/`.codehilite`/`[data-code]` selectors covered
+- `STAGE 0 — numbers OUTSIDE code block still detected` — sanity check
+- `STAGE 0 — M1 digit pre-screen skips no-digit nodes when email disabled` — `'No digits here at all.'` with `{ numeric: true }` returns 0 (saves regex work via the `hasDigit` early-exit)
+- `STAGE 0 — M1 pre-screen does NOT skip when email enabled` — email path runs even on no-digit text; sanity check that the email path is preserved
+
+### Phase 1 — Tier-A suppressors (added)
+- `isHexColor — #FF5733-shape hex bare-digits not blurred` — `'#123456'` returns 0
+- `isHexColor — bare digits without # prefix still blurred` — `'123456'` returns 1
+- `isYearRange — "2020-2024" not blurred` — endpoints both in 1000–2099 → suppressed
+- `isYearRange — non-year range "1234-9999" still considered` — fingerprint edge; smoke test (`9999` outside range)
+- `isPercentage — "12345%" not blurred`
+- `isPercentage — number without trailing % blurred`
+- `isScientificNotation — "1234e10" not blurred` — trailing `e[+-]?\d` triggers suppression
+- `isMeasurement — "1024 MB" not blurred`
+- `isMeasurement — "5000 km" not blurred`
+- `isMeasurement — number without trailing unit blurred`
+- `isResolution — "1920x1080" not blurred` — `\d+x\d+` pattern triggers suppression
+- `isOrdinalLabel — "Section 12345" not blurred`
+- `isOrdinalLabel — "Chapter 12345" not blurred`
+- `isOrdinalLabel — "Page 12345" not blurred`
+- `isOrdinalLabel — bare 12345 with no precursor blurred` — sanity check
+- `isDateLike — ISO 8601 "2026-04-29" not blurred` — structural fingerprint
+- `isDateLike — compact 8-digit "20260429" not blurred` — sanity check on month/day passes
+- `isDateLike — invalid compact 8-digit "20269999" still blurs` — sanity-check fails (day 99) → not suppressed
+- `isOrderRef — "Order #12345" not blurred`
+- `isOrderRef — "Tracking 12345" not blurred`
+- `isOrderRef — "Invoice 12345" not blurred`
+- `isOrderRef — bare number with no order context blurred` — sanity check
+- `extended isPublicPrice — "price" keyword suppresses` — `'The price 12345 here.'` returns 0
+- `extended isPublicPrice — multilingual ES "precio" suppresses` — `'El precio 12345 aquí.'` returns 0 (ES keyword)
+
+### Phase 2 — cascade tiers + regex cache + stats (added)
+- `Phase 2 — getCachedRegex returns same RegExp instance per pattern` — two consecutive calls with the same prototype return the identical instance; `lastIndex` is `0` after each call
+- `Phase 2 — getCachedRegex resets lastIndex on each call` — after `exec()` advances `lastIndex`, a subsequent `getCachedRegex` call resets it to `0`
+- `Phase 2 — getCachedRegex distinguishes by source AND flags` — same source with different flags (`/\d+/g` vs `/\d+/gi`) yields distinct instances
+- `Phase 2 — falsePositivesCheckCascade returns same as flat precise` — behavior parity smoke test: each Phase 1 suppressor still fires through the cascade (`isYear` / `isHexColor` / `isPercentage` / `isDateLike` true cases + one no-suppressor false case)
+- `Phase 2 — getStats returns the stats shape (zeros when Logger off)` — `{ node_count, digit_node_count, stage3_candidates, stage4_suppressed, total_emit }` all numbers; values 0 when `Logger.enabled` is falsy
+- `Phase 2 — getStats counters increment when Logger.enabled is true` — mocks `blsi.Logger = { enabled: true }`; assert `node_count`, `digit_node_count`, `total_emit` all ≥ 1 after a scan that finds a numeric match. Restores `blsi.Logger` in `finally`.
+- `Phase 2 — getStats resets at the top of each scan` — after `scan` + `clear`, all counters return to 0
+- `Phase 2 — getStats is a copy, not a live reference` — mutating the returned object does not affect subsequent `getStats` results
 
 ## Edge Cases Covered
 

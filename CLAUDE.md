@@ -28,12 +28,18 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/logger.js` | `blsi.Logger` | `log`, `warn`, `error`, `flow(tag, data?)`, `scope(name)`, `enable`, `disable`, `get enabled`. Persists toggle to `chrome.storage.local.blsi_debug`. Listens on `chrome.storage.onChanged` for cross-context state sync. `error` always logs; all else gated. `scope(name)` returns tagged variant `{log, warn, error, flow, get enabled}`. |
 | `src/action_registry.js` | `blsi.Actions` | Single source of truth for shortcut-driven actions. `list()`, `get(id)`, `ids()`, `defaultBindings()`, `ACTIONS`. Each action: `{ id, label, description, defaultBinding, messageType, chromeCommand }`. Adding action = one entry here. |
 | `src/shortcut_label.js` | `blsi.ShortcutLabel` | Platform-aware label rendering + reserved chord list. `codeLabel(code)`, `modLabel(mod)`, `chordLabel({code, mods})`, `bindingLabel([...])`, `chordKey(chord)`, `bindingKey(binding)`, `IS_MAC`, `CODE_TO_LABEL`. Mac renders `⌘⇧⌥⌃`, Windows/Linux renders spelled-out mods. Also: `isReserved(chord)`, `lookup(chord)`, `RESERVED` — warning-only hint list (~14 entries); capture UI allows save regardless. |
-| `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `MAX_PATTERN_LENGTH` |
+| `src/url_matcher.js` | `blsi.UrlMatcher` | `matchesPattern`, `resolveSettings`, `isRestrictedUrl(url)` (Chrome-blocked URL guard — chrome://, chromewebstore.google.com, etc.), `MAX_PATTERN_LENGTH` |
 | `src/selector_utils.js` | `blsi.SelectorUtils` | `getSelectors(el) → string[]` (ordered structural→semantic; use for saving), `getSelector(el) → string\|null` (compat alias → `getSelectors()[0]`), `isSelectorStable(el) → bool` (fast O(1) check; true if id/class/aria/data-* found), `generateId`, `restoreSelector(string\|string[]) → Element\|null` (tries each in order, returns first unique match), `restoreAllSelectors` |
-| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `save_settings`, `capture_snapshot(hostname?)`, `save_site_snapshot(hostname_value, hostname_type, snapshot)`, `get_site_snapshot(hostname_value, hostname_type)`, `resolve(hostname, url, tab_id?)`, `get_blur_items`, `save_blur_state(is_active)` (writes `blur_all.status` globally), `save_blur_item`, `remove_blur_item`, `save_automate_blur` (idle/tab_switch only — `screen_share` rejected), `patch_automate_blur`, `clear_automate_blur`, `get_automate_blur` (returns `{idle, tab_switch}` only), `get_screen_share_state`, `set_screen_share_active(tabId)`, `set_screen_share_inactive`, `suppress_screen_share(scope, ctx)`, `unsuppress_screen_share(scope, ctx)`, `get_suppressed_tabs`, `add_suppressed_tab`, `remove_suppressed_tab`, `clear_suppressed_tabs`, `clear_host`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage.local` (model) and `chrome.storage.session` (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly (no background relay) |
+| `src/storage_model.js` | `blsi.Model` | `init_cache`, `on_change`, `get`, `patch_section`, `save_settings`, `capture_snapshot(hostname?)`, `save_site_snapshot(hostname_value, hostname_type, snapshot)`, `get_site_snapshot(hostname_value, hostname_type)`, `resolve(hostname, url, tab_id?)`, `get_blur_items`, `save_blur_state(is_active)` (writes `blur_all.status` globally), `save_blur_item`, `remove_blur_item`, `get_screen_share_state`, `set_screen_share_active(tabId)`, `set_screen_share_inactive`, `suppress_screen_share(scope, ctx)`, `unsuppress_screen_share(scope, ctx)`, `get_suppressed_tabs`, `add_suppressed_tab`, `remove_suppressed_tab`, `clear_suppressed_tabs`, `clear_host`, `get_rules`, `save_rules`, `_reset_cache` — accesses `chrome.storage.local` (model) and `chrome.storage.session` (`blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly (no background relay). Idle + tab_switch session keys are owned by `blsi.Automate.State`; resolve reads them via `State.read_idle()` / `State.read_tab_switch(tab_id)`. |
 | `src/tab_privacy.js` | `blsi.TabPrivacy` | `enable()`, `disable()`, `isActive` (getter) — replaces tab title with `…` when active |
-| `src/pii_detector.js` | `blsi.PiiDetector` | `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()` — TreeWalker text-node approach; wraps matches in `[data-bl-si-pii]` spans (no `[data-bl-si-blur]`); independent of blur-all. Owns no observer — subscribes to the engine's mutation dispatcher and receives raw `MutationRecord[]` covering childList + characterData. |
-| `src/fonts.js` | `blsi.Fonts` | `DISC_FONT_FACE`, `ASTERISK_FONT_FACE` — base64-encoded `@font-face` strings for `"bl-si-censored-disc"` and `"bl-si-starred-asterisk"` (OFL-1.1). Used by the engine for censored/starred modes. |
+| `src/pii/pii_state.js` | `blsi.PiiState` | `PII_ATTR` constant + `getMatchCount`/`incrementMatchCount`/`resetMatchCount`/`getActiveTypes`/`setActiveTypes`/`clearActiveTypes` — shared private state for the PII sub-modules. |
+| `src/pii/pii_checksums.js` | `blsi.PiiChecksums` | Phase 0 stub — empty `Object.freeze({})`. Phase 3 fills with Luhn / Verhoeff / mod-N / ISO 7064 / Base58Check / bech32 / letter-tables. |
+| `src/pii/pii_pre_filter.js` | `blsi.PiiPreFilter` | `isExtensionUI(node)`, `isInsidePiiSpan(node)` — Stage 0 whole-node drops. Phase 1 adds `isInsideCodeBlock` + M1 digit pre-screen. |
+| `src/pii/pii_country.js` | `blsi.PiiCountry` | Phase 0 stub. Phase 4 fills with page-level country signal (TLD + lang + meta + currency density) → ISO 3166 alpha-2 or null. |
+| `src/pii/pii_suppressors.js` | `blsi.PiiSuppressors` | `NUMERIC_PROFILE`, `FALSE_POSITIVE_CHECKS`, `falsePositivesCheck`, `isYear`, `isVersion`, `isPublicPrice`, `isCountNoise` — Stage 4 FP cascade. Phase 1 extends with Tier-A suppressors. |
+| `src/pii/pii_detectors.js` | `blsi.PiiDetectors` | `EMAIL_RE`, `NUMERIC_RE`, `PATTERNS`, `findMatches(text, types)`, `getPatterns()` — pattern catalog + match finder. Phase 3 adds Stage 1 dedicated detectors + `runDetector` helper + `consumed[]` tracker. |
+| `src/pii/pii.js` | `blsi.PiiDetector` | Facade — `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()`. Public global name preserved from pre-split for backward compat. Owns no observer; subscribes to engine MO dispatcher. |
+| `src/fonts.js` | `blsi.Fonts` | `DISC_FONT_FACE`, `ASTERISK_FONT_FACE` — `@font-face` strings for `"bl-si-censored-disc"` and `"bl-si-starred-asterisk"` (OFL-1.1) referencing `chrome-extension://` URLs. `loadFonts()` — fire-and-forget; fetches the woff2 binaries from the extension origin and registers them in `document.fonts` via the FontFace API so the modes still render when page CSP forbids `chrome-extension://` in `font-src`. |
 | `src/core/engine_state.js` | `blsi.EngineState` | Shared private state across the engine sub-modules: getters/setters for `isPageBlurred`, `pickerActive`, `currentSettings`, `pickBlurDynamicActive`, plus `getBlurredCount` / `incrementBlurredCount` / `decrementBlurredCount`. |
 | `src/core/categories.js` | `blsi.Categories` | `CATEGORY_SELECTORS`, `CATEGORY_ORDER`, `DEFAULT_CATS` — frozen tag/role data for the five blur categories. Pure data, no state. |
 | `src/core/css_manager.js` | `blsi.CssManager` | Three injection systems: `injectRules / removeRules / isBlurAllActive` (blur-all), `injectPickBlurRules / removePickBlurRules` (pick-blur), `injectPiiRules / removePiiRules` (PII). Plus `ensureSvgFilter`, `getSelectors / getLastSelectorCache`, and `SVG_FILTER_ID` (read by orchestrator teardown). |
@@ -41,7 +47,10 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/core/observer.js` | `blsi.Observer` | One MutationObserver per root + idle-batched drain + subscriber pub/sub: `observeRoot`, `disconnectObserver`, `subscribeMutations(name, handler)` (also attaches `observeRoot(document)` so subscribers receive mutations regardless of feature state), `unsubscribeMutations(name)` (disconnects the document MO when no subscriber AND no feature still needs it), `hasSubscribers()`, `initShadowAttachListener` / `removeShadowAttachListener`, orchestrator helpers `clearPendingMutations`, `clearStampQueueForRoot`, `pushStampQueueItem`, `scheduleStampIdle`. MO config `{ childList, subtree, characterData }`. |
 | `src/core/target_engine.js` | `blsi.TargetEngine` | Pick-blur targets — zones, items, popup hover highlight: `reconcileItems`, `activeItemsSize`, `tryPickBlurNode`, `getZoneOverlays`, `removeAllZoneOverlays`, `resetCounters`, `allocateElementName`, `allocateStickyName(anchor)`, `highlightItem`, `clearItemHighlight`. |
 | `src/engine.js` | `blsi.Engine` | Facade + orchestrator. Re-exports the public surface of every `core/*` module. Owns `handleSite` (single async entry, mutex-guarded), `handleDocument(settings, root)` (works for `document` and shadow roots), `handleIframe` (thin wrapper over `MarkerEngine._stampIframeIfCrossOrigin`), `teardown`, `unblurAll`, `_setPickerActiveForObserver`, and getters for `isPageBlurred` / `blurredCount`. External callers (`content_script`, `picker`, `reveal_controller`, popup, tests) talk only to this surface. |
-| `src/auto_blur.js` | `blsi.AutoBlur` | `init(callbacks)`, `destroy()`, `isIdle()` — idle + tab-switch auto-blur; callbacks: `{ onIdle, onActive, onTabSwitch }` |
+| `src/automate/state.js` | `blsi.Automate.State` | Shared session-storage state for automate triggers. `PHASES` (idle: active/idle/locked; tab_switch: off/armed/fired), `KEYS` (storage names), `read_idle()`, `read_tab_switch(tab_id)`, `read_all_tab_switch()`, `write_idle(phase)`, `write_tab_switch(tab_id, phase)` (writing `'off'` strips the entry), `clear_tab_switch(tab_id)`, multi-subscriber `on_change(fn)`, `_reset()`. Loaded in BOTH contexts. |
+| `src/automate/overlay.js` | `blsi.Automate.Overlay` | Viewport overlay primitive used by automate intent (parallel to stamp+CSS engine). `init()`, `show({mode, color, opacity, blur_radius})`, `update(opts)`, `hide()`, `isVisible()`, `destroy()`. Modes: `solid` / `frosted` / `color`. Loaded in CONTENT only. |
+| `src/automate/idle.js` | `blsi.Automate.Idle` | Background-only `chrome.idle.onStateChanged` listener. `init()`, `destroy()`, `setThreshold(seconds)` (clamped [15, 3600]), `getCurrentPhase()`. Threshold seeded from `automate.settings.idle.{value,unit}`; hot-updates on storage change. |
+| `src/automate/visibility.js` | `blsi.Automate.Visibility` | Per-tab Page Lifecycle observer (visibilitychange + focus + blur). `init({tab_id})`, `destroy()`, `getCurrentPhase()`. Only writes `'fired'` to State; `'armed'` strips the entry (D4: absence === armed/off). |
 | `src/main_world_bridge.js` | _(none — MAIN world)_ | No global; runs at `document_start` in page's MAIN world. Patches `navigator.mediaDevices.getDisplayMedia` (fires `'__blsi_screen_share'` on share start/stop) and `Element.prototype.attachShadow` (fires `'__blsi_shadow_attached'` on element for late shadow root discovery). No `chrome.*` access. |
 | `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()`, `whoAmI()`, `getTabId()` — isolated-world bridge; listens for `'__blsi_screen_share'` CustomEvents from MAIN world. On `init` fires `WHO_AM_I` round-trip so `Store.resolve(..., tab_id)` can identify the sharing tab. On share start opens port `'blsi-screen-share'` + sends `SCREEN_SHARE_STARTED`; on share end disconnects port + sends `SCREEN_SHARE_ENDED`. Background owns the session record (`blsi_screen_share`); content tabs subscribe via `chrome.storage.session.onChanged`. `SCREEN_SHARE_NOTIFY` broadcast is a UI ping for toast timing. |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
@@ -51,7 +60,7 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order fixed by `manifest.json`** — `main_world_bridge.js` runs first in MAIN world at `document_start`. Isolated world at `document_idle`: constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii_detector → fonts → core/engine_state → core/categories → core/css_manager → core/marker_engine → core/observer → core/target_engine → engine → auto_blur → screen_share → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
+**Load order fixed by `manifest.json`** — `main_world_bridge.js` runs first in MAIN world at `document_start`. Isolated world at `document_idle`: constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii/pii_state → pii/pii_checksums → pii/pii_pre_filter → pii/pii_country → pii/pii_suppressors → pii/pii_detectors → pii/pii → fonts → core/engine_state → core/categories → core/css_manager → core/marker_engine → core/observer → core/target_engine → engine → screen_share → automate/state → automate/overlay → automate/visibility → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -87,10 +96,11 @@ Settings use **snake_case** keys everywhere. No two-shape duality — same shape
                      // The popup blur-all toggle does NOT create site_rules entries —
                      // it writes to the global blur_all.status.
 }
-// Three session-storage keys live OUTSIDE blsi_model:
-//   chrome.storage.session['blsi_automate_blur']            — per-hostname { idle, tab_switch }
-//   chrome.storage.session['blsi_screen_share']             — single global record (see below)
-//   chrome.storage.session['blsi_automate_suppressed_tabs'] — number[] (per-tab silence-all)
+// Session-storage keys live OUTSIDE blsi_model:
+//   chrome.storage.session['blsi_automate_idle']                — 'active'|'idle'|'locked' (global; owned by automate/state.js)
+//   chrome.storage.session['blsi_automate_tab_switch_by_tab']   — { [tab_id]: 'fired' } (per-tab; owned by automate/state.js)
+//   chrome.storage.session['blsi_screen_share']                 — single global record (see below)
+//   chrome.storage.session['blsi_automate_suppressed_tabs']     — number[] (per-tab silence-all)
 ```
 
 **`pick_and_blur.items`** — hostname-keyed map storing all pick & blur items:
@@ -200,11 +210,16 @@ automate.settings = {
 
 Three independent session keys, all in **`chrome.storage.session`** (auto-cleared on browser close/crash). Owned and read separately to keep concerns from leaking across each other.
 
-**`blsi_automate_blur`** — hostname-keyed `{ idle, tab_switch }`. Per-hostname trigger state for the activity-driven automate features. Written by `auto_blur` callbacks in `content_script.js`. **No `screen_share` sub-key** — that lives in the global record below. `init_cache` strips legacy `screen_share` sub-keys (one-time migration).
+**`blsi_automate_idle`** — single global string: `'active' | 'idle' | 'locked'`. Mirrors the latest `chrome.idle.IdleState`. Written by `blsi.Automate.Idle` (background-only listener). Cleared on browser close.
+
+**`blsi_automate_tab_switch_by_tab`** — per-tab map `{ [tab_id]: 'fired' }`. Only `'fired'` is persisted; absence === `'off'` (=== `'armed'` for resolve purposes — D4). Written by `blsi.Automate.Visibility` (content-only, per-tab Page Lifecycle observer).
 
 ```js
-// chrome.storage.session['blsi_automate_blur']:
-{ 'gmail.com': { idle: true, tab_switch: false } }
+// chrome.storage.session['blsi_automate_idle']:
+'idle'
+
+// chrome.storage.session['blsi_automate_tab_switch_by_tab']:
+{ '184729322': 'fired' }
 ```
 
 **`blsi_screen_share`** — single global record describing the live screen-share session. Owned by `background.js`; `storage_model.js` mirrors it into `_screen_share_cache` for synchronous reads.
@@ -249,16 +264,19 @@ Automate triggers NEVER write `blur_all`. `onActive()` only clears idle/tab_swit
 - `screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }` (popup card label)
 - `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab` — booleans (Undo affordance)
 
-`blsi.Model` automate session APIs:
-- `get_automate_blur(hostname)` → `{ idle, tab_switch }` (synchronous)
-- `save_automate_blur(hostname, 'idle' | 'tab_switch', bool)` — `'screen_share'` rejected
-- `patch_automate_blur(hostname, patch)` — batch-write idle/tab_switch
-- `clear_automate_blur(hostname)`
+Idle + tab_switch session APIs live on `blsi.Automate.State`:
+- `read_idle()` → `'active' | 'idle' | 'locked'` (global)
+- `read_tab_switch(tab_id)` → `'off' | 'armed' | 'fired'` (per-tab; absence === armed/off)
+- `write_idle(phase)` (background-only writer in production)
+- `write_tab_switch(tab_id, phase)` / `clear_tab_switch(tab_id)` (per-tab)
+- `on_change(fn)` — multi-subscriber registry on the two keys above
+
+`blsi.Model` screen-share + suppression session APIs:
 - `get_screen_share_state()` → `{ active, sharing_tab_id, started_at, suppressed_sites }`
 - `set_screen_share_active(tabId)` / `set_screen_share_inactive()` — owned by `background.js`; popup/content read-only
 - `suppress_screen_share(scope, ctx)` / `unsuppress_screen_share(scope, ctx)` — `scope ∈ 'tab' | 'site_session' | 'feature'`
 - `get_suppressed_tabs()` / `add_suppressed_tab` / `remove_suppressed_tab` / `clear_suppressed_tabs`
-- `clear_host(hostname)` — also clears `automate_blur[hostname]`
+- `clear_host(hostname)` — clears pick-blur items only (idle/tab_switch are not per-host)
 
 ---
 
@@ -315,7 +333,7 @@ Sub-agents get CLAUDE.md loaded but task prompt overrides attention to rules. Fo
 
 ### Running tests
 ```bash
-npm run test:unit          # 792 unit tests, fast
+npm run test:unit          # 801 unit tests, fast
 npm test                   # + coverage (~91% line coverage on src/)
 ```
 
@@ -404,5 +422,8 @@ Docs are load-bearing references used by humans and Claude. Code changes → rel
 | Keyboard shortcuts don't fire when focus inside cross-origin iframe | Browser delivers keydown to focused frame; shortcut handler is main-frame only | Phase 2 |
 | Cross-origin iframes with strict `Referrer-Policy` may not blur on initial load | `document.referrer` empty → `_topHostname` starts empty → blur-all state unknown until postMessage from main frame arrives | Acceptable — resolves within milliseconds once main frame init completes |
 | SPA navigation inside iframes not tracked | `history.pushState` wrapping and popstate/hashchange listeners are main-frame only — URL rule overrides don't update if iframe does SPA navigation | Phase 2 |
-| Opening the extension popup briefly blurs the page when `automate.tab_switch` is on | `window.blur` fires when focus moves to the popup; auto_blur cannot detect own-extension focus from page context. 250 ms debounce filters short focus-pulls but the popup stays open longer. | Acceptable tradeoff — consistent with privacy intent (anyone shoulder-surfing during settings adjustment sees blurred content) |
+| Opening the extension popup briefly blurs the page when `automate.tab_switch` is on | `window.blur` fires when focus moves to the popup; the per-tab Visibility observer cannot detect own-extension focus from page context. | Acceptable tradeoff — consistent with privacy intent (anyone shoulder-surfing during settings adjustment sees blurred content). Future mitigation: background broadcasts a `popup-opened` flag to suppress the next `passive` for ~500ms. |
+| Extension cannot run on Chrome-restricted URLs (Chrome Web Store, `chrome://*`, `chrome-extension://*`, `about:`, `view-source:`, devtools, etc.) | Browser policy — `host_permissions: ["<all_urls>"]` does NOT grant injection on these URLs. Extensions are physically blocked at the platform level. | Mitigated — popup detects via `blsi.UrlMatcher.isRestrictedUrl(tab.url)` and renders a dedicated empty-state view; `background.js _reinjectAllTabs` skips these tabs |
+| MAIN-world bridge runs late on tabs already open at install/update time | `chrome.scripting.executeScript` cannot retroactively run at `document_start`; any `getDisplayMedia` / `attachShadow` already executed in those tabs goes un-hooked. Subsequent navigations get the static `document_start` injection correctly. | Acceptable — install-time recovery prioritises the common case (page idle waiting for blur to apply); resolves on next nav |
+| PII auto-detect cannot scan text rendered inside `<canvas>` | Canvas contents are a 2D bitmap drawn by JS — there are no DOM text nodes for `pii_detector`'s `TreeWalker(SHOW_TEXT)` to enumerate, and the browser blocks bitmap pixel extraction by design (DRM/privacy). OCR is not viable in-extension (size, perf, latency). | Fundamental — not fixable. Workaround: enable blur-all with the `media` category on, which blurs the entire `<canvas>` element via CSS `filter: blur()`. Pick-blur (selector-based) and screenshot capture continue to work on canvas. |
 ```

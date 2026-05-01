@@ -8,6 +8,8 @@ Coordinator IIFE — no window global, no public API. Owns all event wiring betw
 
 `DOMContentLoaded` → `init()` — async; calls `State.load()`, seeds i18n, renders initial state.
 
+**Restricted-URL guard:** After `chrome.tabs.query`, `init()` checks `blsi.UrlMatcher.isRestrictedUrl(tab.url)`. When `true` (Chrome Web Store, chrome://*, etc.), it calls `UI.showRestrictedView()` and returns early — `State.load`, hostname/URL seeding, render, and storage subscription are all skipped. The toggles cannot affect those tabs, so a dedicated empty state replaces the normal UI.
+
 ## Private Helpers
 
 ### `_activatePicker(mode: string)`

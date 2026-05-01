@@ -5,7 +5,7 @@
 `content_script.js` is the top-level orchestrator injected into every page (all frames, `run_at: document_idle`). It has no IIFE global of its own — it coordinates all `blsi.*` modules that were loaded before it by `manifest.json`. It owns the lifecycle: initialization, storage subscriptions, message routing, picker callbacks, shortcut dispatch, SPA URL change detection, and cross-frame postMessage protocol.
 
 - Not an IIFE with a return value. One immediately-invoked arrow function, no export.
-- Depends on: `blsi.BlurEngine`, `blsi.Model`, `blsi.SelectorUtils`, `blsi.Picker`, `blsi.Shortcuts`, `blsi.Reveal`, `blsi.Logger`, `blsi.Screenshot`, `blsi.SelectionBlur`, `blsi.AutoBlur`, `blsi.ScreenShare`, `blsi.PiiDetector`, `blsi.TabPrivacy`, `blsi.ContentI18n`, `blsi.Actions`.
+- Depends on: `blsi.Engine`, `blsi.Model`, `blsi.SelectorUtils`, `blsi.Picker`, `blsi.Shortcuts`, `blsi.Reveal`, `blsi.Logger`, `blsi.Screenshot`, `blsi.SelectionBlur`, `blsi.Automate.{State,Overlay,Visibility}`, `blsi.ScreenShare`, `blsi.PiiDetector`, `blsi.TabPrivacy`, `blsi.ContentI18n`, `blsi.Actions`.
 - All of the above are available synchronously because `manifest.json` load order guarantees them before this file.
 
 ---
@@ -15,22 +15,24 @@
 `init()` is called once, either immediately (if `document.readyState !== 'loading'`) or on `DOMContentLoaded`. Steps in order:
 
 1. Dispatch `'bl-si-init-start'` CustomEvent on `document` (anchors perf-test timers).
-2. `Store.init_cache()` — loads `blsi_model` from local storage and the three session-storage keys (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) into in-memory caches. Concurrently fires `blsi.ScreenShare.whoAmI()` so the resolve below can identify the sharing tab on initial load.
-3. `Store.resolve(_topHostname, location.href, _myTabId)` — resolves effective settings for the current URL + tab from the cache.
-4. `blsi.ContentI18n.init(resolved.language)` — initializes i18n strings (main frame only).
-5. If `IS_PWA`: call `_injectPwaPanel()`, store result in `_pwaPanelHost`.
-6. `chrome.runtime.onMessage.addListener(handleMessage)` — registers the message handler.
-7. `Reveal.init(...)` — registers reveal event listeners unconditionally (they early-return when disabled, but must be registered before enable/disable cycles).
-8. Register `contextmenu` listener to track `lastContextMenuTarget` (main frame only).
-9. If `resolved.enabled === false`: subscribe `Store.on_change(handleStorageChange)` and dispatch `'bl-si-ready'`; return early.
-10. `Engine.resetCounters()` — clears dynamic/sticky name counters before applying stored items.
-11. `applyState(resolved, null)` — applies full settings: shortcuts, picker, tab privacy, reveal, engine sync, AutoBlur, PII scan.
-12. Screen-share catch-up: if the resolved snapshot already carries `automate_blur_triggers.screen_share === true` (i.e. tab opened mid-share), shows the 3-action toast — no separate session-storage read; `Store.resolve()` already factors in the global session record.
-13. `_checkPwaHint()` — shows one-time PWA tip (IS_PWA only).
-14. `Store.on_change(handleStorageChange)` — subscribes to storage changes AFTER initial restore to avoid cold-start race conditions.
-15. If not main frame: register `window.message` listener to receive `BLSI_SETTINGS_CHANGED` from parent frame.
-16. If main frame: `_broadcastToFrames()` — send `topHostname` to all child iframes.
-17. Dispatch `'bl-si-ready'` CustomEvent on `document`.
+2. `blsi.Fonts.loadFonts()` — fire-and-forget. Registers the censored / starred WOFF2 fonts in `document.fonts` via the FontFace API so `font-family` rules render correctly even when page CSP forbids `chrome-extension://` in `font-src`. Idempotent.
+3. `Store.init_cache()` — loads `blsi_model` from local storage and the screen-share + suppressed-tabs session keys into in-memory caches. Idle + tab_switch session caches live in `blsi.Automate.State` and self-hydrate. Concurrently fires `blsi.ScreenShare.whoAmI()` so the resolve below can identify the sharing tab on initial load.
+4. `Store.resolve(_topHostname, location.href, _myTabId)` — resolves effective settings for the current URL + tab from the cache.
+5. `blsi.ContentI18n.init(resolved.language)` — initializes i18n strings (main frame only).
+6. If `IS_PWA`: call `_injectPwaPanel()`, store result in `_pwaPanelHost`.
+7. `chrome.runtime.onMessage.addListener(handleMessage)` — registers the message handler.
+8. `Reveal.init(...)` — registers reveal event listeners unconditionally (they early-return when disabled, but must be registered before enable/disable cycles).
+9. Register `contextmenu` listener to track `lastContextMenuTarget` (main frame only).
+10. If `resolved.enabled === false`: subscribe `Store.on_change(handleStorageChange)` and dispatch `'bl-si-ready'`; return early.
+11. `Engine.resetCounters()` — clears dynamic/sticky name counters before applying stored items.
+12. `Automate.Overlay.init()` (main frame only, idempotent) — readies the viewport overlay primitive used by automate intent. Mounts only on first `show()`.
+13. `applyState(resolved, null)` — applies full settings: shortcuts, picker, tab privacy, reveal, engine sync, automate observers (`Automate.Visibility.init({tab_id})` / `ScreenShare.init`), PII scan.
+13. Screen-share catch-up: if the resolved snapshot already carries `automate_blur_triggers.screen_share === true` (i.e. tab opened mid-share), shows the 3-action toast — no separate session-storage read; `Store.resolve()` already factors in the global session record.
+14. `_checkPwaHint()` — shows one-time PWA tip (IS_PWA only).
+15. `Store.on_change(handleStorageChange)` — subscribes to storage changes AFTER initial restore to avoid cold-start race conditions.
+16. If not main frame: register `window.message` listener to receive `BLSI_SETTINGS_CHANGED` from parent frame.
+17. If main frame: `_broadcastToFrames()` — send `topHostname` to all child iframes.
+18. Dispatch `'bl-si-ready'` CustomEvent on `document`.
 
 ---
 

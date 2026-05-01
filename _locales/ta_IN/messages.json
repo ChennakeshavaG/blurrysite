@@ -533,6 +533,12 @@
   "off_state_hint": {
     "message": "எல்லா தளங்களிலும் ப்ளர் இடைநிறுத்தப்பட்டுள்ளது"
   },
+  "restricted_state_title": {
+    "message": "இந்தப் பக்கம் கட்டுப்படுத்தப்பட்டுள்ளது"
+  },
+  "restricted_state_message": {
+    "message": "Chrome வலைக் கடை, புதிய தாவல் பக்கம் மற்றும் chrome:// பக்கங்களில் நீட்டிப்புகளை Chrome தடை செய்கிறது. வழக்கமான வலைத்தளத்தில் Blurry Site-ஐ முயற்சிக்கவும்."
+  },
   "power_turn_on": {
     "message": "இயக்கு"
   },

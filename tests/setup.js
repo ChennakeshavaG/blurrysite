@@ -101,6 +101,14 @@ global.chrome = {
     setBadgeText: jest.fn(),
     setBadgeBackgroundColor: jest.fn(),
   },
+  idle: {
+    setDetectionInterval: jest.fn(),
+    queryState: jest.fn((_threshold, cb) => { if (cb) cb('active'); }),
+    onStateChanged: {
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+    },
+  },
 };
 
 // ─── BlurrySitePopupShared stub ───────────────────────────────────────────────

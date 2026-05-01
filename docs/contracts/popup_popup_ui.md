@@ -113,9 +113,23 @@ A single element may carry any combination of the three (e.g. an icon button wit
 
 **Returns:** void.
 
-**Side effects:** Toggles `hidden` on main, off-state, and every sub-view in `SUB_VIEWS`. Adds/removes `bl-has-subpage` on `document.body`.
+**Side effects:** Toggles `hidden` on main, off-state, every sub-view in `SUB_VIEWS`, and `#bl-view-restricted` (always re-hidden during ordinary nav so a stale restricted state never bleeds through). Adds/removes `bl-has-subpage` on `document.body`.
 
 **Constants:** `SUB_VIEWS = ['bl-view-htb-modify', 'bl-view-automate-modify', 'bl-view-shortcuts', 'bl-view-site-rules', 'bl-view-general']`. Adding a sub-page requires extending this array.
+
+---
+
+### showRestrictedView()
+
+**What:** Swaps the popup into the "page restricted" empty state used when the active tab's URL is one Chrome blocks all extensions from (Web Store, chrome://, etc.). Mutually exclusive with main / off / sub-views; intended to be called once during popup boot only — normal navigation never targets it.
+
+**Params:** none.
+
+**Returns:** void.
+
+**Side effects:** Hides `#bl-view-main`, `#bl-view-off`, and every sub-view in `SUB_VIEWS`; un-hides `#bl-view-restricted`; clears `bl-has-subpage` from `document.body`.
+
+**Edge cases:** Each `getElementById` is guarded — missing nodes are skipped silently.
 
 ---
 

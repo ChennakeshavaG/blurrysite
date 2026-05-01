@@ -138,6 +138,32 @@
 .bl-si-toolbar .bl-si-toolbar-drag { cursor: grab !important; }
 
 /**
+ * Iframes during picker mode: make pointer events fall through to the main
+ * document so sticky zone drawing works on iframe-heavy pages (the iframe
+ * would otherwise capture mousedown/move and the picker's main-frame
+ * capture-phase listeners would never see them — drawing freezes and the
+ * browser starts a text selection inside the iframe instead).
+ *
+ * Side effect: iframe contents are non-interactive while the picker is open,
+ * which matches the picker's "select something" intent.
+ */
+.bl-si-picker-active iframe {
+  pointer-events: none !important;
+}
+
+/**
+ * Suppress text selection during picker drag — preventDefault on mousedown
+ * does not fire when the original target was inside an iframe (its document
+ * already started the selection), and on some pages the selection still
+ * lingers across the drag. Belt-and-suspenders alongside the iframe rule.
+ */
+.bl-si-picker-active,
+.bl-si-picker-active body {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/**
  * Hover highlight: shown on the element currently under the cursor while the
  * picker is active.
  */

@@ -39,10 +39,19 @@ A hook fires on every Edit/Write to these files and reminds you of the relevant 
 | `src/action_registry.js` | `docs/contracts/action_registry.md` |
 | `src/reveal_controller.js` | `docs/contracts/reveal_controller.md` |
 | `src/picker.js` | `docs/contracts/picker.md` |
-| `src/pii_detector.js` | `docs/contracts/pii_detector.md` |
+| `src/pii/pii_state.js` | `docs/contracts/pii/pii_state.md` |
+| `src/pii/pii_checksums.js` | `docs/contracts/pii/pii_checksums.md` |
+| `src/pii/pii_pre_filter.js` | `docs/contracts/pii/pii_pre_filter.md` |
+| `src/pii/pii_country.js` | `docs/contracts/pii/pii_country.md` |
+| `src/pii/pii_suppressors.js` | `docs/contracts/pii/pii_suppressors.md` |
+| `src/pii/pii_detectors.js` | `docs/contracts/pii/pii_detectors.md` |
+| `src/pii/pii.js` | `docs/contracts/pii/pii.md` |
 | `src/content_i18n.js` | `docs/contracts/content_i18n.md` |
 | `src/logger.js` | `docs/contracts/logger.md` |
-| `src/auto_blur.js` | `docs/contracts/auto_blur.md` |
+| `src/automate/state.js` | `docs/contracts/automate/state.md` |
+| `src/automate/overlay.js` | `docs/contracts/automate/overlay.md` |
+| `src/automate/idle.js` | `docs/contracts/automate/idle.md` |
+| `src/automate/visibility.js` | `docs/contracts/automate/visibility.md` |
 | `src/tab_privacy.js` | `docs/contracts/tab_privacy.md` |
 | `src/fonts.js` | `docs/contracts/fonts.md` |
 | `src/main_world_bridge.js` | `docs/contracts/main_world_bridge.md` |
@@ -53,6 +62,7 @@ A hook fires on every Edit/Write to these files and reminds you of the relevant 
 | `content_script.js` | `docs/contracts/content_script.md` |
 | `tests/unit/<module>.test.js` | `docs/contracts/<module>.tests.md` |
 | `tests/unit/core/<module>.test.js` | `docs/contracts/core/<module>.tests.md` |
+| `tests/unit/pii/<module>.test.js` | `docs/contracts/pii/<module>.tests.md` |
 
 ## Rules
 

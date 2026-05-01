@@ -453,6 +453,56 @@ describe('BlurrySite constants', () => {
       expect(PB.validate_model(m).automate.settings.idle.value).toBe(5);
     });
 
+    // chrome.idle.setDetectionInterval has a 15s floor — sec values below 15
+    // would silently round up. validate_model surfaces the clamp so the popup
+    // shows the same value the runtime actually uses.
+    test('automate.idle: sec value 1 clamped up to 15', () => {
+      const m = PB.build_default_model();
+      m.automate.settings.idle = { value: 1, unit: 'sec', enabled: true };
+      const r = PB.validate_model(m).automate.settings.idle;
+      expect(r.value).toBe(15);
+      expect(r.unit).toBe('sec');
+    });
+
+    test('automate.idle: sec value 14 clamped up to 15', () => {
+      const m = PB.build_default_model();
+      m.automate.settings.idle = { value: 14, unit: 'sec', enabled: true };
+      expect(PB.validate_model(m).automate.settings.idle.value).toBe(15);
+    });
+
+    test('automate.idle: sec value 15 untouched (boundary)', () => {
+      const m = PB.build_default_model();
+      m.automate.settings.idle = { value: 15, unit: 'sec', enabled: true };
+      expect(PB.validate_model(m).automate.settings.idle.value).toBe(15);
+    });
+
+    test('automate.idle: sec value 60 untouched', () => {
+      const m = PB.build_default_model();
+      m.automate.settings.idle = { value: 60, unit: 'sec', enabled: true };
+      expect(PB.validate_model(m).automate.settings.idle.value).toBe(60);
+    });
+
+    test('automate.idle: min unit not clamped (1 min = 60s ≥ 15s)', () => {
+      const m = PB.build_default_model();
+      m.automate.settings.idle = { value: 1, unit: 'min', enabled: true };
+      const r = PB.validate_model(m).automate.settings.idle;
+      expect(r.value).toBe(1);
+      expect(r.unit).toBe('min');
+    });
+
+    test('automate.idle: site_rule snapshot also clamps sec value <15', () => {
+      const m = PB.build_default_model();
+      m.site_rules = [{
+        hostname_value: 'example.com',
+        hostname_type: 'exact',
+        snapshot: {
+          automate: { settings: { idle: { value: 5, unit: 'sec', enabled: true } } },
+        },
+      }];
+      const r = PB.validate_model(m);
+      expect(r.site_rules[0].snapshot.automate.settings.idle.value).toBe(15);
+    });
+
     test('shortcuts: rejects empty binding array', () => {
       const m = PB.build_default_model();
       m.shortcuts['toggle-blur-all'] = { binding: [] };

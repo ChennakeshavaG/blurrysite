@@ -21,6 +21,7 @@ const path = require('path');
 
 const MODULE_PATH     = path.resolve(__dirname, '../../src/storage_model.js');
 const URL_MATCHER_PATH = path.resolve(__dirname, '../../src/url_matcher.js');
+const STATE_PATH       = path.resolve(__dirname, '../../src/automate/state.js');
 
 function loadStorageModel() {
   if (blsi.Model) return;
@@ -28,6 +29,8 @@ function loadStorageModel() {
   if (!blsi.UrlMatcher && fs.existsSync(URL_MATCHER_PATH)) {
     require(URL_MATCHER_PATH);
   }
+  // resolve() reads idle + tab_switch via blsi.Automate.State at runtime.
+  if (fs.existsSync(STATE_PATH)) require(STATE_PATH);
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -55,10 +58,6 @@ function buildStubSource() {
       clear_host:             jest.fn(),
       get_rules:              jest.fn(() => []),
       save_rules:             jest.fn(),
-      save_automate_blur:     jest.fn(),
-      patch_automate_blur:    jest.fn(),
-      clear_automate_blur:    jest.fn(),
-      get_automate_blur:      jest.fn(() => ({ idle: false, tab_switch: false })),
       get_screen_share_state:    jest.fn(() => ({ active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [] })),
       set_screen_share_active:   jest.fn(),
       set_screen_share_inactive: jest.fn(),
@@ -753,179 +752,146 @@ describe('on_change', () => {
   });
 });
 
-// ── automate_blur CRUD (session storage) ─────────────────────────────────────
-// automate_blur now lives in chrome.storage.session (blsi_automate_blur key)
-// rather than inside blsi_model. Cleared on browser close — no stale triggers.
-// Access via blsi.Model.get_automate_blur(hostname) instead of model.automate_blur.
+// ── automate_blur (resolve fold via blsi.Automate.State) ────────────────────
+// Idle + tab_switch state lives in chrome.storage.session under keys owned by
+// blsi.Automate.State. resolve() reads them at call time. Per-trigger CRUD
+// belongs to State + the observer modules — see tests/unit/automate/*.
 
 describe('automate_blur', () => {
   beforeEach(async () => {
     mockSet();
     blsi.Model._reset_cache();
+    if (blsi.Automate && blsi.Automate.State) blsi.Automate.State._reset();
     const m = blsi.build_default_model();
+    // Both triggers feature-on so resolve fires when phase reports a fired state.
+    m.automate.settings.idle.enabled = true;
+    m.automate.settings.tab_switch.enabled = true;
     mockGet(m);
     await blsi.Model.init_cache();
   });
 
-  test('save_automate_blur sets a trigger for a hostname', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(true);
-    expect(entry.tab_switch).toBe(false);
-  });
-
-  test('save_automate_blur rejects unknown trigger', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'bad_trigger', true);
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(false);
-    expect(entry.tab_switch).toBe(false);
-  });
-
-  test('save_automate_blur rejects screen_share (now a global record)', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'screen_share', true);
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(false);
-    expect(entry.tab_switch).toBe(false);
-    // Screen-share state lives in the screen_share session record, not here.
-    expect(entry.screen_share).toBeUndefined();
-  });
-
-  test('save_automate_blur rejects invalid hostname', async () => {
-    const before = JSON.stringify(blsi.Model.get_automate_blur('__proto__'));
-    await blsi.Model.save_automate_blur('__proto__', 'idle', true);
-    expect(JSON.stringify(blsi.Model.get_automate_blur('__proto__'))).toBe(before);
-  });
-
-  test('patch_automate_blur updates multiple triggers atomically', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    await blsi.Model.patch_automate_blur('example.com', { idle: false, tab_switch: true });
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(false);
-    expect(entry.tab_switch).toBe(true);
-  });
-
-  test('clear_automate_blur removes the hostname entry', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    await blsi.Model.clear_automate_blur('example.com');
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(false);
-    expect(entry.tab_switch).toBe(false);
-  });
-
-  test('resolve includes automate_blur_active and automate_blur_triggers', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
+  test('idle phase "idle" + feature-on → automate_blur_active + idle trigger', async () => {
+    await blsi.Automate.State.write_idle('idle');
+    const resolved = blsi.Model.resolve('example.com', 'https://example.com/', 1);
     expect(resolved.automate_blur_active).toBe(true);
     expect(resolved.automate_blur_triggers.idle).toBe(true);
     expect(resolved.automate_blur_triggers.tab_switch).toBe(false);
     expect(resolved.automate_blur_triggers.screen_share).toBe(false);
   });
 
-  test('resolve: engage is true when only automate fires (manual = false)', async () => {
-    // Screen-share trigger comes from the global record, not per-hostname automate_blur.
-    // The feature must be enabled in model.automate.settings.screen_share for ss to fire.
-    await blsi.Model.patch_section('automate', { settings: { screen_share: { enabled: true } } });
-    await blsi.Model.set_screen_share_active(99);
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(resolved.engage).toBe(true);
-    expect(resolved.automate_blur_only).toBe(true);
-    expect(resolved.automate_blur_skipped).toBe(false);
+  test('idle phase "locked" also flips active', async () => {
+    await blsi.Automate.State.write_idle('locked');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_active).toBe(true);
+    expect(r.automate_blur_triggers.idle).toBe(true);
   });
 
-  test('resolve: automate_blur_only resets all blur-relevant keys to defaults from global settings', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    // Set user custom global settings that automate should NOT inherit
+  test('idle phase "active" → no automate firing', async () => {
+    await blsi.Automate.State.write_idle('active');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_active).toBe(false);
+    expect(r.automate_blur_triggers.idle).toBe(false);
+  });
+
+  test('idle feature OFF: phase "idle" does NOT flip active', async () => {
+    await blsi.Model.patch_section('automate', { settings: { idle: { enabled: false } } });
+    await blsi.Automate.State.write_idle('idle');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_active).toBe(false);
+  });
+
+  test('tab_switch fired (per-tab) + feature-on → tab_switch trigger', async () => {
+    await blsi.Automate.State.write_tab_switch(7, 'fired');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 7);
+    expect(r.automate_blur_active).toBe(true);
+    expect(r.automate_blur_triggers.tab_switch).toBe(true);
+    expect(r.automate_blur_triggers.idle).toBe(false);
+  });
+
+  test('tab_switch fired on a different tab does NOT affect this tab', async () => {
+    await blsi.Automate.State.write_tab_switch(7, 'fired');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 99);
+    expect(r.automate_blur_active).toBe(false);
+  });
+
+  test('tab_switch feature OFF: fired phase does NOT flip active', async () => {
+    await blsi.Model.patch_section('automate', { settings: { tab_switch: { enabled: false } } });
+    await blsi.Automate.State.write_tab_switch(7, 'fired');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 7);
+    expect(r.automate_blur_active).toBe(false);
+  });
+
+  test('per-tab suppression silences automate triggers for that tab', async () => {
+    await blsi.Automate.State.write_idle('idle');
+    await blsi.Model.add_suppressed_tab(7);
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 7);
+    expect(r.automate_blur_active).toBe(false);
+  });
+
+  test('engage is true when only automate fires (manual = false)', async () => {
+    await blsi.Automate.State.write_idle('idle');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.engage).toBe(true);
+    expect(r.automate_blur_only).toBe(true);
+    expect(r.automate_blur_skipped).toBe(false);
+  });
+
+  test('automate_blur_only resets blur-relevant keys to DEFAULT_MODEL', async () => {
+    await blsi.Automate.State.write_idle('idle');
     await blsi.Model.save_settings({ blur_radius: 30, thorough_blur: true, reveal_mode: 'none', transition_duration: 50, redaction_color: '#ff0000', highlight_color: '#0000ff' });
     await blsi.Model.patch_section('blur_all', { settings: { blur_mode: 'frosted', blur_categories: { text: false, media: false, form: true, table: false, structure: false } } });
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.automate_blur_only).toBe(true);
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_only).toBe(true);
     const ds  = blsi.DEFAULT_MODEL.global_default_settings;
     const dbs = blsi.DEFAULT_MODEL.blur_all.settings;
-    expect(resolved.blur_mode).toBe(dbs.blur_mode);
-    expect(resolved.blur_categories).toEqual(dbs.blur_categories);
-    expect(resolved.blur_radius).toBe(ds.blur_radius);
-    expect(resolved.thorough_blur).toBe(ds.thorough_blur);
-    expect(resolved.reveal_mode).toBe(ds.reveal_mode);
-    expect(resolved.transition_duration).toBe(ds.transition_duration);
-    expect(resolved.redaction_color).toBe(ds.redaction_color);
-    expect(resolved.highlight_color).toBe(ds.highlight_color);
+    expect(r.blur_mode).toBe(dbs.blur_mode);
+    expect(r.blur_categories).toEqual(dbs.blur_categories);
+    expect(r.blur_radius).toBe(ds.blur_radius);
+    expect(r.thorough_blur).toBe(ds.thorough_blur);
+    expect(r.reveal_mode).toBe(ds.reveal_mode);
+    expect(r.transition_duration).toBe(ds.transition_duration);
+    expect(r.redaction_color).toBe(ds.redaction_color);
+    expect(r.highlight_color).toBe(ds.highlight_color);
   });
 
-  test('resolve: automate_blur_skipped = true when blur_all is already enabled', async () => {
-    await blsi.Model.save_blur_state(true); // manual blur on (global)
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.automate_blur_skipped).toBe(true);
-    expect(resolved.automate_blur_only).toBe(false);
-    expect(resolved.engage).toBe(true);
+  test('automate_blur_skipped = true when blur_all already on', async () => {
+    await blsi.Model.save_blur_state(true);
+    await blsi.Automate.State.write_idle('idle');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_skipped).toBe(true);
+    expect(r.automate_blur_only).toBe(false);
+    expect(r.engage).toBe(true);
   });
 
-  test('resolve: automate_blur_skipped = true when pick_and_blur is enabled', async () => {
+  test('automate_blur_skipped = true when pick_and_blur enabled', async () => {
     const m = blsi.build_default_model();
     m.pick_and_blur.status = true;
-    m.automate.settings.screen_share.enabled = true; // feature on so ss can fire
+    m.automate.settings.screen_share.enabled = true;
     blsi.Model._reset_cache();
     mockGet(m);
     await blsi.Model.init_cache();
 
-    // Screen-share fires via the global session record.
     await blsi.Model.set_screen_share_active(99);
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(resolved.automate_blur_skipped).toBe(true);
-    expect(resolved.automate_blur_skip_reason).toBe('pick_blur');
-    expect(resolved.automate_blur_only).toBe(false);
-    expect(resolved.engage).toBe(false); // blur-all stays off; pick-blur handles it
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_skipped).toBe(true);
+    expect(r.automate_blur_skip_reason).toBe('pick_blur');
+    expect(r.automate_blur_only).toBe(false);
+    expect(r.engage).toBe(false);
   });
 
-  test('resolve: automate_blur_only and automate_blur_skipped are false when automate not firing', async () => {
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.automate_blur_only).toBe(false);
-    expect(resolved.automate_blur_skipped).toBe(false);
+  test('automate_blur_only and skipped both false when nothing firing', () => {
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.automate_blur_only).toBe(false);
+    expect(r.automate_blur_skipped).toBe(false);
   });
 
-  test('resolve: manual blur preserved after automate cleared', async () => {
+  test('manual blur preserved after automate clears', async () => {
     await blsi.Model.save_blur_state(true);
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    await blsi.Model.patch_automate_blur('example.com', { idle: false });
-    const resolved = blsi.Model.resolve('example.com', 'https://example.com/');
-    expect(resolved.engage).toBe(true); // global manual blur survives
+    await blsi.Automate.State.write_idle('idle');
+    await blsi.Automate.State.write_idle('active');
+    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    expect(r.engage).toBe(true);
   });
-
-  test('clear_host also clears automate_blur for that hostname', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    await blsi.Model.clear_host('example.com');
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(false);
-  });
-
-  test('save_automate_blur is a no-op when value already matches cache', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    chrome.storage.session.set.mockClear();
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    expect(chrome.storage.session.set).not.toHaveBeenCalled();
-  });
-
-  test('save_automate_blur writes when value flips back', async () => {
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
-    chrome.storage.session.set.mockClear();
-    await blsi.Model.save_automate_blur('example.com', 'idle', false);
-    expect(chrome.storage.session.set).toHaveBeenCalledTimes(1);
-  });
-
-  test('patch_automate_blur is a no-op when patch results in identical entry', async () => {
-    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: false });
-    chrome.storage.session.set.mockClear();
-    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: false });
-    expect(chrome.storage.session.set).not.toHaveBeenCalled();
-  });
-
-  test('patch_automate_blur writes when at least one trigger flips', async () => {
-    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: false });
-    chrome.storage.session.set.mockClear();
-    await blsi.Model.patch_automate_blur('example.com', { idle: true, tab_switch: true });
-    expect(chrome.storage.session.set).toHaveBeenCalledTimes(1);
-  });
-
 });
 
 // ── screen_share session record + suppression ───────────────────────────────
@@ -990,8 +956,10 @@ describe('screen_share session record', () => {
   });
 
   test('suppress_screen_share("tab") silences ALL automate triggers for that tab', async () => {
+    // Need idle feature on so the idle phase actually flips active in resolve.
+    await blsi.Model.patch_section('automate', { settings: { idle: { enabled: true } } });
     await blsi.Model.set_screen_share_active(7);
-    await blsi.Model.save_automate_blur('example.com', 'idle', true);
+    if (blsi.Automate && blsi.Automate.State) await blsi.Automate.State.write_idle('idle');
     await blsi.Model.suppress_screen_share('tab', { tab_id: 8 });
     const me = blsi.Model.resolve('example.com', 'https://example.com/', 8);
     expect(me.automate_blur_triggers.screen_share).toBe(false);
@@ -1041,27 +1009,6 @@ describe('screen_share session record', () => {
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 8);
     expect(r.automate_blur_skipped).toBe(true);
     expect(r.automate_blur_skip_reason).toBe('site_rule');
-  });
-});
-
-// ── automate_blur shape migration (legacy screen_share sub-key strip) ────────
-describe('automate_blur shape migration', () => {
-  test('init_cache strips legacy screen_share sub-key from existing session entries', async () => {
-    mockSet();
-    blsi.Model._reset_cache();
-    const m = blsi.build_default_model();
-    mockGet(m);
-    // Seed legacy shape directly into the session mock.
-    const legacy = { 'example.com': { idle: true, tab_switch: false, screen_share: true } };
-    chrome.storage.session.get.mockImplementation((key, cb) => {
-      if (key === 'blsi_automate_blur') return cb({ blsi_automate_blur: legacy });
-      cb({});
-    });
-    await blsi.Model.init_cache();
-    const entry = blsi.Model.get_automate_blur('example.com');
-    expect(entry.idle).toBe(true);
-    expect(entry.tab_switch).toBe(false);
-    expect(entry).not.toHaveProperty('screen_share');
   });
 });
 

@@ -17,7 +17,6 @@ const StorageModel = (() => {
   "use strict";
 
   const STORAGE_KEY = "blsi_model";
-  const AUTOMATE_SESSION_KEY = "blsi_automate_blur";
   const SCREEN_SHARE_SESSION_KEY = "blsi_screen_share";
   const SUPPRESSED_TABS_SESSION_KEY = "blsi_automate_suppressed_tabs";
   const ITEM_LIMIT = 10;
@@ -34,10 +33,13 @@ const StorageModel = (() => {
 
   // ── Private state ──────────────────────────────────────────────────────────
   var _cache = null; // null = not yet initialised
-  var _automate_cache = {}; // mirrors chrome.storage.session blsi_automate_blur — { idle, tab_switch } only
   var _screen_share_cache = _default_screen_share_state();
   var _suppressed_tabs_cache = []; // array of tab ids — silences ALL automate triggers per tab
   var _on_change = null; // function(newModel, oldModel) | null
+
+  // Idle (global) + tab_switch (per-tab) live in chrome.storage.session under
+  // keys owned by blsi.Automate.State. We don't mirror them here — resolve()
+  // reads them at call-time from State.read_idle() / read_tab_switch(tab_id).
 
   // ── Storage I/O ────────────────────────────────────────────────────────────
   function _storage_get() {
@@ -131,17 +133,6 @@ const StorageModel = (() => {
     }
   }
 
-  // Writes automate session data; rolls back _automate_cache on failure.
-  async function _session_write_automate(data) {
-    var prev = _automate_cache;
-    try {
-      await _session_set_key(AUTOMATE_SESSION_KEY, data);
-    } catch (e) {
-      _automate_cache = prev;
-      console.warn("[blsi] session write failed:", e.message);
-    }
-  }
-
   async function _session_write_screen_share(data) {
     var prev = _screen_share_cache;
     try {
@@ -160,34 +151,6 @@ const StorageModel = (() => {
       _suppressed_tabs_cache = prev;
       console.warn("[blsi] suppressed-tabs session write failed:", e.message);
     }
-  }
-
-  function _normalize_automate_entry(raw) {
-    var src = raw && typeof raw === "object" ? raw : {};
-    // Strip legacy `screen_share` sub-key — screen-share state lives in
-    // SCREEN_SHARE_SESSION_KEY now. Preserve only idle + tab_switch.
-    return { idle: !!src.idle, tab_switch: !!src.tab_switch };
-  }
-
-  function _normalize_automate_map(raw) {
-    var src = raw && typeof raw === "object" ? raw : {};
-    var out = {};
-    var dirty = false;
-    for (var host in src) {
-      if (!Object.prototype.hasOwnProperty.call(src, host)) continue;
-      var entry = src[host];
-      var norm = _normalize_automate_entry(entry);
-      // Drop entries that became empty after stripping screen_share.
-      if (!norm.idle && !norm.tab_switch) { dirty = true; continue; }
-      // Detect any shape change (extra keys, screen_share sub-key, etc.).
-      if (entry && (entry.screen_share !== undefined ||
-          Object.keys(entry).length !== 2 ||
-          entry.idle !== norm.idle || entry.tab_switch !== norm.tab_switch)) {
-        dirty = true;
-      }
-      out[host] = norm;
-    }
-    return { map: out, dirty: dirty };
   }
 
   function _normalize_screen_share(raw) {
@@ -219,12 +182,12 @@ const StorageModel = (() => {
 
     if (area === "session") {
       var fired = false;
-      if (AUTOMATE_SESSION_KEY in changes) {
-        var na = _normalize_automate_map(changes[AUTOMATE_SESSION_KEY].newValue || {}).map;
-        if (!_deep_equal(_automate_cache, na)) {
-          _automate_cache = na;
-          fired = true;
-        }
+      // Idle + tab_switch are owned by blsi.Automate.State — that module keeps
+      // its own caches in sync. We re-fire on_change so content_script
+      // re-resolves whenever those keys change.
+      var State = (typeof blsi !== "undefined" && blsi.Automate && blsi.Automate.State) || null;
+      if (State && (State.KEYS.idle in changes || State.KEYS.tab_switch_by_tab in changes)) {
+        fired = true;
       }
       if (SCREEN_SHARE_SESSION_KEY in changes) {
         var nss = _normalize_screen_share(changes[SCREEN_SHARE_SESSION_KEY].newValue || _default_screen_share_state());
@@ -254,13 +217,6 @@ const StorageModel = (() => {
       if (!_deep_equal(raw, _cache)) await _write(_cache); // migration write
     } else {
       await _write(blsi.build_default_model()); // seed write
-    }
-    var raw_automate = await _session_get_key(AUTOMATE_SESSION_KEY, {});
-    var norm_automate = _normalize_automate_map(raw_automate);
-    _automate_cache = norm_automate.map;
-    if (norm_automate.dirty) {
-      // One-time migration write: strip legacy `screen_share` sub-keys + empty entries.
-      await _session_write_automate(_automate_cache);
     }
     _screen_share_cache = _normalize_screen_share(
       await _session_get_key(SCREEN_SHARE_SESSION_KEY, _default_screen_share_state())
@@ -667,13 +623,21 @@ const StorageModel = (() => {
       }
     }
 
-    // ── 9. automate active state (session cache) ──────────────────────────
-    var automate_entry = (_automate_cache || {})[hostname] || {};
+    // ── 9. automate active state (session storage via blsi.Automate.State) ─
     var has_tab_id = typeof tab_id === "number" && Number.isFinite(tab_id);
     var tab_suppressed = has_tab_id && _suppressed_tabs_cache.indexOf(tab_id) >= 0;
 
-    var idle_raw = !!automate_entry.idle;
-    var tab_switch_raw = !!automate_entry.tab_switch;
+    var State = (typeof blsi !== "undefined" && blsi.Automate && blsi.Automate.State) || null;
+    var PH = State ? State.PHASES : null;
+    // idle is global. Phase 'idle'|'locked' = OS reports user away. Gate on
+    // resolved.automate_idle.enabled — listener runs regardless of feature on/off.
+    var idle_phase = State ? State.read_idle() : "active";
+    var idle_feature_on = !!(resolved.automate_idle && resolved.automate_idle.enabled);
+    var idle_raw = idle_feature_on && PH && (idle_phase === PH.idle.idle || idle_phase === PH.idle.locked);
+    // tab_switch is per-tab. 'fired' = page hidden or window unfocused.
+    var ts_phase = (State && has_tab_id) ? State.read_tab_switch(tab_id) : "off";
+    var ts_feature_on = !!(resolved.automate_tab_switch && resolved.automate_tab_switch.enabled);
+    var tab_switch_raw = ts_feature_on && PH && ts_phase === PH.tab_switch.fired;
 
     // Screen-share: derived from single global record + suppression maps.
     var ss = _screen_share_cache || _default_screen_share_state();
@@ -844,53 +808,6 @@ const StorageModel = (() => {
     await _write(Object.assign({}, current, {
       pick_and_blur: Object.assign({}, current.pick_and_blur, { items: pb_items }),
     }));
-    await clear_automate_blur(hostname);
-  }
-
-  // ── Automate blur ──────────────────────────────────────────────────────────
-  // Hostname-keyed { idle, tab_switch } only. Screen-share state lives in
-  // SCREEN_SHARE_SESSION_KEY (single global record) — see methods below.
-
-  async function save_automate_blur(hostname, trigger, is_active) {
-    if (!_is_valid_hostname(hostname)) return;
-    var valid = { idle: true, tab_switch: true };
-    if (!valid[trigger]) return;
-    var existing = Object.assign({ idle: false, tab_switch: false }, (_automate_cache || {})[hostname] || {});
-    if (existing[trigger] === !!is_active) return;
-    var ab = Object.assign({}, _automate_cache || {});
-    var entry = Object.assign({}, existing);
-    entry[trigger] = !!is_active;
-    ab[hostname] = entry;
-    _automate_cache = ab; // update in-memory cache immediately (self-echo guard in onChanged)
-    await _session_write_automate(ab);
-  }
-
-  async function patch_automate_blur(hostname, patch) {
-    if (!_is_valid_hostname(hostname)) return;
-    var existing = Object.assign({ idle: false, tab_switch: false }, (_automate_cache || {})[hostname] || {});
-    var next = Object.assign({}, existing);
-    var valid = { idle: true, tab_switch: true };
-    for (var k in patch) {
-      if (valid[k]) next[k] = !!patch[k];
-    }
-    if (next.idle === existing.idle && next.tab_switch === existing.tab_switch) return;
-    var ab = Object.assign({}, _automate_cache || {});
-    ab[hostname] = next;
-    _automate_cache = ab;
-    await _session_write_automate(ab);
-  }
-
-  async function clear_automate_blur(hostname) {
-    if (!_is_valid_hostname(hostname)) return;
-    var ab = Object.assign({}, _automate_cache || {});
-    delete ab[hostname];
-    _automate_cache = ab;
-    await _session_write_automate(ab);
-  }
-
-  function get_automate_blur(hostname) {
-    var entry = (_automate_cache || {})[hostname] || {};
-    return { idle: !!entry.idle, tab_switch: !!entry.tab_switch };
   }
 
   // ── Screen-share session state (single global record) ─────────────────────
@@ -1059,7 +976,6 @@ const StorageModel = (() => {
   // ── Test utility ───────────────────────────────────────────────────────────
   function _reset_cache() {
     _cache = null;
-    _automate_cache = {};
     _screen_share_cache = _default_screen_share_state();
     _suppressed_tabs_cache = [];
   }
@@ -1085,11 +1001,6 @@ const StorageModel = (() => {
     save_blur_item,
     remove_blur_item,
     clear_host,
-    // Automate blur trigger state (session storage — cleared on browser close)
-    save_automate_blur,
-    patch_automate_blur,
-    clear_automate_blur,
-    get_automate_blur,
     // Screen-share session record + suppression APIs
     get_screen_share_state,
     set_screen_share_active,

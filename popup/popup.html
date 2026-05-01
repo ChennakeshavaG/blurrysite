@@ -100,6 +100,18 @@
     <button class="bl-btn-primary bl-off-view__turn-on" id="bl-turn-on" data-i18n="power_turn_on">Turn On</button>
   </div>
 
+  <!-- ── RESTRICTED-PAGE VIEW (Chrome blocks extensions on this URL) ── -->
+  <div class="bl-restricted-view" id="bl-view-restricted" hidden>
+    <span class="bl-restricted-view__icon" aria-hidden="true">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+      </svg>
+    </span>
+    <p class="bl-restricted-view__msg" data-i18n="restricted_state_title">This page is restricted</p>
+    <p class="bl-restricted-view__hint" data-i18n="restricted_state_message">Chrome blocks extensions on the Web Store, the new tab page, and chrome:// pages. Try Blurry Site on a regular website.</p>
+  </div>
+
   <!-- ── SUB-PAGES ───────────────────────────────────────────────────── -->
 
   <div class="bl-subpage" id="bl-view-htb-modify" hidden>
@@ -192,6 +204,7 @@
   <script src="../src/action_registry.js"></script>
   <script src="../src/shortcut_label.js"></script>
   <script src="../src/url_matcher.js"></script>
+  <script src="../src/automate/state.js"></script>
   <script src="../src/storage_model.js"></script>
   <script src="renders/shared.js"></script>
   <script src="renders/main.js"></script>

@@ -121,6 +121,12 @@ Loaded implicitly by `tests/setup.js` via `require('../../src/constants.js')` �
 - `pii_mode migrates legacy values: gaussian→blur, asterisked→hidden→starred` — `'gaussian'` → `'blur'`; `'asterisked'` → `'starred'`; `'hidden'` → `'starred'`.
 - `automate.idle: hr unit rejected — falls back to min` — `unit: 'hr'` becomes `'min'`.
 - `automate.idle: value 0 (below min 1) falls back to 5` — `value: 0` becomes `5`.
+- `automate.idle: sec value 1 clamped up to 15` — chrome.idle 15s floor; unit stays `'sec'`.
+- `automate.idle: sec value 14 clamped up to 15` — boundary just below floor.
+- `automate.idle: sec value 15 untouched (boundary)` — exact floor passes through.
+- `automate.idle: sec value 60 untouched` — values above floor pass through.
+- `automate.idle: min unit not clamped (1 min = 60s ≥ 15s)` — min values inherently above floor.
+- `automate.idle: site_rule snapshot also clamps sec value <15` — same clamp applies inside the snapshot post-fill so rule overrides cannot bypass the floor.
 - `shortcuts: rejects empty binding array` — empty binding is replaced with the default (length > 0).
 - `shortcuts: accepts valid binding` — valid `[{code:'KeyK', mods:['Control','Shift']}]` passes through.
 - `site_rules: blur_all:false is preserved (not coerced to null)` — popup toggle-off path writes `false`; validate_model must not coerce it.
@@ -143,6 +149,7 @@ Loaded implicitly by `tests/setup.js` via `require('../../src/constants.js')` �
 - `blur_all: false` in site_rules must survive — not coerced to `null` — because it is how the user disables blur for a site.
 - `picker_mode: null` is a valid "not set" state and must not be replaced with a default.
 - `idle.value = 0` below minimum; `idle.unit = 'hr'` outside allowed set.
+- `idle.unit = 'sec'` with `value < 15` clamped up to 15 — both in the main shape and inside site_rule snapshots — to honour `chrome.idle.setDetectionInterval`'s 15s floor.
 - Shortcut entry validation: malformed entries replaced with action defaults.
 
 ---

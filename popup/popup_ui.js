@@ -108,6 +108,11 @@ const BlurrySitePopupUI = (() => {
 
   function showView(viewId, isEnabled) {
     const isMain = viewId === 'bl-view-main';
+    // Restricted view is mutually exclusive with everything else; normal nav
+    // never targets it (set via showRestrictedView during boot only). Always
+    // hide it during ordinary view swaps.
+    const restrictedEl = document.getElementById('bl-view-restricted');
+    if (restrictedEl) restrictedEl.hidden = true;
     if (isMain) {
       document.getElementById('bl-view-main').hidden = !isEnabled;
       document.getElementById('bl-view-off').hidden  = !!isEnabled;
@@ -123,6 +128,24 @@ const BlurrySitePopupUI = (() => {
     }
   }
 
+  // ── Restricted-page view (Chrome blocks extensions on this URL) ────────
+  // One-shot during popup boot when chrome.tabs.query returns a restricted
+  // URL. Hides every other view, including header chrome that controls page
+  // state (power/theme remain visible — they're global, not page-scoped).
+  function showRestrictedView() {
+    const main = document.getElementById('bl-view-main');
+    const off  = document.getElementById('bl-view-off');
+    const restricted = document.getElementById('bl-view-restricted');
+    if (main) main.hidden = true;
+    if (off)  off.hidden  = true;
+    if (restricted) restricted.hidden = false;
+    for (const id of SUB_VIEWS) {
+      const el = document.getElementById(id);
+      if (el) el.hidden = true;
+    }
+    document.body.classList.remove('bl-has-subpage');
+  }
+
   // ── Clear All button state ────────────────────────────────────────────────
   function updateClearAll(settings, blurItems, isPageBlurred) {
     const btn = document.getElementById('bl-clear-all');
@@ -136,6 +159,7 @@ const BlurrySitePopupUI = (() => {
     setHost, setVersion, applyI18n,
     renderPowerButton,
     showView,
+    showRestrictedView,
     updateClearAll,
   };
 })();

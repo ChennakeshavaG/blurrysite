@@ -889,6 +889,41 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   color: var(--bl-text-muted);
 }
 
+/* ── Restricted-page view (Chrome blocks extensions here) ──────────── */
+.bl-restricted-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 24px;
+  min-height: 200px;
+  text-align: center;
+}
+.bl-restricted-view[hidden] { display: none; }
+
+.bl-restricted-view__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bl-text-muted);
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.bl-restricted-view__msg {
+  font-size: var(--bl-text-xl);
+  font-weight: 600;
+  color: var(--bl-text-primary);
+}
+
+.bl-restricted-view__hint {
+  font-size: var(--bl-text-base);
+  color: var(--bl-text-muted);
+  max-width: 260px;
+  line-height: 1.4;
+}
+
 /* ── Primary button (used in off-state turn-on) ─────────────────────── */
 .bl-btn-primary {
   background: var(--bl-amber);

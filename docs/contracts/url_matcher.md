@@ -44,6 +44,26 @@
 
 ---
 
+### isRestrictedUrl(url)
+
+**What**: Tests whether a URL is a Chrome-restricted page where extensions cannot inject content scripts. The browser enforces this list at the platform level — `host_permissions: ["<all_urls>"]` does NOT bypass it. Used by both the popup (to swap in a "page restricted" empty state) and `background.js` (to skip restricted tabs during install-time programmatic re-injection).
+
+**Params**:
+- `url` (string | undefined | null) — A full URL string, typically `tab.url` from `chrome.tabs.query`.
+
+**Returns**: `boolean` — `true` if the URL is restricted (extension cannot run); `false` if injection is permitted.
+
+**Side effects**: None.
+
+**Handles**:
+- Falsy / non-string / malformed URL → returns `true` (treated as restricted; covers PDF viewer, devtools tabs, mid-navigation tabs with no committed URL).
+- Restricted schemes (any path): `chrome:`, `chrome-extension:`, `edge:`, `about:`, `moz-extension:`, `view-source:`, `devtools:`, `chrome-search:`.
+- Restricted hosts: `chromewebstore.google.com` (any path), `chrome.google.com` when path starts with `/webstore` (legacy Chrome Web Store URL).
+- Hostname comparison is lowercased; protocol comparison uses the raw `parsed.protocol` value (always lowercase per the URL spec).
+- Pure function — no DOM, no storage, no `chrome.*` access. Safe to call from background, popup, and content-script contexts.
+
+---
+
 ### resolveSettings(url, globalSettings, urlRules)
 
 **What**: Computes the effective settings for a given page URL by deep-merging the extension defaults, the user's global settings, and the first matching URL rule's partial settings override.

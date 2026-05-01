@@ -145,6 +145,43 @@ const BlurrySiteUrlMatcher = (() => {
   }
 
   /**
+   * Tests whether a URL is a Chrome-restricted page where extensions cannot
+   * inject content scripts (regardless of host_permissions). The browser
+   * enforces this list — listed URLs return true so callers can short-circuit
+   * injection attempts and surface a clearer "page restricted" UX.
+   *
+   * Restricted by scheme: chrome:, chrome-extension:, edge:, about:,
+   * moz-extension:, view-source:, devtools:, chrome-search:.
+   * Restricted by host: chromewebstore.google.com (any path),
+   * chrome.google.com when path starts with /webstore.
+   * Empty / missing / unparseable URLs are treated as restricted (PDF viewer,
+   * devtools, mid-navigation tabs).
+   *
+   * @param {string|undefined|null} url
+   * @returns {boolean}
+   */
+  function isRestrictedUrl(url) {
+    if (!url || typeof url !== 'string') return true;
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (_) {
+      return true;
+    }
+    const protocol = parsed.protocol;
+    if (protocol === 'chrome:' || protocol === 'chrome-extension:' ||
+        protocol === 'edge:'   || protocol === 'about:' ||
+        protocol === 'moz-extension:' || protocol === 'view-source:' ||
+        protocol === 'devtools:' || protocol === 'chrome-search:') {
+      return true;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'chromewebstore.google.com') return true;
+    if (host === 'chrome.google.com' && parsed.pathname.startsWith('/webstore')) return true;
+    return false;
+  }
+
+  /**
    * Resolve settings for the current URL.
    * Priority: first matching URL rule > user global settings > DEFAULT_SETTINGS.
    * Rule settings are partial — deep-merged over the global settings.
@@ -168,6 +205,7 @@ const BlurrySiteUrlMatcher = (() => {
   return {
     matchesPattern,
     resolveSettings,
+    isRestrictedUrl,
     MAX_PATTERN_LENGTH,
   };
 })();

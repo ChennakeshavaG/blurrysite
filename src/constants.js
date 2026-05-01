@@ -502,13 +502,19 @@ const Constants = (() => {
           screen_share: {
             enabled: (typeof ss.enabled === 'boolean') ? ss.enabled : d.automate.settings.screen_share.enabled,
           },
-          idle: {
-            value: (typeof id.value === 'number' && id.value >= 1 && id.value <= 99)
-              ? id.value : d.automate.settings.idle.value,
-            unit: Object.values(idle_units).includes(id.unit)
-              ? id.unit : d.automate.settings.idle.unit,
-            enabled: (typeof id.enabled === 'boolean') ? id.enabled : d.automate.settings.idle.enabled,
-          },
+          idle: (() => {
+            const v = (typeof id.value === 'number' && id.value >= 1 && id.value <= 99)
+              ? id.value : d.automate.settings.idle.value;
+            const u = Object.values(idle_units).includes(id.unit)
+              ? id.unit : d.automate.settings.idle.unit;
+            // chrome.idle floor is 15s. Clamp sec values below 15 up to 15;
+            // min values are inherently >=60s.
+            return {
+              value: (u === 'sec' && v < 15) ? 15 : v,
+              unit:  u,
+              enabled: (typeof id.enabled === 'boolean') ? id.enabled : d.automate.settings.idle.enabled,
+            };
+          })(),
           tab_switch: {
             enabled: (typeof ts.enabled === 'boolean') ? ts.enabled : d.automate.settings.tab_switch.enabled,
           },
@@ -704,6 +710,10 @@ const Constants = (() => {
               out.automate.settings.idle.unit = d.automate.settings.idle.unit;
             if (typeof out.automate.settings.idle.enabled !== 'boolean')
               out.automate.settings.idle.enabled = d.automate.settings.idle.enabled;
+            // chrome.idle floor: clamp sec values <15 up to 15.
+            if (out.automate.settings.idle.unit === 'sec' && out.automate.settings.idle.value < 15) {
+              out.automate.settings.idle.value = 15;
+            }
             for (const trig of ['tab_switch', 'screen_share']) {
               if (!out.automate.settings[trig])
                 out.automate.settings[trig] = { enabled: d.automate.settings[trig].enabled };

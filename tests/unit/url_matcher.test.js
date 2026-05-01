@@ -70,14 +70,28 @@ function buildStubSource() {
     function resolveSettings(url, globals, rules) {
       return blsi.deep_merge(blsi.DEFAULT_MODEL.global_default_settings, globals || {});
     }
-    blsi.UrlMatcher = { matchesPattern: matchesPattern, resolveSettings: resolveSettings, MAX_PATTERN_LENGTH: 500 };
+    function isRestrictedUrl(url) {
+      if (!url || typeof url !== 'string') return true;
+      try {
+        const u = new URL(url);
+        const p = u.protocol;
+        if (p === 'chrome:' || p === 'chrome-extension:' || p === 'edge:' ||
+            p === 'about:'  || p === 'moz-extension:'   || p === 'view-source:' ||
+            p === 'devtools:' || p === 'chrome-search:') return true;
+        const h = u.hostname.toLowerCase();
+        if (h === 'chromewebstore.google.com') return true;
+        if (h === 'chrome.google.com' && u.pathname.startsWith('/webstore')) return true;
+        return false;
+      } catch (_) { return true; }
+    }
+    blsi.UrlMatcher = { matchesPattern: matchesPattern, resolveSettings: resolveSettings, isRestrictedUrl: isRestrictedUrl, MAX_PATTERN_LENGTH: 500 };
   })();
   `;
 }
 
 loadUrlMatcher();
 
-const { matchesPattern, resolveSettings, MAX_PATTERN_LENGTH } = blsi.UrlMatcher;
+const { matchesPattern, resolveSettings, isRestrictedUrl, MAX_PATTERN_LENGTH } = blsi.UrlMatcher;
 
 // USER IMPACT: user creates a rule "example.com" — settings apply to the apex domain and all its subdomains
 // OPTIMIZE: all 11 tests below share the same (url, pattern, type, bool) shape; replace with a test.each table
@@ -211,4 +225,62 @@ describe('UrlMatcher.resolveSettings', () => {
   // MISSING: no test for resolveSettings with a rule missing the patternType field (should default to wildcard)
   // MISSING: no test for resolveSettings with a rule whose settings object is null/undefined
   // MISSING: no test for resolveSettings when globals is null (should fall back to defaults only)
+});
+
+// USER IMPACT: popup shows a clear "page restricted" empty state on chrome:// pages and the Web Store,
+// instead of rendering toggles that silently fail; background.js skips these URLs during install-time re-injection.
+describe('UrlMatcher.isRestrictedUrl', () => {
+  test('chrome:// pages are restricted', () => {
+    expect(isRestrictedUrl('chrome://newtab')).toBe(true);
+    expect(isRestrictedUrl('chrome://extensions')).toBe(true);
+    expect(isRestrictedUrl('chrome://settings/cookies')).toBe(true);
+  });
+
+  test('chrome-extension:// pages are restricted', () => {
+    expect(isRestrictedUrl('chrome-extension://abcd1234/popup.html')).toBe(true);
+  });
+
+  test('Chrome Web Store hosts are restricted', () => {
+    expect(isRestrictedUrl('https://chromewebstore.google.com/')).toBe(true);
+    expect(isRestrictedUrl('https://chromewebstore.google.com/category/extensions')).toBe(true);
+    expect(isRestrictedUrl('https://chrome.google.com/webstore')).toBe(true);
+    expect(isRestrictedUrl('https://chrome.google.com/webstore/detail/foo/abc')).toBe(true);
+  });
+
+  test('chrome.google.com outside /webstore is NOT restricted', () => {
+    expect(isRestrictedUrl('https://chrome.google.com/about')).toBe(false);
+    expect(isRestrictedUrl('https://chrome.google.com/')).toBe(false);
+  });
+
+  test('about: / view-source: / devtools: / moz-extension: / edge: / chrome-search: are restricted', () => {
+    expect(isRestrictedUrl('about:blank')).toBe(true);
+    expect(isRestrictedUrl('view-source:https://example.com')).toBe(true);
+    expect(isRestrictedUrl('devtools://devtools/bundled/inspector.html')).toBe(true);
+    expect(isRestrictedUrl('moz-extension://abcd/page.html')).toBe(true);
+    expect(isRestrictedUrl('edge://settings')).toBe(true);
+    expect(isRestrictedUrl('chrome-search://local-ntp/local-ntp.html')).toBe(true);
+  });
+
+  test('regular https / http URLs are NOT restricted', () => {
+    expect(isRestrictedUrl('https://example.com/')).toBe(false);
+    expect(isRestrictedUrl('http://example.com/path?q=1')).toBe(false);
+    expect(isRestrictedUrl('https://news.ycombinator.com/')).toBe(false);
+  });
+
+  test('empty / null / undefined / non-string URLs are restricted', () => {
+    expect(isRestrictedUrl('')).toBe(true);
+    expect(isRestrictedUrl(null)).toBe(true);
+    expect(isRestrictedUrl(undefined)).toBe(true);
+    expect(isRestrictedUrl(123)).toBe(true);
+    expect(isRestrictedUrl({})).toBe(true);
+  });
+
+  test('malformed URLs are restricted', () => {
+    expect(isRestrictedUrl('not a url')).toBe(true);
+    expect(isRestrictedUrl('://broken')).toBe(true);
+  });
+
+  test('hostname comparison is case-insensitive', () => {
+    expect(isRestrictedUrl('https://ChromeWebStore.Google.Com/')).toBe(true);
+  });
 });

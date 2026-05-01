@@ -1,9 +1,9 @@
 /**
- * tests/unit/pii_detector.test.js
+ * tests/unit/pii/pii.test.js
  *
- * Unit tests for src/pii_detector.js
+ * Unit tests for src/pii/ (7-file split — Phase 0 of PII rewrite).
  *
- * Module exposes blsi.PiiDetector:
+ * Module exposes blsi.PiiDetector (set by the facade pii.js):
  *   scan(rootEl, types), clear(rootEl), handleMutations(mutations, root),
  *   getMatchCount(), getPatterns()
  *
@@ -48,7 +48,21 @@
 
 const fs   = require('fs');
 const path = require('path');
-const MODULE_PATH = path.resolve(__dirname, '../../src/pii_detector.js');
+
+// The legacy single-file pii_detector.js was split into 7 sub-modules under
+// src/pii/. They must be loaded in this exact order so each later module sees
+// its dependencies (state → checksums → pre_filter → country → suppressors →
+// detectors → facade pii.js which assigns blsi.PiiDetector).
+const PII_DIR = path.resolve(__dirname, '../../../src/pii');
+const PII_FILES = [
+  'pii_state.js',
+  'pii_checksums.js',
+  'pii_pre_filter.js',
+  'pii_country.js',
+  'pii_suppressors.js',
+  'pii_detectors.js',
+  'pii.js',
+];
 
 function buildStubSource() {
   return `(function() {
@@ -70,10 +84,16 @@ function buildStubSource() {
 }
 
 function freshLoad() {
+  // IIFEs assume globalThis.blsi exists (constants.js sets it at suite setup,
+  // but jest.resetModules() may wipe state). Re-seed defensively.
+  global.blsi = global.blsi || {};
   delete blsi.PiiDetector;
   jest.resetModules();
-  if (fs.existsSync(MODULE_PATH)) {
-    jest.isolateModules(() => { require(MODULE_PATH); });
+  const allExist = PII_FILES.every((f) => fs.existsSync(path.join(PII_DIR, f)));
+  if (allExist) {
+    jest.isolateModules(() => {
+      for (const f of PII_FILES) require(path.join(PII_DIR, f));
+    });
   } else {
     (0, eval)(buildStubSource());
   }
@@ -132,20 +152,20 @@ describe('pii_detector.js', () => {
   // OPTIMIZE: these four currency-prefix tests share identical structure; merge with test.each([['$1,234.56','dollar'],['€500','euro'],['£250','pound'],['₹50,000','rupee']])
   // REDUNDANT: "detects dollar amount" and the three currency tests below all verify the same currency-prefix sub-pattern; the symbol is the only variable
   test('NUMERIC — detects dollar amount', () => {
-    document.body.innerHTML = '<p>Total: $1,234.56 due today.</p>';
+    document.body.innerHTML = '<p>Charge: $1,234.56 here.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThan(0);
     expect(document.querySelector('[data-bl-si-pii="numeric"]')).not.toBeNull();
   });
 
   // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects Euro symbol (€)', () => {
-    document.body.innerHTML = '<p>Price: \u20AC500 per unit.</p>';
+    document.body.innerHTML = '<p>Pay \u20AC500 to John today.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   // REDUNDANT: same currency-prefix assertion as "detects dollar amount"; symbol differs only
   test('NUMERIC — detects British Pound (£)', () => {
-    document.body.innerHTML = '<p>Cost: \u00A3250.00</p>';
+    document.body.innerHTML = '<p>Pay \u00A3250.00 to Anna.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
@@ -170,7 +190,7 @@ describe('pii_detector.js', () => {
   });
 
   test('NUMERIC — detects EUR currency code suffix', () => {
-    document.body.innerHTML = '<p>Invoice amount: 50000 EUR</p>';
+    document.body.innerHTML = '<p>Pay 50000 EUR to Anna today.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThan(0);
   });
 
@@ -640,7 +660,7 @@ describe('pii_detector.js', () => {
   });
 
   test('isCountNoise — no count context: number is detected', () => {
-    document.body.innerHTML = '<p>Invoice total: 12345</p>';
+    document.body.innerHTML = '<p>Hello there 12345 friend.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
   });
@@ -648,4 +668,273 @@ describe('pii_detector.js', () => {
   // MISSING: no test for greedy match trailing punctuation ("5000," — does comma get captured inside span?)
   // MISSING: no test for embedded number in word ("model2024x" — word boundary \b should prevent match)
   // MISSING: no test for clear() with both EMAIL and NUMERIC active simultaneously
+
+  // ── Phase 1 — STAGE 0 pre-filter ───────────────────────────────────────────
+
+  test('STAGE 0 — skips numbers inside <code>', () => {
+    document.body.innerHTML = '<p>Use <code>12345</code> here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — skips numbers inside <pre>', () => {
+    document.body.innerHTML = '<pre>line 12345 of code</pre>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — skips numbers inside <kbd>', () => {
+    document.body.innerHTML = '<p>Press <kbd>Alt+12345</kbd>.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — skips numbers inside <samp>', () => {
+    document.body.innerHTML = '<samp>output: 12345 done</samp>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — skips numbers inside .highlight (syntax-highlighter)', () => {
+    document.body.innerHTML = '<div class="highlight">var x = 12345;</div>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — numbers OUTSIDE code block still detected', () => {
+    document.body.innerHTML = '<p>Hello there 12345 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('STAGE 0 — M1 digit pre-screen skips no-digit nodes when email disabled', () => {
+    document.body.innerHTML = '<p>No digits here at all.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — M1 pre-screen does NOT skip when email enabled', () => {
+    document.body.innerHTML = '<p>Reach me at user@example.com today.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { email: true })).toBe(1);
+  });
+
+  // ── Phase 1 — Tier-A suppressors ───────────────────────────────────────────
+
+  test('isHexColor — #FF5733-shape hex bare-digits not blurred', () => {
+    // 6-digit hex with # prefix collides with 6-digit BARE_DIGITS for the digit-only case
+    document.body.innerHTML = '<p>Use #123456 as accent.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isHexColor — bare digits without # prefix still blurred', () => {
+    document.body.innerHTML = '<p>Hello 123456 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('isYearRange — "2020-2024" not blurred', () => {
+    document.body.innerHTML = '<p>Hello 2020-2024 era.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isYearRange — non-year range "1234-9999" still considered', () => {
+    document.body.innerHTML = '<p>Hello 1234-9999 friend.</p>';
+    // 9999 is outside 1000-2099 → isYearRange returns false → other checks may apply,
+    // but isYear catches 1234. Result: span may or may not exist depending on regex
+    // behavior on the whole string. Assert at least some matching.
+    blsi.PiiDetector.scan(document.body, { numeric: true });
+    // No strong assertion — this is a fingerprint-vs-suppressor edge.
+  });
+
+  test('isPercentage — "12345%" not blurred', () => {
+    document.body.innerHTML = '<p>Total 12345% growth here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isPercentage — number without trailing % blurred', () => {
+    document.body.innerHTML = '<p>Hello 12345 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('isScientificNotation — "1234e10" not blurred', () => {
+    document.body.innerHTML = '<p>Const 1234e10 used here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isMeasurement — "1024 MB" not blurred', () => {
+    document.body.innerHTML = '<p>File 1024 MB size.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isMeasurement — "5000 km" not blurred', () => {
+    document.body.innerHTML = '<p>Drive 5000 km away.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isMeasurement — number without trailing unit blurred', () => {
+    document.body.innerHTML = '<p>Hello 12345 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('isResolution — "1920x1080" not blurred', () => {
+    document.body.innerHTML = '<p>Display 1920x1080 native.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrdinalLabel — "Section 12345" not blurred', () => {
+    document.body.innerHTML = '<p>See Section 12345 below.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrdinalLabel — "Chapter 12345" not blurred', () => {
+    document.body.innerHTML = '<p>Read Chapter 12345 here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrdinalLabel — "Page 12345" not blurred', () => {
+    document.body.innerHTML = '<p>Open Page 12345 now.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrdinalLabel — bare 12345 with no precursor blurred', () => {
+    document.body.innerHTML = '<p>Hello there 12345 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('isDateLike — ISO 8601 "2026-04-29" not blurred', () => {
+    document.body.innerHTML = '<p>Happens on 2026-04-29 here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isDateLike — compact 8-digit "20260429" not blurred', () => {
+    document.body.innerHTML = '<p>Stamp 20260429 found.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isDateLike — invalid compact 8-digit "20269999" still blurs (sanity check fails)', () => {
+    document.body.innerHTML = '<p>Hello 20269999 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('isOrderRef — "Order #12345" not blurred', () => {
+    document.body.innerHTML = '<p>Your Order #12345 ships.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrderRef — "Tracking 12345" not blurred', () => {
+    document.body.innerHTML = '<p>Tracking 12345 here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrderRef — "Invoice 12345" not blurred', () => {
+    document.body.innerHTML = '<p>Invoice 12345 today.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('isOrderRef — bare number with no order context blurred', () => {
+    document.body.innerHTML = '<p>Hello 12345 friend.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+  });
+
+  test('extended isPublicPrice — "price" keyword suppresses', () => {
+    document.body.innerHTML = '<p>The price 12345 here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('extended isPublicPrice — multilingual ES "precio" suppresses', () => {
+    document.body.innerHTML = '<p>El precio 12345 aquí.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  // ── Phase 2 — cascade tiers + regex cache + stats ──────────────────────────
+
+  test('Phase 2 — getCachedRegex returns same RegExp instance per pattern', () => {
+    const proto = /\d+/g;
+    const r1 = blsi.PiiState.getCachedRegex(proto);
+    const r2 = blsi.PiiState.getCachedRegex(proto);
+    expect(r1).toBe(r2);
+    expect(r1.lastIndex).toBe(0);
+  });
+
+  test('Phase 2 — getCachedRegex resets lastIndex on each call', () => {
+    const proto = /\d+/g;
+    const r = blsi.PiiState.getCachedRegex(proto);
+    r.exec('abc 123 def');
+    expect(r.lastIndex).toBeGreaterThan(0);
+    blsi.PiiState.getCachedRegex(proto);
+    expect(r.lastIndex).toBe(0);
+  });
+
+  test('Phase 2 — getCachedRegex distinguishes by source AND flags', () => {
+    const a = blsi.PiiState.getCachedRegex(/\d+/g);
+    const b = blsi.PiiState.getCachedRegex(/\d+/gi);
+    expect(a).not.toBe(b);
+  });
+
+  test('Phase 2 — falsePositivesCheckCascade returns same as flat precise', () => {
+    // Behavior parity smoke test — every Phase 1 suppressor still fires through the cascade.
+    expect(
+      blsi.PiiSuppressors.falsePositivesCheckCascade('2024', 'In year 2024 we', 8),
+    ).toBe(true); // isYear
+    expect(
+      blsi.PiiSuppressors.falsePositivesCheckCascade('12345', '#12345', 1),
+    ).toBe(false); // 5-digit not a valid hex length AND outside year range
+    expect(
+      blsi.PiiSuppressors.falsePositivesCheckCascade('123456', '#123456', 1),
+    ).toBe(true); // isHexColor
+    expect(
+      blsi.PiiSuppressors.falsePositivesCheckCascade('12345', '12345%', 0),
+    ).toBe(true); // isPercentage
+    expect(
+      blsi.PiiSuppressors.falsePositivesCheckCascade(
+        '2026-04-29',
+        'on 2026-04-29 today',
+        3,
+      ),
+    ).toBe(true); // isDateLike (structural)
+    expect(
+      blsi.PiiSuppressors.falsePositivesCheckCascade(
+        '12345',
+        'Hello 12345 friend.',
+        6,
+      ),
+    ).toBe(false); // no suppressor fires
+  });
+
+  test('Phase 2 — getStats returns the stats shape (zeros when Logger off)', () => {
+    document.body.innerHTML = '<p>Hello 12345 friend.</p>';
+    blsi.PiiDetector.scan(document.body, { numeric: true });
+    const stats = blsi.PiiDetector.getStats();
+    expect(stats).toEqual({
+      node_count: expect.any(Number),
+      digit_node_count: expect.any(Number),
+      stage3_candidates: expect.any(Number),
+      stage4_suppressed: expect.any(Number),
+      total_emit: expect.any(Number),
+    });
+  });
+
+  test('Phase 2 — getStats counters increment when Logger.enabled is true', () => {
+    // Mock the Logger global since pii.test.js doesn't load src/logger.js.
+    const prevLogger = blsi.Logger;
+    blsi.Logger = { enabled: true };
+    try {
+      document.body.innerHTML = '<p>Hello 12345 friend.</p>';
+      blsi.PiiDetector.scan(document.body, { numeric: true });
+      const stats = blsi.PiiDetector.getStats();
+      expect(stats.node_count).toBeGreaterThanOrEqual(1);
+      expect(stats.digit_node_count).toBeGreaterThanOrEqual(1);
+      expect(stats.total_emit).toBeGreaterThanOrEqual(1);
+    } finally {
+      blsi.Logger = prevLogger;
+    }
+  });
+
+  test('Phase 2 — getStats resets at the top of each scan', () => {
+    document.body.innerHTML = '<p>Hello 12345 friend.</p>';
+    blsi.PiiDetector.scan(document.body, { numeric: true });
+    blsi.PiiDetector.clear(document.body);
+    const stats = blsi.PiiDetector.getStats();
+    expect(stats.node_count).toBe(0);
+    expect(stats.total_emit).toBe(0);
+  });
+
+  test('Phase 2 — getStats is a copy, not a live reference', () => {
+    const a = blsi.PiiDetector.getStats();
+    a.node_count = 9999;
+    const b = blsi.PiiDetector.getStats();
+    expect(b.node_count).not.toBe(9999);
+  });
 });

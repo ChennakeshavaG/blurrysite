@@ -2,19 +2,17 @@
 
 ## Overview
 
-Single source of truth for extension persistent state. Accesses `chrome.storage.local` (key: `blsi_model`) and `chrome.storage.session` (keys: `blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly — no background relay. Maintains in-memory caches (`_cache`, `_automate_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`) that mirror storage. `_write()` validates before persisting and rolls back the cache on failure. `resolve(hostname, url, tab_id?)` computes derived settings including `engage` (page-wide engine gate; folds extension on/off + manual + automate), screen-share trigger state, and suppression flags. Single pub-sub subscriber via `on_change`.
+Single source of truth for extension persistent state. Accesses `chrome.storage.local` (key: `blsi_model`) and `chrome.storage.session` (keys: `blsi_screen_share`, `blsi_automate_suppressed_tabs`) directly — no background relay. Maintains in-memory caches (`_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`) that mirror storage. Idle + tab_switch session keys live in `blsi.Automate.State` (sibling module); `resolve()` reads them at call time. `_write()` validates before persisting and rolls back the cache on failure. `resolve(hostname, url, tab_id?)` computes derived settings including `engage` (page-wide engine gate; folds extension on/off + manual + automate), screen-share trigger state, and suppression flags. Single pub-sub subscriber via `on_change`.
 
 ## Module State
 
 | Variable | Description |
 |---|---|
 | `_cache` | `Object\|null` — full `blsi_model` in-memory; null before `init_cache()` |
-| `_automate_cache` | `Object` — mirrors `blsi_automate_blur` session storage; per-hostname `{ idle, tab_switch }` only |
 | `_screen_share_cache` | `Object` — mirrors `blsi_screen_share` session storage; single global record `{ active, sharing_tab_id, started_at, suppressed_sites }` |
 | `_suppressed_tabs_cache` | `number[]` — mirrors `blsi_automate_suppressed_tabs` session storage; tab ids silenced for ALL automate triggers |
 | `_on_change` | `Function\|null` — single storage-change subscriber |
 | `STORAGE_KEY` | `'blsi_model'` |
-| `AUTOMATE_SESSION_KEY` | `'blsi_automate_blur'` |
 | `SCREEN_SHARE_SESSION_KEY` | `'blsi_screen_share'` |
 | `SUPPRESSED_TABS_SESSION_KEY` | `'blsi_automate_suppressed_tabs'` |
 | `ITEM_LIMIT` | `10` — max blur items per hostname |
@@ -24,17 +22,17 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 
 ### init_cache()
 
-**What**: Loads `blsi_model` from local storage and the three session-storage keys (`blsi_automate_blur`, `blsi_screen_share`, `blsi_automate_suppressed_tabs`) into caches. Must be called once before any `get()` or `patch_section()`.  
+**What**: Loads `blsi_model` from local storage and the screen-share + suppressed-tabs session keys into caches. Idle + tab_switch caches live in `blsi.Automate.State` and self-hydrate. Must be called once before any `get()` or `patch_section()`.  
 **Returns**: `Promise<void>`  
-**Side effects**: Populates `_cache` (validates + migrates via `blsi.validate_model`); populates `_automate_cache`, `_screen_share_cache`, `_suppressed_tabs_cache`; writes back if migration changed the model. **Migration**: strips legacy `screen_share` sub-key (and any resulting empty entries) from `_automate_cache` and writes back once — that state now lives in the screen-share session record.  
-**Handles**: Empty storage → seeds from `blsi.build_default_model()`. Missing session keys default to `{}` / `_default_screen_share_state()` / `[]`.
+**Side effects**: Populates `_cache` (validates + migrates via `blsi.validate_model`); populates `_screen_share_cache`, `_suppressed_tabs_cache`; writes back if migration changed the model.  
+**Handles**: Empty storage → seeds from `blsi.build_default_model()`. Missing session keys default to `_default_screen_share_state()` / `[]`.
 
 ### on_change(listener)
 
 **What**: Registers a callback fired whenever the cached model changes.  
 **Params**: `listener(newModel, oldModel)` — called with both model snapshots  
 **Side effects**: Replaces previous subscriber (single subscriber only; replacement logs a warning)  
-**Handles**: Called with `(cache, cache)` for session-only changes (automate_blur updates that don't change the main model).
+**Handles**: Called with `(cache, cache)` for session-only changes (idle / tab_switch / screen-share updates that don't change the main model).
 
 ### get()
 
@@ -53,7 +51,7 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 4. `blur_items` for hostname (pulled from `pick_and_blur.items[hostname]`, gated on `pick_and_blur.status`)
 5. Wildcard/regex site rule snapshot apply (first match wins) — may REPLACE `blur_items` if the snapshot pins its own `pick_and_blur.items` array; may override `blur_all_status` if `snapshot.blur_all.status` is boolean
 6. Exact hostname site rule snapshot apply — same REPLACE / override semantics
-7. Automate blur state — `_automate_cache[hostname]` (idle/tab_switch) and `_screen_share_cache` (single global record) with per-tab and per-site suppression applied
+7. Automate trigger state — `blsi.Automate.State.read_idle()` (global) gated on `automate.idle.enabled`; `State.read_tab_switch(tab_id)` (per-tab) gated on `automate.tab_switch.enabled`; `_screen_share_cache` (single global record). Per-tab suppression silences all three triggers; per-site suppression silences screen-share only.
 8. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
 9. Derived key computation: `manual_blur = !!resolved.blur_all_status`; `engage = (resolved.enabled !== false) && (manual_blur || (automate_blur_active && !blur_present))`
 
@@ -145,31 +143,16 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 **Returns**: `Object|null` — `null` if rule not found OR if snapshot is empty `{}`.  
 **Synchronous** (reads from `_cache`).
 
-### get_automate_blur(hostname)
+### Automate trigger state — idle & tab_switch
 
-**What**: Returns the current per-hostname automate trigger state (idle + tab_switch only).  
-**Params**: `hostname` (string)  
-**Returns**: `{ idle: bool, tab_switch: bool }` from `_automate_cache`. **No `screen_share` key** — that state lives in the global session record (see `get_screen_share_state`).  
-**Synchronous** — no I/O.
+Idle (global) and tab_switch (per-tab) state moved to `blsi.Automate.State`
+(see `docs/contracts/automate/state.md`). `storage_model.resolve()` reads
+both at call time via `State.read_idle()` and `State.read_tab_switch(tab_id)`.
 
-### save_automate_blur(hostname, trigger, bool)
-
-**What**: Writes one automate trigger to session storage.  
-**Params**: `hostname` (string), `trigger` (`'idle'|'tab_switch'`), `bool` (boolean)  
-**Returns**: `Promise<void>`  
-**Handles**: `'screen_share'` and any other unknown trigger → no-op (rejected). Use `set_screen_share_active` / `set_screen_share_inactive` for screen-share state. **No-op short-circuit** — when the cached entry already matches the requested value the function returns without writing, preventing cross-tab `chrome.storage.onChanged` notifications that would otherwise re-enter `applyState` on every other tab.
-
-### patch_automate_blur(hostname, patch)
-
-**What**: Batch-writes multiple triggers in one session storage write.  
-**Params**: `hostname` (string), `patch` (`{idle?, tab_switch?}`)  
-**Returns**: `Promise<void>`  
-**Handles**: Silently ignores invalid keys in patch (including `screen_share`). **No-op short-circuit** — when the merged result equals the cached entry on both `idle` and `tab_switch`, the function returns without writing.
-
-### clear_automate_blur(hostname)
-
-**What**: Removes all automate_blur state for a hostname from session storage.  
-**Returns**: `Promise<void>`
+The legacy per-hostname `blsi_automate_blur` key + the
+`save_automate_blur` / `patch_automate_blur` / `clear_automate_blur` /
+`get_automate_blur` API are removed. Callers writing trigger state should use
+`blsi.Automate.State.write_idle` / `write_tab_switch` directly.
 
 ### get_screen_share_state()
 
@@ -234,7 +217,7 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### clear_host(hostname)
 
-**What**: Clears pick-blur items for the host in local storage; clears automate_blur in session storage.  
+**What**: Clears pick-blur items for the host in local storage. Does not touch automate trigger state — that's per-tab/global, not per-host.  
 **Returns**: `Promise<void>`  
 **Note**: Preserves site_rules entries — does not touch them. blur_all is global; clear it via `save_blur_state(false)` if needed.
 
@@ -246,7 +229,7 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### _reset_cache()
 
-**What**: Test-only — clears both `_cache` and `_automate_cache` so tests start clean.  
+**What**: Test-only — clears `_cache`, `_screen_share_cache`, and `_suppressed_tabs_cache` so tests start clean. Idle/tab_switch caches live in `blsi.Automate.State` — call `State._reset()` separately when needed.  
 **Returns**: `void`
 
 ## Internal Functions
@@ -256,13 +239,9 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 **What**: Validates model via `blsi.validate_model()`, updates `_cache` synchronously, writes to `chrome.storage.local`, rolls back `_cache` on failure.  
 **Critical**: `_cache` is updated BEFORE the async write — all sync reads see the new value immediately.
 
-### _session_write(data)
-
-**What**: Mirrors `_write` for session storage — updates `_automate_cache` synchronously, writes to `chrome.storage.session`, rolls back on failure.
-
 ### `chrome.storage.onChanged` listener
 
-**What**: Handles storage changes from other contexts. Checks both `local` (model) and `session` (automate) areas. Self-echo guard via `_deep_equal` prevents redundant subscriber fires. For session-only changes, calls subscriber with `(cache, cache)`.
+**What**: Handles storage changes from other contexts. Checks both `local` (model) and `session` (screen-share, suppressed tabs, plus the State module's idle / tab_switch keys for re-fire). Self-echo guard via `_deep_equal` prevents redundant subscriber fires. For session-only changes, calls subscriber with `(cache, cache)`.
 
 ### _deep_equal(a, b)
 
@@ -296,10 +275,13 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ## Storage Schema
 
-| Storage | Key | Contents |
-|---|---|---|
-| `chrome.storage.local` | `blsi_model` | Full feature-grouped model (see Settings Shape in CLAUDE.md) |
-| `chrome.storage.session` | `blsi_automate_blur` | `{ [hostname]: { idle, tab_switch, screen_share } }` — auto-cleared on browser close |
+| Storage | Key | Contents | Owner |
+|---|---|---|---|
+| `chrome.storage.local` | `blsi_model` | Full feature-grouped model (see Settings Shape in CLAUDE.md) | `storage_model` |
+| `chrome.storage.session` | `blsi_screen_share` | Single global record `{ active, sharing_tab_id, started_at, suppressed_sites }` | `storage_model` |
+| `chrome.storage.session` | `blsi_automate_suppressed_tabs` | `number[]` of tab ids silenced for ALL automate triggers | `storage_model` |
+| `chrome.storage.session` | `blsi_automate_idle` | One of `'active'\|'idle'\|'locked'` (chrome.idle phase) — global | `automate/state.js` |
+| `chrome.storage.session` | `blsi_automate_tab_switch_by_tab` | `{ [tab_id]: 'fired' }` (absent === armed/off) | `automate/state.js` |
 
 ## Invariants
 
@@ -310,4 +292,4 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 - `ITEM_LIMIT = 10` per hostname; enforced on every `save_blur_item`.
 - `RULES_LIMIT = 200` for non-exact rules; enforced on every `save_rules`.
 - `on_change` has at most one active subscriber at any time.
-- Automate triggers NEVER write `blur_all` — they only write to `blsi_automate_blur` session storage.
+- Automate triggers NEVER write `blur_all` — idle/tab_switch state lives in `blsi.Automate.State` session keys; screen-share lives in the global session record.

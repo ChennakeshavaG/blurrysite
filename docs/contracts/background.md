@@ -8,7 +8,7 @@ MV3 service worker. Stateless between wake cycles — no module-level mutable st
 
 On every SW start:
 1. Resets `blsi_screen_share` to its empty default `{ active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [] }` and clears `blsi_automate_suppressed_tabs`. Prevents stale state after mid-share SW restart; tab ids from a prior session may have been recycled by Chrome, so the per-tab list is safest to drop. If a share is actually in progress, the port reconnect immediately re-stamps the record via `_setScreenShareActive`.
-2. Imports `src/constants.js`, `src/logger.js`, `src/action_registry.js` via `importScripts`.
+2. Imports `src/constants.js`, `src/logger.js`, `src/action_registry.js`, `src/url_matcher.js`, `src/automate/state.js`, `src/automate/idle.js` via `importScripts`. The automate imports register the `blsi.Automate.State` cache + `chrome.storage.onChanged` listener and the `blsi.Automate.Idle` observer (`chrome.idle.onStateChanged` → `blsi_automate_idle` session key) at SW load. `Idle.init()` is invoked from background top-level so the listener is registered on every SW wake.
 3. Builds `COMMAND_TO_MESSAGE` map from `blsi.Actions.list()`.
 
 ## Module-Level State
@@ -23,8 +23,9 @@ On every SW start:
 
 ### `chrome.runtime.onInstalled`
 
-**What**: Calls `createContextMenus()` and removes stale storage keys from pre-refactor versions.  
+**What**: Calls `createContextMenus()`, removes stale storage keys from pre-refactor versions, and triggers `_reinjectAllTabs()` for `reason === 'install' | 'update'` so already-open tabs activate the extension without a manual reload.
 **Stale keys removed**: `blurred_selectors`, `settings`, `rules`, `blurred_items`, `blur_all_hosts`
+**Re-injection skipped on**: `'chrome_update'`, `'shared_module_update'` (content scripts survive Chrome updates).
 
 ### `chrome.runtime.onStartup`
 
@@ -46,6 +47,28 @@ On every SW start:
 All titles are resolved via `chrome.i18n.getMessage(key) || 'English fallback'`. The fallback runs only if the locale lookup fails (e.g. unsupported locale + missing en).
 
 **Note**: Context menu blur/unblur sends message to tab but does not capture `targetElementId` — content script uses `lastContextMenuTarget` (set by `contextmenu` event listener in content_script.js).
+
+### _reinjectAllTabs()
+
+**What**: Programmatically injects content scripts and CSS into every currently-open tab so the extension activates immediately after install or update — without requiring a tab reload or browser restart.
+**Returns**: `Promise<void>` — never rejects (per-tab failures are caught and logged).
+**Side effects**: Calls `chrome.tabs.query({})`, `chrome.scripting.insertCSS`, and `chrome.scripting.executeScript` (twice — isolated world then MAIN world).
+**Logic**:
+1. Queries all tabs.
+2. For each tab with an id and a URL that passes `blsi.UrlMatcher.isRestrictedUrl(tab.url) === false`:
+   - Inserts `styles/content.css` into all frames.
+   - Executes the 34-file isolated-world bundle (`_ISOLATED_WORLD_FILES`) in declared order across all frames.
+   - Executes `src/main_world_bridge.js` in the MAIN world of the top frame only.
+3. Logs an aggregate summary `{ attempted, succeeded, skipped }`.
+
+**Handles**:
+- `chrome.tabs.query` failure → logs and returns; no injection attempted.
+- Per-tab injection failure (closed tab, race with navigation, restricted URL not on the helper's list) → caught and logged at `warn`; iteration continues.
+- Restricted URLs (chrome://, chrome-extension://, chromewebstore.google.com, etc.) → skipped before any `chrome.scripting` call (counted in the `skipped` log field).
+
+**Tradeoffs**:
+- MAIN-world bridge runs post-`document_start` on already-open tabs. Any in-flight `getDisplayMedia` / `attachShadow` calls that already executed will not be hooked. Acceptable for install-time recovery; the static manifest declaration handles all subsequent navigations correctly.
+- File list (`_MAIN_WORLD_FILES`, `_ISOLATED_WORLD_FILES`, `_CONTENT_CSS_FILES`) mirrors `manifest.json content_scripts` — the manifest is the source of truth. Adding a new content script requires updating both.
 
 ### _openSettingsOrPanel(tab)
 
@@ -119,7 +142,7 @@ Content tabs read the live record via `chrome.storage.session.onChanged` in `sto
 ## Invariants
 
 - Service worker MUST be stateless between wake cycles — `_sharePorts` is the only module-level mutable state, and it starts empty on every restart (by design).
-- Background writes only `blsi_screen_share` and `blsi_automate_suppressed_tabs` session keys. The model (`blsi_model`) is owned by `storage_model.js` in content + popup contexts.
+- Background writes `blsi_screen_share`, `blsi_automate_suppressed_tabs`, and (via `blsi.Automate.Idle` → `blsi.Automate.State.write_idle`) `blsi_automate_idle` session keys. The model (`blsi_model`) is owned by `storage_model.js` in content + popup contexts.
 - `sendMessage` calls always use `.catch(() => {})` — tab may have no content script (chrome:// pages, etc.).
 - `COMMAND_TO_MESSAGE` auto-builds from action registry — never hardcode command→message mappings in background.js.
 - The sharing tab is excluded from `SCREEN_SHARE_NOTIFY` broadcast on STARTED. Resolve-side check (`tab_id === sharing_tab_id`) is the authoritative blur gate.

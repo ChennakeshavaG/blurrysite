@@ -246,6 +246,7 @@ Single source of truth for the `blsi_model` storage shape. Feature-grouped. **Sh
 **`automate`**:
 - `screen_share.enabled`, `tab_switch.enabled`: boolean
 - `idle.value`: int 1–99; `idle.unit`: must be in `idle_units`; `idle.enabled`: boolean
+- **chrome.idle floor clamp**: when the resolved unit is `'sec'` and value < 15, value is clamped up to 15. `'min'` values are inherently ≥60s so no clamp applies. Matches `chrome.idle.setDetectionInterval`'s 15s floor.
 
 **`shortcuts`**:
 - Iterates over `build_default_model().shortcuts` keys (action ids from `blsi.Actions`)

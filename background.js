@@ -3,7 +3,10 @@
 importScripts(
   'src/constants.js',
   'src/logger.js',
-  'src/action_registry.js'
+  'src/action_registry.js',
+  'src/url_matcher.js',
+  'src/automate/state.js',
+  'src/automate/idle.js'
 );
 
 const log = blsi.Logger.scope('bg');
@@ -105,11 +108,117 @@ chrome.storage.session.set({
   [SUPPRESSED_TABS_SESSION_KEY]: [],
 });
 
+// Register the OS-level idle observer at SW load. Idempotent — re-runs on
+// every SW wake re-registers the chrome.idle listener and re-seeds the cached
+// phase via chrome.idle.queryState. Threshold pulled from blsi_model on init
+// and hot-updated via the storage onChanged listener inside the module.
+if (blsi && blsi.Automate && blsi.Automate.Idle) {
+  blsi.Automate.Idle.init();
+}
+
+// ── Install-time content script re-injection ───────────────────────────────
+// Static manifest content_scripts only fire on next navigation. Already-open
+// tabs at install/update time get nothing — users would have to reload every
+// tab. Re-inject programmatically into existing tabs so the extension activates
+// immediately. Skipped on chrome_update / shared_module_update because content
+// scripts survive Chrome browser updates intact.
+//
+// File list MUST stay in lockstep with manifest.json content_scripts. The
+// manifest is the source of truth; this list mirrors it for re-injection only.
+const _MAIN_WORLD_FILES = ['src/main_world_bridge.js'];
+const _ISOLATED_WORLD_FILES = [
+  'src/constants.js',
+  'src/content_i18n.js',
+  'src/logger.js',
+  'src/action_registry.js',
+  'src/shortcut_label.js',
+  'src/url_matcher.js',
+  'src/selector_utils.js',
+  'src/storage_model.js',
+  'src/tab_privacy.js',
+  'src/pii/pii_state.js',
+  'src/pii/pii_checksums.js',
+  'src/pii/pii_pre_filter.js',
+  'src/pii/pii_country.js',
+  'src/pii/pii_suppressors.js',
+  'src/pii/pii_detectors.js',
+  'src/pii/pii.js',
+  'src/fonts.js',
+  'src/core/engine_state.js',
+  'src/core/categories.js',
+  'src/core/css_manager.js',
+  'src/core/marker_engine.js',
+  'src/core/observer.js',
+  'src/core/target_engine.js',
+  'src/engine.js',
+  'src/screen_share.js',
+  'src/automate/state.js',
+  'src/automate/overlay.js',
+  'src/automate/visibility.js',
+  'src/reveal_controller.js',
+  'src/shortcut_handler.js',
+  'src/selection_blur.js',
+  'src/screenshot.js',
+  'src/picker.js',
+  'src/content_script.js',
+];
+const _CONTENT_CSS_FILES = ['styles/content.css'];
+
+async function _reinjectAllTabs() {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({});
+  } catch (err) {
+    log.warn('reinject: tabs.query failed', err && err.message);
+    return;
+  }
+
+  let attempted = 0;
+  let succeeded = 0;
+  for (const tab of tabs) {
+    if (!tab.id) continue;
+    if (blsi.UrlMatcher.isRestrictedUrl(tab.url)) continue;
+    attempted++;
+
+    // CSS first, then isolated-world JS in declared order, then MAIN-world bridge.
+    // MAIN bridge runs late on already-open tabs (post-document_start) — any
+    // getDisplayMedia / attachShadow already executed will not be hooked.
+    // Acceptable tradeoff for install-time recovery; resolves on next nav.
+    const tabId = tab.id;
+    try {
+      await chrome.scripting.insertCSS({
+        target: { tabId, allFrames: true },
+        files: _CONTENT_CSS_FILES,
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        files: _ISOLATED_WORLD_FILES,
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: false },
+        files: _MAIN_WORLD_FILES,
+        world: 'MAIN',
+      });
+      succeeded++;
+    } catch (err) {
+      // Silent skip — tab may have closed, navigated to a restricted URL after
+      // our filter, or be in a state where injection is blocked.
+      log.warn('reinject failed', { tabId, url: tab.url, err: err && err.message });
+    }
+  }
+
+  log.flow('reinject summary', { attempted, succeeded, skipped: tabs.length - attempted });
+}
+
 chrome.runtime.onInstalled.addListener((details) => {
-  log.flow('onInstalled', { reason: details && details.reason });
+  const reason = details && details.reason;
+  log.flow('onInstalled', { reason });
   createContextMenus();
   // Clean up stale storage keys from pre-refactor versions
   chrome.storage.local.remove(['blurred_selectors', 'settings', 'rules', 'blurred_items', 'blur_all_hosts']);
+  if (reason === 'install' || reason === 'update') {
+    _reinjectAllTabs();
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
