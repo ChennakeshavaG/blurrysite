@@ -31,7 +31,7 @@ None. State lives in `blsi.PiiState`.
 - Nodes inside extension UI (`blsi.PiiPreFilter.isExtensionUI`).
 - Nodes already inside a `[data-bl-si-pii]` wrapper (`blsi.PiiPreFilter.isInsidePiiSpan`).
 - Nodes inside `<code>` / `<pre>` / `<kbd>` / `<samp>` / `[data-code]` / `.highlight` / `.codehilite` (`blsi.PiiPreFilter.isInsideCodeBlock`).
-- Whitespace-only text nodes.
+- Text nodes shorter than 4 characters (shortest legitimate PII match — email `a@b.co` is 6 chars, numeric patterns require 4+). Faster than `trim().length === 0` because no string allocation, and stricter (also drops single-glyph nodes). Same length floor applied in `handleMutations` (childList added text nodes + characterData updates).
 - **M1 digit pre-screen** — nodes with no digit are skipped UNLESS `types.email` is enabled (email matching needs no digit). `blsi.PiiPreFilter.hasDigit(text)`.
 
 ### clear(rootEl)

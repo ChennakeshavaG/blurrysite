@@ -97,7 +97,10 @@ const BlurrySitePiiDetector = (() => {
       if (blsi.PiiPreFilter.isInsidePiiSpan(tn)) continue;
       if (blsi.PiiPreFilter.isInsideCodeBlock(tn)) continue;
       const text = tn.textContent;
-      if (!text || text.trim().length === 0) continue;
+      // Length floor: shortest PII match (email "a@b.co") is 6 chars; numeric
+      // patterns require 4+. Skipping <4-char nodes drops single-glyph and
+      // whitespace-only text without a trim() allocation.
+      if (!text || text.length < 4) continue;
       // M1 digit pre-screen: skip detector regex when no digit is present,
       // unless EMAIL is enabled (email needs no digit).
       const digit = blsi.PiiPreFilter.hasDigit(text);
@@ -151,7 +154,7 @@ const BlurrySitePiiDetector = (() => {
             if (blsi.PiiPreFilter.isInsidePiiSpan(node)) continue;
             if (blsi.PiiPreFilter.isInsideCodeBlock(node)) continue;
             const text = node.textContent;
-            if (text && text.trim().length > 0) {
+            if (text && text.length >= 4) {
               if (
                 !blsi.PiiPreFilter.hasDigit(text) &&
                 !activeTypes.email
@@ -179,7 +182,7 @@ const BlurrySitePiiDetector = (() => {
         if (blsi.PiiPreFilter.isInsidePiiSpan(node)) continue;
         if (blsi.PiiPreFilter.isInsideCodeBlock(node)) continue;
         const text = node.textContent;
-        if (!text || text.trim().length === 0) continue;
+        if (!text || text.length < 4) continue;
         if (!blsi.PiiPreFilter.hasDigit(text) && !activeTypes.email) continue;
         const matches = blsi.PiiDetectors.findMatches(text, activeTypes);
         if (matches.length > 0) _wrapTextNode(node, matches);

@@ -72,6 +72,10 @@
   let _lastIdlePhase = 'active';
   let _lastTabSwitchPhase = 'off';
 
+  // Idle handle for the deferred initial PII scan. Tracked so a follow-up
+  // applyState (settings change, disable) can cancel a stale pending scan.
+  let _piiScanIdleHandle = null;
+
   // ── State helpers ──────────────────────────────────────────────────────────
 
   /**
@@ -596,10 +600,30 @@
     // roots), with characterData included so typed text in contenteditable
     // is detected without a reload.
     const anyDetect = resolved.pii_email || resolved.pii_numeric;
+    if (_piiScanIdleHandle != null) {
+      if (typeof cancelIdleCallback !== 'undefined') cancelIdleCallback(_piiScanIdleHandle);
+      else clearTimeout(_piiScanIdleHandle);
+      _piiScanIdleHandle = null;
+    }
     if (anyDetect && resolved.enabled) {
       blsi.Engine.injectPiiRules(resolved.pii_mode, resolved.pii_redaction_color);
-      blsi.PiiDetector.scan(document.body, { email: resolved.pii_email, numeric: resolved.pii_numeric });
-      blsi.Engine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
+      // Defer the initial scan past LCP — walking every text node and wrapping
+      // matches synchronously at document_idle adds hundreds of ms to LCP on
+      // image-heavy pages (YouTube, etc.) and triggers reflow during the CLS
+      // measurement window. Subscription is also deferred so handleMutations
+      // doesn't no-op on records that arrive before scan() seeds activeTypes.
+      const types = { email: resolved.pii_email, numeric: resolved.pii_numeric };
+      const runScan = () => {
+        _piiScanIdleHandle = null;
+        if (!document.body) return;
+        blsi.PiiDetector.scan(document.body, types);
+        blsi.Engine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
+      };
+      if (typeof requestIdleCallback !== 'undefined') {
+        _piiScanIdleHandle = requestIdleCallback(runScan, { timeout: 2000 });
+      } else {
+        _piiScanIdleHandle = setTimeout(runScan, 0);
+      }
     } else {
       blsi.Engine.unsubscribeMutations('pii');
       blsi.Engine.removePiiRules();
