@@ -187,4 +187,17 @@ servers, no telemetry.
 
 ## License
 
-MIT
+[GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`).
+
+Copyright (C) 2025 Chennakeshava G.
+
+BlurrySite is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. It is distributed in the hope that it will be
+useful, but **without any warranty**; without even the implied warranty
+of merchantability or fitness for a particular purpose. See the
+[`LICENSE`](LICENSE) file for the full text.
+
+Third-party assets (fonts, icons) carry their own licenses — see
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) for the inventory.

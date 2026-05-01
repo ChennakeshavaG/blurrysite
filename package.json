@@ -2,6 +2,16 @@
   "name": "blurrysite",
   "version": "1.0.0",
   "description": "Browser extension to blur text, images, and videos for privacy",
+  "license": "GPL-3.0-or-later",
+  "author": "Chennakeshava G <gudapallichennakeshava@gmail.com>",
+  "homepage": "https://github.com/ChennakeshavaG/blurrysite",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChennakeshavaG/blurrysite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ChennakeshavaG/blurrysite/issues"
+  },
   "scripts": {
     "test": "npm run i18n:lint && npm run string:lint && jest --coverage",
     "test:unit": "npm run i18n:lint && npm run string:lint && jest tests/unit",

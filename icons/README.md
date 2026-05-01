@@ -72,3 +72,19 @@ PNGs must be rendered via inline SVG + Playwright screenshot (not canvas `drawIm
 
 Dark disc: `fill="rgba(255,255,255,0.38)"`  
 Light disc: `fill="rgba(0,0,0,0.14)"`
+
+---
+
+## Licensing
+
+The icon artwork (PNG + SVG) is original work covered by the project's
+top-level [`LICENSE`](../LICENSE) (GPL-3.0-or-later).
+
+The cursive **Pinyon Script** font embedded inside `logo-dark.svg` and
+`logo-light.svg` is third-party. It is licensed under the SIL Open Font
+License v1.1 — see [`LICENSE-pinyon-script.txt`](LICENSE-pinyon-script.txt)
+in this directory. Source: https://fonts.google.com/specimen/Pinyon+Script
+(designer: Nicole Fally).
+
+A consolidated inventory of all third-party assets bundled with the
+extension lives at [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md).
