@@ -4,7 +4,7 @@
 
 ### Exact Structure of `settings.SHORTCUTS`
 
-The complete default structure is defined in `/Users/keshava-13944/blurrysite/src/constants.js` (lines 151–173):
+The complete default structure is defined in `src/constants.js` (lines 151–173):
 
 ```javascript
 SHORTCUTS: Object.freeze({
