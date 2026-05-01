@@ -194,16 +194,21 @@ const BlurrySitePopupRenderHtb = (() => {
     slider.step  = '1';
     slider.value = String((settings.global_default_settings && settings.global_default_settings.blur_radius) || 6);
 
+    function _strengthLabel(r) {
+      var key = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
+      return _t(key);
+    }
+
     var valEl = document.createElement('span');
     valEl.className = 'bl-slider-val';
-    valEl.textContent = slider.value + 'px';
+    valEl.textContent = _strengthLabel(+slider.value);
 
     // Set initial fill
     _updateFill(slider);
 
     slider.addEventListener('input', function () {
       var v = +slider.value;
-      valEl.textContent = v + 'px';
+      valEl.textContent = _strengthLabel(v);
       _updateFill(slider);
       onSave({ global_default_settings: { blur_radius: v } });
     });

@@ -111,7 +111,7 @@ const BlurrySitePopupRender = (() => {
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
       summaryEl.appendChild(_summaryRow(
         _t('htb_label_strength'),
-        _t(strengthKey) + ' (' + r + 'px)',
+        _t(strengthKey),
       ));
     }
 
@@ -524,7 +524,7 @@ const BlurrySitePopupRender = (() => {
 
     const r = settings.global_default_settings.blur_radius;
     const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
-    wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
+    wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey)));
 
     const cats = settings.blur_all.settings.blur_categories || {};
     const catLabels = Object.keys(_CAT_KEY).filter(k => cats[k]).map(k => _t(_CAT_KEY[k]));
@@ -629,7 +629,7 @@ const BlurrySitePopupRender = (() => {
       wrap.appendChild(_summaryRow(_t('htb_label_mode'), _t(_TYPE_KEY[settings.pick_and_blur.settings.blur_type || 'blur'])));
       const r = settings.global_default_settings.blur_radius;
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
-      wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey) + ' (' + r + 'px)'));
+      wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey)));
     } else {
       const countEl = document.createElement('p');
       countEl.className = 'bl-pick-count';
