@@ -1,0 +1,32 @@
+# Gitleaks configuration for BlurrySite
+# Run: gitleaks detect --config .gitleaks.toml
+#
+# Purpose: catch accidental leaks of internal infrastructure references
+# that survived the history rewrite. Test fixtures and PII research docs
+# contain intentional example emails/data — allowlisted below.
+
+title = "BlurrySite gitleaks config"
+
+[allowlist]
+  paths = [
+    '''\.git/''',
+    '''\.claude/''',
+    '''node_modules/''',
+    '''package-lock\.json''',
+    '''tests/''',
+    '''docs/research/''',
+    '''\.superpowers/''',
+  ]
+
+# Non-public npm registry URLs (e.g. private Nexus mirrors).
+[[rules]]
+  id = "non-public-registry"
+  description = "Non-public npm registry URL"
+  regex = '''https?://[a-zA-Z0-9.-]*registry[a-zA-Z0-9.-]*\.[a-zA-Z]{2,}'''
+  tags = ["registry"]
+
+  [rules.allowlist]
+    regexes = [
+      '''registry\.npmjs\.org''',
+      '''registry\.npmmirror\.com''',
+    ]
