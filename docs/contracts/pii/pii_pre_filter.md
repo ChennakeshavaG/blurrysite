@@ -2,11 +2,12 @@
 
 ## Overview
 
-Stage 0 whole-node drops. Cheap DOM + text checks that decide whether a text node should bypass the PII pipeline entirely. Four predicates:
+Stage 0 whole-node drops. Cheap DOM + text checks that decide whether a text node should bypass the PII pipeline entirely. Five predicates:
 - `isExtensionUI` — extension-owned UI tree
 - `isInsidePiiSpan` — already-wrapped node
 - `isInsideCodeBlock` — `<code>` / `<pre>` / `<kbd>` / `<samp>` / syntax-highlighter ancestor
 - `hasDigit` — M1 whole-node digit pre-screen
+- `hasDigitOrLongAlnum` — extended pre-screen for the numeric branch when the identifier sub-pass is in play; lets pure-alpha tokens with a 8+ char alnum run (Bearer, base64 refresh tokens) through
 
 Sibling sub-modules call into this through `blsi.PiiPreFilter`.
 
@@ -15,6 +16,7 @@ Sibling sub-modules call into this through `blsi.PiiPreFilter`.
 | Variable | Description |
 |---|---|
 | `_HAS_DIGIT_RE` | `/\d/` — module-level shared regex used by `hasDigit`. No `/g` flag (not used in match-position contexts). |
+| `_HAS_DIGIT_OR_LONG_ALNUM_RE` | `/\d|[A-Za-z0-9]{8,}/` — module-level shared regex used by `hasDigitOrLongAlnum`. Same single-pass cost as `_HAS_DIGIT_RE`. |
 | `_CODE_SELECTOR` | `'code, pre, kbd, samp, [data-code], .highlight, .codehilite'` — selector list passed to `closest()` by `isInsideCodeBlock`. |
 
 ## Public API
@@ -60,6 +62,14 @@ Returns `false` for null/orphaned nodes.
 **Logic**: `_HAS_DIGIT_RE.test(text)`. Single linear scan, no allocation.
 
 **Note**: callers that have email enabled must NOT skip nodes that fail `hasDigit` outright — email addresses contain no digit-only requirement. The facade reads `types.email` and runs the email path independently when `hasDigit` returns `false`.
+
+### hasDigitOrLongAlnum(text)
+
+**What**: Extended whole-node pre-screen — returns `true` if the string contains any digit OR any run of 8+ alnum characters. Used by the facade on the numeric branch when the identifier sub-pass is enabled, so pure-alpha tokens (Bearer headers, base64 refresh tokens) with no digit but with a long alnum run still survive Stage 0 and reach the detector.
+**Params**:
+- `text` — `string`
+**Returns**: `boolean`
+**Logic**: `_HAS_DIGIT_OR_LONG_ALNUM_RE.test(text)`. Single linear scan, no allocation; the alternation is cheap because the digit branch short-circuits on the first digit.
 
 ## Dependencies
 

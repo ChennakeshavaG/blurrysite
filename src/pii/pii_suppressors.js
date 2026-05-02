@@ -135,6 +135,23 @@ const BlurrySitePiiSuppressors = (() => {
   const _DATE_KEYWORD_RE =
     /\b(?:date|posted|published|updated|created|modified|due|expires|expir(?:es|ation|y|ed)|valid(?: until)?|as of|since|fecha|publicado|actualizado|vence|date|publié|mis à jour|expire|Datum|veröffentlicht|aktualisiert|gültig|fällig|日付|投稿|更新|期限|更新|日期|发布|更新|截止|तारीख|दिनांक|प्रकाशित)\b/i;
 
+  // Match-shape gate for the keyword fallback. A real date written near a
+  // date keyword is short (≤4 bare digits like "2024", or 1–4 digit groups
+  // joined by `/`, `.`, `-`, or space — "11/12", "01/15/2024", "2024-01-15").
+  // Phone numbers, credit cards, account numbers — anything ≥10 digits with
+  // separators, or ≥5 bare digits — must NOT be killed by a stray
+  // "created"/"updated" nearby. The `length > 10` guard plus the explicit
+  // separator-required structure catch both `+91 94909 73391` (15 chars, has
+  // `+`) and `9876543210` (10 bare digits, no separator).
+  const _DATE_SHAPE_FOR_KEYWORD_RE =
+    /^(?:\d{1,4}|\d{1,4}[ /.\-]\d{1,4}(?:[ /.\-]\d{1,4})?)$/;
+
+  function _isDateShapedForKeyword(matchText) {
+    if (matchText.length > 10) return false;
+    if (matchText.indexOf("+") !== -1) return false;
+    return _DATE_SHAPE_FOR_KEYWORD_RE.test(matchText);
+  }
+
   function isDateLike(matchText, text, matchIndex) {
     // Structural fast-path — separator-bearing forms (ISO 8601 / slash / dot / week / ordinal).
     for (const re of _DATE_STRUCTURAL_RES) {
@@ -146,7 +163,9 @@ const BlurrySitePiiSuppressors = (() => {
       const d = parseInt(matchText.slice(6, 8), 10);
       if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return true;
     }
-    // Windowed keyword fallback.
+    // Windowed keyword fallback — gated on match shape so phone-shaped /
+    // account-shaped numbers near "created"/"updated"/etc. are NOT suppressed.
+    if (!_isDateShapedForKeyword(matchText)) return false;
     const start = Math.max(0, matchIndex - 50);
     const end = Math.min(text.length, matchIndex + matchText.length + 50);
     return _DATE_KEYWORD_RE.test(text.slice(start, end));
@@ -163,6 +182,18 @@ const BlurrySitePiiSuppressors = (() => {
     return _ORDER_REF_RE.test(text.slice(start, end));
   }
 
+  // Statistics keyword window — papers / reports / dashboards leak numbers
+  // adjacent to `p<`, `n=`, `CI`, `SD`, `SE`, `R²`, `r=`, `cohort`,
+  // `confidence interval`, `sample size`, etc. ±30-char window.
+  const _STATS_RE =
+    /\b(?:p\s*[<=>]|n\s*=|sample\s+size|cohort|CI|confidence\s+interval|95%|99%|SD|SE|σ|R²|R\^2|r\s*=)\b/i;
+
+  function isStatistic(_matchText, text, matchIndex) {
+    const start = Math.max(0, matchIndex - 30);
+    const end = Math.min(text.length, matchIndex + 30);
+    return _STATS_RE.test(text.slice(start, end));
+  }
+
   // ── Cascade tiers (Phase 2) ──────────────────────────────────────────────
   // Cheap-to-expensive ordering — falsePositivesCheckCascade short-circuits
   // on the first tier that produces a hit. Tier boundaries are documented
@@ -177,7 +208,7 @@ const BlurrySitePiiSuppressors = (() => {
   ]);
   const _CHECKS_TRAILING = Object.freeze([isMeasurement, isResolution]);
   const _CHECKS_PRECEDING = Object.freeze([isOrdinalLabel]);
-  const _CHECKS_KEYWORD_50 = Object.freeze([isDateLike, isOrderRef]);
+  const _CHECKS_KEYWORD_50 = Object.freeze([isDateLike, isOrderRef, isStatistic]);
   const _CHECKS_KEYWORD_LARGE = Object.freeze([isPublicPrice, isCountNoise]);
 
   // Flat list preserved for back-compat (tests / aggressive profile).
@@ -229,6 +260,7 @@ const BlurrySitePiiSuppressors = (() => {
     isOrdinalLabel,
     isDateLike,
     isOrderRef,
+    isStatistic,
     isPublicPrice,
     isCountNoise,
     falsePositivesCheck,

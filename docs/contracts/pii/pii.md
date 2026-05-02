@@ -21,6 +21,7 @@ None. State lives in `blsi.PiiState`.
 **Returns**: `number` — total spans created in this call.
 **Side effects**:
 - Sets `blsi.PiiState.setActiveTypes(...)` for reuse by `handleMutations`.
+- **Phase 4**: seeds the per-scan country signal — `blsi.PiiState.setCountry(blsi.PiiCountry.detect())` (PERF.md M6 cache). Stage 2 validators read it via `getCountry()`. The facade is the only path that should seed; tests can drive the signal end-to-end through `<html lang>` because `PiiCountry.detect()` reads it.
 - Resets `blsi.PiiState._stats` (per-scan window).
 - TreeWalker collects ALL text nodes before wrapping — avoids walker invalidation from DOM mutations during the scan.
 - For each eligible text node: calls `blsi.PiiState.recordNode(hasDigit)`, then `blsi.PiiDetectors.findMatches`, then `_wrapTextNode`.
@@ -32,7 +33,7 @@ None. State lives in `blsi.PiiState`.
 - Nodes already inside a `[data-bl-si-pii]` wrapper (`blsi.PiiPreFilter.isInsidePiiSpan`).
 - Nodes inside `<code>` / `<pre>` / `<kbd>` / `<samp>` / `[data-code]` / `.highlight` / `.codehilite` (`blsi.PiiPreFilter.isInsideCodeBlock`).
 - Text nodes shorter than 4 characters (shortest legitimate PII match — email `a@b.co` is 6 chars, numeric patterns require 4+). Faster than `trim().length === 0` because no string allocation, and stricter (also drops single-glyph nodes). Same length floor applied in `handleMutations` (childList added text nodes + characterData updates).
-- **M1 digit pre-screen** — nodes with no digit are skipped UNLESS `types.email` is enabled (email matching needs no digit). `blsi.PiiPreFilter.hasDigit(text)`.
+- **M1 digit pre-screen** — nodes are skipped unless one of: (a) `types.email` is enabled (email needs no digit), (b) `blsi.PiiPreFilter.hasDigit(text)` (any digit), or (c) `types.numeric` is enabled AND `blsi.PiiPreFilter.hasDigitOrLongAlnum(text)` (any digit OR an 8+ alnum run). The (c) branch lets pure-alpha identifier-context tokens (Bearer headers, base64 refresh tokens) reach the detector. Same gate is applied in `handleMutations` for childList added text nodes.
 
 ### clear(rootEl)
 

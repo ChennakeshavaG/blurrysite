@@ -158,6 +158,40 @@ No external module dependencies are mocked — the `src/pii/` modules operate pu
 - `extended isPublicPrice — "price" keyword suppresses` — `'The price 12345 here.'` returns 0
 - `extended isPublicPrice — multilingual ES "precio" suppresses` — `'El precio 12345 aquí.'` returns 0 (ES keyword)
 
+### Bug fixes — currency punct / country-code phone / isDateLike shape gate (added)
+- `NUMERIC currency prefix — trailing comma is NOT captured` — `'Hello $1,234.56, world done.'` → span = `'$1,234.56'` (alt #1 anchored at digit-end)
+- `NUMERIC currency prefix — trailing space is NOT captured` — `'Hello $100 world done.'` → span = `'$100'`
+- `NUMERIC currency prefix — trailing period is NOT captured` — `'Saw $50.'` → span = `'$50'`
+- `NUMERIC currency prefix — European decimal comma still captured fully` — `'Paid €99,99 here.'` → span = `'€99,99'` (internal comma preserved)
+- `NUMERIC country-code phone — "+91 94909 73391" wraps as one span` — alt #4 captures cc + 2 groups
+- `NUMERIC country-code phone — "+1 555-123-4567" wraps as one span` — alt #4 captures cc + 3 groups
+- `NUMERIC country-code phone — plain "555-123-4567" still wraps as one span` — alt #4's optional `\+?` allows no-`+` form
+- `NUMERIC country-code phone — "1234-5678" still falls through to alt #5` — leading 4-digit group exceeds alt #4's `\d{1,3}`; alt #5 takes over
+- `isDateLike — country-code phone near "created" is NOT suppressed` — `('+91 94909 73391', 'Group created by ...', 17)` returns `false` (length>10 fails shape gate)
+- `isDateLike — bare 10-digit phone near "updated" is NOT suppressed` — `('9876543210', 'Account updated 9876543210 yesterday', 16)` returns `false` (no separator fails shape gate)
+- `isDateLike — country-code phone near "modified" is NOT suppressed` — `('+1 555-123-4567', 'Last modified ...', 14)` returns `false` (`+` fails shape gate)
+- `isDateLike — bare 4-digit year near "Posted" IS still suppressed` — `('2024', 'Posted 2024', 7)` returns `true` (shape gate passes, keyword fires)
+- `isDateLike — slash date near "Created" IS still suppressed via shape gate` — `('11/12', 'Created on 11/12', 11)` returns `true`
+- `isDateLike — full slash date "01/15/2024" IS still suppressed (structural fast-path)` — structural list catches it before the gate runs
+- `end-to-end — "Group created by +91 94909 73391" wraps the phone` — combined Bug 2 + Bug 3 regression
+- `end-to-end — "Account updated 9876543210 yesterday" wraps the number` — combined Bug 3 + alt #7 regression
+- `NUMERIC parens phone — "(555) 123-4567" wraps as one span` — alt #4 parens form
+- `NUMERIC parens phone — "(555)-123-4567" wraps as one span` — alt #4 with hyphen between `)` and groups
+- `NUMERIC parens phone — "+1 (555) 123-4567" wraps including country code` — alt #4 with leading cc
+- `NUMERIC parens phone — "(20) 7946 0958" wraps with 2-digit area code` — alt #4 UK-style
+- `NUMERIC phone — UK landline "+44 20 7946 0958" wraps as one span` — alt #5 with 2-digit middle group
+- `NUMERIC phone — French "01 23 45 67 89" wraps with all 2-digit groups` — alt #5 all-2-digit groups, no `+`
+
+### Identifier-context detection (added — sub-pass inside types.numeric)
+Decision #3 reframe — `Order #12345` / `Tracking 12345` / `Invoice 12345` (previous 3 isOrderRef negatives) **flipped to wrap** the value via the new keyword-prefix detector. `isOrderRef` itself is unchanged.
+
+Keyword-prefix positives: `User ID: 12345`, `user_id=abc123def`, `API Key — 7HsKx9aZ2pQrLm`, `password: hunter2`, `OTP is 4729`, `Confirmation code: VX7-9PQ`, `customer #12345`, `employee no 88421`, `client_secret = "abc123_xyz"`, `Verification: 123456`, `Pin 4242`, `refresh_token: VeryLongAlphaTokenButNoDigits` (16+ alpha path), `Account #12345 / Customer ID 67890`, `Order #1234567890`, `Order ABC-12345`, tie-break `User ID: 12345`.
+
+Dispositive providers: bare AWS `AKIA…`, GitHub PAT `ghp_…`, 3-segment JWT, `Authorization: Bearer eyJ…`, Stripe `api_key: sk_live_…`, Bearer + JWT overlap → one span.
+
+Negatives: `the id is short`, `id="x"`, `account holder smith`, `Order #5`, `Case 12`, `password: aaaaaaaaaaaaaaaa` (all-same-char gate).
+- `NUMERIC phone — NBSP-separated "+91 94909 73391" wraps as one span` — alt #5 with U+00A0 separators
+
 ### Phase 2 — cascade tiers + regex cache + stats (added)
 - `Phase 2 — getCachedRegex returns same RegExp instance per pattern` — two consecutive calls with the same prototype return the identical instance; `lastIndex` is `0` after each call
 - `Phase 2 — getCachedRegex resets lastIndex on each call` — after `exec()` advances `lastIndex`, a subsequent `getCachedRegex` call resets it to `0`
@@ -167,6 +201,120 @@ No external module dependencies are mocked — the `src/pii/` modules operate pu
 - `Phase 2 — getStats counters increment when Logger.enabled is true` — mocks `blsi.Logger = { enabled: true }`; assert `node_count`, `digit_node_count`, `total_emit` all ≥ 1 after a scan that finds a numeric match. Restores `blsi.Logger` in `finally`.
 - `Phase 2 — getStats resets at the top of each scan` — after `scan` + `clear`, all counters return to 0
 - `Phase 2 — getStats is a copy, not a live reference` — mutating the returned object does not affect subsequent `getStats` results
+
+### Phase 3 — Stage 1 dedicated detectors (added)
+
+Integration coverage for the high-confidence checksum-validated detectors wired into `findMatches` ahead of the identifier sub-pass and Stage 3 NUMERIC_RE. Underlying validator unit tests live in `pii_checksums.test.js`.
+
+#### Stage 1 — Card PAN
+- `valid Visa test PAN wrapped as one span` — `'4242424242424242'` → 1 span; textContent equals the full 16-digit PAN.
+- `Mastercard with hyphen separators wrapped` — `'5555-5555-5555-4444'` → 1 span (regex allows `[ \-]` between digits).
+- `Amex 15-digit test PAN wrapped` — `'378282246310005'` → 1 span (15-digit Amex IIN).
+- `Luhn-passing 16-digit number with non-card IIN falls back to bare-numeric (NOT Stage 1)` — `'1230231230231233'` → ≥ 1 span via Stage 3; Stage 1 declines because `_classifyPan` returns null.
+- `Luhn-FAIL 16-digit not detected by Stage 1 (still falls back)` — `'4242424242424241'` → 1 span (bare-numeric); Stage 1 declines on Luhn fail. Asserts no double-wrap.
+
+#### Stage 1 — IBAN
+- `valid GB IBAN with spaces wrapped as one span` — `'GB29 NWBK 6016 1331 9268 19'` → 1 span; textContent equals the spaced form.
+- `valid DE IBAN no separators wrapped` — `'DE89370400440532013000'` → 1 span.
+- `flipped IBAN check digits not wrapped` — `'GB99 NWBK 6016 1331 9268 19'` → no IBAN-shaped span starting `GB`; mod-97 fails.
+- `non-IBAN 2-letter prefix with valid mod-97 length not wrapped` — `'ZZ29NWBK60161331926819'` → no `ZZ`-prefixed PII span; `ZZ` has no `_IBAN_LENGTHS` entry.
+
+#### Stage 1 — ETH wallet
+- `valid 0x + 40-hex address wrapped as one span` — `'0x742d35cc6634c0532925a3b844bc9e7595f0beb1'` → 1 span; textContent equals the full address.
+- `0x with 39 hex chars NOT wrapped (length dispositive)` — Short-by-one address → no `0x`-prefixed PII span (regex strictly requires 40 hex).
+- `mixed-case ETH address still wrapped` — Upper-case hex still matches; EIP-55 case-checksum is optional in this implementation.
+
+#### Stage 1 — ISBN-13 (suppress / anti-PII)
+- `valid ISBN-13 NOT wrapped (consumed → no PII span)` — `'9780135957059'` → 0 spans; Stage 1 consumes the range, suppressing the bare-numeric overlap.
+- `ISBN-13 dashed form NOT wrapped` — `'978-0-13-595705-9'` → 0 spans.
+- `978-prefixed but checksum-invalid 13-digit number STILL wraps via bare-numeric` — Stage 1 declines on checksum fail; bare-numeric Stage 3 catches it.
+
+#### Stage 1 — Aadhaar
+- `valid Verhoeff-passing 12-digit ID wrapped` — `'234123412346'` → ≥ 1 span (synthetic Aadhaar passing Verhoeff).
+- `Verhoeff-failing 12-digit number falls back to bare-numeric (not Stage 1)` — Off-by-one check digit → ≥ 1 span via Stage 3 (bare-numeric).
+
+#### Stage 1 — overlap with bare-numeric
+- `PAN does not double-wrap (Stage 1 + Stage 3)` — Bare 16-digit Visa → exactly 1 span; consumed-tracker prevents Stage 3 from re-emitting.
+- `ETH address does not double-wrap` — 0x-prefixed address → exactly 1 span.
+
+### Phase 4 — Stage 2 context-gated detectors (added)
+
+Stage 2 detectors run after the identifier sub-pass and before Stage 3 NUMERIC_RE, sharing the same `consumed[]` tracker. Validators read country signal via `blsi.PiiState.getCountry()`, seeded once per scan by the facade calling `blsi.PiiCountry.detect()`. Tests drive the country signal through `<html lang>` (cleared in `beforeEach` / `afterEach`) — that's the same input path production uses.
+
+Country signal cleanup is added to `beforeEach`/`afterEach`: `document.documentElement.removeAttribute('lang')` plus the existing innerHTML reset.
+
+#### Stage 2 — MAC address
+- `valid colon-separated MAC wrapped` — `'00:1A:2B:3C:4D:5E'` → 1 span; full address text.
+- `hyphen-separated MAC wrapped` — `'00-1A-2B-3C-4D-5E'` → 1 span.
+- `5-pair string (only 5 octets) NOT wrapped as MAC` — short-by-one pairs → no MAC-shaped span.
+
+#### Stage 2 — IPv4
+- `public IPv4 with keyword nearby wrapped` — `'Connect to server 8.8.8.8 today.'` → 1 span; textContent equals `8.8.8.8`.
+- `public IPv4 without keyword NOT wrapped` — Same address with no keyword → no IPv4 span.
+- `private IPv4 (10/8) NOT wrapped even with keyword` — `'Server IP 10.0.0.1 internal.'` → 0 spans (private range suppressed).
+- `loopback 127.0.0.1 NOT wrapped` — Reserved range.
+- `192.168.x.y private NOT wrapped` — Reserved range.
+
+#### Stage 2 — IMEI
+- `Luhn-valid IMEI with keyword wrapped` — `'490154203237518'` near `IMEI` → 1 span.
+- `Luhn-valid 15-digit number WITHOUT keyword falls back to bare-numeric` — Same digits, no keyword → 1 span via Stage 3 bare-numeric.
+- `Luhn-FAIL 15-digit number with IMEI keyword NOT wrapped by Stage 2 (still bare-numeric)` — Stage 2 declines on Luhn fail; Stage 3 wraps.
+
+#### Stage 2 — E.164 phone
+- `+ prefix dispositive — wrapped without keyword` — `'+1 555-123-4567'` → 1 span.
+- `NBSP-separated +91 phone wrapped as one span` — `'+91<NBSP>94909<NBSP>73391'` → 1 span (NBSP via ` ` escape in regex source).
+
+#### Stage 2 — SSN_US
+- `SSN with keyword wrapped (no country signal)` — `'SSN 123-45-6789 on file.'` → 1 span; textContent equals `123-45-6789`.
+- `SSN on US-country page wrapped without keyword` — `<html lang="en-US">` → 1 span via country gate.
+- `SSN on non-US page without keyword NOT wrapped` — `<html lang="en-GB">` + no SSN keyword → ≤ 1 span (only Stage 3 bare-numeric of the trailing 4-digit group).
+- `SSN with 000 area code NOT wrapped (range gate)` — Negative lookahead in regex rejects `000` first 3 digits.
+- `SSN with 666 area code NOT wrapped` — Negative lookahead rejects `666`.
+
+#### Stage 2 — NHS_UK
+- `valid NHS number on GB-country page wrapped` — `<html lang="en-GB">` + `'943 476 5919'` (mod-11 valid) → 1 span; textContent matches the spaced form.
+- `valid NHS number with NHS keyword wrapped (no country signal)` — `'NHS number 9434765919 entered.'` → 1 span via keyword.
+- `valid NHS shape on non-GB page without keyword NOT wrapped via Stage 2` — `<html lang="en-US">` + no NHS keyword → 1 span via Stage 3 bare-numeric (Stage 2 declines).
+- `mod-11 fail on GB page NOT wrapped via Stage 2` — `'9434765918'` (off-by-one) → Stage 2 declines on mod-11 fail; Stage 3 wraps.
+
+### Phase 5 — Consolidated descriptor framework (added)
+
+After Phase 5 unification, every detector is a frozen data row in `STAGE1_DETECTORS` / `STAGE2_DETECTORS` running through a single `_runDescriptor` runner. The integration tests below cover the new detectors landed alongside the consolidation.
+
+#### Stage 1 dispositive — CN ID / NRIC SG / CURP MX / Emirates ID / NIE ES / Codice Fiscale
+- `valid 18-char CN ID with X check digit wrapped` — activates the previously-dead `iso7064Mod11_2` checksum.
+- `invalid CN ID checksum NOT wrapped via Stage 1` — fails ISO 7064 → Stage 1 declines.
+- `NRIC SG positional shape wrapped` — `S1234567A` → 1 span (positional shape dispositive).
+- `CURP MX positional shape wrapped` — `HEGG560427MVZRRL04` → 1 span (18-char RENAPO format).
+- `Emirates ID with 784 prefix wrapped` — `784-1985-1234567-8` → 1 span.
+- `NIE ES XYZ-prefix shape wrapped` — `X1234567L` → 1 span.
+- `Codice Fiscale 16-char wrapped` — `RSSMRA80A01H501Z` → 1 span.
+
+#### Stage 1 dispositive — postal codes (UK / CA)
+- `UK postcode SW1A 1AA wrapped` — distinctive shape, no country gate.
+- `CA postal K1A 0B1 wrapped` — alternating letter-digit, dispositive.
+
+#### Stage 1 dispositive — IPv6 / GPS DMS / Plus Code
+- `IPv6 full address wrapped` — `2001:0db8:85a3:0000:0000:8a2e:0370:7334`.
+- `GPS DMS coordinate wrapped` — `40°26'46"N`.
+- `Plus Code wrapped` — `8FVC9G8F+5W`.
+
+#### Stage 2 country-gated — postal codes
+- `NL postal on NL page wrapped` — `<html lang="nl-NL">` + `1234 AB`.
+- `NL postal-shaped 1024 MB on non-NL page NOT wrapped (measurement)` — proves the country gate is necessary; raw shape collides with `1024 MB`.
+- `US ZIP+4 on US page wrapped` — `<html lang="en-US">` + `90210-1234`.
+
+#### Stage 2 country-gated — BSN NL / NPI US / DNI ES / ABN AU / MRN
+- `BSN on NL page wrapped` — `111222333` passes 11-test (weights 9..2 + −1 on d9, sum mod 11 = 0).
+- `NPI with NPI keyword wrapped` — `1234567893` passes Luhn(`80840` + npi).
+- `DNI on ES page wrapped` — `12345678Z` (letter-mod-23 dropped — country gate alone).
+- `ABN with keyword wrapped` — `51 824 753 556` (mod-89 dropped — keyword gate alone).
+- `MRN with medical keyword wrapped` — bare 5-digit number with `MRN` / `Patient` keyword.
+
+#### isStatistic suppressor
+- `"n=2018" near "p<0.05" not blurred` — 5-digit value within 30 chars of `p<` / `n=` keyword → suppressed.
+- `"R²=0.842" not blurred` — 4-digit value within 30 chars of `R²=` keyword → suppressed.
+- `plain number with no statistical context still wrapped` — guards against over-suppression.
 
 ## Edge Cases Covered
 

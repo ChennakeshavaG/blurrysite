@@ -52,11 +52,11 @@ Isolated world (run_at:"document_idle"):
  7. storage_model.js      → blsi.Model (direct chrome.storage access; single blsi_model key; resolve/patch/debounced_patch)
  8. tab_privacy.js        → blsi.TabPrivacy (title masking; enable/disable/isActive)
  9a. pii/pii_state.js      → blsi.PiiState (shared private state for PII sub-modules; PII_ATTR + match count + active types)
- 9b. pii/pii_checksums.js  → blsi.PiiChecksums (pure-math checksum algos; Phase 0 stub)
+ 9b. pii/pii_checksums.js  → blsi.PiiChecksums (pure-math checksum algos: luhn / verhoeff / mod97 / mod11Weighted / iso7064Mod11_2 / isbn13 / isbn10)
  9c. pii/pii_pre_filter.js → blsi.PiiPreFilter (Stage 0 whole-node drops: isExtensionUI, isInsidePiiSpan, isInsideCodeBlock, hasDigit)
- 9d. pii/pii_country.js    → blsi.PiiCountry (page-country signal; Phase 0 stub)
+ 9d. pii/pii_country.js    → blsi.PiiCountry (page-country signal: detect / detectFromInputs / _resetCache; cached once per scan)
  9e. pii/pii_suppressors.js → blsi.PiiSuppressors (Stage 4 FP cascade: isYear/isVersion/isHexColor/isYearRange/isPercentage/isScientificNotation/isMeasurement/isResolution/isOrdinalLabel/isDateLike/isOrderRef/isPublicPrice/isCountNoise + falsePositivesCheck)
- 9f. pii/pii_detectors.js  → blsi.PiiDetectors (EMAIL_RE/NUMERIC_RE/PATTERNS + findMatches)
+ 9f. pii/pii_detectors.js  → blsi.PiiDetectors (Phase 5 consolidation: every detector is a frozen row in STAGE1_DETECTORS / STAGE2_DETECTORS driven by unified _runDescriptor — Stage 1 dispositive → identifier sub-pass → Stage 2 country/keyword-gated → Stage 3 NUMERIC_RE)
  9g. pii/pii.js            → blsi.PiiDetector (facade; scan/clear/handleMutations/getMatchCount/getPatterns)
 10. fonts.js              → blsi.Fonts (embedded WOFF2 font assets; FONT_FACE string for "bl-si-redact-asterisk")
 11. core/engine_state.js  → blsi.EngineState (shared private state for engine sub-modules)
@@ -92,7 +92,10 @@ A module may only depend on modules loaded before it.
 - `getActiveTypes()` returns the current `{ email, numeric }` object or `null` (= unseeded). Modules treat `null` as "no scan has run yet" and no-op accordingly.
 
 ### pii/pii_checksums.js
-- Phase 0 stub — exposes `Object.freeze({})`. Phase 3 fills with Luhn / Verhoeff / mod-N / ISO 7064 / Base58Check / bech32 / letter-tables. Pure math only — no DOM, no storage.
+- Pure-math validators consumed by Stage 1 + Stage 2 detectors. No DOM, no storage, no globals — every function takes a string + (where parameterised) numeric weights and returns a boolean or numeric residue.
+- Phase 3 + Phase 4 ship: `luhn` (mod-10 — PAN, IMEI, SIN, NPI), `verhoeff` (Aadhaar D5-group), `mod97` (IBAN, ISO 13616), `mod11Weighted` (NHS / BSN / Personnummer — generic, returns residue 0..10 or -1), `iso7064Mod11_2` (Chinese resident ID, accepts `'X'` for 10), `isbn13` (weighted mod-10), `isbn10` (weighted mod-11, accepts `'X'` for 10).
+- Deferred (no consumer yet): `bech32` / `base58check` (BTC wallets), `mod89` (AU ABN), `iso7064Mod11_10` (DE Steuer-ID), letter-tables (Codice Fiscale / DNI / NIE / NRIC SG). Each lands alongside the detector that needs it.
+- Adding an algorithm: pure function in this file → `describe` block in `pii_checksums.test.js` → entry in `pii_checksums.md` Public API → entry in `pii_checksums.tests.md` Test File Layout → consumer detector in `pii_detectors.js`.
 
 ### pii/pii_pre_filter.js
 - `isExtensionUI(node)` enumerates the 6 extension-owned ancestor selectors and returns `true` for any descendant of those — so the PII scan skips toolbars, popups, picker UI, etc.
@@ -100,14 +103,18 @@ A module may only depend on modules loaded before it.
 - Phase 1 will add `isInsideCodeBlock` + the M1 digit pre-screen here. Keep all whole-node drop heuristics in this module — pattern modules must not re-implement them.
 
 ### pii/pii_country.js
-- Phase 0 placeholder. Phase 4 fills with page-level country signal (TLD + lang + meta + currency density) returning ISO 3166 alpha-2 or null.
+- Page-level country signal — `detect()` (DOM-aware, cached) + `detectFromInputs(inputs)` (pure) + `_resetCache()`. Returns ISO 3166 alpha-2 or `null`.
+- Priority chain: meta tags (`geo.country`, `og:locale`, `content-language`) → `<html lang>` (region subtag required, bare `en` rejected) → ccTLD allow-list (~45 entries; `.io` / `.me` / `.tv` / `.co` deliberately excluded as gTLDs) → currency-density (single-country symbols only: `£`/`₹`/`₩`/`₽`; threshold ≥3 occurrences in first 1000 chars).
+- Cache lifecycle (PERF.md M6): `detect()` runs at most once per scan even on heavy pages with thousands of text nodes. Facade `pii.scan()` calls it at the top and seeds `blsi.PiiState.setCountry(...)`. `_resetCache()` clears for SPA invalidation paths + tests.
+- Adding a ccTLD: append to `_TLD_TO_COUNTRY` in source + add a TP test (`example.<tld> → <country>`) in `pii_country.test.js` + bump the contract list.
+- Adding a currency symbol: append to `_CURRENCY_HINT` only if the symbol maps to a single country. Multi-country symbols (`$`, `€`, `¥`) belong nowhere — they hurt precision more than they help.
 
 ### pii/pii_suppressors.js
 - `NUMERIC_PROFILE` (`'precise' | 'aggressive'`) is a developer-only constant inside the IIFE. Users only see on/off.
 - **falsePositivesCheck pattern**: each check is `(matchText, text, matchIndex) => boolean`. Return `true` to suppress.
 - **Adding a check**: (1) write the function, (2) decide which **cost tier** it belongs in and add to that tier array (`_CHECKS_STRUCTURAL` for match-self / ~1µs; `_CHECKS_TRAILING` for next 4–10 chars; `_CHECKS_PRECEDING` for back 30 chars; `_CHECKS_KEYWORD_50` for ±50-char window; `_CHECKS_KEYWORD_LARGE` for ±100/150-char window), (3) confirm it appears in the spread inside `FALSE_POSITIVE_CHECKS.precise` (added automatically since the array spreads the tier arrays), (4) add tests, (5) update `docs/contracts/pii/pii_suppressors.tests.md`.
 - `falsePositivesCheck` delegates to `falsePositivesCheckCascade` when profile is `'precise'`; cascade walks tiers in cost order with `||` short-circuit between tiers and `Array.some` short-circuit within each tier. Never put suppression logic in pattern modules — keep it here.
-- Active profile checks: `precise` runs all 13 (Phase 1 Tier-A added: isHexColor, isYearRange, isPercentage, isScientificNotation, isMeasurement, isResolution, isOrdinalLabel, isDateLike, isOrderRef alongside the original isYear/isVersion/isPublicPrice/isCountNoise); `aggressive` runs only `isVersion`.
+- Active profile checks: `precise` runs all 14 (Phase 1 Tier-A: isHexColor, isYearRange, isPercentage, isScientificNotation, isMeasurement, isResolution, isOrdinalLabel, isDateLike, isOrderRef; Phase 5: isStatistic; alongside the original isYear/isVersion/isPublicPrice/isCountNoise); `aggressive` runs only `isVersion`.
 - `isYear` suppresses 4-digit numbers in 1000–2099 (dates, copyright years).
 - `isVersion` suppresses numbers preceded by `v`/`V` or followed by `.digit` (semver build numbers).
 - `isHexColor` suppresses 3/6/8-hex strings preceded by `#`.
@@ -116,18 +123,26 @@ A module may only depend on modules loaded before it.
 - `isMeasurement` — trailing unit token (`KB`/`MB`/`GHz`/`fps`/`°C`/`km`/`kg`/`sec`/`min`/`hr`/etc.).
 - `isResolution` — `\d+[ ]?[x×:][ ]?\d+` pattern.
 - `isOrdinalLabel` — preceding multilingual ordinal precursor (`Section`/`Chapter`/`Page`/`Step`/etc., 30-char window).
-- `isDateLike` — ISO 8601 / slash / dot / week / ordinal-date structural fingerprints + multilingual `date`/`posted`/`expires`/etc. keyword window (50 chars).
+- `isDateLike` — ISO 8601 / slash / dot / week / ordinal-date structural fingerprints + multilingual `date`/`posted`/`expires`/etc. keyword window (50 chars). Keyword fallback gated on match-shape (≤10 chars, no `+`, matches `\d{1,4}` bare or `\d{1,4}[ /.\-]\d{1,4}(?:[ /.\-]\d{1,4})?`) so phone / account numbers near date keywords are NOT suppressed.
 - `isOrderRef` — multilingual `order`/`tracking`/`invoice`/`case`/`SKU`/`ISBN` keyword window (50 chars).
+- `isStatistic` — `p<`/`n=`/`CI`/`SD`/`SE`/`R²`/`r=`/`cohort`/`confidence interval`/`sample size` keyword window (30 chars). Suppresses figures in research papers and stats dashboards.
 - `isPublicPrice` suppresses matches near multilingual price keywords: `/month`/`cart`/`qty`/`quantity`/`units`/`rating`/`reviews`/`stars`/`price`/`cost`/`total`/`subtotal`/`sale`/`discount`/`MRP` + ES/FR/DE/IT/JA/ZH/HI equivalents (100-char window).
 - `isCountNoise` suppresses matches near multilingual engagement keywords: `unread`/`notifications`/`messages`/`followers`/`likes`/`views`/`comments`/`results`/`stock`/`available`/`inventory`/`page`/`of` + ES/FR/DE/JA/ZH/HI equivalents (150-char window).
 
 ### pii/pii_detectors.js
-- Pattern catalog + match finder. `EMAIL_RE`, `NUMERIC_RE`, `PATTERNS`, `findMatches(text, types)`, `getPatterns()`.
-- **Pattern order matters in `NUMERIC_RE`**: alternation 4 must precede 5. Re-order at your peril.
-- `findMatches` clones each `RegExp` before iterating so `lastIndex` is always reset — never call `.exec()` on the live pattern object.
-- Calls `blsi.PiiSuppressors.falsePositivesCheck` only on the NUMERIC path — email matches are never suppressed.
+- Pattern catalog + match finder. `EMAIL_RE`, `NUMERIC_RE`, `PATTERNS`, `STAGE1_DETECTORS`, `STAGE2_DETECTORS`, `findMatches(text, types)`, `getPatterns()`.
+- **Phase 5 consolidation** — every detector is a frozen row in `STAGE1_DETECTORS` (dispositive) or `STAGE2_DETECTORS` (context-gated) driven by a single `_runDescriptor` runner. Adding a detector is a one-row data change. Users see one `numeric` toggle; per-detector behaviour is configured by maintainers via descriptor rows — there is **no popup UI exposing individual detectors**. Do not introduce per-detector user-facing config.
+- **Descriptor shape**: `{ id, regex, checksum?, dispositive?, countries?, keywordRe?, keywordWindow?, action, preScreen? }`. Decision flow: `preScreen` -> overlap -> `checksum` -> context-gate (`dispositive` ? PASS : `country in countries` ? PASS : `keywordRe` matches window ? PASS : SKIP) -> push to `consumed[]` + (if `'emit'`) `matches[]`.
+- **`findMatches` runs four layers** in order, sharing a per-call `consumed[]` tracker: Stage 1 (`_runStage1` over `STAGE1_DETECTORS`) -> identifier sub-pass (`_runIdentifierPass` — DISPOSITIVE_RES + PREFIX_RE) -> Stage 2 (`_runStage2` over `STAGE2_DETECTORS`) -> Stage 3 (NUMERIC_RE + Stage 4 FP cascade). SUPPRESS-action detectors (ISBN-13) push to `consumed[]` without emitting (anti-PII).
+- **Stage 1 dispositive set** (shape-bound or shape+checksum, no country/keyword required): `card_pan` (Luhn + IIN), `iban` (mod-97 + country-length), `eth_wallet`, `isbn_13` (suppress), `aadhaar` (Verhoeff), `cn_id` (ISO 7064 mod-11-2), `nric_sg`, `curp_mx`, `emirates_id`, `nie_es`, `codice_fiscale`, `postal_uk`, `postal_ca`, `ipv6`, `gps_dms`, `plus_code`. Letter-table validators (Codice Fiscale, NIE, NRIC) deliberately **dropped** in favour of country-aware positional shape — see "checksum policy" below.
+- **Stage 2 context-gated set** (validators read country signal + keyword window): `mac_address` (shape), `ipv4` (private-range suppress + keyword), `imei` (Luhn + keyword), `e164_phone` (+ prefix), `ssn_us` (range gate + US/keyword), `nhs_uk` (mod-11 + GB/keyword), `bsn_nl` (11-test + NL/keyword), `npi_us` (Luhn(80840+) + keyword), `dni_es` (ES/keyword), `abn_au` (AU/keyword), `mrn` (medical keyword), `postal_jp/au/nl/br`, `us_zip4`, `eircode_ie` (all country-gated to avoid shape collisions).
+- **Adding a detector** in 4 steps: (1) regex constant near the top of the file in the right grouping; (2) optional checksum function — if it requires a new algorithm, add to `pii_checksums.js` first with its own tests + contract entry; (3) frozen descriptor entry in the right array (Stage 1 if dispositive, Stage 2 otherwise); (4) integration test in `pii.test.js` (drive country via `<html lang>`, NOT `blsi.PiiState.setCountry()` — the facade clobbers it during scan).
+- **Checksum policy**: keep cheap algorithms with Stage-4 cascade savings (Luhn, Verhoeff, mod-97, mod-11 weighted, ISO 7064 mod-11-2, ISBN-10/13). Skip heavy or marginal ones — letter-table validators (Codice Fiscale / DNI / NIE / NRIC SG) drop in favour of country-aware positional shape; Base58Check / bech32 (BTC) deferred entirely (use prefix + keyword if/when added). Tradeoff: ~1% extra FP for letter-table-shaped IDs without country gate, ~0% on country-gated pages.
+- **Pattern order matters in `NUMERIC_RE`**: 7 alternations (currency-prefix / currency-code-suffix / comma-thousands / **parens-phone** / cc-and-2-digit-phone / phone-like-fallback / bare-4+-digits). Phone-form separator class is `[ \- ]` — NBSP via `\u00A0` escape (raw NBSP gets lost on copy-paste).
+- **Identifier-context sub-pass** runs after Stage 1, before Stage 2. Bespoke logic (does NOT use `_runDescriptor`) because PREFIX_RE captures a value group that the generic descriptor shape doesn't model. Two passes: `DISPOSITIVE_RES` (Bearer / AKIA / ghp_ / sk_/pk_ / AIza / xox- / JWT) + `PREFIX_RE` (`KEYWORD[: = # - --] value`). Value-validator: `length >= 4` AND (`/\d/` OR `length >= 16`) AND not all-same-char.
+- `findMatches` retrieves cached regex instances via `blsi.PiiState.getCachedRegex(prototype)` — never call `.exec()` on a live pattern object directly (lastIndex would persist).
+- Calls `blsi.PiiSuppressors.falsePositivesCheck` only on the Stage 3 NUMERIC_RE path — email matches and Stage 1/2 hits skip the suppressor cascade entirely.
 - Sorts and de-overlaps results before returning so the facade can splice text right-to-left without conflicts.
-- Phase 3 adds Stage 1 dedicated detectors + `runDetector` helper + `consumed[]` tracker here.
 
 ### pii/pii.js
 - Facade — exposes `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()` as `blsi.PiiDetector`. Public global name preserved from the pre-split single file for backward compat.

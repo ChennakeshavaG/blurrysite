@@ -19,6 +19,10 @@ const BlurrySitePiiState = (() => {
 
   let _matchCount = 0;
   let _activeTypes = null;
+  // Per-scan country signal cache (Phase 4 — PERF.md M6). Seeded once at
+  // the top of facade.scan() via `setCountry(blsi.PiiCountry.detect())`.
+  // Stage 2 detector validators read it via getCountry().
+  let _country = null;
 
   // ── Regex cache (Phase 2 — PERF.md M3) ────────────────────────────────────
   // Replaces the previous `new RegExp(re.source, re.flags)` per-call pattern.
@@ -111,6 +115,26 @@ const BlurrySitePiiState = (() => {
     _activeTypes = null;
   }
 
+  // ── Country signal cache (Phase 4 — PERF.md M6) ──────────────────────────
+  // Single ISO 3166 alpha-2 code (or null) seeded by the facade at the top of
+  // each scan. Stage 2 detector validators read it via `getCountry()`.
+
+  function getCountry() {
+    return _country;
+  }
+
+  function setCountry(code) {
+    if (typeof code === "string" && /^[A-Z]{2}$/.test(code)) {
+      _country = code;
+    } else {
+      _country = null;
+    }
+  }
+
+  function clearCountry() {
+    _country = null;
+  }
+
   return Object.freeze({
     PII_ATTR,
     getMatchCount,
@@ -119,6 +143,9 @@ const BlurrySitePiiState = (() => {
     getActiveTypes,
     setActiveTypes,
     clearActiveTypes,
+    getCountry,
+    setCountry,
+    clearCountry,
     getCachedRegex,
     _resetRegexCache,
     recordNode,

@@ -2,12 +2,12 @@
 
 ## Overview
 
-Stage 4 false-positive suppressor cascade. Holds every `(matchText, text, matchIndex) => boolean` check that decides whether a candidate match should be dropped before wrapping. Phase 1 ships 13 checks total in the `precise` profile, ordered cheap-to-expensive so the cascade short-circuits on the first hit:
+Stage 4 false-positive suppressor cascade. Holds every `(matchText, text, matchIndex) => boolean` check that decides whether a candidate match should be dropped before wrapping. The `precise` profile ships 14 checks ordered cheap-to-expensive so the cascade short-circuits on the first hit:
 
 1. **Structural** (match-self, ~1µs): `isYear`, `isVersion`, `isHexColor`, `isYearRange`, `isPercentage`, `isScientificNotation`
 2. **Trailing-char** (next 4–10 chars, ~1µs): `isMeasurement`, `isResolution`
 3. **Preceding-word** (back 30 chars, ~3µs): `isOrdinalLabel`
-4. **Keyword-window ±50** (~10µs): `isDateLike`, `isOrderRef`
+4. **Keyword-window ±50** (~10µs): `isDateLike`, `isOrderRef`, `isStatistic`
 5. **Keyword-window ±100/150** (~20µs): `isPublicPrice`, `isCountNoise`
 
 Profile switch is developer-facing only; users see on/off in the popup.
@@ -91,14 +91,26 @@ Frozen `{ aggressive: Function[], precise: Function[] }` — the ordered cascade
 **Returns**: `true` if any of:
 - `matchText` is structurally a date: ISO 8601 extended (`yyyy-mm-dd`), slash dates (`yyyy/mm/dd`, `mm/dd/yyyy`), dot dates (`dd.mm.yyyy`, `yyyy.mm.dd`), ISO week (`yyyy-Www[-d]`), or ordinal date (`yyyy-DDD`).
 - `matchText` is a compact 8-digit form (`yyyymmdd`) AND positions 5–6 ∈ [01, 12] AND positions 7–8 ∈ [01, 31].
-- ±50 chars of `matchIndex` contain a multilingual date keyword: EN `date|posted|published|updated|created|modified|due|expires|expir(es|ation|y)|valid|as of|since` and ES/FR/DE/JA/ZH/HI equivalents.
+- **Match-shape gate passes** AND ±50 chars of `matchIndex` contain a multilingual date keyword: EN `date|posted|published|updated|created|modified|due|expires|expir(es|ation|y)|valid|as of|since` and ES/FR/DE/JA/ZH/HI equivalents.
 
-**Use**: suppresses dates that fall through the existing `isYear` (which catches only standalone 4-digit years).
+**Match-shape gate** — the keyword fallback only fires when `matchText` is structurally short / date-like:
+- Length ≤ 10 chars.
+- Contains no `+` (rules out country-code phones like `+91 94909 73391`).
+- Matches `^(?:\d{1,4}|\d{1,4}[ /.\-]\d{1,4}(?:[ /.\-]\d{1,4})?)$` — either a bare 1–4-digit run (covers `2024`, `99`) OR 2–3 digit groups joined by space / `/` / `.` / `-` (covers `11/12`, `01-15-2024`).
+
+Phone numbers (≥10 digits with separators or `+`) and bare account numbers (≥5 bare digits) fail the gate, so a stray "created"/"updated"/etc. nearby cannot suppress them. Real dates still pass via either the structural fast-path or the gate.
+
+**Use**: suppresses dates that fall through the existing `isYear` (which catches only standalone 4-digit years), without over-suppressing phone / account numbers near date-related prose.
 
 #### isOrderRef(matchText, text, matchIndex)
 
 **Returns**: `true` if ±50 chars of `matchIndex` contain a multilingual identifier-by-design keyword: `order|tracking|invoice|case|ticket|reference|confirmation|booking|receipt|sku|model|isbn|issn|episode` and ES/FR/DE/JA/ZH/HI equivalents.
 **Use**: suppresses order numbers, tracking codes, invoice IDs, ISBN, ISSN, support ticket numbers.
+
+#### isStatistic(matchText, text, matchIndex)
+
+**Returns**: `true` if ±30 chars of `matchIndex` contain a statistical-context keyword: `p<` / `p=` / `p>`, `n=`, `sample size`, `cohort`, `CI`, `confidence interval`, `95%`, `99%`, `SD`, `SE`, `σ`, `R²` / `R^2`, `r=`.
+**Use**: suppresses figures/sample-size/effect-size numbers in research papers, dashboards, and statistical reports. Tighter window than other keyword suppressors because the statistical keywords appear directly adjacent to the value.
 
 ### Tier 5 — keyword-window ±100/150 chars (~20µs)
 
@@ -129,7 +141,7 @@ Frozen `{ aggressive: Function[], precise: Function[] }` — the ordered cascade
 1. `_CHECKS_STRUCTURAL` — `[isYear, isVersion, isHexColor, isYearRange, isPercentage, isScientificNotation]`
 2. `_CHECKS_TRAILING` — `[isMeasurement, isResolution]`
 3. `_CHECKS_PRECEDING` — `[isOrdinalLabel]`
-4. `_CHECKS_KEYWORD_50` — `[isDateLike, isOrderRef]`
+4. `_CHECKS_KEYWORD_50` — `[isDateLike, isOrderRef, isStatistic]`
 5. `_CHECKS_KEYWORD_LARGE` — `[isPublicPrice, isCountNoise]`
 
 **Side effects**: none.

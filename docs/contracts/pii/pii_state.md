@@ -13,6 +13,7 @@ Shared private state for the PII sub-modules. Holds the running match count, the
 | `_activeTypes` | `{email: bool, numeric: bool} \| null` — set by `scan()` via `setActiveTypes`, reused by `handleMutations` via `getActiveTypes`. |
 | `_REGEX_CACHE` | `Map<string, RegExp>` keyed by `"<source>::<flags>"`. One compiled instance per pattern, reused across scan/mutation calls. Eliminates per-call `new RegExp(...)` allocation. |
 | `_stats` | `{ node_count, digit_node_count, stage3_candidates, stage4_suppressed, total_emit }` — per-scan counters. Increment helpers no-op when `blsi.Logger.enabled` is false. |
+| `_country` | `string \| null` — ISO 3166 alpha-2 country code seeded once per scan by the facade via `setCountry(blsi.PiiCountry.detect())`. Stage 2 detector validators read via `getCountry()`. PERF.md M6 cache. |
 
 ## Public API
 
@@ -51,6 +52,23 @@ Shared private state for the PII sub-modules. Holds the running match count, the
 
 **Side effects**: `_activeTypes = null`.
 **Use**: optional teardown helper; not currently called by any caller (handleMutations no-ops on null naturally).
+
+### getCountry()
+
+**Returns**: `string | null` — current `_country`. Either an ISO 3166 alpha-2 code (`'US'`, `'GB'`, `'IN'`, …) or `null` when no signal was detected (or before the facade has seeded it).
+**Side effects**: none.
+**Use**: Stage 2 detector validators in `pii_detectors.js` (SSN_US, NHS_UK, …) read this to decide whether the country is itself a positive trigger.
+
+### setCountry(code)
+
+**Params**: `code` — `string` expected to be an ISO 3166 alpha-2 (uppercase, two letters). Other values (lowercase, mixed-length, non-string, `null`, `undefined`) are normalised to `_country = null`.
+**Side effects**: `_country = code` when valid; `_country = null` otherwise.
+**Use**: called once per scan by the facade with the value from `blsi.PiiCountry.detect()`.
+
+### clearCountry()
+
+**Side effects**: `_country = null`.
+**Use**: optional teardown helper for tests / SPA invalidation paths.
 
 ### getCachedRegex(prototype)
 
@@ -104,9 +122,10 @@ Shared private state for the PII sub-modules. Holds the running match count, the
 
 ## Lifecycle
 
-`PII_ATTR` is constant. `_matchCount`, `_activeTypes`, `_REGEX_CACHE`, and `_stats` are module-lifetime state — survive across multiple `scan()` calls.
-- `clear()` resets `_matchCount` and `_stats` but does NOT clear `_activeTypes` (so `handleMutations` keeps wrapping after a `clear()`) and does NOT clear `_REGEX_CACHE` (compile-once-reuse-forever).
-- `scan()` resets `_stats` at the top of every call (per-scan window).
+`PII_ATTR` is constant. `_matchCount`, `_activeTypes`, `_country`, `_REGEX_CACHE`, and `_stats` are module-lifetime state — survive across multiple `scan()` calls.
+- `clear()` resets `_matchCount` and `_stats` but does NOT clear `_activeTypes`, `_country`, or `_REGEX_CACHE` — so `handleMutations` keeps wrapping correctly after a `clear()`.
+- `scan()` resets `_stats` at the top of every call (per-scan window) and re-seeds `_country` via `setCountry(blsi.PiiCountry.detect())`.
+- `_country` is per-scan but cached across mutation drains — `handleMutations` reuses whatever the most recent `scan()` seeded.
 - `_REGEX_CACHE` is never cleared in production — it's append-only and bounded by the static set of detector regexes.
 
 ## Edge cases
@@ -116,3 +135,5 @@ Shared private state for the PII sub-modules. Holds the running match count, the
 - `getCachedRegex` on a `/g` regex: callers can `exec()` immediately — `lastIndex` is reset before return. Concurrent reentry is not safe (single instance per pattern), but the detector pipeline is single-threaded by construction.
 - `recordNode` / `recordCandidate` / `recordSuppress` / `recordEmit` no-op when `blsi.Logger` is undefined or `Logger.enabled` is false. No exception in either case.
 - Calling `incrementMatchCount` before any `setActiveTypes` is allowed — counters and types are independent.
+- `setCountry('us')` (lowercase) → `_country = null`. Caller must pass uppercase. `getCountry()` immediately after module load returns `null`.
+- `getCountry()` after a `clear()` still returns the value seeded by the previous `scan()` — `_country` is intentionally not reset by clear so that mutation drains continue to apply Stage 2 country gates correctly.

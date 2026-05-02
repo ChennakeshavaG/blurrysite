@@ -3,10 +3,16 @@
  *
  * Cheap DOM + text checks that decide whether a text node should bypass
  * the PII pipeline entirely:
- *   - isExtensionUI(node)      — extension-owned UI tree
- *   - isInsidePiiSpan(node)    — already-wrapped node
- *   - isInsideCodeBlock(node)  — <code>/<pre>/<kbd>/<samp> ancestor
- *   - hasDigit(text)           — M1 whole-node digit pre-screen
+ *   - isExtensionUI(node)            — extension-owned UI tree
+ *   - isInsidePiiSpan(node)          — already-wrapped node
+ *   - isInsideCodeBlock(node)        — <code>/<pre>/<kbd>/<samp> ancestor
+ *   - hasDigit(text)                 — M1 whole-node digit pre-screen
+ *   - hasDigitOrLongAlnum(text)      — extended pre-screen for the numeric
+ *                                       branch when the identifier sub-pass
+ *                                       is in play; lets through long alpha
+ *                                       tokens (Bearer, base64) that have
+ *                                       no digit but still contain a 8+
+ *                                       alnum run worth scanning.
  *
  * Exposed as blsi.PiiPreFilter (IIFE — no ES module syntax).
  */
@@ -19,6 +25,13 @@ const BlurrySitePiiPreFilter = (() => {
   // Email is the only PII that doesn't need a digit; the facade still runs
   // EMAIL on no-digit text when types.email is on.
   const _HAS_DIGIT_RE = /\d/;
+
+  // Extended pre-screen for the numeric branch — passes nodes that contain
+  // at least one digit OR an 8+ char alnum run. The identifier sub-pass
+  // dispositive detectors (Bearer / base64 refresh tokens / etc.) emit on
+  // long alpha-only values that the bare-`/\d/` filter would drop, so the
+  // numeric path uses this helper instead of `hasDigit`.
+  const _HAS_DIGIT_OR_LONG_ALNUM_RE = /\d|[A-Za-z0-9]{8,}/;
 
   // Code-block / technical-token containers — anything inside these is a
   // dev-doc artefact, never user-facing PII. Highest-impact early-exit on
@@ -58,11 +71,16 @@ const BlurrySitePiiPreFilter = (() => {
     return _HAS_DIGIT_RE.test(text);
   }
 
+  function hasDigitOrLongAlnum(text) {
+    return _HAS_DIGIT_OR_LONG_ALNUM_RE.test(text);
+  }
+
   return Object.freeze({
     isExtensionUI,
     isInsidePiiSpan,
     isInsideCodeBlock,
     hasDigit,
+    hasDigitOrLongAlnum,
   });
 })();
 

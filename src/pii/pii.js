@@ -67,6 +67,13 @@ const BlurrySitePiiDetector = (() => {
     if (!anyEnabled) return 0;
 
     blsi.PiiState.setActiveTypes(enabledTypes);
+    // Phase 4: seed the per-scan country signal once at the top of the
+    // scan via PERF.md M6 cache. Stage 2 validators read it through
+    // blsi.PiiState.getCountry() so the live document is queried at most
+    // once per scan even on heavy pages with thousands of text nodes.
+    if (blsi.PiiCountry && typeof blsi.PiiCountry.detect === "function") {
+      blsi.PiiState.setCountry(blsi.PiiCountry.detect());
+    }
     // Top-level scan defines the per-scan stats window. Recursive subtree
     // walks via _scanSubtree (called from handleMutations ELEMENT_NODE)
     // intentionally skip the reset so counters accumulate across the drain.
@@ -101,10 +108,14 @@ const BlurrySitePiiDetector = (() => {
       // patterns require 4+. Skipping <4-char nodes drops single-glyph and
       // whitespace-only text without a trim() allocation.
       if (!text || text.length < 4) continue;
-      // M1 digit pre-screen: skip detector regex when no digit is present,
-      // unless EMAIL is enabled (email needs no digit).
+      // M1 digit pre-screen: skip detector regex when no digit (and no long
+      // alnum run when numeric is on, so identifier-context detectors that
+      // wrap pure-alpha tokens still see the text). Email path is exempt.
+      const numericPath = enabledTypes.numeric
+        ? blsi.PiiPreFilter.hasDigitOrLongAlnum(text)
+        : false;
       const digit = blsi.PiiPreFilter.hasDigit(text);
-      if (!digit && !enabledTypes.email) continue;
+      if (!digit && !numericPath && !enabledTypes.email) continue;
       blsi.PiiState.recordNode(digit);
       const matches = blsi.PiiDetectors.findMatches(text, enabledTypes);
       if (matches.length > 0) total += _wrapTextNode(tn, matches);
@@ -155,8 +166,12 @@ const BlurrySitePiiDetector = (() => {
             if (blsi.PiiPreFilter.isInsideCodeBlock(node)) continue;
             const text = node.textContent;
             if (text && text.length >= 4) {
+              const numericPath = activeTypes.numeric
+                ? blsi.PiiPreFilter.hasDigitOrLongAlnum(text)
+                : false;
               if (
                 !blsi.PiiPreFilter.hasDigit(text) &&
+                !numericPath &&
                 !activeTypes.email
               )
                 continue;
