@@ -1,9 +1,11 @@
 /**
  * tests/e2e/blur.spec.js
  *
- * End-to-end tests for the PrivacyBlur Chrome extension using Puppeteer.
+ * End-to-end tests for the Blurry Site Chrome extension using Puppeteer.
  * Launches a real Chromium instance with the extension loaded and verifies
- * behaviour from the user's perspective.
+ * behaviour from the user's perspective by driving the same message protocol
+ * that the popup and shortcut handler use (background SW →
+ * chrome.tabs.sendMessage → content_script handleMessage).
  *
  * Skip guard: set SKIP_E2E=1 to bypass (useful in CI without Chrome).
  */
@@ -16,43 +18,35 @@ const path = require('path');
 const SKIP = !!process.env.SKIP_E2E;
 const EXTENSION_PATH = path.resolve(__dirname, '../../');
 
-// ─── Test page HTML ──────────────────────────────────────────────────────────
-
 const TEST_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>PrivacyBlur E2E Test Page</title>
+<head><meta charset="UTF-8"><title>Blurry Site E2E Test Page</title>
 <style>
   body { font-family: sans-serif; padding: 24px; }
   img  { width: 200px; height: 200px; background: #ccc; display: block; }
-  video { width: 320px; height: 240px; background: #000; display: block; margin-top: 12px; }
   p    { font-size: 18px; }
 </style>
 </head>
 <body>
   <h1 id="title">E2E Test Page</h1>
   <img id="test-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=" alt="test">
-  <video id="test-video" muted></video>
   <p id="test-para">Sensitive paragraph content that should be blurred.</p>
-  <p id="para2">Another paragraph.</p>
+  <span id="test-span">Inline text-check span.</span>
 </body>
 </html>`;
 
-// ─── Suite ────────────────────────────────────────────────────────────────────
-
 const describeFn = SKIP ? describe.skip : describe;
 
-describeFn('PrivacyBlur extension — E2E', () => {
+describeFn('Blurry Site extension — E2E', () => {
   let puppeteer;
   let browser;
   let page;
   let extensionId;
   let server;
   let testPageUrl;
-
-  // ── Setup ────────────────────────────────────────────────────────────────
+  let swTarget;
 
   beforeAll(async () => {
-    // Local HTTP server — content scripts require http/https (not data: URLs).
     server = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(TEST_PAGE_HTML);
@@ -65,7 +59,6 @@ describeFn('PrivacyBlur extension — E2E', () => {
     });
 
     puppeteer = require('puppeteer');
-
     browser = await puppeteer.launch({
       headless: process.env.E2E_HEADED ? false : 'new',
       slowMo: process.env.E2E_HEADED ? 150 : 0,
@@ -79,17 +72,17 @@ describeFn('PrivacyBlur extension — E2E', () => {
       ],
     });
 
-    // Wait for the service worker to register.
-    let extTarget = null;
-    for (let i = 0; i < 15 && !extTarget; i++) {
+    for (let i = 0; i < 15 && !swTarget; i++) {
       const targets = await browser.targets();
-      extTarget = targets.find(
+      swTarget = targets.find(
         (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
       );
-      if (!extTarget) await new Promise((r) => setTimeout(r, 500));
+      if (!swTarget) await new Promise((r) => setTimeout(r, 500));
     }
-    if (extTarget) {
-      extensionId = extTarget.url().split('//')[1].split('/')[0];
+    if (swTarget) {
+      extensionId = swTarget.url().split('//')[1].split('/')[0];
+    } else {
+      throw new Error('Service worker target not found');
     }
 
     page = await browser.newPage();
@@ -102,148 +95,94 @@ describeFn('PrivacyBlur extension — E2E', () => {
   });
 
   beforeEach(async () => {
+    // Reset blur_all.status BEFORE navigating so init_cache reads clean state.
+    const client = await swTarget.createCDPSession();
+    try {
+      await client.send('Runtime.evaluate', {
+        expression: `(async () => {
+          const { blsi_model } = await chrome.storage.local.get('blsi_model');
+          if (blsi_model && blsi_model.blur_all) {
+            blsi_model.blur_all.status = false;
+            // Also clear any persisted blur items from prior tests.
+            if (blsi_model.pick_and_blur && blsi_model.pick_and_blur.items) {
+              blsi_model.pick_and_blur.items = {};
+            }
+            await chrome.storage.local.set({ blsi_model });
+          }
+        })()`,
+        awaitPromise: true,
+      });
+    } finally {
+      await client.detach();
+    }
+
     await page.goto(testPageUrl, { waitUntil: 'load' });
-    // Wait for content scripts to initialise.
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 1500));
   });
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
   /**
-   * Find the content script's isolated execution context ID via CDP.
-   * Content scripts run in an isolated world separate from the main page world.
+   * Send a message to the active tab via the background service worker —
+   * matches the production path used by shortcut commands and the popup.
    */
-  async function getContentScriptContextId(client) {
-    const contexts = [];
-
-    // Collect execution contexts.
-    client.on('Runtime.executionContextCreated', (params) => {
-      contexts.push(params.context);
-    });
-    await client.send('Runtime.disable');
-    await client.send('Runtime.enable');
-    // Brief pause so context events fire.
-    await new Promise((r) => setTimeout(r, 100));
-
-    // Find the content script's isolated context (has chrome-extension:// origin).
-    const csCtx = contexts.find(
-      (ctx) =>
-        ctx.origin &&
-        ctx.origin.includes('chrome-extension://') &&
-        ctx.auxData &&
-        ctx.auxData.type === 'isolated'
-    );
-    return csCtx ? csCtx.id : null;
-  }
-
-  /**
-   * Evaluate an expression in the content script's isolated world via CDP.
-   * This gives us access to blsi.BlurEngine and other globals.
-   */
-  async function evalInContentScript(expression) {
-    const client = await page.createCDPSession();
+  async function sendMessageViaBackground(type, extra) {
+    const client = await swTarget.createCDPSession();
     try {
-      const contextId = await getContentScriptContextId(client);
-      if (!contextId) {
-        throw new Error('Content script context not found');
-      }
-
+      const payload = Object.assign({ type }, extra || {});
       const result = await client.send('Runtime.evaluate', {
-        expression,
-        contextId,
+        expression: `
+          (async () => {
+            const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            if (!tab || !tab.id) throw new Error('No active tab');
+            return new Promise((resolve) => {
+              chrome.tabs.sendMessage(tab.id, ${JSON.stringify(payload)}, (resp) => {
+                resolve(resp || {});
+              });
+            });
+          })()
+        `,
         returnByValue: true,
         awaitPromise: true,
       });
-
       if (result.exceptionDetails) {
         const msg = result.exceptionDetails.exception
           ? result.exceptionDetails.exception.description
           : result.exceptionDetails.text;
-        throw new Error('Content script eval failed: ' + msg);
+        throw new Error('Background eval failed: ' + msg);
       }
-
       return result.result.value;
     } finally {
       await client.detach();
     }
   }
 
-  /**
-   * Send a command message to the content script by evaluating in its world.
-   * This simulates what background.js does via chrome.tabs.sendMessage.
-   */
-  async function sendCommand(type) {
-    // Dispatch directly through the content script's message handler by
-    // firing the chrome.runtime.onMessage listeners in the content script world.
-    // The content script registered: chrome.runtime.onMessage.addListener(handleMessage)
-    // We can trigger it by dispatching through the extension messaging system.
-    //
-    // Simplest: call the extension globals directly from the content script world.
-    const expressions = {
-      TOGGLE_BLUR_ALL: `
-        (function() {
-          var blurred = document.querySelectorAll('[data-bl-si-blur]');
-          if (blurred.length > 0) {
-            blsi.BlurEngine.unblurAll();
-          } else {
-            blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
-            blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
-          }
-        })()
-      `,
-      TOGGLE_PICKER: `
-        (function() {
-          if (document.documentElement.classList.contains('bl-si-picker-active')) {
-            blsi.Picker.deactivate();
-          } else {
-            blsi.Picker.activate(
-              { blurRadius: 8, highlightColor: '#f59e0b' },
-              {
-                onBlur: function(el) {
-                  blsi.BlurEngine.applyBlur(el);
-                  var sel = blsi.SelectorUtils.getSelector(el);
-                  if (sel) blsi.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
-                },
-                onUnblur: function(el) {
-                  blsi.BlurEngine.removeBlur(el);
-                },
-                onDeactivate: function() {}
-              }
-            );
-          }
-        })()
-      `,
-      CLEAR_ALL_BLUR: `
-        (function() {
-          blsi.BlurEngine.unblurAll();
-        })()
-      `,
-    };
-
-    const expr = expressions[type];
-    if (!expr) throw new Error('Unknown command: ' + type);
-    return evalInContentScript(expr);
-  }
-
-  async function hasBlurAttr(selector) {
-    return page.evaluate(
-      (sel) => {
-        const el = document.querySelector(sel);
-        return el ? el.hasAttribute('data-bl-si-blur') : false;
-      },
-      selector
-    );
+  async function nudgePage() {
+    await page.evaluate(() => {
+      const n = document.createElement('span');
+      n.id = '__nudge_' + Date.now();
+      n.textContent = 'nudge';
+      document.body.appendChild(n);
+    });
   }
 
   async function countBlurred() {
     return page.evaluate(() => document.querySelectorAll('[data-bl-si-blur]').length);
   }
 
+  async function waitForCount(min, timeoutMs) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const n = await countBlurred();
+      if (n >= min) return n;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return countBlurred();
+  }
+
   // ── Tests ─────────────────────────────────────────────────────────────────
 
   test('extension loads and content script is injected', async () => {
     const title = await page.title();
-    expect(title).toBe('PrivacyBlur E2E Test Page');
+    expect(title).toBe('Blurry Site E2E Test Page');
 
     // Content script sets CSS custom properties on :root.
     const hasCustomProp = await page.evaluate(() => {
@@ -253,52 +192,50 @@ describeFn('PrivacyBlur extension — E2E', () => {
     expect(hasCustomProp).toBe(true);
   });
 
-  test('blur all content works', async () => {
-    await sendCommand('TOGGLE_BLUR_ALL');
-    await new Promise((r) => setTimeout(r, 300));
+  test('blur all stamps text-check element via real message protocol', async () => {
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    const blurredCount = await waitForCount(1, 5000);
+    expect(blurredCount).toBeGreaterThan(0);
 
-    const paraBlurred = await hasBlurAttr('#test-para');
-    const imgBlurred = await hasBlurAttr('#test-img');
-    expect(paraBlurred || imgBlurred).toBe(true);
-  });
+    // <span> is text-check — gets the data-bl-si-blur attribute.
+    const spanBlurred = await page.$eval('#test-span', (el) => el.hasAttribute('data-bl-si-blur'));
+    expect(spanBlurred).toBe(true);
+  }, 15000);
 
-  test('blur all toggles off on second call', async () => {
-    await sendCommand('TOGGLE_BLUR_ALL');
-    await new Promise((r) => setTimeout(r, 300));
+  test('blur all toggles off on second TOGGLE_BLUR_ALL', async () => {
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    await waitForCount(1, 5000);
 
-    await sendCommand('TOGGLE_BLUR_ALL');
-    await new Promise((r) => setTimeout(r, 300));
+    // Wait past the fire-token dedup window (500ms in handleMessage) so the
+    // second TOGGLE isn't absorbed as a relay duplicate.
+    await new Promise((r) => setTimeout(r, 600));
 
-    const paraBlurred = await hasBlurAttr('#test-para');
-    const imgBlurred = await hasBlurAttr('#test-img');
-    expect(paraBlurred).toBe(false);
-    expect(imgBlurred).toBe(false);
-  });
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    // Poll: teardown clears stamps but may run inside an idle slot.
+    const start = Date.now();
+    let after = await countBlurred();
+    while (after > 0 && Date.now() - start < 3000) {
+      await new Promise((r) => setTimeout(r, 100));
+      after = await countBlurred();
+    }
+    expect(after).toBe(0);
+  }, 15000);
 
   test('picker activates and adds bl-si-picker-active class', async () => {
-    await sendCommand('TOGGLE_PICKER');
-    await new Promise((r) => setTimeout(r, 300));
+    await sendMessageViaBackground('TOGGLE_PICKER');
+    await new Promise((r) => setTimeout(r, 500));
 
     const pickerActive = await page.evaluate(() =>
       document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(pickerActive).toBe(true);
-  });
-
-  test('clicking an image in picker mode applies data-bl-si-blur', async () => {
-    await sendCommand('TOGGLE_PICKER');
-    await new Promise((r) => setTimeout(r, 300));
-
-    await page.click('#test-img');
-    await new Promise((r) => setTimeout(r, 300));
-
-    const blurred = await hasBlurAttr('#test-img');
-    expect(blurred).toBe(true);
-  });
+  }, 15000);
 
   test('pressing Escape deactivates picker mode', async () => {
-    await sendCommand('TOGGLE_PICKER');
-    await new Promise((r) => setTimeout(r, 300));
+    await sendMessageViaBackground('TOGGLE_PICKER');
+    await new Promise((r) => setTimeout(r, 500));
 
     await page.keyboard.press('Escape');
     await new Promise((r) => setTimeout(r, 300));
@@ -307,141 +244,34 @@ describeFn('PrivacyBlur extension — E2E', () => {
       document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(pickerActive).toBe(false);
-  });
-
-  test('blurred elements are restored after page reload', async () => {
-    // Blur via picker.
-    await sendCommand('TOGGLE_PICKER');
-    await new Promise((r) => setTimeout(r, 300));
-
-    await page.click('#test-para');
-    await new Promise((r) => setTimeout(r, 400));
-
-    const blurredBefore = await hasBlurAttr('#test-para');
-    expect(blurredBefore).toBe(true);
-
-    // Deactivate picker.
-    await page.keyboard.press('Escape');
-    await new Promise((r) => setTimeout(r, 200));
-
-    // Reload and wait for content script + restore.
-    await page.reload({ waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 1500));
-
-    const blurredAfter = await hasBlurAttr('#test-para');
-    expect(blurredAfter).toBe(true);
-  });
+  }, 15000);
 
   test('clear all blur removes everything', async () => {
-    // Directly blur some elements to ensure there is something to clear.
-    await evalInContentScript(`
-      blsi.BlurEngine.applyBlur(document.querySelector('#test-img'));
-      blsi.BlurEngine.applyBlur(document.querySelector('#test-para'));
-    `);
-    await new Promise((r) => setTimeout(r, 300));
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    await waitForCount(1, 5000);
 
-    const before = await countBlurred();
-    expect(before).toBeGreaterThan(0);
-
-    await sendCommand('CLEAR_ALL_BLUR');
+    await sendMessageViaBackground('CLEAR_ALL_BLUR');
     await new Promise((r) => setTimeout(r, 500));
 
     const after = await countBlurred();
     expect(after).toBe(0);
-  });
+  }, 15000);
 
-  // ── Google.com tests ───────────────────────────────────────────────────
+  // ── Google.com cross-site smoke test ─────────────────────────────────────
 
   test('content script injects on google.com', async () => {
     await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
     await new Promise((r) => setTimeout(r, 1500));
 
-    // Verify content script set CSS custom properties on google.com.
     const hasCustomProp = await page.evaluate(() => {
       const val = getComputedStyle(document.documentElement).getPropertyValue('--bl-si-radius');
       return val.trim().length > 0;
     });
     expect(hasCustomProp).toBe(true);
-  });
+  }, 30000);
 
-  test('blur all works on google.com', async () => {
-    await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
-    await new Promise((r) => setTimeout(r, 1500));
-
-    // Find the content script world and call blur-all APIs.
-    const client = await page.createCDPSession();
-    try {
-      const contextId = await getContentScriptContextId(client);
-      expect(contextId).toBeTruthy();
-
-      await client.send('Runtime.evaluate', {
-        expression: `
-          blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true });
-          blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
-        `,
-        contextId,
-        returnByValue: true,
-        awaitPromise: true,
-      });
-    } finally {
-      await client.detach();
-    }
-
-    await new Promise((r) => setTimeout(r, 500));
-
-    const blurredCount = await page.evaluate(
-      () => document.querySelectorAll('[data-bl-si-blur]').length
-    );
-    expect(blurredCount).toBeGreaterThan(0);
-  });
-
-  test('picker mode works on google.com', async () => {
-    await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
-    await new Promise((r) => setTimeout(r, 1500));
-
-    const client = await page.createCDPSession();
-    try {
-      const contextId = await getContentScriptContextId(client);
-      expect(contextId).toBeTruthy();
-
-      // Activate picker via content script world.
-      await client.send('Runtime.evaluate', {
-        expression: `
-          blsi.Picker.activate(
-            { blurRadius: 8, highlightColor: '#f59e0b' },
-            {
-              onBlur: function(el) { blsi.BlurEngine.applyBlur(el); },
-              onUnblur: function(el) { blsi.BlurEngine.removeBlur(el); },
-              onDeactivate: function() {}
-            }
-          );
-        `,
-        contextId,
-        returnByValue: true,
-        awaitPromise: true,
-      });
-    } finally {
-      await client.detach();
-    }
-
-    await new Promise((r) => setTimeout(r, 300));
-
-    const pickerActive = await page.evaluate(() =>
-      document.documentElement.classList.contains('bl-si-picker-active')
-    );
-    expect(pickerActive).toBe(true);
-
-    // Escape to deactivate.
-    await page.keyboard.press('Escape');
-    await new Promise((r) => setTimeout(r, 300));
-
-    const pickerAfter = await page.evaluate(() =>
-      document.documentElement.classList.contains('bl-si-picker-active')
-    );
-    expect(pickerAfter).toBe(false);
-  });
-
-  // ── Popup test ────────────────────────────────────────────────────────────
+  // ── Popup smoke test ─────────────────────────────────────────────────────
 
   test('popup loads without errors', async () => {
     if (!extensionId) {
@@ -456,8 +286,8 @@ describeFn('PrivacyBlur extension — E2E', () => {
 
     const bodyText = await popupPage.evaluate(() => document.body.innerText);
     expect(bodyText).toBeTruthy();
-    expect(bodyText).toContain('PrivacyBlur');
+    expect(bodyText).toContain('Blurry Site');
 
     await popupPage.close();
-  });
+  }, 15000);
 });

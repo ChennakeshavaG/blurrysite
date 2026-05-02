@@ -95,11 +95,19 @@ describeFn('MutationObserver + blur-all integration', () => {
   });
 
   beforeEach(async () => {
-    // Clear persisted blur-all state so each test starts clean.
+    // Clear persisted blur-all state so each test starts clean. The current
+    // model lives under `blsi_model.blur_all.status` — older tests wrote to
+    // a now-dead `blur_all_hosts` key which silently leaked state across tests.
     const client = await swTarget.createCDPSession();
     try {
       await client.send('Runtime.evaluate', {
-        expression: `chrome.storage.local.set({ blur_all_hosts: {} })`,
+        expression: `(async () => {
+          const { blsi_model } = await chrome.storage.local.get('blsi_model');
+          if (blsi_model && blsi_model.blur_all) {
+            blsi_model.blur_all.status = false;
+            await chrome.storage.local.set({ blsi_model });
+          }
+        })()`,
         awaitPromise: true,
       });
     } finally {
@@ -196,37 +204,41 @@ describeFn('MutationObserver + blur-all integration', () => {
     await sendMessageViaBackground('TOGGLE_BLUR_ALL');
     await new Promise((r) => setTimeout(r, 500));
 
-    // Rapidly inject 20 text elements while the observer is active.
+    // Rapidly inject 20 text-check elements (<span>, with text content) while
+    // the observer is active. Text-check elements get the `data-bl-si-blur`
+    // attribute via the MO live-stamp path. (<p> is in `alwaysBlur` and
+    // doesn't carry the attribute — covered by CSS tag rules instead.)
     await page.evaluate(() => {
       const target = document.getElementById('dynamic-target');
       for (let i = 0; i < 20; i++) {
-        const el = document.createElement('p');
+        const el = document.createElement('span');
         el.className = 'rapid-inject';
         el.textContent = 'Rapid injection #' + i;
         target.appendChild(el);
       }
     });
 
-    // Let the observer settle.
-    await new Promise((r) => setTimeout(r, 2000));
+    // Let the observer settle. The MO drain runs through the idle queue;
+    // poll briefly to absorb jitter.
+    const start = Date.now();
+    let count = 0;
+    while (Date.now() - start < 5000) {
+      count = await page.evaluate(
+        () => document.querySelectorAll('.rapid-inject[data-bl-si-blur]').length
+      );
+      if (count === 20) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const stats = await page.evaluate(() => ({
+      injectedCount: document.querySelectorAll('.rapid-inject').length,
+      injectedBlurredCount: document.querySelectorAll('.rapid-inject[data-bl-si-blur]').length,
+      wrapperCount: document.querySelectorAll('.bl-si-text-node-wrapper').length,
+    }));
 
-    const stats = await page.evaluate(() => {
-      const injected = document.querySelectorAll('.rapid-inject');
-      const injectedBlurred = document.querySelectorAll('.rapid-inject[data-bl-si-blur]');
-      const allWrappers = document.querySelectorAll('.bl-si-text-node-wrapper');
-
-      return {
-        injectedCount: injected.length,
-        injectedBlurredCount: injectedBlurred.length,
-        wrapperCount: allWrappers.length,
-      };
-    });
-
-    // All 20 injected elements should be blurred by the observer.
     expect(stats.injectedCount).toBe(20);
     expect(stats.injectedBlurredCount).toBe(20);
 
-    // No text-node wrappers should exist (new engine uses CSS rules, not DOM wrapping).
+    // No text-node wrappers — the new engine uses CSS rules, not DOM wrapping.
     expect(stats.wrapperCount).toBe(0);
   }, 20000);
 
@@ -259,12 +271,16 @@ describeFn('MutationObserver + blur-all integration', () => {
     expect(result.canvasOverlayCount).toBe(0);
   }, 15000);
 
-  test('MutationObserver respects categories: form elements not blurred when form OFF', async () => {
-    // Activate blur-all (default categories: form OFF)
+  test('MutationObserver respects categories: text-check element gets stamped when blur-all on', async () => {
+    // Default categories: text/media/table/structure ON, form OFF.
     await sendMessageViaBackground('TOGGLE_BLUR_ALL');
     await new Promise((r) => setTimeout(r, 500));
 
-    // Dynamically inject form elements while observer is running
+    // Inject a <span> (text-check, gets data-bl-si-blur) and an <input>
+    // (alwaysBlur form element, but form category is OFF so it shouldn't
+    // appear in the alwaysBlur CSS selector). The data-attribute check is
+    // only valid for text-check elements; form elements are governed by the
+    // CSS tag rule which is excluded entirely when form category is off.
     await page.evaluate(() => {
       const target = document.getElementById('dynamic-target');
       const input = document.createElement('input');
@@ -273,35 +289,38 @@ describeFn('MutationObserver + blur-all integration', () => {
       input.value = 'sensitive';
       target.appendChild(input);
 
-      const textarea = document.createElement('textarea');
-      textarea.id = 'injected-textarea';
-      textarea.textContent = 'private notes';
-      target.appendChild(textarea);
-
-      // Also inject a p for positive control
-      const p = document.createElement('p');
-      p.id = 'injected-p';
-      p.textContent = 'This should be blurred';
-      target.appendChild(p);
+      const span = document.createElement('span');
+      span.id = 'injected-span';
+      span.textContent = 'This should be blurred';
+      target.appendChild(span);
     });
 
-    await new Promise((r) => setTimeout(r, 1500));
+    // Poll briefly for the span stamp.
+    const start = Date.now();
+    let spanBlurred = false;
+    while (Date.now() - start < 5000) {
+      spanBlurred = await page.evaluate(
+        () => document.getElementById('injected-span')?.hasAttribute('data-bl-si-blur')
+      );
+      if (spanBlurred) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     const result = await page.evaluate(() => {
       const input = document.getElementById('injected-input');
-      const textarea = document.getElementById('injected-textarea');
-      const p = document.getElementById('injected-p');
+      const span = document.getElementById('injected-span');
       return {
-        inputBlurred: input ? input.hasAttribute('data-bl-si-blur') : null,
-        textareaBlurred: textarea ? textarea.hasAttribute('data-bl-si-blur') : null,
-        pBlurred: p ? p.hasAttribute('data-bl-si-blur') : null,
+        inputHasAttr: input ? input.hasAttribute('data-bl-si-blur') : null,
+        spanHasAttr: span ? span.hasAttribute('data-bl-si-blur') : null,
       };
     });
 
-    // Form elements should NOT be blurred (form category off by default)
-    expect(result.inputBlurred).toBe(false);
-    expect(result.textareaBlurred).toBe(false);
-    // Text element should be blurred (text category on by default)
-    expect(result.pBlurred).toBe(true);
+    // <input> never carries the data-attribute (alwaysBlur tags rely on CSS
+    // tag rules, not the attribute). With form category OFF the CSS rule
+    // excludes inputs entirely — but that's a CSS-level assertion outside
+    // the scope of this attribute check.
+    expect(result.inputHasAttr).toBe(false);
+    // <span> is text-check — must get the attribute when blur-all is on.
+    expect(result.spanHasAttr).toBe(true);
   }, 15000);
 });

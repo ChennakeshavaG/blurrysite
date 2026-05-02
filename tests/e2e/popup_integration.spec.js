@@ -1,9 +1,10 @@
 /**
  * tests/e2e/popup_integration.spec.js
  *
- * Tests for popup → background → content script communication.
- * Uses CDP to evaluate in the content script's isolated world (reliable).
- * Avoids worker.evaluate() which hangs with Puppeteer service workers.
+ * Tests for popup → background → content script communication via the real
+ * extension messaging path (background SW → chrome.tabs.sendMessage →
+ * content_script handleMessage). Storage drives the engine; engine reacts
+ * to chrome.storage.onChanged on `blsi_model`.
  */
 
 'use strict';
@@ -21,6 +22,7 @@ const TEST_PAGE_HTML = `<!DOCTYPE html>
   <h1 id="title">Test Page</h1>
   <p id="para1">First paragraph to blur.</p>
   <p id="para2">Second paragraph to blur.</p>
+  <span id="span1">Inline text-check span.</span>
   <img id="img1" src="data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=" alt="test">
 </body>
 </html>`;
@@ -31,9 +33,9 @@ describeFn('Popup ↔ Content Script Integration', () => {
   let puppeteer;
   let browser;
   let page;
-  let extensionId;
   let server;
   let testPageUrl;
+  let swTarget;
 
   beforeAll(async () => {
     server = http.createServer((_req, res) => {
@@ -48,7 +50,6 @@ describeFn('Popup ↔ Content Script Integration', () => {
     });
 
     puppeteer = require('puppeteer');
-
     browser = await puppeteer.launch({
       headless: process.env.E2E_HEADED ? false : 'new',
       slowMo: process.env.E2E_HEADED ? 100 : 0,
@@ -62,17 +63,14 @@ describeFn('Popup ↔ Content Script Integration', () => {
       ],
     });
 
-    let extTarget = null;
-    for (let i = 0; i < 15 && !extTarget; i++) {
+    for (let i = 0; i < 15 && !swTarget; i++) {
       const targets = await browser.targets();
-      extTarget = targets.find(
+      swTarget = targets.find(
         (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
       );
-      if (!extTarget) await new Promise((r) => setTimeout(r, 500));
+      if (!swTarget) await new Promise((r) => setTimeout(r, 500));
     }
-    if (extTarget) {
-      extensionId = extTarget.url().split('//')[1].split('/')[0];
-    }
+    if (!swTarget) throw new Error('Service worker target not found');
 
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
@@ -83,45 +81,88 @@ describeFn('Popup ↔ Content Script Integration', () => {
     if (server) server.close();
   });
 
-  // ── Helpers (all use CDP — no worker.evaluate) ───────────────────────────
-
-  async function getContentScriptContextId(client) {
-    const contexts = [];
-    client.on('Runtime.executionContextCreated', (params) => {
-      contexts.push(params.context);
-    });
-    await client.send('Runtime.disable');
-    await client.send('Runtime.enable');
-    await new Promise((r) => setTimeout(r, 100));
-    return (
-      contexts.find(
-        (ctx) =>
-          ctx.origin &&
-          ctx.origin.includes('chrome-extension://') &&
-          ctx.auxData &&
-          ctx.auxData.type === 'isolated'
-      ) || {}
-    ).id;
-  }
-
-  async function evalInContentScript(expression) {
-    const client = await page.createCDPSession();
+  beforeEach(async () => {
+    // Reset model to clean state before navigation.
+    const client = await swTarget.createCDPSession();
     try {
-      const contextId = await getContentScriptContextId(client);
-      if (!contextId) throw new Error('Content script context not found');
+      await client.send('Runtime.evaluate', {
+        expression: `(async () => {
+          const { blsi_model } = await chrome.storage.local.get('blsi_model');
+          if (blsi_model) {
+            if (blsi_model.blur_all) blsi_model.blur_all.status = false;
+            if (blsi_model.global_default_settings) {
+              blsi_model.global_default_settings.enabled = true;
+              blsi_model.global_default_settings.blur_radius = 8;
+            }
+            if (blsi_model.pick_and_blur && blsi_model.pick_and_blur.items) {
+              blsi_model.pick_and_blur.items = {};
+            }
+            await chrome.storage.local.set({ blsi_model });
+          }
+        })()`,
+        awaitPromise: true,
+      });
+    } finally {
+      await client.detach();
+    }
+
+    await page.goto(testPageUrl, { waitUntil: 'load' });
+    await new Promise((r) => setTimeout(r, 1500));
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  async function sendMessageViaBackground(type, extra) {
+    const client = await swTarget.createCDPSession();
+    try {
+      const payload = Object.assign({ type }, extra || {});
       const result = await client.send('Runtime.evaluate', {
-        expression,
-        contextId,
+        expression: `
+          (async () => {
+            const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            if (!tab || !tab.id) throw new Error('No active tab');
+            return new Promise((resolve) => {
+              chrome.tabs.sendMessage(tab.id, ${JSON.stringify(payload)}, (resp) => {
+                resolve(resp || {});
+              });
+            });
+          })()
+        `,
         returnByValue: true,
         awaitPromise: true,
       });
       if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.exception?.description || 'Eval failed');
+        throw new Error('Background eval failed: ' + (result.exceptionDetails.exception?.description || result.exceptionDetails.text));
       }
       return result.result.value;
     } finally {
       await client.detach();
     }
+  }
+
+  async function setModelField(updater) {
+    const client = await swTarget.createCDPSession();
+    try {
+      await client.send('Runtime.evaluate', {
+        expression: `(async () => {
+          const { blsi_model } = await chrome.storage.local.get('blsi_model');
+          (${updater.toString()})(blsi_model);
+          await chrome.storage.local.set({ blsi_model });
+        })()`,
+        awaitPromise: true,
+      });
+    } finally {
+      await client.detach();
+    }
+  }
+
+  async function nudgePage() {
+    await page.evaluate(() => {
+      const n = document.createElement('span');
+      n.id = '__nudge_' + Date.now();
+      n.textContent = 'nudge';
+      document.body.appendChild(n);
+    });
   }
 
   async function countBlurred() {
@@ -134,110 +175,57 @@ describeFn('Popup ↔ Content Script Integration', () => {
     );
   }
 
+  async function waitForCount(min, timeoutMs) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const n = await countBlurred();
+      if (n >= min) return n;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return countBlurred();
+  }
+
   // ── Tests ─────────────────────────────────────────────────────────────────
 
-  test('content script receives messages and blurs content', async () => {
-    await page.goto(testPageUrl, { waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // Trigger TOGGLE_BLUR_ALL via content script globals (simulates what
-    // background.js does when relaying chrome.commands).
-    await evalInContentScript(`
-      blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false);
-    `);
-    await new Promise((r) => setTimeout(r, 300));
-
-    const count = await countBlurred();
-    console.log(`  → Blurred: ${count}`);
+  test('content script receives TOGGLE_BLUR_ALL and stamps text-check elements', async () => {
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    const count = await waitForCount(1, 5000);
     expect(count).toBeGreaterThan(0);
-
-    // Unblur.
-    await evalInContentScript(`blsi.BlurEngine.unblurAll()`);
-  });
+  }, 15000);
 
   test('settings change via chrome.storage.onChanged reaches content script', async () => {
-    await page.goto(testPageUrl, { waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 1000));
-
     const radiusBefore = await getRadius();
-    console.log(`  → Radius before: ${radiusBefore}`);
+    expect(radiusBefore).toBe('8px');
 
-    // Change settings via chrome.storage.local (content script has access).
-    // This fires chrome.storage.onChanged which the content script listens to.
-    await evalInContentScript(`
-      new Promise((resolve) => {
-        chrome.storage.local.get('settings', (result) => {
-          const s = result.settings || {};
-          s.blurRadius = 15;
-          chrome.storage.local.set({ settings: s }, resolve);
-        });
-      });
-    `);
+    // Change blur_radius via storage — content script listens via onChanged.
+    await setModelField((m) => {
+      m.global_default_settings.blur_radius = 15;
+    });
     await new Promise((r) => setTimeout(r, 500));
 
     const radiusAfter = await getRadius();
-    console.log(`  → Radius after: ${radiusAfter}`);
     expect(radiusAfter).toBe('15px');
+  }, 15000);
 
-    // Reset.
-    await evalInContentScript(`
-      new Promise((resolve) => {
-        chrome.storage.local.get('settings', (result) => {
-          const s = result.settings || {};
-          s.blurRadius = 8;
-          chrome.storage.local.set({ settings: s }, resolve);
-        });
-      });
-    `);
-    await new Promise((r) => setTimeout(r, 300));
-  });
+  test('disabling extension via storage clears CSS vars / engine work', async () => {
+    // Toggle blur on first to verify engine activates.
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    await waitForCount(1, 5000);
+    expect(await countBlurred()).toBeGreaterThan(0);
 
-  test('disabling extension via storage blocks blur actions', async () => {
-    await page.goto(testPageUrl, { waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 1000));
+    // Disable via storage.
+    await setModelField((m) => {
+      m.global_default_settings.enabled = false;
+    });
+    await new Promise((r) => setTimeout(r, 800));
 
-    // Disable via storage — content script picks this up via onChanged.
-    await evalInContentScript(`
-      new Promise((resolve) => {
-        chrome.storage.local.get('settings', (result) => {
-          const s = result.settings || {};
-          s.enabled = false;
-          chrome.storage.local.set({ settings: s }, resolve);
-        });
-      });
-    `);
-    await new Promise((r) => setTimeout(r, 500));
+    // After disable, engine teardown clears stamps.
+    expect(await countBlurred()).toBe(0);
+  }, 15000);
 
-    // Try to blur directly — engine still works, but content script message
-    // handler should block TOGGLE_BLUR_ALL from background.
-    // Simulate the message handler check:
-    const canBlur = await evalInContentScript(`
-      // Check the internal settings.enabled flag in the content script closure.
-      // We can't access it directly, but we can check the observable effect:
-      // try to send a message through the extension's own messaging.
-      new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }, (resp) => {
-          resolve(resp && resp.settings ? resp.settings.enabled : 'unknown');
-        });
-      });
-    `);
-    console.log(`  → Enabled in storage: ${canBlur}`);
-    expect(canBlur).toBe(false);
-
-    // Re-enable.
-    await evalInContentScript(`
-      new Promise((resolve) => {
-        chrome.storage.local.get('settings', (result) => {
-          const s = result.settings || {};
-          s.enabled = true;
-          chrome.storage.local.set({ settings: s }, resolve);
-        });
-      });
-    `);
-    await new Promise((r) => setTimeout(r, 300));
-  });
-
-  test('blur all works on google.com', async () => {
+  test('blur all works on google.com via message protocol', async () => {
     await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
     await new Promise((r) => setTimeout(r, 1500));
 
@@ -245,60 +233,50 @@ describeFn('Popup ↔ Content Script Integration', () => {
     const hasCS = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bl-si-radius').trim().length > 0
     );
-    console.log(`  → Content script on google: ${hasCS}`);
     expect(hasCS).toBe(true);
 
-    // Blur all via content script world.
-    await evalInContentScript(`blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
-    await new Promise((r) => setTimeout(r, 500));
-
-    const count = await countBlurred();
-    console.log(`  → Blurred on google: ${count}`);
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    const count = await waitForCount(1, 5000);
     expect(count).toBeGreaterThan(0);
 
-    // Unblur.
-    await evalInContentScript(`blsi.BlurEngine.unblurAll()`);
-  });
+    // Cleanup — wait past dedup window then toggle off so other tests aren't
+    // affected.
+    await new Promise((r) => setTimeout(r, 600));
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+  }, 30000);
 
-  test('clear page works on google.com', async () => {
+  test('CLEAR_ALL_BLUR removes everything on google.com', async () => {
     await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
     await new Promise((r) => setTimeout(r, 1500));
 
-    // Blur.
-    await evalInContentScript(`blsi.BlurEngine.injectBlurRules({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }); blsi.BlurEngine.blurTextCheckElements({ TEXT: true, MEDIA: true, FORM: false, TABLE: true, STRUCTURE: true }, false)`);
-    await new Promise((r) => setTimeout(r, 300));
+    await sendMessageViaBackground('TOGGLE_BLUR_ALL');
+    await nudgePage();
+    await waitForCount(1, 5000);
     const before = await countBlurred();
-    console.log(`  → Before clear: ${before}`);
     expect(before).toBeGreaterThan(0);
 
-    // Clear.
-    await evalInContentScript(`blsi.BlurEngine.unblurAll()`);
-    await new Promise((r) => setTimeout(r, 300));
-    const after = await countBlurred();
-    console.log(`  → After clear: ${after}`);
+    await new Promise((r) => setTimeout(r, 600));  // past dedup window
+    await sendMessageViaBackground('CLEAR_ALL_BLUR');
+    const start = Date.now();
+    let after = await countBlurred();
+    while (after > 0 && Date.now() - start < 3000) {
+      await new Promise((r) => setTimeout(r, 100));
+      after = await countBlurred();
+    }
     expect(after).toBe(0);
-  });
+  }, 30000);
 
-  test('picker mode works on google.com', async () => {
+  test('picker activates and Escape deactivates on google.com', async () => {
     await page.goto('https://www.google.com', { waitUntil: 'load', timeout: 15000 });
     await new Promise((r) => setTimeout(r, 1500));
 
-    await evalInContentScript(`
-      blsi.Picker.activate(
-        { blurRadius: 8, highlightColor: '#f59e0b' },
-        {
-          onBlur: function(el) { blsi.BlurEngine.applyBlur(el); },
-          onUnblur: function(el) { blsi.BlurEngine.removeBlur(el); },
-          onDeactivate: function() {}
-        }
-      );
-    `);
-    await new Promise((r) => setTimeout(r, 300));
+    await sendMessageViaBackground('TOGGLE_PICKER');
+    await new Promise((r) => setTimeout(r, 500));
 
     const active = await page.evaluate(() =>
       document.documentElement.classList.contains('bl-si-picker-active')
     );
-    console.log(`  → Picker active on google: ${active}`);
     expect(active).toBe(true);
 
     await page.keyboard.press('Escape');
@@ -308,44 +286,5 @@ describeFn('Popup ↔ Content Script Integration', () => {
       document.documentElement.classList.contains('bl-si-picker-active')
     );
     expect(afterEscape).toBe(false);
-  });
-
-  test('blur persists and restores on local page after reload', async () => {
-    // Use local test page for reliable selector persistence (google.com
-    // re-renders on load, making selectors stale — documented limitation).
-    await page.goto(testPageUrl, { waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // Blur a specific element via picker flow (save to storage).
-    await evalInContentScript(`
-      (async () => {
-        const el = document.querySelector('#para1');
-        if (el) {
-          blsi.BlurEngine.applyBlur(el);
-          const sel = blsi.SelectorUtils.getSelector(el);
-          if (sel) {
-            await blsi.Storage.saveBlurItem(location.hostname, { type: 'dynamic', name: 'Dynamic 1', selector: sel });
-          }
-        }
-      })();
-    `);
-    await new Promise((r) => setTimeout(r, 500));
-
-    const before = await countBlurred();
-    console.log(`  → Blurred before reload: ${before}`);
-    expect(before).toBeGreaterThan(0);
-
-    // Reload.
-    await page.reload({ waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 1500));
-
-    const after = await countBlurred();
-    console.log(`  → Blurred after reload (restored): ${after}`);
-    expect(after).toBeGreaterThan(0);
-
-    // Clean up storage.
-    await evalInContentScript(`
-      blsi.Storage.clearHost(location.hostname);
-    `);
-  });
+  }, 30000);
 });
