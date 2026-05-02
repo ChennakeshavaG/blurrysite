@@ -28,6 +28,6 @@ Pure-data module. Defines which HTML tags and ARIA roles belong to each blur cat
 
 ## How to apply (How)
 
-- Adding a category: append to `CATEGORY_SELECTORS` AND to `CATEGORY_ORDER` (order matters for fingerprint stability), update `DEFAULT_MODEL` in `constants.js`, and document the new sub-keys in `CLAUDE.md` Settings Shape section.
+- Adding a category: append to `CATEGORY_SELECTORS` AND to `CATEGORY_ORDER` (order matters for fingerprint stability), update `DEFAULT_MODEL` in `constants.js`, and document the new sub-keys in `.claude/rules/settings-shape.md`.
 - Adding a tag to an existing category: append to the relevant `alwaysBlur` or `textCheck` array. No code change needed elsewhere — caches are derived from this data.
 - Adding a role: append to the relevant category's `roles` array. The CSS attribute selector and the JS role match are both data-driven.

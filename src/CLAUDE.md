@@ -34,6 +34,10 @@ Rules:
 
 ---
 
+## Critical: Module Globals
+
+Every source file exposes exactly one window global. Wrong name → silent `undefined` crash in page context.
+
 ## Module Load Order (enforced by manifest.json)
 
 ```
@@ -342,3 +346,32 @@ if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return
 - `applyState(resolved, prev)` awaits `_sync()` at the end — no per-field branching on categories/mode/thorough/radius. Engine skips the page-wide nuke when nothing structural changed.
 - Settings resolution: `Store.resolve(_topHostname, location.href)` → `applyState(resolved, prev)` — used by `init()`, `handleStorageChange()`, and `onUrlChange()` (SPA).
 - `handleStorageChange(newModel, _oldModel)` — receives full model objects (new `blsi_model` shape). Re-resolves via `Store.resolve()` + `applyState()`. Single storage key — no per-key branching on `blurred_items` / `blur_all_hosts` (those keys no longer exist).
+
+---
+
+## Blur Engine Element Handling
+
+All elements (video, img, text containers, generic) blurred via CSS class only (`bl-si-blurred`). CSS `filter: blur()` on parent blurs all descendants — no canvas overlays, no text-node wrapping, no DOM injection. This means:
+- No `position: relative` injection on parent elements (was breaking layouts)
+- No `requestAnimationFrame` loops for video (CSS blur works on DRM video too)
+- No text-node wrapper spans (CSS blur covers text nodes via parent filter)
+- Live radius updates propagate instantly via `var(--bl-si-radius)` from `:root`
+
+---
+
+## CSS Class Constants (do not invent new names)
+
+| Constant | Value |
+|---|---|
+| Blur class | `bl-si-blurred` |
+| Frosted glass mode | `bl-si-frosted` |
+| Canvas overlay | `bl-si-canvas-overlay` |
+| Text wrapper | `bl-si-text-node-wrapper` |
+| Hover highlight | `bl-si-hover-highlight` |
+| Picker active (on `<html>`) | `bl-si-picker-active` |
+| Toolbar | `bl-si-toolbar` (id: `bl-si-picker-toolbar`) |
+| Reveal attribute (all modes, click+hover) | `data-bl-si-reveal` (attribute, not class) |
+| Sticky zone overlay | `bl-si-zone-overlay` |
+| Zone drawing preview | `bl-si-zone-drawing` |
+| Zone hover highlight (picker mode) | `bl-si-zone-highlight` |
+| Zone name label | `bl-si-zone-label` |

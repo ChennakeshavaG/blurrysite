@@ -311,7 +311,7 @@ The legacy per-hostname `blsi_automate_blur` key + the
 
 | Storage | Key | Contents | Owner |
 |---|---|---|---|
-| `chrome.storage.local` | `blsi_model` | Full feature-grouped model (see Settings Shape in CLAUDE.md) | `storage_model` |
+| `chrome.storage.local` | `blsi_model` | Full feature-grouped model (see `.claude/rules/settings-shape.md`) | `storage_model` |
 | `chrome.storage.session` | `blsi_screen_share` | Single global record `{ active, sharing_tab_id, started_at, suppressed_sites }` | `storage_model` |
 | `chrome.storage.session` | `blsi_automate_suppressed_tabs` | `number[]` of tab ids silenced for ALL automate triggers | `storage_model` |
 | `chrome.storage.session` | `blsi_automate_idle` | One of `'active'\|'idle'\|'locked'` (chrome.idle phase) — global | `automate/state.js` |
