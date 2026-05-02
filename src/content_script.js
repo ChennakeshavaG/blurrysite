@@ -47,13 +47,6 @@
   let _urlChangeTimer = null;
 
   /**
-   * Tracks whether this tab is currently rendering screen-share automate blur
-   * (per the resolved state). Used to gate toast firing — only show on the
-   * non-blurred → blurred transition, not on every NOTIFY ping.
-   */
-  let _ssCurrentlyBlurring = false;
-
-  /**
    * Top-level page hostname — used exclusively for blur_all_hosts lookup so
    * cross-origin iframes follow the parent page's blur-all state rather than
    * their own. Seeded from document.referrer on initial load; updated via
@@ -66,11 +59,10 @@
   /** Last observed URL — SPA navigation change detection */
   let lastUrl = location.href;
 
-  // Tracks the prior automate phases so we only fire toasts on transitions.
-  // D10: per-instance state — resets on reload. Acceptable until the toast
-  // persistence redesign lands.
-  let _lastIdlePhase = 'active';
-  let _lastTabSwitchPhase = 'off';
+  // (Toast transition tracking moved to blsi.Automate.Manager — step 4 of the
+  // engine/automate split. Manager owns _lastIdlePhase / _lastTabSwitchPhase /
+  // _ssCurrentlyBlurring / _lastSkipped and fires the four automate toasts
+  // independently.)
 
   // Idle handle for the deferred initial PII scan. Tracked so a follow-up
   // applyState (settings change, disable) can cancel a stale pending scan.
@@ -156,9 +148,11 @@
     const tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
       ? blsi.ScreenShare.getTabId()
       : null;
-    const resolved = preResolved || Store.resolve(_topHostname, location.href, tabId);
+    // Engine path uses resolve_settings (no automate decision fields). Manager
+    // owns automate state and reads resolve_automate independently. The full
+    // union (resolve()) is retained for popup compatibility only.
+    const resolved = preResolved || Store.resolve_settings(_topHostname, location.href, tabId);
     settings = resolved;
-    _ssCurrentlyBlurring = !!(resolved.automate_blur_triggers && resolved.automate_blur_triggers.screen_share);
     await Engine.handleSite(resolved);
   }
 
@@ -319,8 +313,17 @@
 
     switch (type) {
       // ── Toggle blur-all mode (global) ───────────────────────────────────
+      // Reads blur_all.status from the model directly rather than deriving
+      // from Engine.isPageBlurred. After the engine/automate split,
+      // isPageBlurred only reflects engine-driven blur — when automate
+      // Overlay is up but no manual blur, isPageBlurred is false, which
+      // would cause the toggle to switch blur_all ON (turning the visible
+      // page MORE blurred). The user's intent is "toggle the blur-all
+      // setting" — read the setting, flip the setting.
       case blsi.command.toggle_blur_all: {
-        const newState = !Engine.isPageBlurred;
+        const _model = Store.get();
+        const _currentStatus = !!(_model && _model.blur_all && _model.blur_all.status);
+        const newState = !_currentStatus;
         log.flow('trigger.toggleBlurAll', { nextState: newState });
         (async () => {
           await Store.save_blur_state(newState);
@@ -333,7 +336,7 @@
       // ── Toggle element picker ───────────────────────────────────────────
       case blsi.command.toggle_picker: {
         const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
-        const resolved = Store.resolve(_topHostname, location.href, _tabId);
+        const resolved = Store.resolve_settings(_topHostname, location.href, _tabId);
         const pickerMode = message.picker_mode || resolved.picker_mode;
         log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: pickerMode });
         if (isPickerActive) {
@@ -457,23 +460,15 @@
       }
 
       // ── Screen share notify (background broadcast) ─────────────────────
-      // Toast trigger only — actual blur state comes from Store.resolve()
-      // which reads the session record. Storage onChanged also re-syncs in
-      // tabs that miss this message; this handler ensures the toast fires
-      // exactly once per non-blurred → blurred transition.
+      // Engine resync only — Manager owns the screen-share toast and fires
+      // it independently via its on_automate_change subscription. The notify
+      // message exists for tabs that need a wake-up nudge before storage
+      // onChanged fans out; firing _sync() drives engine.handleSite to
+      // re-stamp / teardown if a site_rule snapshot just flipped.
       case blsi.command.screen_share_notify: {
         log.flow('trigger.screenShareNotify');
         (async () => {
-          const wasBlurring = _ssCurrentlyBlurring;
           await _sync();
-          const nowBlurring = _ssCurrentlyBlurring;
-          if (!wasBlurring && nowBlurring) {
-            const actions = await _ssBlurStopActions();
-            Shortcuts.showToast(_toastMsg('automate_toast_screen_share', 'automate_screen_share'), 15000, actions);
-          } else if (!nowBlurring && settings && settings.automate_blur_skipped &&
-                     settings.automate_blur_skip_reason && !wasBlurring) {
-            Shortcuts.showToast(_toastMsg('automate_toast_skipped', 'automate_screen_share'), 2500);
-          }
           if (sendResponse) sendResponse({ ok: true });
         })();
         return true;
@@ -566,31 +561,7 @@
         blsi.Automate.Visibility.destroy();
       }
 
-      // Toast attribution (D8) — fire on idle/tab_switch transitions where
-      // this tab actually starts blurring. Splits idle vs tab_switch toasts so
-      // the user sees which trigger fired. Skipped when manual blur or
-      // pick_blur was already active (resolve flips automate_blur_skipped).
-      const State = blsi.Automate && blsi.Automate.State;
-      if (State && resolved.automate_blur_only) {
-        const idle_phase = State.read_idle();
-        if (resolved.automate_blur_triggers.idle &&
-            idle_phase !== _lastIdlePhase &&
-            (idle_phase === State.PHASES.idle.idle || idle_phase === State.PHASES.idle.locked)) {
-          Shortcuts.showToast(_toastMsg('automate_toast_idle', 'automate_idle'), 2500);
-        }
-        const ts_phase = (typeof tabId === 'number') ? State.read_tab_switch(tabId) : 'off';
-        if (resolved.automate_blur_triggers.tab_switch &&
-            ts_phase !== _lastTabSwitchPhase &&
-            ts_phase === State.PHASES.tab_switch.fired) {
-          Shortcuts.showToast(_toastMsg('automate_toast_tab_switch', 'automate_tab_switch'), 2500);
-        }
-      }
-      if (State) {
-        _lastIdlePhase = State.read_idle();
-        _lastTabSwitchPhase = (typeof tabId === 'number')
-          ? State.read_tab_switch(tabId)
-          : 'off';
-      }
+      // Idle / tab_switch toast attribution moved to blsi.Automate.Manager.
     }
 
     // PII auto-detection — scan after blur reconciliation so PII spans don't
@@ -715,7 +686,7 @@
     if (!Engine) return;
 
     const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
-    const resolved = Store.resolve(_topHostname, location.href, _tabId);
+    const resolved = Store.resolve_settings(_topHostname, location.href, _tabId);
     const prev = { ...settings };
 
     // Detect language change for i18n re-init.
@@ -749,8 +720,12 @@
       try {
         const prev = { ...settings };
         const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
-        const resolved = Store.resolve(_topHostname, currentUrl, _tabId);
+        const resolved = Store.resolve_settings(_topHostname, currentUrl, _tabId);
         await applyState(resolved, prev);
+        // Honor path-specific site rules in the automate path too.
+        if (blsi.Automate && blsi.Automate.Manager) {
+          blsi.Automate.Manager.on_url_change(_topHostname, currentUrl);
+        }
       } catch (err) {
         console.warn('[BlurrySite] URL change handler error:', err.message, err.stack);
       }
@@ -804,7 +779,7 @@
 
     // 2. Resolve settings for the current URL from cached model.
     const _initTabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
-    const resolved = Store.resolve(_topHostname, location.href, _initTabId);
+    const resolved = Store.resolve_settings(_topHostname, location.href, _initTabId);
     settings = resolved;
 
     // 2b. Initialize the content-script i18n helper — main frame only because
@@ -839,8 +814,23 @@
       }, true);
     }
 
-    // 7. If the extension is disabled, subscribe to changes (so re-enable works)
-    //    but skip shortcuts + blur restore.
+    // 7a. Wire the automate Manager BEFORE the disabled-extension early-return.
+    //     Manager honors the master switch internally (it hides Overlay when
+    //     enabled=false). Initializing it unconditionally means re-enabling the
+    //     extension later flips automate on without needing a content_script reload.
+    if (IS_MAIN_FRAME && blsi.Automate && blsi.Automate.Overlay) {
+      blsi.Automate.Overlay.init(); // idempotent; mounts on first show()
+    }
+    if (IS_MAIN_FRAME && blsi.Automate && blsi.Automate.Manager) {
+      blsi.Automate.Manager.init({
+        tab_id: _initTabId,
+        get_host_url: () => ({ host: _topHostname, url: location.href }),
+        ss_stop_actions: _ssBlurStopActions,
+      });
+    }
+
+    // 7b. If the extension is disabled, subscribe to changes (so re-enable works)
+    //     but skip shortcuts + blur restore.
     if (resolved.enabled === false) {
       Store.on_change(handleStorageChange);
       document.dispatchEvent(new CustomEvent('bl-si-ready'));
@@ -850,17 +840,21 @@
     // 8–9. Apply all stored settings — single authoritative call that covers
     //      blur restore, PII scan, automate observers, shortcuts, and CSS vars.
     Engine.resetCounters();
-    if (IS_MAIN_FRAME && blsi.Automate && blsi.Automate.Overlay) {
-      blsi.Automate.Overlay.init(); // idempotent; mounts on first show()
-    }
     await applyState(resolved, null);
 
-    // 9b. Catch-up toast for tabs opened mid-share. resolve() already factored
-    //     the live session record during applyState; just fire the toast if
-    //     this tab landed in screen-share-blur on initial load.
-    if (IS_MAIN_FRAME && _ssCurrentlyBlurring && settings.automate_blur_only) {
-      const _initActions = await _ssBlurStopActions();
-      Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions);
+    // 9b. Catch-up toast for tabs opened mid-share. Manager seeds its
+    //     transition tracking on init without firing toasts (so users aren't
+    //     spammed for state that already existed when the tab opened); we
+    //     issue one explicit screen-share toast here if this tab landed in
+    //     screen-share-blur on initial load. Manager handles every subsequent
+    //     transition independently.
+    if (IS_MAIN_FRAME) {
+      const _autoSnap = Store.resolve_automate(_topHostname, location.href, _initTabId);
+      const _ss_blurring_now = !!(_autoSnap.automate_blur_triggers && _autoSnap.automate_blur_triggers.screen_share);
+      if (_ss_blurring_now && _autoSnap.automate_blur_only) {
+        const _initActions = await _ssBlurStopActions();
+        Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions);
+      }
     }
 
     // 9c. Show one-time PWA hint after Shortcuts is initialized (applyState

@@ -3,7 +3,7 @@
  *
  * Unit tests for src/automate/visibility.js
  * Module exposes blsi.Automate.Visibility with:
- *   init, destroy, getCurrentPhase
+ *   init, destroy
  */
 
 'use strict';
@@ -57,7 +57,7 @@ describe('automate/visibility.js', () => {
       blsi.Automate.Visibility.init({ tab_id: 7 });
       // D4: armed is absence — no storage write on a quiet init.
       expect(chrome.storage.session.set).not.toHaveBeenCalled();
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('armed');
+      expect(blsi.Automate.State.read_tab_switch(7)).toBe('off');
     });
 
     test('seeds fired phase when tab is hidden on init', () => {
@@ -66,7 +66,7 @@ describe('automate/visibility.js', () => {
       blsi.Automate.Visibility.init({ tab_id: 7 });
       const last = chrome.storage.session.set.mock.calls.at(-1);
       expect(last[0]).toEqual({ [KEY]: { '7': 'fired' } });
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('fired');
+      expect(blsi.Automate.State.read_tab_switch(7)).toBe('fired');
     });
 
     test('init without numeric tab_id is a no-op', () => {
@@ -95,7 +95,7 @@ describe('automate/visibility.js', () => {
       blsi.Automate.Visibility.init({ tab_id: 8 });
       // destroy(7) strips the entry; init(8) is armed = absence → no extra write.
       expect(chrome.storage.session.set.mock.calls.at(-1)[0]).toEqual({ [KEY]: {} });
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('armed');
+      expect(blsi.Automate.State.read_tab_switch(8)).toBe('off');
     });
   });
 
@@ -178,24 +178,6 @@ describe('automate/visibility.js', () => {
       document.dispatchEvent(new Event('visibilitychange'));
       window.dispatchEvent(new Event('blur'));
       expect(chrome.storage.session.set).not.toHaveBeenCalled();
-    });
-
-    test('getCurrentPhase resets to armed default after destroy', () => {
-      setVisibility('hidden');
-      blsi.Automate.Visibility.init({ tab_id: 7 });
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('fired');
-      blsi.Automate.Visibility.destroy();
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('armed');
-    });
-  });
-
-  describe('getCurrentPhase', () => {
-    test('reflects the most recent derivation', () => {
-      blsi.Automate.Visibility.init({ tab_id: 7 });
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('armed');
-      setVisibility('hidden');
-      document.dispatchEvent(new Event('visibilitychange'));
-      expect(blsi.Automate.Visibility.getCurrentPhase()).toBe('fired');
     });
   });
 });

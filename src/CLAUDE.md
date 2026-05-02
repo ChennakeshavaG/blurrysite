@@ -70,6 +70,7 @@ Isolated world (run_at:"document_idle"):
 18a. automate/state.js    → blsi.Automate.State (shared phase enums + KEYS + read/write helpers; both contexts)
 18b. automate/overlay.js  → blsi.Automate.Overlay (viewport overlay primitive; show/hide/update; content only)
 18c. automate/visibility.js → blsi.Automate.Visibility (per-tab Page Lifecycle observer; init({tab_id})/destroy)
+18d. automate/manager.js     → blsi.Automate.Manager (automate orchestrator; drives Overlay from live state via Model.on_automate_change; init({tab_id,get_host_url})/destroy/on_url_change)
 20. reveal_controller.js  → blsi.Reveal
 21. shortcut_handler.js   → blsi.Shortcuts
 22. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
@@ -258,7 +259,9 @@ if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return
 - `patch_section(section, delta)` — deep-merges `delta` into the named section, writes the updated model back to storage, and updates cache. Use for deliberate user-triggered saves.
 - `debounced_patch(section, delta, delay?)` — same as `patch_section` but batches rapid calls (default **150 ms**). Use from popup inputs to avoid saturating storage writes.
 - `save_settings(patch)` — merges a partial settings patch into `model.global_default_settings`. Pass only the keys you want to update; unspecified keys are preserved.
-- `resolve(hostname, url, tab_id?)` — returns the effective resolved settings for a hostname/URL by merging global settings + first matching wildcard/regex site_rule + exact hostname site_rule. Includes `engage`, `blur_items`, `automate_blur_active`, and `automate_blur_triggers` in the output. Reads idle phase via `blsi.Automate.State.read_idle()` (gated by `automate.idle.enabled`) and tab_switch phase via `read_tab_switch(tab_id)` (gated by `automate.tab_switch.enabled`).
+- `resolve_settings(hostname, url, tab_id?)` — **engine surface**. Folded settings + `engage` (= `(enabled !== false) && manual_blur`). Excludes automate decision fields. Used by `content_script._sync` / `handleStorageChange` / `onUrlChange` / init.
+- `resolve_automate(hostname, url, tab_id)` — **Manager surface**. Returns `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only/_skipped/_skip_reason`, `screen_share_state`, `screen_share_suppressed_*`, `automate_idle/_tab_switch/_screen_share` (gate settings post-rule fold), `_rule_match`, `_rule_overrides_automate`. Used exclusively by `blsi.Automate.Manager`.
+- `resolve(hostname, url, tab_id?)` — backward-compat shim returning `{...resolve_settings, ...resolve_automate}`. Used by popup. Engine never calls this.
 - `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
 - `clear_host(host)` — clears items for the host in local storage. Does not touch automate trigger state (per-tab/global, not per-host).
 - `clear_all()` — clears `blur_all` + items for all exact rules in local storage + resets session storage (`blsi_automate_blur: {}`) separately.

@@ -44,10 +44,43 @@
   });
 
   // ── In-memory caches (synchronous read surface) ───────────────────────────
+  //
+  // Why a cache exists at all:
+  //   read_idle() / read_tab_switch() are synchronous because their primary
+  //   caller — storage_model.resolve() — is sync, and resolve() in turn is
+  //   called from popup render paths that are also sync. chrome.storage.session
+  //   has no sync API, so we keep the latest value mirrored in a variable.
+  //
+  // Cache lifecycle (module load → steady state):
+  //
+  //   1. Variable declaration installs DEFAULTS:
+  //        _idle_cache       = 'active'
+  //        _tab_switch_cache = {}
+  //      Any sync read before hydration completes returns these defaults.
+  //
+  //   2. Bottom of IIFE installs the onChanged LISTENER first, then calls
+  //      _hydrate(). Listener-first ordering matters: a write landing between
+  //      hydrate-issue and hydrate-callback would otherwise be dropped.
+  //
+  //   3. _hydrate() issues a one-shot async chrome.storage.session.get and
+  //      OVERWRITES the defaults with persisted values if any exist (e.g. a
+  //      background SW just woke up, or a tab opened mid-session after another
+  //      context wrote 'idle' / a tab_switch entry). Storage empty → defaults
+  //      survive.
+  //
+  //   4. From here on, the LISTENER is the sole external updater — every
+  //      cross-context write to KEYS.idle / KEYS.tab_switch_by_tab fires
+  //      _on_storage_changed which re-syncs the cache. Hydrate never runs
+  //      again.
+  //
+  //   5. Local writes via write_idle() / write_tab_switch() take a fast path:
+  //      they update the cache SYNCHRONOUSLY (so the same-tick read sees the
+  //      new value), then issue chrome.storage.session.set. The onChanged
+  //      echo fires the listener too, but its "value differs from cache"
+  //      guard short-circuits it.
 
   let _idle_cache = PHASES.idle.active;             // default before SW reports
   let _tab_switch_cache = Object.create(null);      // { [tab_id]: phase }
-  let _change_listeners = [];                       // function(key, old, new)[]
 
   function _hydrate() {
     if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.session) return;
@@ -62,29 +95,18 @@
   function _on_storage_changed(changes, area) {
     if (area !== 'session') return;
     if (KEYS.idle in changes) {
-      const old_v = _idle_cache;
       const new_v = changes[KEYS.idle].newValue;
-      if (typeof new_v === 'string' && new_v !== old_v) {
+      if (typeof new_v === 'string' && new_v !== _idle_cache) {
         _idle_cache = new_v;
-        _fire(KEYS.idle, old_v, new_v);
       }
     }
     if (KEYS.tab_switch_by_tab in changes) {
-      const old_v = _tab_switch_cache;
       const raw = changes[KEYS.tab_switch_by_tab].newValue;
-      const new_v = (raw && typeof raw === 'object') ? raw : Object.create(null);
-      _tab_switch_cache = new_v;
-      _fire(KEYS.tab_switch_by_tab, old_v, new_v);
+      _tab_switch_cache = (raw && typeof raw === 'object') ? raw : Object.create(null);
     }
   }
 
-  function _fire(key, old_v, new_v) {
-    for (let i = 0; i < _change_listeners.length; i++) {
-      try { _change_listeners[i](key, old_v, new_v); }
-      catch (_) { /* swallow — one bad listener can't break others */ }
-    }
-  }
-
+  // Listener BEFORE hydrate — see lifecycle note above.
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener(_on_storage_changed);
     _hydrate();
@@ -131,21 +153,10 @@
 
   function clear_tab_switch(tab_id) { return write_tab_switch(tab_id, PHASES.tab_switch.off); }
 
-  // Subscriber registry. Caller passes (key, old_v, new_v); returns unsubscribe.
-  function on_change(fn) {
-    if (typeof fn !== 'function') return function () {};
-    _change_listeners.push(fn);
-    return function unsubscribe() {
-      const idx = _change_listeners.indexOf(fn);
-      if (idx >= 0) _change_listeners.splice(idx, 1);
-    };
-  }
-
   // Test-only — reset caches without writing to storage.
   function _reset() {
     _idle_cache = PHASES.idle.active;
     _tab_switch_cache = Object.create(null);
-    _change_listeners = [];
   }
 
   const State = Object.freeze({
@@ -157,7 +168,6 @@
     write_idle,
     write_tab_switch,
     clear_tab_switch,
-    on_change,
     _reset,
   });
 

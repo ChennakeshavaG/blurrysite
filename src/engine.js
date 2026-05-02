@@ -263,26 +263,13 @@ const Engine = (() => {
         _State.setIsPageBlurred(false);
         _reconcileItems([]);
         removeAllZoneOverlays(); // safety net for orphaned zones
-        if (blsi.Automate && blsi.Automate.Overlay) blsi.Automate.Overlay.hide();
         return;
       }
 
-      // ── Automate overlay (parallel render path) ────────────────────────────
-      // Driven entirely by automate triggers (idle / tab_switch / screen_share);
-      // overlays the entire viewport via a single DOM element. Independent of the
-      // stamp+CSS engine — see docs/automate-redesign-plan.md.
-      if (blsi.Automate && blsi.Automate.Overlay) {
-        if (settings.automate_blur_active) {
-          blsi.Automate.Overlay.show({
-            mode: settings.blur_mode || 'blur',
-            color: (settings.pick_blur_color && settings.pick_blur_color.hex) || '#000000',
-            opacity: 1,
-            blur_radius: settings.blur_radius || 16,
-          });
-        } else {
-          blsi.Automate.Overlay.hide();
-        }
-      }
+      // ── Automate overlay (separate reactive path) ──────────────────────────
+      // The Overlay is owned by blsi.Automate.Manager, which subscribes to
+      // session storage transitions independently of the engine. Engine no
+      // longer reads automate_blur_active.
 
       const isActive = !!settings.engage;
 

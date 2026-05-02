@@ -1,12 +1,26 @@
 /**
- * automate/visibility.js — Per-tab Page Lifecycle observer.
+ * automate/visibility.js — Per-tab presence observer.
  *
- * Listens to visibilitychange + window.focus/blur. Derives an active /
- * passive / hidden state (Page Lifecycle), maps it to 'armed' | 'fired',
- * and writes via blsi.Automate.State.write_tab_switch(tab_id, phase).
+ * Watches whether the user is currently looking at this tab. "Looking at"
+ * means: tab is visible AND the browser window has focus. Anything else
+ * (switched to another tab, minimized, focused another window/app, docked
+ * devtools, etc.) flips the tab to 'fired'.
  *
- * Replaces the tab-switch portion of src/auto_blur.js. No hand-rolled
- * debounces — same-value writes are absorbed by State's idempotency.
+ * Three event sources cover the away-from-tab cases:
+ *   - document 'visibilitychange' — tab switch / minimize / restore
+ *   - window   'blur'             — another window or app stole focus
+ *   - window   'focus'            — focus returned, re-evaluate
+ *
+ * We listen on the window (not focusin/focusout) because we care that the
+ * WINDOW lost focus — focusin/focusout fire on every element-level focus
+ * change inside the page (input clicks, tab-through), which is way noisier
+ * than the signal we want.
+ *
+ * Result is written via blsi.Automate.State.write_tab_switch(tab_id, phase).
+ * Only 'fired' is persisted; 'armed' writes 'off' which strips the entry
+ * (absence in the map === armed/off — keeps the map small, since most tabs
+ * are armed most of the time). State.write_tab_switch is idempotent, so
+ * same-value events absorb at the State layer — no local dedup needed.
  *
  * Loaded in CONTENT context only (manifest content_scripts).
  *
@@ -22,33 +36,27 @@
 
   let _initialized = false;
   let _tab_id      = null;
-  let _on_vis      = null;
-  let _on_focus    = null;
-  let _on_blur     = null;
-  let _current_phase = (State && State.PHASES.tab_switch.armed) || 'armed';
 
-  function _is_active() {
-    if (typeof document === 'undefined') return true;
-    if (document.visibilityState === 'hidden') return false;
-    if (typeof document.hasFocus === 'function' && !document.hasFocus()) return false;
-    return true;
-  }
-
-  function _derive_phase() {
-    if (!State) return 'armed';
-    return _is_active() ? State.PHASES.tab_switch.armed : State.PHASES.tab_switch.fired;
-  }
-
+  // Single handler registered on all three events. Re-derives the phase from
+  // the live document state and writes through State. Same function reference
+  // is used for add + remove, so addEventListener / removeEventListener match
+  // by identity without needing alias variables.
   function _evaluate_and_write() {
     if (!State || typeof _tab_id !== 'number') return;
-    const phase = _derive_phase();
-    if (phase === _current_phase) return;
-    _current_phase = phase;
-    // D4: absence === armed/off. Only write 'fired' as a real entry; 'armed'
-    // strips the entry (write_tab_switch with 'off' is the absence write).
+
+    // Active = tab visible AND window focused. Both checks needed: a tab can
+    // be 'visible' (rendered on screen) while the user has alt-tabbed to
+    // another app — visibilityState alone would miss that. The non-browser
+    // fallback (no document) defaults to active so test environments don't
+    // spuriously fire.
+    let active = true;
+    if (typeof document !== 'undefined') {
+      if (document.visibilityState === 'hidden') active = false;
+      else if (typeof document.hasFocus === 'function' && !document.hasFocus()) active = false;
+    }
+
     const PH = State.PHASES.tab_switch;
-    if (phase === PH.fired) State.write_tab_switch(_tab_id, PH.fired);
-    else                    State.write_tab_switch(_tab_id, PH.off);
+    State.write_tab_switch(_tab_id, active ? PH.off : PH.fired);
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -63,45 +71,35 @@
     _tab_id = next_tab_id;
     _initialized = true;
 
-    _on_vis   = _evaluate_and_write;
-    _on_focus = _evaluate_and_write;
-    _on_blur  = _evaluate_and_write;
-
     if (typeof document !== 'undefined' && document.addEventListener) {
-      document.addEventListener('visibilitychange', _on_vis, true);
+      document.addEventListener('visibilitychange', _evaluate_and_write, true);
     }
     if (typeof window !== 'undefined' && window.addEventListener) {
-      window.addEventListener('focus', _on_focus, true);
-      window.addEventListener('blur',  _on_blur,  true);
+      window.addEventListener('focus', _evaluate_and_write, true);
+      window.addEventListener('blur',  _evaluate_and_write, true);
     }
 
-    // Seed the entry on init.
-    _current_phase = null;     // force the first write through
+    // Seed storage on init — writes 'fired' if the tab opened hidden/unfocused,
+    // skipped (idempotent at State layer) when armed.
     _evaluate_and_write();
   }
 
   function destroy() {
-    if (typeof document !== 'undefined' && document.removeEventListener && _on_vis) {
-      document.removeEventListener('visibilitychange', _on_vis, true);
+    if (typeof document !== 'undefined' && document.removeEventListener) {
+      document.removeEventListener('visibilitychange', _evaluate_and_write, true);
     }
     if (typeof window !== 'undefined' && window.removeEventListener) {
-      if (_on_focus) window.removeEventListener('focus', _on_focus, true);
-      if (_on_blur)  window.removeEventListener('blur',  _on_blur,  true);
+      window.removeEventListener('focus', _evaluate_and_write, true);
+      window.removeEventListener('blur',  _evaluate_and_write, true);
     }
     if (State && typeof _tab_id === 'number') {
       State.clear_tab_switch(_tab_id);
     }
-    _on_vis = null;
-    _on_focus = null;
-    _on_blur = null;
     _tab_id = null;
     _initialized = false;
-    _current_phase = (State && State.PHASES.tab_switch.armed) || 'armed';
   }
 
-  function getCurrentPhase() { return _current_phase; }
-
-  const Visibility = Object.freeze({ init, destroy, getCurrentPhase });
+  const Visibility = Object.freeze({ init, destroy });
 
   if (typeof globalThis !== 'undefined') {
     globalThis.blsi = globalThis.blsi || {};

@@ -138,10 +138,9 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `patch_automate_blur updates multiple triggers atomically` — `{ idle: false, screen_share: true }` applied in one call updates both fields while leaving `tab_switch: false`.
 - `clear_automate_blur removes the hostname entry` — after clear, `get_automate_blur` returns the all-false default.
 - `resolve includes automate_blur_active and automate_blur_triggers` — after `save_automate_blur('example.com', 'idle', true)`, `resolved.automate_blur_active === true` and `resolved.automate_blur_triggers.idle === true`.
-- `resolve: engage is true when only automate fires (manual = false)` — `engage` is `true`; `automate_blur_only` is `true`; `automate_blur_skipped` is `false`.
-- `resolve: automate_blur_only resets all blur-relevant keys to defaults from global settings` — when `automate_blur_only`, `blur_mode`, `blur_categories`, `blur_radius`, `thorough_blur`, `reveal_mode`, `transition_duration`, `redaction_color`, `highlight_color` all equal `DEFAULT_MODEL` values even when the user has customized them.
-- `resolve: automate_blur_skipped = true when blur_all is already enabled` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `engage` is still `true`.
-- `resolve: automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`; `engage` stays `false` (pick-blur handles it separately).
+- `resolve: engage is FALSE when only automate fires (engine no longer activates for automate)` — post-engine/automate-split, `engage` tracks blur-all only. Automate fires the Overlay via `blsi.Automate.Manager`, not the engine. `automate_blur_only` is `true`; `automate_blur_skipped` is `false`. (Previously `engage` was `true` here because the old formula folded automate as a blur reason.)
+- `resolve: automate_blur_skipped = true when blur_all is already enabled` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `engage` is still `true` (driven by `blur_all`).
+- `resolve: automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`; `engage` stays `false` (pick-blur reconcile is unconditional inside `engine.handleSite`, not gated by `engage`).
 - `resolve: automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
 - `resolve: manual blur preserved after automate cleared` — after patching idle trigger to `false`, `engage` remains `true` from the persisted manual `blur_all: true`.
 - `clear_host also clears automate_blur for that hostname` — after `clear_host`, `get_automate_blur` returns the all-false default.
@@ -208,6 +207,15 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 - `_rule_match exposes the matching rule for popup deep-link` — wildcard match returns `{ hostname_value: '*.github.com', hostname_type: 'wildcard' }`.
 - `exact rule snapshot wins over wildcard for _rule_match` — when both match, `_rule_match` reports the exact rule.
 - `_rule_overrides empty when no rule matches` — for an unmatched host, `_rule_overrides` is `{}` and `_rule_match` is `null`.
+
+### `resolve_automate`
+
+Slim resolver consumed by the automate Manager. Step 1 of the engine/automate split — currently a thin slice over `resolve()`.
+
+- `returns only the automate-decision fields` — `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_*`, `automate_idle`, `automate_tab_switch`, `automate_screen_share`, `_rule_match` are present; manual-blur / settings-tree fields (`engage`, `blur_mode`, `blur_radius`, `blur_categories`, `blur_items`, `shortcuts`, `pii_*`) are absent.
+- `values match resolve() output for automate keys` — derivation parity with the full resolver across all returned fields.
+- `reflects per-host site-rule fold of automate gates` — site_rule snapshot flipping `automate.settings.idle.enabled = false` propagates into `resolved.automate_idle.enabled`.
+- `omits tab_id → screen_share self-skip cannot apply` — calling with `tab_id = null` produces `screen_share_state.is_sharing_tab = false` (matches popup callers without an active tab id).
 
 ---
 

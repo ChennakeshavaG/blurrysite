@@ -3,7 +3,10 @@
  *
  * Unit tests for src/automate/overlay.js
  * Module exposes blsi.Automate.Overlay with:
- *   init, show, update, hide, isVisible, destroy
+ *   init, show, hide, isVisible, destroy
+ *
+ * Single fixed style: deep frosted (backdrop-filter blur + dark tint). No
+ * params, no settings dependency.
  */
 
 'use strict';
@@ -61,7 +64,7 @@ describe('automate/overlay.js', () => {
     });
 
     test('destroy() removes the overlay + resets state', () => {
-      blsi.Automate.Overlay.show({ mode: 'solid', color: '#123456' });
+      blsi.Automate.Overlay.show();
       blsi.Automate.Overlay.destroy();
       expect(document.getElementById(ROOT_ID)).toBeNull();
       // After destroy, show() re-mounts fresh.
@@ -95,97 +98,31 @@ describe('automate/overlay.js', () => {
       expect(s.getPropertyPriority('position')).toBe('important');
       expect(s.getPropertyPriority('z-index')).toBe('important');
       expect(s.getPropertyPriority('pointer-events')).toBe('important');
+      expect(s.getPropertyPriority('background')).toBe('important');
     });
   });
 
-  describe('mode application', () => {
-    test("'solid' sets opaque rgba background, no backdrop-filter", () => {
-      blsi.Automate.Overlay.show({ mode: 'solid', color: '#000000', opacity: 1 });
-      const s = document.getElementById(ROOT_ID).style;
-      // jsdom collapses rgba(R,G,B,1) -> rgb(R, G, B)
-      expect(s.background).toMatch(/rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)/);
-      expect(s.getPropertyValue('backdrop-filter')).toBe('');
-    });
-
-    test("'frosted' applies backdrop-filter blur(N) and -webkit- variant", () => {
+  describe('frosted style', () => {
+    test('applies backdrop-filter: blur(40px) and the -webkit- variant', () => {
       // jsdom drops unknown CSS properties (backdrop-filter not in cssstyle whitelist),
       // so we spy on setProperty to verify the call shape.
       const setPropertySpy = jest.spyOn(CSSStyleDeclaration.prototype, 'setProperty');
       try {
-        blsi.Automate.Overlay.show({ mode: 'frosted', color: '#ffffff', opacity: 0.5, blur_radius: 12 });
+        blsi.Automate.Overlay.show();
         const calls = setPropertySpy.mock.calls;
         expect(calls).toEqual(expect.arrayContaining([
-          ['backdrop-filter',         'blur(12px)', 'important'],
-          ['-webkit-backdrop-filter', 'blur(12px)', 'important'],
+          ['backdrop-filter',         'blur(40px)', 'important'],
+          ['-webkit-backdrop-filter', 'blur(40px)', 'important'],
         ]));
       } finally {
         setPropertySpy.mockRestore();
       }
-      // Translucent tint applied — opacity 0.5 < 0.6 cap, so passes through
+    });
+
+    test('applies dark tint background', () => {
+      blsi.Automate.Overlay.show();
       const s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0\.5\s*\)/);
-    });
-
-    test("'frosted' caps tint alpha at 0.6", () => {
-      blsi.Automate.Overlay.show({ mode: 'frosted', color: '#ffffff', opacity: 1 });
-      const s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0\.6\s*\)/);
-    });
-
-    test("'color' sets rgba(color, opacity) without backdrop-filter", () => {
-      blsi.Automate.Overlay.show({ mode: 'color', color: '#ff0000', opacity: 0.4 });
-      const s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*255\s*,\s*0\s*,\s*0\s*,\s*0\.4\s*\)/);
-      expect(s.getPropertyValue('backdrop-filter')).toBe('');
-    });
-
-    test('invalid hex falls back to rgba(0,0,0,alpha)', () => {
-      blsi.Automate.Overlay.show({ mode: 'solid', color: 'not-a-hex', opacity: 0.7 });
-      const s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\.7\s*\)/);
-    });
-
-    test('opacity outside [0,1] is clamped', () => {
-      blsi.Automate.Overlay.show({ mode: 'solid', color: '#000000', opacity: 5 });
-      let s = document.getElementById(ROOT_ID).style;
-      // clamped to 1, jsdom collapses to rgb()
-      expect(s.background).toMatch(/rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)/);
-      blsi.Automate.Overlay.update({ opacity: -3 });
-      s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/);
-    });
-
-    test('switching frosted -> solid removes backdrop-filter', () => {
-      blsi.Automate.Overlay.show({ mode: 'frosted', blur_radius: 8, opacity: 0.3 });
-      blsi.Automate.Overlay.update({ mode: 'solid' });
-      const s = document.getElementById(ROOT_ID).style;
-      expect(s.getPropertyValue('backdrop-filter')).toBe('');
-      expect(s.getPropertyValue('-webkit-backdrop-filter')).toBe('');
-    });
-  });
-
-  describe('update', () => {
-    test('merges options rather than replacing', () => {
-      blsi.Automate.Overlay.show({ mode: 'frosted', color: '#ffffff', opacity: 0.4, blur_radius: 8 });
-      const setPropertySpy = jest.spyOn(CSSStyleDeclaration.prototype, 'setProperty');
-      try {
-        blsi.Automate.Overlay.update({ blur_radius: 20 });
-        expect(setPropertySpy.mock.calls).toEqual(expect.arrayContaining([
-          ['backdrop-filter', 'blur(20px)', 'important'],
-        ]));
-      } finally {
-        setPropertySpy.mockRestore();
-      }
-      // tint kept from initial show
-      const s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0\.4\s*\)/);
-    });
-
-    test('update before show mounts the overlay', () => {
-      blsi.Automate.Overlay.update({ mode: 'color', color: '#ff0000', opacity: 0.5 });
-      const el = document.getElementById(ROOT_ID);
-      expect(el).not.toBeNull();
-      expect(el.style.background).toMatch(/rgba\(\s*255\s*,\s*0\s*,\s*0\s*,\s*0\.5\s*\)/);
+      expect(s.background).toMatch(/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\.45\s*\)/);
     });
   });
 

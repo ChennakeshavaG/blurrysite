@@ -35,7 +35,8 @@ const StorageModel = (() => {
   var _cache = null; // null = not yet initialised
   var _screen_share_cache = _default_screen_share_state();
   var _suppressed_tabs_cache = []; // array of tab ids — silences ALL automate triggers per tab
-  var _on_change = null; // function(newModel, oldModel) | null
+  var _on_change = null;           // legacy single subscriber (function(newModel, oldModel) | null)
+  var _on_automate_change = null;  // automate Manager subscriber (function(newModel, oldModel) | null)
 
   // Idle (global) + tab_switch (per-tab) live in chrome.storage.session under
   // keys owned by blsi.Automate.State. We don't mirror them here — resolve()
@@ -178,6 +179,9 @@ const StorageModel = (() => {
       var old_model = _cache;
       _cache = new_val ? blsi.validate_model(new_val) : null;
       if (_on_change) _on_change(_cache, old_model);
+      // Local model changes can flip automate gates (automate.*.enabled,
+      // site_rules) — Manager re-evaluates and uses output diff to skip no-ops.
+      if (_on_automate_change) _on_automate_change(_cache, old_model);
     }
 
     if (area === "session") {
@@ -204,6 +208,9 @@ const StorageModel = (() => {
         }
       }
       if (fired && _on_change) _on_change(_cache, _cache);
+      // Session changes are automate-only (idle / tab_switch / screen_share /
+      // suppressed_tabs). Engine subscribers don't care; Manager does.
+      if (fired && _on_automate_change) _on_automate_change(_cache, _cache);
     }
   });
 
@@ -239,6 +246,19 @@ const StorageModel = (() => {
       console.warn("[blsi] on_change: replacing existing subscriber — only one allowed");
     }
     _on_change = cb;
+  }
+
+  /**
+   * Register the automate Manager's storage subscriber. Single subscriber —
+   * calling twice replaces the first (logs a warning). Fires in the same
+   * conditions as on_change today; later refactors may narrow this to
+   * "automate-relevant changes only".
+   */
+  function on_automate_change(cb) {
+    if (_on_automate_change && _on_automate_change !== cb) {
+      console.warn("[blsi] on_automate_change: replacing existing subscriber — only one allowed");
+    }
+    _on_automate_change = cb;
   }
 
   /** Synchronous read of current cached model. */
@@ -525,21 +545,19 @@ const StorageModel = (() => {
   }
 
   /**
-   * Merge global model + URL-matched rule + exact hostname entry into one flat
-   * settings object ready for Engine.handleSite().
+   * Private — runs the global → feature → site_rule snapshot fold. Both
+   * resolve_settings (engine surface) and resolve_automate (Manager surface)
+   * call this independently. Note: the `resolve()` shim calls BOTH resolvers
+   * which means the fold runs twice per shim invocation. Acceptable today
+   * because the fold is fast (~tens of microseconds) and `resolve()` is only
+   * used by popup; if it ever becomes a hotspot, refactor `resolve()` to call
+   * `_common_fold` once and pass the result into the two resolvers.
    *
-   * Merge order (later wins):
-   *   defaults → global settings → blur_all.settings → feature settings →
-   *   first matching wildcard/regex site_rule.settings → exact hostname site_rule.settings
-   *
-   * @param {string} hostname  e.g. 'example.com'
-   * @param {string} url       Full URL for wildcard/regex rule matching
-   * @param {number|null} [tab_id]  Optional. When provided, per-tab automate
-   *   suppression and per-tab sharing-tab identity are honored. Pass null
-   *   from popup callers if active tab id is unknown.
-   * @returns {object} Flat resolved settings object
+   * Returns a flat object containing every setting key (post-fold) plus
+   * `_rule_overrides` and `_rule_match`. Does NOT compute the engage flag
+   * or any automate decision fields — those belong to the dedicated resolvers.
    */
-  function resolve(hostname, url, tab_id) {
+  function _common_fold(hostname, url) {
     var m = get();
     var resolved = {};
 
@@ -623,25 +641,59 @@ const StorageModel = (() => {
       }
     }
 
-    // ── 9. automate active state (session storage via blsi.Automate.State) ─
+    return resolved;
+  }
+
+  /**
+   * Engine surface — folded settings + `engage` gate. Does NOT compute any
+   * automate decision fields (`automate_blur_active` etc.) — those belong to
+   * `resolve_automate()`. As a result, `engage` does NOT include automate as
+   * a blur reason: when only automate is firing, engine teardown runs and
+   * the Overlay (driven by Manager) is the sole render path.
+   *
+   * @param {string} hostname
+   * @param {string} url
+   * @param {number|null} [tab_id]  Accepted for API symmetry; unused here.
+   * @returns {object} Flat resolved settings object suitable for engine.handleSite()
+   */
+  function resolve_settings(hostname, url, tab_id) {
+    var resolved = _common_fold(hostname, url);
+
+    // engage — gate for the page-wide engine layer. False when the extension
+    // is disabled OR when blur-all is not active. Pick-blur is reconciled
+    // unconditionally by the engine (independent of engage), so it does not
+    // appear here. Automate is rendered exclusively via the Overlay
+    // (blsi.Automate.Manager), not the engine, so it is also excluded.
+    var manual_blur = !!resolved.blur_all_status;
+    resolved.engage = (resolved.enabled !== false) && manual_blur;
+
+    void tab_id;  // tab_id reserved for future use (e.g., per-tab settings)
+    return resolved;
+  }
+
+  /**
+   * Manager surface — slim slice with only the automate-decision fields.
+   * Computed against the same fold as `resolve_settings`. Engine never reads
+   * this; Manager never reads `resolve()` or `resolve_settings()`.
+   */
+  function resolve_automate(hostname, url, tab_id) {
+    var folded = _common_fold(hostname, url);
+
+    // ── automate active state (session storage via blsi.Automate.State) ───
     var has_tab_id = typeof tab_id === "number" && Number.isFinite(tab_id);
     var tab_suppressed = has_tab_id && _suppressed_tabs_cache.indexOf(tab_id) >= 0;
 
     var State = (typeof blsi !== "undefined" && blsi.Automate && blsi.Automate.State) || null;
     var PH = State ? State.PHASES : null;
-    // idle is global. Phase 'idle'|'locked' = OS reports user away. Gate on
-    // resolved.automate_idle.enabled — listener runs regardless of feature on/off.
     var idle_phase = State ? State.read_idle() : "active";
-    var idle_feature_on = !!(resolved.automate_idle && resolved.automate_idle.enabled);
+    var idle_feature_on = !!(folded.automate_idle && folded.automate_idle.enabled);
     var idle_raw = idle_feature_on && PH && (idle_phase === PH.idle.idle || idle_phase === PH.idle.locked);
-    // tab_switch is per-tab. 'fired' = page hidden or window unfocused.
     var ts_phase = (State && has_tab_id) ? State.read_tab_switch(tab_id) : "off";
-    var ts_feature_on = !!(resolved.automate_tab_switch && resolved.automate_tab_switch.enabled);
+    var ts_feature_on = !!(folded.automate_tab_switch && folded.automate_tab_switch.enabled);
     var tab_switch_raw = ts_feature_on && PH && ts_phase === PH.tab_switch.fired;
 
-    // Screen-share: derived from single global record + suppression maps.
     var ss = _screen_share_cache || _default_screen_share_state();
-    var ss_feature_enabled = !!(resolved.automate_screen_share && resolved.automate_screen_share.enabled);
+    var ss_feature_enabled = !!(folded.automate_screen_share && folded.automate_screen_share.enabled);
     var ss_site_suppressed = ss.suppressed_sites.indexOf(hostname) >= 0;
     var ss_is_sharing_tab = has_tab_id && ss.sharing_tab_id === tab_id;
     var ss_blur_raw =
@@ -654,57 +706,64 @@ const StorageModel = (() => {
     var tab_switch_eff = !tab_suppressed && tab_switch_raw;
     var ss_eff = !tab_suppressed && ss_blur_raw;
 
-    resolved.automate_blur_active = !!(idle_eff || tab_switch_eff || ss_eff);
-    resolved.automate_blur_triggers = {
-      idle: idle_eff,
-      tab_switch: tab_switch_eff,
-      screen_share: ss_eff,
-    };
-    resolved.screen_share_suppressed_for_host = ss_site_suppressed;
-    resolved.screen_share_suppressed_for_tab = tab_suppressed;
-    resolved.screen_share_state = {
-      active: ss.active,
-      sharing_tab_id: ss.sharing_tab_id,
-      started_at: ss.started_at,
-      is_sharing_tab: ss_is_sharing_tab,
-    };
+    var automate_blur_active = !!(idle_eff || tab_switch_eff || ss_eff);
 
-    // engage — gate for the page-wide engine layer. False when the extension is
-    // disabled OR when neither manual blur nor automate triggers want the layer.
-    // Folds the extension on/off check so engine.js call sites collapse to
-    // !!settings.engage.
-    var manual_blur = !!resolved.blur_all_status;
-    var pick_blur_present = !!resolved.pick_blur_enabled;
+    // skipped vs only depends on whether a manual blur reason is also active.
+    var manual_blur = !!folded.blur_all_status;
+    var pick_blur_present = !!folded.pick_blur_enabled;
     var blur_present = manual_blur || pick_blur_present;
-    var automate_needs_blur = resolved.automate_blur_active && !blur_present;
-
-    resolved.engage = (resolved.enabled !== false) && (manual_blur || automate_needs_blur);
-    resolved.automate_blur_only = !!automate_needs_blur;
-    resolved.automate_blur_skipped =
-      resolved.automate_blur_active && !!blur_present;
-    resolved.automate_blur_skip_reason = !resolved.automate_blur_skipped
+    var automate_blur_only = automate_blur_active && !blur_present;
+    var automate_blur_skipped = automate_blur_active && blur_present;
+    var automate_blur_skip_reason = !automate_blur_skipped
       ? null
-      : resolved._rule_match
+      : folded._rule_match
       ? "site_rule"
       : manual_blur
       ? "manual"
       : "pick_blur";
 
-    if (automate_needs_blur) {
-      var def = blsi.DEFAULT_MODEL;
-      var ds = def.global_default_settings;
-      var dbs = def.blur_all.settings;
-      resolved.blur_mode = dbs.blur_mode;
-      resolved.blur_categories = dbs.blur_categories;
-      resolved.blur_radius = ds.blur_radius;
-      resolved.thorough_blur = ds.thorough_blur;
-      resolved.reveal_mode = ds.reveal_mode;
-      resolved.transition_duration = ds.transition_duration;
-      resolved.redaction_color = ds.redaction_color;
-      resolved.highlight_color = ds.highlight_color;
-    }
+    return {
+      automate_blur_active:              automate_blur_active,
+      automate_blur_triggers: {
+        idle:         idle_eff,
+        tab_switch:   tab_switch_eff,
+        screen_share: ss_eff,
+      },
+      automate_blur_only:                automate_blur_only,
+      automate_blur_skipped:             automate_blur_skipped,
+      automate_blur_skip_reason:         automate_blur_skip_reason,
+      screen_share_state: {
+        active:         ss.active,
+        sharing_tab_id: ss.sharing_tab_id,
+        started_at:     ss.started_at,
+        is_sharing_tab: ss_is_sharing_tab,
+      },
+      screen_share_suppressed_for_host:  ss_site_suppressed,
+      screen_share_suppressed_for_tab:   tab_suppressed,
+      automate_idle:                     folded.automate_idle,
+      automate_tab_switch:               folded.automate_tab_switch,
+      automate_screen_share:             folded.automate_screen_share,
+      _rule_match:                       folded._rule_match,
+      _rule_overrides_automate: {
+        automate_idle:         !!(folded._rule_overrides && folded._rule_overrides.automate_idle),
+        automate_tab_switch:   !!(folded._rule_overrides && folded._rule_overrides.automate_tab_switch),
+        automate_screen_share: !!(folded._rule_overrides && folded._rule_overrides.automate_screen_share),
+      },
+    };
+  }
 
-    return resolved;
+  /**
+   * Backward-compat shim. Returns the union of `resolve_settings` and
+   * `resolve_automate`. Used by:
+   *   - popup (popup_state.js) — needs full union for the automate notif card
+   *   - existing call sites that haven't migrated to the split resolvers yet
+   *
+   * Internally folds twice (once per resolver). Acceptable because the fold
+   * is fast and this shim should fade as call sites migrate. Engine never
+   * uses this; it calls `resolve_settings` directly via content_script.
+   */
+  function resolve(hostname, url, tab_id) {
+    return Object.assign({}, resolve_settings(hostname, url, tab_id), resolve_automate(hostname, url, tab_id));
   }
 
   // ── Blur items ─────────────────────────────────────────────────────────────
@@ -985,6 +1044,7 @@ const StorageModel = (() => {
     // Init / subscribe
     init_cache,
     on_change,
+    on_automate_change,
     get,
     // Model writes
     patch_section,
@@ -995,6 +1055,8 @@ const StorageModel = (() => {
     get_site_snapshot,
     // Resolve (content_script)
     resolve,
+    resolve_settings,
+    resolve_automate,
     // Blur items
     get_blur_items,
     save_blur_state,

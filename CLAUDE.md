@@ -47,10 +47,11 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/core/observer.js` | `blsi.Observer` | One MutationObserver per root + idle-batched drain + subscriber pub/sub: `observeRoot`, `disconnectObserver`, `subscribeMutations(name, handler)` (also attaches `observeRoot(document)` so subscribers receive mutations regardless of feature state), `unsubscribeMutations(name)` (disconnects the document MO when no subscriber AND no feature still needs it), `hasSubscribers()`, `initShadowAttachListener` / `removeShadowAttachListener`, orchestrator helpers `clearPendingMutations`, `clearStampQueueForRoot`, `pushStampQueueItem`, `scheduleStampIdle`. MO config `{ childList, subtree, characterData }`. |
 | `src/core/target_engine.js` | `blsi.TargetEngine` | Pick-blur targets — zones, items, popup hover highlight: `reconcileItems`, `activeItemsSize`, `tryPickBlurNode`, `getZoneOverlays`, `removeAllZoneOverlays`, `resetCounters`, `allocateElementName`, `allocateStickyName(anchor)`, `highlightItem`, `clearItemHighlight`. |
 | `src/engine.js` | `blsi.Engine` | Facade + orchestrator. Re-exports the public surface of every `core/*` module. Owns `handleSite` (single async entry, mutex-guarded), `handleDocument(settings, root)` (works for `document` and shadow roots), `handleIframe` (thin wrapper over `MarkerEngine._stampIframeIfCrossOrigin`), `teardown`, `unblurAll`, `_setPickerActiveForObserver`, and getters for `isPageBlurred` / `blurredCount`. External callers (`content_script`, `picker`, `reveal_controller`, popup, tests) talk only to this surface. |
-| `src/automate/state.js` | `blsi.Automate.State` | Shared session-storage state for automate triggers. `PHASES` (idle: active/idle/locked; tab_switch: off/armed/fired), `KEYS` (storage names), `read_idle()`, `read_tab_switch(tab_id)`, `read_all_tab_switch()`, `write_idle(phase)`, `write_tab_switch(tab_id, phase)` (writing `'off'` strips the entry), `clear_tab_switch(tab_id)`, multi-subscriber `on_change(fn)`, `_reset()`. Loaded in BOTH contexts. |
-| `src/automate/overlay.js` | `blsi.Automate.Overlay` | Viewport overlay primitive used by automate intent (parallel to stamp+CSS engine). `init()`, `show({mode, color, opacity, blur_radius})`, `update(opts)`, `hide()`, `isVisible()`, `destroy()`. Modes: `solid` / `frosted` / `color`. Loaded in CONTENT only. |
+| `src/automate/state.js` | `blsi.Automate.State` | Shared session-storage state for automate triggers. `PHASES` (idle: active/idle/locked; tab_switch: off/armed/fired), `KEYS` (storage names), `read_idle()`, `read_tab_switch(tab_id)`, `read_all_tab_switch()`, `write_idle(phase)`, `write_tab_switch(tab_id, phase)` (writing `'off'` strips the entry), `clear_tab_switch(tab_id)`, `_reset()`. Loaded in BOTH contexts. |
+| `src/automate/overlay.js` | `blsi.Automate.Overlay` | Viewport overlay primitive used by automate intent (parallel to stamp+CSS engine). `init()`, `show()`, `hide()`, `isVisible()`, `destroy()`. Single fixed style: deep frosted (40px backdrop-filter + 0.45 dark tint). No params, no settings dependency — automate is privacy-strongest by design. Loaded in CONTENT only. |
 | `src/automate/idle.js` | `blsi.Automate.Idle` | Background-only `chrome.idle.onStateChanged` listener. `init()`, `destroy()`, `setThreshold(seconds)` (clamped [15, 3600]), `getCurrentPhase()`. Threshold seeded from `automate.settings.idle.{value,unit}`; hot-updates on storage change. |
-| `src/automate/visibility.js` | `blsi.Automate.Visibility` | Per-tab Page Lifecycle observer (visibilitychange + focus + blur). `init({tab_id})`, `destroy()`, `getCurrentPhase()`. Only writes `'fired'` to State; `'armed'` strips the entry (D4: absence === armed/off). |
+| `src/automate/visibility.js` | `blsi.Automate.Visibility` | Per-tab Page Lifecycle observer (visibilitychange + focus + blur). `init({tab_id})`, `destroy()`. Only writes `'fired'` to State; `'armed'` strips the entry (absence === armed/off).
+| `src/automate/manager.js` | `blsi.Automate.Manager` | Automate orchestrator. Drives the Overlay from live state — independent of the engine. `init({tab_id, get_host_url})`, `destroy()`, `on_url_change(host, url)`. Subscribes via `Model.on_automate_change`. Reads only `Model.resolve_automate()`. Loaded in CONTENT only, main-frame only at the call site. | |
 | `src/main_world_bridge.js` | _(none — MAIN world)_ | No global; runs at `document_start` in page's MAIN world. Patches `navigator.mediaDevices.getDisplayMedia` (fires `'__blsi_screen_share'` on share start/stop) and `Element.prototype.attachShadow` (fires `'__blsi_shadow_attached'` on element for late shadow root discovery). No `chrome.*` access. |
 | `src/screen_share.js` | `blsi.ScreenShare` | `init()`, `destroy()`, `whoAmI()`, `getTabId()` — isolated-world bridge; listens for `'__blsi_screen_share'` CustomEvents from MAIN world. On `init` fires `WHO_AM_I` round-trip so `Store.resolve(..., tab_id)` can identify the sharing tab. On share start opens port `'blsi-screen-share'` + sends `SCREEN_SHARE_STARTED`; on share end disconnects port + sends `SCREEN_SHARE_ENDED`. Background owns the session record (`blsi_screen_share`); content tabs subscribe via `chrome.storage.session.onChanged`. `SCREEN_SHARE_NOTIFY` broadcast is a UI ping for toast timing. |
 | `src/reveal_controller.js` | `blsi.Reveal` | `init({ getMode, isPickerActive })`, `destroy`, `clearAll` |
@@ -60,7 +61,7 @@ Every source file exposes exactly one window global. Wrong name → silent `unde
 | `src/picker.js` | `blsi.Picker` | `activate`, `deactivate`, `setSettings`, `setMode`, `isActive` (getter) |
 | `content_script.js` | _(none — orchestrator)_ | Binds all modules via `blsi.*` aliases after DOM ready |
 
-**Load order fixed by `manifest.json`** — `main_world_bridge.js` runs first in MAIN world at `document_start`. Isolated world at `document_idle`: constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii/pii_state → pii/pii_checksums → pii/pii_pre_filter → pii/pii_country → pii/pii_suppressors → pii/pii_detectors → pii/pii → fonts → core/engine_state → core/categories → core/css_manager → core/marker_engine → core/observer → core/target_engine → engine → screen_share → automate/state → automate/overlay → automate/visibility → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
+**Load order fixed by `manifest.json`** — `main_world_bridge.js` runs first in MAIN world at `document_start`. Isolated world at `document_idle`: constants → content_i18n → logger → action_registry → shortcut_label → url_matcher → selector_utils → storage_model → tab_privacy → pii/pii_state → pii/pii_checksums → pii/pii_pre_filter → pii/pii_country → pii/pii_suppressors → pii/pii_detectors → pii/pii → fonts → core/engine_state → core/categories → core/css_manager → core/marker_engine → core/observer → core/target_engine → engine → screen_share → automate/state → automate/overlay → automate/visibility → automate/manager → reveal_controller → shortcut_handler → selection_blur → screenshot → picker → content_script. Never reorder.
 
 ---
 
@@ -212,7 +213,7 @@ Three independent session keys, all in **`chrome.storage.session`** (auto-cleare
 
 **`blsi_automate_idle`** — single global string: `'active' | 'idle' | 'locked'`. Mirrors the latest `chrome.idle.IdleState`. Written by `blsi.Automate.Idle` (background-only listener). Cleared on browser close.
 
-**`blsi_automate_tab_switch_by_tab`** — per-tab map `{ [tab_id]: 'fired' }`. Only `'fired'` is persisted; absence === `'off'` (=== `'armed'` for resolve purposes — D4). Written by `blsi.Automate.Visibility` (content-only, per-tab Page Lifecycle observer).
+**`blsi_automate_tab_switch_by_tab`** — per-tab map `{ [tab_id]: 'fired' }`. Only `'fired'` is persisted; absence === `'off'` (=== `'armed'` for resolve purposes — keeps the map small since most tabs are armed most of the time). Written by `blsi.Automate.Visibility` (content-only, per-tab Page Lifecycle observer).
 
 ```js
 // chrome.storage.session['blsi_automate_idle']:
@@ -236,13 +237,21 @@ Three independent session keys, all in **`chrome.storage.session`** (auto-cleare
 
 **`blsi_automate_suppressed_tabs`** — `number[]` of tab ids silenced for **all** automate triggers. Set when a user picks "This tab" from the toast / popup notif card. `chrome.tabs.onRemoved` strips closed tab ids. Each new share clears this list (mitigates Chrome tab-id reuse).
 
-**Resolve logic** — `resolve(hostname, url, tab_id)` computes:
+**Resolve logic** — split into two resolvers post-engine/automate-split:
+
+`resolve_settings(hostname, url, tab_id?)` — engine surface. Returns folded settings + `engage`:
 ```
-manual_blur          = snapshot.blur_all.status if matched-rule sets it, else global_status
+manual_blur = !!resolved.blur_all_status
+engage      = (resolved.enabled !== false) && manual_blur
+```
+**No automate term, no pick-blur term.** Pick-blur reconcile + CSS injection runs unconditionally inside `engine.handleSite`. Automate is rendered exclusively via the Overlay (driven by `blsi.Automate.Manager`), not the engine.
+
+`resolve_automate(hostname, url, tab_id)` — Manager surface. Returns automate-decision fields:
+```
 tab_suppressed       = suppressed_tabs.includes(tab_id)
 
-idle_eff             = !tab_suppressed && automate_cache[host].idle
-tab_switch_eff       = !tab_suppressed && automate_cache[host].tab_switch
+idle_eff             = !tab_suppressed && idle.enabled && State.read_idle() in {'idle','locked'}
+tab_switch_eff       = !tab_suppressed && tab_switch.enabled && State.read_tab_switch(tab_id) === 'fired'
 
 ss_blur_for_me_raw   = ss.active
                         && tab_id !== ss.sharing_tab_id
@@ -251,25 +260,26 @@ ss_blur_for_me_raw   = ss.active
 ss_eff               = !tab_suppressed && ss_blur_for_me_raw
 
 automate_blur_active = idle_eff || tab_switch_eff || ss_eff
-engage      = manual_blur || (automate_blur_active && !blur_present)
 ```
+
+`resolve(hostname, url, tab_id)` is now a backward-compat shim returning `{...resolve_settings, ...resolve_automate}` for popup callers and any code that needs the union.
 
 Automate triggers NEVER write `blur_all`. `onActive()` only clears idle/tab_switch — manual blur survives idle return.
 
-`resolve()` exposes derived keys:
+Derived keys exposed by `resolve_automate` (mirrored on the `resolve()` shim):
 - `automate_blur_active`, `automate_blur_triggers` — `{ idle, tab_switch, screen_share }` booleans (post-suppression)
-- `automate_blur_only` — true when automate is **sole** blur reason (overrides 8 settings with DEFAULT_MODEL)
+- `automate_blur_only` — true when automate is **sole** blur reason (no manual blur, no pick-blur)
 - `automate_blur_skipped` — true when automate fired but deferred (blur-all or pick-blur already on)
 - `automate_blur_skip_reason` — `'site_rule' | 'manual' | 'pick_blur' | null`
 - `screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }` (popup card label)
 - `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab` — booleans (Undo affordance)
+- `_rule_overrides_automate` — `{ automate_idle, automate_tab_switch, automate_screen_share }` booleans — used by Manager to attach "(site rule)" suffix to toasts
 
 Idle + tab_switch session APIs live on `blsi.Automate.State`:
 - `read_idle()` → `'active' | 'idle' | 'locked'` (global)
 - `read_tab_switch(tab_id)` → `'off' | 'armed' | 'fired'` (per-tab; absence === armed/off)
 - `write_idle(phase)` (background-only writer in production)
 - `write_tab_switch(tab_id, phase)` / `clear_tab_switch(tab_id)` (per-tab)
-- `on_change(fn)` — multi-subscriber registry on the two keys above
 
 `blsi.Model` screen-share + suppression session APIs:
 - `get_screen_share_state()` → `{ active, sharing_tab_id, started_at, suppressed_sites }`

@@ -155,6 +155,7 @@ const _ISOLATED_WORLD_FILES = [
   'src/automate/state.js',
   'src/automate/overlay.js',
   'src/automate/visibility.js',
+  'src/automate/manager.js',
   'src/reveal_controller.js',
   'src/shortcut_handler.js',
   'src/selection_blur.js',

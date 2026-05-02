@@ -1,11 +1,16 @@
 # content_script Contract
 
+> **Post-engine/automate-split notes (current state):**
+> - `_sync()`, `handleStorageChange`, `onUrlChange`, `init`, and `TOGGLE_PICKER` call **`Store.resolve_settings(...)`** (engine surface — no automate decision fields). Older paragraphs in this contract that say `Store.resolve()` should be read as `Store.resolve_settings()` unless explicitly noted otherwise. The bootstrap screen-share catch-up toast (step 9b) calls `Store.resolve_automate(...)` directly for its slim snapshot.
+> - `blsi.Automate.Manager` owns automate Overlay show/hide AND the four automate transition toasts (idle / tab_switch / screen_share / skipped). The previous content_script-level toast attribution and the `_ssCurrentlyBlurring` / `_lastIdlePhase` / `_lastTabSwitchPhase` module-level fields have been removed.
+> - `TOGGLE_BLUR_ALL` reads `blur_all.status` from `Store.get()` directly rather than deriving from `Engine.isPageBlurred` (the latter only reflects engine-driven blur post-split).
+
 ## Overview
 
 `content_script.js` is the top-level orchestrator injected into every page (all frames, `run_at: document_idle`). It has no IIFE global of its own — it coordinates all `blsi.*` modules that were loaded before it by `manifest.json`. It owns the lifecycle: initialization, storage subscriptions, message routing, picker callbacks, shortcut dispatch, SPA URL change detection, and cross-frame postMessage protocol.
 
 - Not an IIFE with a return value. One immediately-invoked arrow function, no export.
-- Depends on: `blsi.Engine`, `blsi.Model`, `blsi.SelectorUtils`, `blsi.Picker`, `blsi.Shortcuts`, `blsi.Reveal`, `blsi.Logger`, `blsi.Screenshot`, `blsi.SelectionBlur`, `blsi.Automate.{State,Overlay,Visibility}`, `blsi.ScreenShare`, `blsi.PiiDetector`, `blsi.TabPrivacy`, `blsi.ContentI18n`, `blsi.Actions`.
+- Depends on: `blsi.Engine`, `blsi.Model`, `blsi.SelectorUtils`, `blsi.Picker`, `blsi.Shortcuts`, `blsi.Reveal`, `blsi.Logger`, `blsi.Screenshot`, `blsi.SelectionBlur`, `blsi.Automate.{State,Overlay,Visibility,Manager}`, `blsi.ScreenShare`, `blsi.PiiDetector`, `blsi.TabPrivacy`, `blsi.ContentI18n`, `blsi.Actions`.
 - All of the above are available synchronously because `manifest.json` load order guarantees them before this file.
 
 ---
@@ -48,11 +53,10 @@
 | `lastContextMenuTarget` | `Element\|null` | Last right-clicked element; set by `contextmenu` listener, consumed and cleared by `CONTEXT_BLUR`/`CONTEXT_UNBLUR` handlers |
 | `_pwaPanelHost` | `Element\|null` | Shadow DOM host for the in-page settings panel (PWA only) |
 | `_urlChangeTimer` | `number\|null` | Debounce timer id for SPA URL-change detection |
-| `_ssCurrentlyBlurring` | `boolean` | Tracks whether this tab is currently rendering screen-share automate blur (per the resolved state). Used by the `SCREEN_SHARE_NOTIFY` handler to gate toast firing — only show on the non-blurred → blurred transition. Not persisted. |
 | `_topHostname` | `string` | Top-level page hostname used for blur_all lookup. Equals `location.hostname` in main frame; derived from `document.referrer` in iframes. Updated via postMessage. |
 | `lastUrl` | `string` | Last observed `location.href` for SPA navigation change detection |
-| `_autoBlurCfgKey` | `string\|null` | Stable JSON key of the last-applied AutoBlur config (`{enabled, idle.{enabled,value,unit}, tab}`). `applyState` only calls `AutoBlur.init`/`destroy` when this key changes; unrelated storage echoes leave the live idle timer untouched. |
-| `_idleToastShown` | `boolean` | True after the idle toast has fired for the current focused visit. Reset to `false` on `visibilitychange` → visible (registered once at module load, main frame only) and on `AutoBlur.destroy()`. Tab-switch toasts ignore this flag. |
+
+> Removed in the engine/automate split: `_ssCurrentlyBlurring`, `_lastIdlePhase`, `_lastTabSwitchPhase`, `_autoBlurCfgKey`, `_idleToastShown`. Toast tracking now lives in `blsi.Automate.Manager`.
 
 Module aliases (set at top of IIFE, not re-assigned):
 - `Engine` → `blsi.BlurEngine`

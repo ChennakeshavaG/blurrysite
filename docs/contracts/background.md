@@ -57,7 +57,7 @@ All titles are resolved via `chrome.i18n.getMessage(key) || 'English fallback'`.
 1. Queries all tabs.
 2. For each tab with an id and a URL that passes `blsi.UrlMatcher.isRestrictedUrl(tab.url) === false`:
    - Inserts `styles/content.css` into all frames.
-   - Executes the 34-file isolated-world bundle (`_ISOLATED_WORLD_FILES`) in declared order across all frames.
+   - Executes the 35-file isolated-world bundle (`_ISOLATED_WORLD_FILES`) in declared order across all frames.
    - Executes `src/main_world_bridge.js` in the MAIN world of the top frame only.
 3. Logs an aggregate summary `{ attempted, succeeded, skipped }`.
 

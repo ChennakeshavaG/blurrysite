@@ -828,30 +828,14 @@ describe('automate_blur', () => {
     expect(r.automate_blur_active).toBe(false);
   });
 
-  test('engage is true when only automate fires (manual = false)', async () => {
+  test('engage is FALSE when only automate fires (engine no longer activates for automate)', async () => {
     await blsi.Automate.State.write_idle('idle');
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(r.engage).toBe(true);
+    // Post-split: engage tracks blur-all only. Automate fires the Overlay
+    // via blsi.Automate.Manager, not the engine.
+    expect(r.engage).toBe(false);
     expect(r.automate_blur_only).toBe(true);
     expect(r.automate_blur_skipped).toBe(false);
-  });
-
-  test('automate_blur_only resets blur-relevant keys to DEFAULT_MODEL', async () => {
-    await blsi.Automate.State.write_idle('idle');
-    await blsi.Model.save_settings({ blur_radius: 30, thorough_blur: true, reveal_mode: 'none', transition_duration: 50, redaction_color: '#ff0000', highlight_color: '#0000ff' });
-    await blsi.Model.patch_section('blur_all', { settings: { blur_mode: 'frosted', blur_categories: { text: false, media: false, form: true, table: false, structure: false } } });
-    const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(r.automate_blur_only).toBe(true);
-    const ds  = blsi.DEFAULT_MODEL.global_default_settings;
-    const dbs = blsi.DEFAULT_MODEL.blur_all.settings;
-    expect(r.blur_mode).toBe(dbs.blur_mode);
-    expect(r.blur_categories).toEqual(dbs.blur_categories);
-    expect(r.blur_radius).toBe(ds.blur_radius);
-    expect(r.thorough_blur).toBe(ds.thorough_blur);
-    expect(r.reveal_mode).toBe(ds.reveal_mode);
-    expect(r.transition_duration).toBe(ds.transition_duration);
-    expect(r.redaction_color).toBe(ds.redaction_color);
-    expect(r.highlight_color).toBe(ds.highlight_color);
   });
 
   test('automate_blur_skipped = true when blur_all already on', async () => {
@@ -876,6 +860,8 @@ describe('automate_blur', () => {
     expect(r.automate_blur_skipped).toBe(true);
     expect(r.automate_blur_skip_reason).toBe('pick_blur');
     expect(r.automate_blur_only).toBe(false);
+    // Pick-blur reconcile runs unconditionally inside engine.handleSite —
+    // engage tracks blur-all only.
     expect(r.engage).toBe(false);
   });
 
@@ -1631,5 +1617,71 @@ describe('resolve with full snapshot overrides', () => {
     const resolved = blsi.Model.resolve('nope.test', 'https://nope.test/');
     expect(resolved._rule_overrides).toEqual({});
     expect(resolved._rule_match).toBe(null);
+  });
+});
+
+// ── resolve_automate (slim slice for the automate Manager) ────────────────────
+describe('resolve_automate', () => {
+  beforeEach(async () => {
+    mockGet(null);
+    await blsi.Model.init_cache();
+  });
+
+  test('returns only the automate-decision fields', () => {
+    const r = blsi.Model.resolve_automate('example.com', 'https://example.com/', 1);
+    // Automate decision keys present
+    expect(r).toHaveProperty('automate_blur_active');
+    expect(r).toHaveProperty('automate_blur_triggers');
+    expect(r).toHaveProperty('automate_blur_only');
+    expect(r).toHaveProperty('automate_blur_skipped');
+    expect(r).toHaveProperty('automate_blur_skip_reason');
+    expect(r).toHaveProperty('screen_share_state');
+    expect(r).toHaveProperty('screen_share_suppressed_for_host');
+    expect(r).toHaveProperty('screen_share_suppressed_for_tab');
+    expect(r).toHaveProperty('automate_idle');
+    expect(r).toHaveProperty('automate_tab_switch');
+    expect(r).toHaveProperty('automate_screen_share');
+    expect(r).toHaveProperty('_rule_match');
+    // Manual-blur / settings-tree fields absent
+    expect(r).not.toHaveProperty('engage');
+    expect(r).not.toHaveProperty('blur_mode');
+    expect(r).not.toHaveProperty('blur_radius');
+    expect(r).not.toHaveProperty('blur_categories');
+    expect(r).not.toHaveProperty('blur_items');
+    expect(r).not.toHaveProperty('shortcuts');
+    expect(r).not.toHaveProperty('pii_email');
+  });
+
+  test('values match resolve() output for automate keys', () => {
+    const full = blsi.Model.resolve('example.com', 'https://example.com/', 1);
+    const slim = blsi.Model.resolve_automate('example.com', 'https://example.com/', 1);
+    expect(slim.automate_blur_active).toBe(full.automate_blur_active);
+    expect(slim.automate_blur_triggers).toEqual(full.automate_blur_triggers);
+    expect(slim.automate_blur_only).toBe(full.automate_blur_only);
+    expect(slim.automate_blur_skipped).toBe(full.automate_blur_skipped);
+    expect(slim.automate_blur_skip_reason).toBe(full.automate_blur_skip_reason);
+    expect(slim.screen_share_state).toEqual(full.screen_share_state);
+    expect(slim.screen_share_suppressed_for_host).toBe(full.screen_share_suppressed_for_host);
+    expect(slim.screen_share_suppressed_for_tab).toBe(full.screen_share_suppressed_for_tab);
+    expect(slim._rule_match).toEqual(full._rule_match);
+  });
+
+  test('reflects per-host site-rule fold of automate gates', async () => {
+    await blsi.Model.save_rules([{
+      hostname_value: 'gmail.com',
+      hostname_type:  blsi.pattern_types.exact,
+      blur_all:       null,
+      items:          [],
+      snapshot:       {},
+    }]);
+    await blsi.Model.save_site_snapshot('gmail.com', blsi.pattern_types.exact,
+      { automate: { settings: { idle: { enabled: false } } } });
+    const r = blsi.Model.resolve_automate('gmail.com', 'https://gmail.com/', 1);
+    expect(r.automate_idle.enabled).toBe(false);
+  });
+
+  test('omits tab_id → screen_share self-skip cannot apply', () => {
+    const r = blsi.Model.resolve_automate('example.com', 'https://example.com/', null);
+    expect(r.screen_share_state.is_sharing_tab).toBe(false);
   });
 });

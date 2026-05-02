@@ -18,8 +18,8 @@ and `window.dispatchEvent(new Event('focus'/'blur'))`.
 ## Describe groups
 
 ### `init`
-- `init({tab_id: 1})` on a visible+focused tab does NOT write to State (D4:
-  absence === armed). `getCurrentPhase()` still reports `'armed'`.
+- `init({tab_id: 1})` on a visible+focused tab does NOT write to State
+  (absence === armed). `State.read_tab_switch(1)` reports `'off'`.
 - `init({tab_id: 1})` on a hidden tab seeds the `fired` entry.
 - `init` without a numeric `tab_id` is a no-op (no listener registered, no
   storage write).
@@ -43,10 +43,6 @@ and `window.dispatchEvent(new Event('focus'/'blur'))`.
   underlying `write_tab_switch('off', tab)` is idempotent for absent entries.
 - `destroy()` removes all three event listeners — events after destroy do not
   write.
-- After `destroy()`, `getCurrentPhase()` resets to the `armed` default.
-
-### `getCurrentPhase`
-- Returns the most recent derivation regardless of whether it was written.
 
 ## Edge cases covered
 
@@ -64,4 +60,4 @@ and `window.dispatchEvent(new Event('focus'/'blur'))`.
 
 ## Test count
 
-15 tests in 4 describe groups.
+13 tests in 3 describe groups.

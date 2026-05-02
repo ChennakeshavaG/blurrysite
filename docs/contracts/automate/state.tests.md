@@ -4,8 +4,8 @@
 
 Unit-test suite for `src/automate/state.js`. Verifies the shared state surface
 (`blsi.Automate.State`) used by the automate module family — phase enum
-constants, storage key constants, read/write helpers, the `chrome.storage.onChanged`-
-backed cache, and the multi-subscriber `on_change` registry.
+constants, storage key constants, read/write helpers, and the
+`chrome.storage.onChanged`-backed cache.
 
 The suite reloads the module per test via `jest.resetModules()` + `require()` so
 each test starts from a clean cache. It uses the `chrome.storage` and
@@ -48,23 +48,19 @@ Default values when nothing has been written.
 - The storage payload always replaces the entire map under `KEYS.tab_switch_by_tab`.
 - `clear_tab_switch(tab_id)` behaves identically to `write_tab_switch(tab_id, 'off')`.
 
-### `on_change subscribers`
-Verifies the multi-subscriber registry and the `chrome.storage.onChanged` listener.
-- A real cache transition for `KEYS.idle` fires every subscriber with
-  `(key, oldValue, newValue)`.
-- A "transition" where `newValue` equals the cached value does NOT fire.
-- A real cache transition for `KEYS.tab_switch_by_tab` fires subscribers with the
-  new map.
-- `area !== 'session'` is filtered — non-session changes do not fire subscribers.
-- Multiple subscribers all fire on a single transition.
-- An exception thrown by one subscriber does not block other subscribers.
-- The unsubscribe function removes only that subscriber.
-- Passing a non-function to `on_change` returns a no-op unsubscribe (does not throw).
+### `onChanged listener`
+Verifies the `chrome.storage.onChanged` listener that keeps the cache in sync
+across contexts.
+- A cross-context write to `KEYS.idle` updates the cached idle phase.
+- A same-value `onChanged` event leaves the cache unchanged (no spurious churn).
+- A cross-context write to `KEYS.tab_switch_by_tab` updates the per-tab map.
+- A non-object `newValue` for the per-tab map (e.g. `undefined` after a clear)
+  resets the cache to an empty map.
+- `area !== 'session'` is filtered — non-session changes do not touch the cache.
 
 ### `_reset`
-- Clears `_idle_cache`, the per-tab map, and the subscriber registry.
+- Clears `_idle_cache` and the per-tab map.
 - Does NOT call `chrome.storage.session.set`.
-- After `_reset`, previously-registered listeners no longer fire.
 
 ## Edge cases covered
 
@@ -72,9 +68,8 @@ Verifies the multi-subscriber registry and the `chrome.storage.onChanged` listen
   (`Promise<false>` resolution).
 - `'off'`-on-absent-key path is a no-op so the storage layer doesn't churn on
   redundant clears.
-- Multiple subscribers + one throwing — registry remains healthy.
-- Same-value transitions don't fire subscribers (matches contract: real
-  transitions only).
+- Same-value `onChanged` events leave the cache untouched.
+- Non-object `newValue` for the per-tab map is tolerated.
 
 ## Known gaps
 
@@ -91,4 +86,4 @@ Verifies the multi-subscriber registry and the `chrome.storage.onChanged` listen
 
 ## Test count
 
-29 tests in 6 describe groups.
+26 tests in 6 describe groups.

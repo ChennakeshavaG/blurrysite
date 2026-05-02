@@ -2,9 +2,9 @@
 
 ## Overview
 
-Per-tab observer for the page's lifecycle state (visible vs hidden, focused vs unfocused). Translates DOM events (`visibilitychange`, `window.blur`, `window.focus`) into a `'armed' | 'fired'` phase. **Only `'fired'` is persisted** to `KEYS.tab_switch_by_tab[tab_id]`; `'armed'` writes pass `'off'` to State, which strips the entry (D4: absence === armed/off — no overlay). The map only carries tabs that are currently in the `fired` state.
+Per-tab observer for the page's lifecycle state (visible vs hidden, focused vs unfocused). Translates DOM events (`visibilitychange`, `window.blur`, `window.focus`) into a `'armed' | 'fired'` phase. **Only `'fired'` is persisted** to `KEYS.tab_switch_by_tab[tab_id]`; `'armed'` writes pass `'off'` to State, which strips the entry (absence === armed/off — keeps the map small since most tabs are armed most of the time). The map only carries tabs that are currently in the `fired` state.
 
-Replaces the tab-switch portion of the deleted `src/auto_blur.js`. The detection logic is structured as a tiny state machine over the Page Lifecycle states (`active` / `passive` / `hidden` / `frozen`), but the published phase is binary — anything that isn't `active` becomes `fired`.
+Replaces the tab-switch portion of the deleted `src/auto_blur.js`. The published phase is binary — `armed` (tab is visible AND window has focus) or `fired` (anything else).
 
 Loaded in CONTENT context only. One instance per tab — `init({tab_id})` is called once from `content_script.init()` after `WHO_AM_I` resolves.
 
@@ -14,7 +14,7 @@ Exposed as `blsi.Automate.Visibility` (IIFE — no ES module syntax).
 
 ### `init({tab_id})` → void
 
-Idempotent. Registers `visibilitychange` (on `document`), `focus` (on `window`), and `blur` (on `window`) listeners. Computes the current Page Lifecycle state and writes the corresponding phase via `blsi.Automate.State.write_tab_switch(tab_id, phase)`.
+Idempotent. Registers `visibilitychange` (on `document`), `focus` (on `window`), and `blur` (on `window`) listeners. Computes the current presence state and writes the corresponding phase via `blsi.Automate.State.write_tab_switch(tab_id, phase)`.
 
 Params:
 - `tab_id: number` — required. Used as the storage map key. Provided by `blsi.ScreenShare.getTabId()` after the WHO_AM_I round-trip in content_script init.
@@ -32,24 +32,18 @@ Edge cases:
 
 Removes the three event listeners. Writes `'off'` to clear the tab's entry from `KEYS.tab_switch_by_tab` (so a torn-down tab doesn't leave stale `fired` state).
 
-### `getCurrentPhase()` → string
-
-Returns the latest phase written by this observer: `'armed' | 'fired'`. Synchronous.
-
 ## Internal mechanics
 
-### Page Lifecycle state derivation
+### Phase derivation
 
-The module derives a state from three signals:
+`_evaluate_and_write` reads two live signals on every call:
 ```
-document.visibilityState === 'hidden'  →  HIDDEN
-document.hasFocus() === false          →  PASSIVE
-otherwise                              →  ACTIVE
+document.visibilityState !== 'hidden'   AND
+document.hasFocus() === true             →  active   (write 'off' → strips entry → armed)
+otherwise                                →  inactive (write 'fired')
 ```
 
-Maps to the published phase:
-- `ACTIVE` → `armed`
-- `PASSIVE` / `HIDDEN` → `fired`
+Both checks are needed: a tab can be `visible` (rendered on screen, e.g. side-by-side window layout) while another window has actual focus — `visibilityState` alone misses that case.
 
 There is no `frozen` handling at the source level; the browser fires `visibilitychange` to `hidden` when freezing, which already produces `fired`. If we later need to distinguish, we can read `document.wasDiscarded` or listen to `freeze` / `resume` events.
 
@@ -62,11 +56,13 @@ There is no `frozen` handling at the source level; the browser fires `visibility
 | `focus` | `window` | re-derive; usually `armed` |
 | `blur` | `window` | re-derive; usually `fired` |
 
-Every event runs the same `_evaluateAndWrite()` function which computes the lifecycle state and calls `write_tab_switch`. Idempotent — `State.write_tab_switch` skips no-op writes.
+Every event runs the same `_evaluate_and_write()` handler — same function reference is used for `addEventListener` / `removeEventListener`, so no alias variables are needed. The handler calls `State.write_tab_switch`, which is idempotent — same-value writes short-circuit at the State layer.
+
+We listen to `window.focus` / `window.blur` rather than `focusin` / `focusout`. The latter bubble through every element-level focus change inside the page (input clicks, tab-through), which is far noisier than the window-level signal we want.
 
 ### No debounce
 
-Page Lifecycle state computation is event-instant. We do not hand-roll the 150ms / 250ms debounces that the old `auto_blur.js` carried — those were filtering legitimate transitions our state machine handles natively (drag-to-new-window appears as `hidden` → `visible` within 10ms; `State.write_tab_switch` produces two writes that cancel out at the cache level when the second is a same-value no-op).
+Phase derivation is event-instant. We do not hand-roll the 150ms / 250ms debounces that the old `auto_blur.js` carried — those were filtering legitimate transitions State idempotency handles natively (drag-to-new-window appears as `hidden` → `visible` within 10ms; `State.write_tab_switch` produces two writes that cancel out at the cache level when the second is a same-value no-op).
 
 If the write storm from rapid transitions becomes a problem, we add a microtask-level coalescer here. Not in v1.
 
@@ -84,11 +80,11 @@ Content script does not see `chrome.tabs.onRemoved`. Background owns the cleanup
 
 ## Edge cases / gotchas
 
-- **Iframes**: `init()` is called from `content_script.init()` only when `IS_MAIN_FRAME` is true. Iframes do not observe Page Lifecycle independently — they would fragment the per-tab state.
+- **Iframes**: `init()` is called from `content_script.init()` only when `IS_MAIN_FRAME` is true. Iframes do not observe presence independently — they would fragment the per-tab state.
 - **Popup-open false positive**: opening the extension popup steals focus → `window.blur` fires → state becomes `fired` → page blurs. Same problem the old debounce mitigated. Future improvement (out of scope for v1): background broadcasts a `popup-opened` flag that suppresses the next `passive` transition for ~500ms.
 - **DevTools docked**: docking devtools triggers `window.blur` on the page. State becomes `fired`. Acceptable.
 - **iOS Safari `visibilitychange` quirks**: not relevant — extension doesn't run on iOS Safari.
-- **Frozen state**: Chrome may freeze background tabs after long periods (`document.wasDiscarded`). Page Lifecycle's freeze event is not currently observed; the prior `hidden` write already represents the intent.
+- **Frozen state**: Chrome may freeze background tabs after long periods (`document.wasDiscarded`). The freeze event is not currently observed; the prior `hidden` write already represents the intent.
 
 ## Cross-file contract
 
@@ -101,4 +97,4 @@ Content script does not see `chrome.tabs.onRemoved`. Background owns the cleanup
 ## Test strategy
 
 - jsdom provides `document.visibilityState`, `document.hidden`, `window.addEventListener`, `document.hasFocus()`. Mock `document.hasFocus` returns and `Object.defineProperty(document, 'visibilityState', ...)` to script transitions.
-- Cover: initial state on init (visible+focused → `armed`); visibility change to hidden → `fired`; window blur → `fired`; window focus from blurred → `armed`; double-init with same tab id is no-op; double-init with different tab id re-binds; destroy clears entry; getCurrentPhase reflects latest write; state writes go through `State.write_tab_switch`.
+- Cover: initial state on init (visible+focused → `armed`); visibility change to hidden → `fired`; window blur → `fired`; window focus from blurred → `armed`; double-init with same tab id is no-op; double-init with different tab id re-binds; destroy clears entry; state writes go through `State.write_tab_switch`. Phase assertions read via `State.read_tab_switch(tab_id)` — visibility itself does not expose a current-phase accessor.

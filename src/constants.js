@@ -22,7 +22,7 @@ const Constants = (() => {
 
   // ── Message categories ─────────────────────────────────────────────────────
   // STORAGE messages removed — storage_model.js accesses chrome.storage directly.
-  // UPDATE_SETTINGS removed (D1) — popup writes to storage; content script reacts via onChange.
+  // UPDATE_SETTINGS removed — popup writes to storage; content script reacts via onChange.
 
   /** Background → content script (command relay, context menu) */
   const command = Object.freeze({

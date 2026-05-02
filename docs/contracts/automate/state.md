@@ -7,7 +7,6 @@ Shared state surface for the `blsi.Automate` module family. Single source of tru
 - `chrome.storage.session` key names that carry live automate state
 - synchronous read helpers backed by an in-memory cache
 - async write helpers that update the cache + persist to session storage
-- a subscriber registry that fires on cache transitions
 
 Loaded in BOTH execution contexts:
 - background service worker (top of `background.js` via `importScripts('src/automate/state.js')`)
@@ -76,7 +75,7 @@ Returns: `Promise<boolean>` — `true` if a storage write happened, `false` if n
 Side effects:
 - Updates `_idle_cache` synchronously (before the storage write completes) so subsequent `read_idle()` calls within the same tick reflect the new value.
 - `chrome.storage.session.set({[KEYS.idle]: phase})`.
-- Triggers `chrome.storage.onChanged` in this and every other tab/SW; subscribers registered via `on_change` will fire.
+- Triggers `chrome.storage.onChanged` in this and every other tab/SW; the listener in this module updates that context's cache.
 
 ### `write_tab_switch(tab_id, phase)` → Promise<boolean>
 
@@ -103,23 +102,9 @@ Edge cases:
 
 Convenience alias for `write_tab_switch(tab_id, PHASES.tab_switch.off)`. Used by `chrome.tabs.onRemoved` cleanup in background.
 
-### `on_change(fn)` → unsubscribe function
-
-Registers a listener fired on every cache transition (idle key changed, or per-tab map changed).
-
-Params: `fn(key, old_value, new_value)` — called with the `KEYS.*` constant, the previous cache value, and the new cache value.
-
-Returns: a zero-arg unsubscribe function. Calling it removes `fn` from the registry.
-
-Behavior:
-- Multiple subscribers allowed (unlike `blsi.Model.on_change` which is single-slot).
-- Errors thrown inside a subscriber are swallowed — one bad listener does not break the others.
-- `key` is one of `KEYS.idle` or `KEYS.tab_switch_by_tab` (screen_share / suppressed_tabs aren't routed through this module yet).
-- Fires only on actual transitions — same-value writes do not fire subscribers.
-
 ### `_reset()` (test-only)
 
-Clears `_idle_cache`, the per-tab map, and the subscriber registry. Does NOT write to storage. For unit tests starting from a clean slate.
+Clears `_idle_cache` and the per-tab map. Does NOT write to storage. For unit tests starting from a clean slate.
 
 ## Internal mechanics
 
@@ -133,7 +118,7 @@ The module registers exactly one `chrome.storage.onChanged` listener (only when 
 
 The listener:
 - Filters by `area === 'session'`.
-- Per-key: if the new value differs from the cached value, updates the cache and fires the change-listener registry.
+- Per-key: if the new value differs from the cached value, updates the cache.
 - For `KEYS.tab_switch_by_tab`, tolerates missing/non-object newValue (treated as empty map).
 
 ### Cache vs storage drift
@@ -150,7 +135,6 @@ If a non-State writer mutates `KEYS.idle` directly via `chrome.storage.session.s
 - The module does not import or depend on any other `blsi.*` module (it's the foundation; siblings depend on it, not the other way).
 - No DOM access. No `chrome.tabs.*`, no `chrome.runtime.connect`. Only `chrome.storage.session` and `chrome.storage.onChanged`.
 - `write_*` returns `Promise<boolean>` regardless of context — callers that don't need the receipt can ignore the return.
-- `on_change` subscribers are NOT idempotent across multiple registrations — passing the same function twice subscribes twice. Caller responsibility.
 
 ## Cross-file contract
 
@@ -167,4 +151,4 @@ If a non-State writer mutates `KEYS.idle` directly via `chrome.storage.session.s
 
 - Mock `chrome.storage.session.get/set` and `chrome.storage.onChanged.addListener` in `tests/setup.js`.
 - Each test calls `State._reset()` in `beforeEach`.
-- Cover: defaults before hydration, write idempotency, `'off'` strips entry, on_change firing on real transitions, on_change skipping no-op writes, multiple subscribers, error in one subscriber doesn't break others, unsubscribe.
+- Cover: defaults before hydration, write idempotency, `'off'` strips entry, onChanged listener updates cache on cross-context writes, same-value onChanged is a no-op.

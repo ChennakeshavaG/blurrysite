@@ -4,7 +4,7 @@
  * Unit tests for src/automate/state.js
  * Module exposes blsi.Automate.State with:
  *   PHASES, KEYS, read_idle, read_tab_switch, read_all_tab_switch,
- *   write_idle, write_tab_switch, clear_tab_switch, on_change, _reset
+ *   write_idle, write_tab_switch, clear_tab_switch, _reset
  */
 
 'use strict';
@@ -161,101 +161,56 @@ describe('automate/state.js', () => {
     });
   });
 
-  describe('on_change subscribers', () => {
-    test('fires on idle key transition via storage onChanged', () => {
-      const fn = jest.fn();
-      State.on_change(fn);
+  describe('onChanged listener', () => {
+    test('updates idle cache on cross-context write', () => {
       global._fireStorageChanged(
         { blsi_automate_idle: { newValue: 'idle' } },
         'session'
       );
-      expect(fn).toHaveBeenCalledWith('blsi_automate_idle', 'active', 'idle');
+      expect(State.read_idle()).toBe('idle');
     });
 
-    test('skips when newValue equals cached value', () => {
-      const fn = jest.fn();
-      State.on_change(fn);
+    test('same-value onChanged does not change cache', () => {
       global._fireStorageChanged(
         { blsi_automate_idle: { newValue: 'active' } },
         'session'
       );
-      expect(fn).not.toHaveBeenCalled();
+      expect(State.read_idle()).toBe('active');
     });
 
-    test('fires on tab_switch map transition', () => {
-      const fn = jest.fn();
-      State.on_change(fn);
+    test('updates tab_switch cache on cross-context write', () => {
       global._fireStorageChanged(
         { blsi_automate_tab_switch_by_tab: { newValue: { '5': 'fired' } } },
         'session'
       );
-      expect(fn).toHaveBeenCalledWith(
-        'blsi_automate_tab_switch_by_tab',
-        expect.any(Object),
-        { '5': 'fired' }
+      expect(State.read_tab_switch(5)).toBe('fired');
+    });
+
+    test('non-object newValue for tab_switch resets to empty map', () => {
+      global._fireStorageChanged(
+        { blsi_automate_tab_switch_by_tab: { newValue: { '5': 'fired' } } },
+        'session'
       );
+      global._fireStorageChanged(
+        { blsi_automate_tab_switch_by_tab: { newValue: undefined } },
+        'session'
+      );
+      expect(State.read_all_tab_switch()).toEqual({});
     });
 
     test('ignores non-session areas', () => {
-      const fn = jest.fn();
-      State.on_change(fn);
       global._fireStorageChanged(
         { blsi_automate_idle: { newValue: 'idle' } },
         'local'
       );
-      expect(fn).not.toHaveBeenCalled();
-    });
-
-    test('multiple subscribers all fire', () => {
-      const a = jest.fn();
-      const b = jest.fn();
-      State.on_change(a);
-      State.on_change(b);
-      global._fireStorageChanged(
-        { blsi_automate_idle: { newValue: 'idle' } },
-        'session'
-      );
-      expect(a).toHaveBeenCalledTimes(1);
-      expect(b).toHaveBeenCalledTimes(1);
-    });
-
-    test('error in one subscriber does not break others', () => {
-      const bad = jest.fn(() => { throw new Error('boom'); });
-      const good = jest.fn();
-      State.on_change(bad);
-      State.on_change(good);
-      global._fireStorageChanged(
-        { blsi_automate_idle: { newValue: 'idle' } },
-        'session'
-      );
-      expect(bad).toHaveBeenCalled();
-      expect(good).toHaveBeenCalled();
-    });
-
-    test('unsubscribe removes the listener', () => {
-      const fn = jest.fn();
-      const off = State.on_change(fn);
-      off();
-      global._fireStorageChanged(
-        { blsi_automate_idle: { newValue: 'idle' } },
-        'session'
-      );
-      expect(fn).not.toHaveBeenCalled();
-    });
-
-    test('passing non-function returns no-op unsubscribe', () => {
-      const off = State.on_change('not a function');
-      expect(typeof off).toBe('function');
-      expect(() => off()).not.toThrow();
+      expect(State.read_idle()).toBe('active');
     });
   });
 
   describe('_reset', () => {
-    test('clears caches and listeners without writing storage', async () => {
+    test('clears caches without writing storage', async () => {
       await State.write_idle('idle');
       await State.write_tab_switch(1, 'fired');
-      const fn = jest.fn();
-      State.on_change(fn);
 
       chrome.storage.session.set.mockClear();
       State._reset();
@@ -263,12 +218,6 @@ describe('automate/state.js', () => {
       expect(State.read_idle()).toBe('active');
       expect(State.read_all_tab_switch()).toEqual({});
       expect(chrome.storage.session.set).not.toHaveBeenCalled();
-
-      global._fireStorageChanged(
-        { blsi_automate_idle: { newValue: 'idle' } },
-        'session'
-      );
-      expect(fn).not.toHaveBeenCalled();
     });
   });
 });

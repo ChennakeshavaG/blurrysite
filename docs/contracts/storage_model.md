@@ -11,7 +11,8 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 | `_cache` | `Object\|null` — full `blsi_model` in-memory; null before `init_cache()` |
 | `_screen_share_cache` | `Object` — mirrors `blsi_screen_share` session storage; single global record `{ active, sharing_tab_id, started_at, suppressed_sites }` |
 | `_suppressed_tabs_cache` | `number[]` — mirrors `blsi_automate_suppressed_tabs` session storage; tab ids silenced for ALL automate triggers |
-| `_on_change` | `Function\|null` — single storage-change subscriber |
+| `_on_change` | `Function\|null` — legacy single storage-change subscriber (used by content_script's engine path until full migration) |
+| `_on_automate_change` | `Function\|null` — automate Manager's storage-change subscriber (independent slot; fires on the same triggers as `_on_change` today) |
 | `STORAGE_KEY` | `'blsi_model'` |
 | `SCREEN_SHARE_SESSION_KEY` | `'blsi_screen_share'` |
 | `SUPPRESSED_TABS_SESSION_KEY` | `'blsi_automate_suppressed_tabs'` |
@@ -26,6 +27,14 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 **Returns**: `Promise<void>`  
 **Side effects**: Populates `_cache` (validates + migrates via `blsi.validate_model`); populates `_screen_share_cache`, `_suppressed_tabs_cache`; writes back if migration changed the model.  
 **Handles**: Empty storage → seeds from `blsi.build_default_model()`. Missing session keys default to `_default_screen_share_state()` / `[]`.
+
+### on_automate_change(listener)
+
+**What**: Register the automate Manager's storage-change callback. Step 2 of the engine/automate split — gives `blsi.Automate.Manager` an independent subscription slot so engine and Manager can react in parallel without sharing a single `on_change` callback.  
+**Params**: `listener(newModel, oldModel)` — same shape as `on_change`.  
+**Returns**: void.  
+**Side effects**: Single subscriber — calling twice replaces the first and logs a warning.  
+**Fires when**: Today, in the same conditions as `on_change` (local model change OR any session-storage automate key change). Later refactors may narrow to "automate-relevant changes only" — current shape is conservative so Manager output-diffs catch no-ops.
 
 ### on_change(listener)
 
@@ -52,8 +61,9 @@ Single source of truth for extension persistent state. Accesses `chrome.storage.
 5. Wildcard/regex site rule snapshot apply (first match wins) — may REPLACE `blur_items` if the snapshot pins its own `pick_and_blur.items` array; may override `blur_all_status` if `snapshot.blur_all.status` is boolean
 6. Exact hostname site rule snapshot apply — same REPLACE / override semantics
 7. Automate trigger state — `blsi.Automate.State.read_idle()` (global) gated on `automate.idle.enabled`; `State.read_tab_switch(tab_id)` (per-tab) gated on `automate.tab_switch.enabled`; `_screen_share_cache` (single global record). Per-tab suppression silences all three triggers; per-site suppression silences screen-share only.
-8. `automate_blur_only` override (overrides 8 settings with DEFAULT_MODEL when automate is the only active trigger)
-9. Derived key computation: `manual_blur = !!resolved.blur_all_status`; `engage = (resolved.enabled !== false) && (manual_blur || (automate_blur_active && !blur_present))`
+8. Derived key computation: `manual_blur = !!resolved.blur_all_status`; `engage = (resolved.enabled !== false) && manual_blur` (post-engine/automate-split — automate no longer folds into engage; pick-blur reconcile is unconditional inside `engine.handleSite`).
+
+> **Note**: a previous version of this resolver also overrode 8 blur-relevant keys with `DEFAULT_MODEL` values when automate was the only active trigger ("automate_blur_only override"). That override has been removed — engine no longer activates for automate-only state, so the user's manual blur preferences cannot bleed into a render path that doesn't run.
 
 **Screen-share trigger** (`automate_blur_triggers.screen_share`):
 
@@ -68,10 +78,34 @@ ss_blur_for_me     = !suppressed_tabs.includes(tab_id) && ss_blur_for_me_raw
 Per-tab suppression silences all three triggers for that tab; per-site suppression silences screen-share only.
 
 **Derived keys on output**: `engage`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab`, `_rule_overrides`, `_rule_match`.  
-**`engage`**: `(resolved.enabled !== false) && (manual_blur || (automate_blur_active && !blur_present))`. The page-wide engine gate read by `engine.js handleMainDocument` / `handleShadowRoot` / `handleIframe`. Replaces the prior `blur_all_active` (which omitted the `enabled` fold).  
+**`engage`**: `(resolved.enabled !== false) && manual_blur` where `manual_blur = !!resolved.blur_all_status`. The page-wide engine gate read by `engine.js handleMainDocument` / `handleShadowRoot` / `handleIframe`. Post-engine/automate-split: automate is rendered via `blsi.Automate.Overlay` driven by `blsi.Automate.Manager` — engine teardown runs when only automate is firing. Pick-blur reconcile + CSS injection runs unconditionally inside `engine.handleSite`, independent of `engage`.  
 **`automate_blur_skip_reason`**: `'site_rule' | 'manual' | 'pick_blur' | null`. Set when `automate_blur_skipped === true`; ordered priority site_rule > manual > pick_blur.  
 **`screen_share_state`**: `{ active, sharing_tab_id, started_at, is_sharing_tab }` — passed to popup notif card for the "sharing for Xm" label.  
 **`_rule_overrides`** / **`_rule_match`**: same as before; used by popup for "Managed by site rule" badges and deep-linking.
+
+> **Note** (post-split): `resolve()` is now a thin shim over `resolve_settings()` + `resolve_automate()`. Engine code paths should call `resolve_settings()` directly to avoid the redundant automate fold. `resolve()` is retained for popup and any legacy callers that need the union.
+
+### resolve_settings(hostname, url, tab_id?)
+
+**What**: Engine surface — folded settings + the `engage` gate. Mirrors most of what `resolve()` returns but **excludes all automate-decision fields** (`automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_*`).
+
+**Params**: same as `resolve()`. `tab_id` accepted for API symmetry; currently unused (resolve_settings does not consult per-tab automate state).
+
+**Returns**: Flat resolved settings object — global + feature settings + site_rule overrides + `engage`. Includes `automate_idle`, `automate_tab_switch`, `automate_screen_share` (gate settings, post-rule fold) — these are settings, not decision fields.
+
+**Engage formula**: `(enabled !== false) && manual_blur` where `manual_blur = !!resolved.blur_all_status`. **No automate term, no pick-blur term.** Automate is rendered via `blsi.Automate.Overlay` driven by `blsi.Automate.Manager` — engine teardown runs when only automate is firing. Pick-blur item reconcile + CSS injection runs unconditionally inside `engine.handleSite`, independent of `engage` (matches the historical behavior — `engage` only ever gated the blur-all CSS injection / stamp pass).
+
+**Used by**: `content_script._sync` (engine path).
+
+### resolve_automate(hostname, url, tab_id?)
+
+**What**: Slim resolver that returns ONLY the automate-decision fields. Consumed by `blsi.Automate.Manager` (the new automate orchestrator) which reacts to `chrome.storage.session` transitions independently of the engine.
+
+**Step 1 of the engine/automate split.** Currently a thin wrapper over `resolve()` — runs the full fold and projects the automate slice. Step 5 will refactor the underlying fold so `resolve()` and `resolve_automate()` no longer duplicate the global → site_rule → snapshot pass. Until then there is no perf win; this exists to give the Manager a focused, stable surface so the rest of the split can land incrementally.
+
+**Params**: same as `resolve()`.
+
+**Returns**: `{ automate_blur_active, automate_blur_triggers, automate_blur_only, automate_blur_skipped, automate_blur_skip_reason, screen_share_state, screen_share_suppressed_for_host, screen_share_suppressed_for_tab, automate_idle, automate_tab_switch, automate_screen_share, _rule_match, _rule_overrides_automate }`. `_rule_overrides_automate` is a slim slice over `resolve()._rule_overrides` carrying only the three automate gate keys (`automate_idle`, `automate_tab_switch`, `automate_screen_share`) — Manager uses these to decide whether each automate toast should carry a "(site rule)" suffix. No manual-blur fields, no `blur_items`, no `shortcuts`, no `engage`. Engine never calls this; Manager never calls `resolve()`.
 
 ### patch_section(section, delta)
 
