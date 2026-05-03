@@ -6,7 +6,7 @@ stays yours during screen-shares, presentations, and over-the-shoulder
 moments.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/unit_tests-906_passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/unit_tests-1205_passing-brightgreen)](#testing)
 [![Vanilla JS](https://img.shields.io/badge/vanilla-JS-yellow)](#how-it-works)
 
 > **Status:** preparing for a public open-source release. Web Store
@@ -143,6 +143,7 @@ src/
 ├── selector_utils.js          structural→semantic CSS-selector generator
 ├── storage_model.js           single chrome.storage namespace; resolve()
 ├── tab_privacy.js             title masking
+├── content_i18n.js            content-world localization
 ├── pii/                       8-stage PII detection pipeline
 │   ├── pii_state.js           shared private state
 │   ├── pii_pre_filter.js      whole-node drop heuristics
@@ -222,7 +223,7 @@ npm registry (`https://registry.npmjs.org/`).
 ### Testing
 
 ```bash
-npm run test:unit       # 906 unit tests across 24 suites — fast, jsdom
+npm run test:unit       # 1205 unit tests across 29 suites — fast, jsdom
 npm test                # unit + coverage report
 npm run lint            # ESLint over src/ + tests/
 npm run i18n:lint       # locale-coverage and key-shape lint

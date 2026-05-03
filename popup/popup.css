@@ -806,6 +806,9 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-back-btn span {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .bl-back-btn:hover {
   background: color-mix(in srgb, var(--bl-danger) 22%, transparent);

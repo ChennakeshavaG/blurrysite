@@ -470,7 +470,7 @@ const BlurrySitePopupRender = (() => {
     const b = document.createElement('button');
     b.className = 'bl-notif-btn' + (variant === 'warn' ? ' bl-notif-btn--warn' : '');
     b.textContent = text;
-    if (tooltip) b.title = tooltip;
+    if (tooltip) b.dataset.tooltipCaption = tooltip;
     b.addEventListener('click', function () { onClick(); });
     return b;
   }

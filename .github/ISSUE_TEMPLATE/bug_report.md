@@ -12,6 +12,9 @@ assignees: ''
 **Extension version**
 <!-- manifest.json "version" value, or commit hash if running from source -->
 
+**Website URL**
+<!-- The page where the bug occurs — helps reproduce site-specific CSS/DOM issues -->
+
 **Describe the bug**
 <!-- What happened vs. what you expected -->
 

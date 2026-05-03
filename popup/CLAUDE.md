@@ -346,4 +346,4 @@ Run after any popup change:
 npm run test:unit
 ```
 
-Expected: **743 passing**.
+Expected: **1205 passing**.

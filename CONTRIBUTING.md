@@ -21,7 +21,7 @@ of the project's working agreements; the long version lives in
    matching `docs/contracts/<module>.md` updates in the same commit.
    If you add or remove tests, update the matching
    `docs/contracts/<module>.tests.md`.
-4. **Tests must stay green.** `npm run test:unit` reports `906 / 906`
+4. **Tests must stay green.** `npm run test:unit` reports `1205 / 1205`
    today. Don't push a PR with regressions.
 5. **Conventional Commits.** Commit subjects follow `type(scope):
    short description`. Types: `feat`, `fix`, `chore`, `perf`,
@@ -45,7 +45,7 @@ of the project's working agreements; the long version lives in
 ├── fonts/                     OFL-1.1 fonts (disc, asterisk)
 ├── _locales/                  chrome.i18n strings
 ├── tests/
-│   ├── unit/                  jsdom-based, 906 passing
+│   ├── unit/                  jsdom-based, 1205 passing
 │   ├── e2e/                   Puppeteer (independent maintenance)
 │   └── perf/                  Playwright fixtures (independent maintenance)
 ├── docs/
@@ -64,7 +64,7 @@ of the project's working agreements; the long version lives in
 
 ```bash
 npm install
-npm run test:unit       # confirm 906 / 906 baseline
+npm run test:unit       # confirm 1205 / 1205 baseline
 ```
 
 The `package-lock.json` pins to the public npm registry. If you have a
@@ -112,7 +112,7 @@ higher when the diff is single-purpose.
 ### 3. Run the local checks
 
 ```bash
-npm run test:unit       # required — must be 906 / 906 green plus your additions
+npm run test:unit       # required — must be 1205 / 1205 green plus your additions
 npm run lint            # ESLint
 npm run i18n:lint       # locale coverage
 npm run string:lint     # repo-specific string linter
