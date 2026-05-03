@@ -560,6 +560,7 @@
 
 .bl-si-toast__action {
   all: initial !important;
+  position: relative !important;
   cursor: pointer !important;
   color: #60a5fa !important;
   font-size: 11.5px !important;
@@ -576,6 +577,43 @@
 
 .bl-si-toast__action:hover {
   background: rgba(96, 165, 250, 0.2) !important;
+}
+
+.bl-si-toast__action[data-tooltip]::after {
+  content: attr(data-tooltip) !important;
+  position: absolute !important;
+  bottom: calc(100% + 6px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  padding: 4px 8px !important;
+  background: rgba(30, 30, 30, 0.95) !important;
+  color: #e5e7eb !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  font-family: system-ui, sans-serif !important;
+  line-height: 1.3 !important;
+  white-space: nowrap !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.15s !important;
+  z-index: 2147483647 !important;
+}
+
+.bl-si-toast__action[data-tooltip]:hover::after {
+  opacity: 1 !important;
+}
+
+.bl-si-toast__action:first-child[data-tooltip]::after {
+  left: 0 !important;
+  transform: none !important;
+}
+
+.bl-si-toast__action:last-child[data-tooltip]::after {
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
 }
 
 .bl-si-toast__action--warn {
