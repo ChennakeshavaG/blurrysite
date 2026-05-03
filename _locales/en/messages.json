@@ -690,7 +690,7 @@
     "message": "Skip site"
   },
   "automate_disable_feature": {
-    "message": "Turn off"
+    "message": "Suspend"
   },
   "automate_tooltip_skip_tab": {
     "message": "Skip automate blur for this tab. Resets on browser restart."
@@ -699,7 +699,19 @@
     "message": "Skip automate blur for this site. Resets on browser restart."
   },
   "automate_tooltip_turn_off": {
-    "message": "Disable this automate trigger permanently."
+    "message": "Pause this trigger until browser restart."
+  },
+  "automate_suspended_label": {
+    "message": "Suspended"
+  },
+  "automate_tooltip_resume": {
+    "message": "Resume this automate trigger."
+  },
+  "notif_suspended": {
+    "message": "Suspended — resumes on restart"
+  },
+  "automate_resume": {
+    "message": "Resume"
   },
   "automate_toast_screen_share": {
     "message": "Blur applied — screen share active"

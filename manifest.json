@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Blurry Site",
-  "version": "0.69",
+  "version": "0.69.1",
   "description": "Blur anything you want on a website. Configure and forget...",
   "default_locale": "en",
 
@@ -10,7 +10,17 @@
   "host_permissions": ["<all_urls>"],
 
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": [
+      "src/constants.js",
+      "src/logger.js",
+      "src/action_registry.js",
+      "src/url_matcher.js",
+      "src/automate/state.js",
+      "src/automate/idle.js",
+      "src/automate/screen_share_bg.js",
+      "background.js"
+    ]
   },
 
   "content_scripts": [

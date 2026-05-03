@@ -974,11 +974,13 @@ describe('screen_share session record', () => {
     expect(other.automate_blur_triggers.idle).toBe(true);
   });
 
-  test('suppress_screen_share("feature") flips enabled flag AND clears the session record', async () => {
+  test('suppress_screen_share("feature") suspends trigger in session AND clears the session record', async () => {
     await blsi.Automate.State.set_screen_share_active(7);
     await blsi.Model.suppress_screen_share('feature', {});
     const m = blsi.Model.get();
-    expect(m.automate.settings.screen_share.enabled).toBe(false);
+    expect(m.automate.settings.screen_share.enabled).toBe(true);
+    const suspended = blsi.Automate.State.read_suspended();
+    expect(suspended.screen_share).toBe(true);
     const ss = blsi.Model.get_screen_share_state();
     expect(ss.active).toBe(false);
   });

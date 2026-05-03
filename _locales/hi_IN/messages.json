@@ -690,7 +690,7 @@
     "message": "साइट छोड़ें"
   },
   "automate_disable_feature": {
-    "message": "बंद करें"
+    "message": "रोकें"
   },
   "automate_tooltip_skip_tab": {
     "message": "इस टैब के लिए ऑटोमेट ब्लर छोड़ें। ब्राउज़र रीस्टार्ट पर रीसेट होगा।"
@@ -699,7 +699,19 @@
     "message": "इस साइट के लिए ऑटोमेट ब्लर छोड़ें। ब्राउज़र रीस्टार्ट पर रीसेट होगा।"
   },
   "automate_tooltip_turn_off": {
-    "message": "इस ऑटोमेट ट्रिगर को स्थायी रूप से बंद करें।"
+    "message": "इस ट्रिगर को ब्राउज़र रीस्टार्ट तक रोकें।"
+  },
+  "automate_suspended_label": {
+    "message": "निलंबित"
+  },
+  "automate_tooltip_resume": {
+    "message": "इस ऑटोमेट ट्रिगर को फिर से चालू करें।"
+  },
+  "notif_suspended": {
+    "message": "निलंबित — रीस्टार्ट पर फिर चालू होगा"
+  },
+  "automate_resume": {
+    "message": "फिर से चालू करें"
   },
   "automate_toast_screen_share": {
     "message": "ब्लर लागू — स्क्रीन शेयर चालू"

@@ -71,16 +71,17 @@ Renders into `#bl-notif-area`: site-rule pill on top (when `activeRule` truthy),
 
 **Rendering order:**
 1. **Site-rule pill** — unchanged, `bl-notif-pill` class.
-2. **Sharing-tab card** — when `ssIsSharingTab && ssShareLive`. This tab IS the one sharing its screen. Shows "Sharing this screen" trigger row with live elapsed timer + only "Disable feature" button. Early-returns — no other sub-cards rendered.
-3. **Screen-share sub-card** — when `triggers.screen_share` is active or screen-share is suppressed (tab/host). If suppressed: shows undo row only, no actions. If active: trigger label + elapsed timer + 3-button action row.
-4. **Idle sub-card** — three modes:
+2. **Sharing-tab card** — when `ssIsSharingTab && ssShareLive`. This tab IS the one sharing its screen. Shows "Sharing this screen" trigger row with live elapsed timer + only "Suspend feature" button (no `variant: 'warn'` — suspend is non-destructive, session-only). Early-returns — no other sub-cards rendered.
+3. **Screen-share sub-card** — when `triggers.screen_share` is active, screen-share is suppressed (tab/host), or screen-share is suspended (`settings.screen_share_suspended`). Priority: suspended > suppressed > triggered. If suspended: shows "Suspended — resumes on restart" label + Resume/Undo button calling `ctx.onUnsuppressScreenShare('feature')`. If suppressed: shows undo row only, no actions. If active: trigger label + elapsed timer + 3-button action row.
+4. **Idle sub-card** — four modes (priority: suspended > suppressed > triggered > info):
+   - **Suspended:** when idle is suspended (`settings.idle_suspended`). Shows "Suspended — resumes on restart" label + Resume/Undo button calling `ctx.onUnsuppressIdle('feature')`.
    - **Info (pre-trigger):** when `settings.automate.settings.idle.enabled` is true but idle has NOT triggered and is NOT suppressed. Shows `infoText` with configured duration (e.g. "Idle blur active — 5 min"). No action buttons, no timer.
-   - **Triggered:** when `triggers.idle` is active. Shows trigger label + elapsed timer + 3-button action row (Skip tab / Skip site / Turn off).
+   - **Triggered:** when `triggers.idle` is active. Shows trigger label + elapsed timer + 3-button action row (Skip tab / Skip site / Suspend feature).
    - **Suppressed:** when idle is suppressed (tab/site). Shows suppression undo row only.
-5. **Tab-switch sub-card** — when `triggers.tab_switch` is active or tab-switch is suppressed (tab/site). Same pattern.
+5. **Tab-switch sub-card** — when `triggers.tab_switch` is active, tab-switch is suppressed (tab/site), or tab-switch is suspended (`settings.tab_switch_suspended`). Same four-mode pattern as idle (suspended > suppressed > triggered), with Resume/Undo calling `ctx.onUnsuppressTabSwitch('feature')`.
 6. **Skipped info card** — when `automate_blur_skipped && !automate_blur_active`. Info-only card with trigger-neutral prefix (`notif_automate_skipped`) + skip reason suffix. No actions.
 
-No sub-cards rendered when none of `automate_blur_active`, `automate_blur_skipped`, `ssIsSharingTab`, any active suppression, or `idleEnabled` are true.
+No sub-cards rendered when none of `automate_blur_active`, `automate_blur_skipped`, `ssIsSharingTab`, any active suppression, any suspended trigger, or `idleEnabled` are true.
 
 **Live elapsed timers**: `_shareTimer` and `_idleTimer` (module-level `setInterval` handles) tick every 1s, updating the elapsed-time span. Both cleared at the top of every `renderNotifArea` call via `clearInterval`. `_idleStartedAt` tracks when the popup first observes `triggers.idle === true` (reset to `null` when idle clears).
 

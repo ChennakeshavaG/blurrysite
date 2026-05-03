@@ -75,15 +75,10 @@ describeFn('MutationObserver + blur-all integration', () => {
     });
 
     // Wait for the service worker to register.
-    for (let i = 0; i < 15; i++) {
-      const targets = await browser.targets();
-      swTarget = targets.find(
-        (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
-      );
-      if (swTarget) break;
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    if (!swTarget) throw new Error('Extension service worker not found');
+    swTarget = await browser.waitForTarget(
+      (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://'),
+      { timeout: 15000 }
+    );
 
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });

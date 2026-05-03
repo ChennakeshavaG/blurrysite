@@ -147,6 +147,21 @@ This group uses its own `beforeEach` that seeds and inits a default model with i
 - `automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
 - `manual blur preserved after automate cleared` — after clearing idle trigger, `engage` remains `true` from the persisted manual `blur_all: true`.
 
+### `screen_share session record`
+
+This group uses its own `beforeEach` that seeds and inits a default model with `screen_share.enabled = true`, and resets `Automate.State`.
+
+- `set_screen_share_active stamps active flag, sharing tab id, and started_at` — `set_screen_share_active(42)` sets `active: true`, `sharing_tab_id: 42`, `started_at` ≥ current time, `suppressed_sites: []`.
+- `set_screen_share_inactive clears the record` — after activating then deactivating, `active: false`, `sharing_tab_id: null`, `started_at: null`.
+- `resolve: sharing tab itself does NOT receive screen-share blur` — the tab whose id matches `sharing_tab_id` has `triggers.screen_share === false`; other tabs have `true`.
+- `resolve: feature disabled silences screen-share blur even when record is active` — `screen_share.enabled: false` suppresses the trigger even when session record is active.
+- `suppress_screen_share("site_session") silences screen-share for that hostname only` — suppressing `example.com` sets `screen_share_suppressed_for_host: true` and silences the trigger for that host; `other.test` still fires.
+- `suppress_screen_share("tab") silences screen_share for that tab (idle has own ignore)` — tab-scoped suppression silences screen_share for that tab only; idle trigger on the same tab is unaffected; other tabs still fire screen_share.
+- `suppress_screen_share("feature") suspends trigger in session AND clears the session record` — suspending the feature writes `read_suspended().screen_share === true` but leaves `enabled` as `true` in the persisted model; the session record is cleared (`active: false`).
+- `unsuppress_screen_share reverses tab + site_session suppressions` — after suppressing both scopes then unsuppressing both, `screen_share_suppressed_for_host` and `screen_share_suppressed_for_tab` return to `false`; trigger fires again.
+- `set_screen_share_active resets per-tab suppression list (mitigates tab-id reuse)` — starting a new share clears stale per-tab suppression entries from the previous share session.
+- `resolve: skip_reason is "site_rule" when an exact rule blurs and ss is also live` — when a site rule pins blur-all on and screen_share is also active, `automate_blur_skipped: true` with `skip_reason: 'site_rule'`.
+
 ### `capture_snapshot`
 
 This group uses its own `beforeEach` that seeds and inits a default model.

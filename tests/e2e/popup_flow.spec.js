@@ -58,18 +58,11 @@ describeFn('Popup UI Flow', () => {
       ],
     });
 
-    for (let i = 0; i < 15 && !swTarget; i++) {
-      const targets = await browser.targets();
-      swTarget = targets.find(
-        (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
-      );
-      if (!swTarget) await new Promise((r) => setTimeout(r, 500));
-    }
-    if (swTarget) {
-      extensionId = swTarget.url().split('//')[1].split('/')[0];
-    } else {
-      throw new Error('Service worker target not found');
-    }
+    swTarget = await browser.waitForTarget(
+      (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://'),
+      { timeout: 15000 }
+    );
+    extensionId = swTarget.url().split('//')[1].split('/')[0];
   }, 60000);
 
   afterAll(async () => {

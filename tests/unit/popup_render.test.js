@@ -712,7 +712,7 @@ describe('renderNotifArea per-trigger sub-cards', () => {
     });
     const cards = area.querySelectorAll('.bl-notif-card');
     expect(cards.length).toBe(1);
-    const btns = cards[0].querySelectorAll('.bl-notif-btn--warn');
+    const btns = cards[0].querySelectorAll('.bl-notif-btn');
     expect(btns.length).toBe(1);
   });
 

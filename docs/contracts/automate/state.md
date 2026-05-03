@@ -6,6 +6,7 @@ Single source of truth for **ALL automate session state**:
 - idle phase (global)
 - tab_switch phase (per-tab)
 - screen_share map (per-tab)
+- suspended triggers (per-trigger)
 - suppressed_tabs list (per-tab)
 - phase enums per trigger
 - `chrome.storage.session` key names
@@ -46,6 +47,7 @@ KEYS.idle              = 'blsi_automate_idle'
 KEYS.tab_switch_by_tab = 'blsi_automate_tab_switch_by_tab'
 KEYS.screen_share      = 'blsi_screen_share'
 KEYS.suppressed_tabs   = 'blsi_automate_suppressed_tabs'
+KEYS.suspended         = 'blsi_automate_suspended'
 ```
 
 ### Session storage schema
@@ -65,6 +67,16 @@ blsi_automate_tab_switch_by_tab = {
   ignore_sites: string[]
 }
 ```
+
+```
+blsi_automate_suspended = {
+  idle: boolean,
+  tab_switch: boolean,
+  screen_share: boolean
+}
+```
+
+Default: all `false`. Browser restart clears session storage → all triggers auto-resume.
 
 **Backward compatibility:** old shapes (bare string for idle, flat `{ '42': 'fired' }` map for tab_switch) are normalized on hydrate and in the `onChanged` listener. The normalizer detects old shapes by the absence of `status`/`ignore_tabs`/`ignore_sites` keys and wraps them into the new object shape with empty ignore arrays.
 
@@ -222,6 +234,22 @@ Removes a tab id from the suppression list. No-op if not present.
 
 Empties the suppression list. No-op when already empty.
 
+### `read_suspended()` → object
+
+Synchronous read of the cached suspended triggers. Returns `{ idle: boolean, tab_switch: boolean, screen_share: boolean }` — a copy (safe to mutate).
+
+### `suspend_trigger(name)` → Promise
+
+Suspends a trigger by name. `name` must be one of `'idle' | 'tab_switch' | 'screen_share'`; other values return a resolved Promise without writing. Idempotent — if already suspended, no-op.
+
+Side effects: updates `_suspended_cache` synchronously; fires subscribers; writes to session storage.
+
+### `resume_trigger(name)` → Promise
+
+Resumes a suspended trigger by name. `name` must be one of `'idle' | 'tab_switch' | 'screen_share'`; other values return a resolved Promise. Idempotent — if not suspended, no-op.
+
+Side effects: updates `_suspended_cache` synchronously; fires subscribers; writes to session storage.
+
 ### `on_session_change(cb)` → void
 
 Register the Manager subscriber. Called with no arguments when any session cache changes. Manager re-evaluates with guaranteed-fresh caches.
@@ -236,7 +264,7 @@ Single slot — calling twice replaces the previous subscriber.
 
 ### `_reset()` (test-only)
 
-Resets all four caches to their default values and clears both subscriber slots. `_idle_cache` resets to `{ status: 'active', ignore_tabs: [], ignore_sites: [] }`, `_tab_switch_cache` resets to `{ status: {}, ignore_tabs: [], ignore_sites: [] }`, `_screen_share_cache` to `{}`, `_suppressed_tabs_cache` to `[]`. Does NOT write to storage. For unit tests starting from a clean slate.
+Resets all five caches to their default values and clears both subscriber slots. `_idle_cache` resets to `{ status: 'active', ignore_tabs: [], ignore_sites: [] }`, `_tab_switch_cache` resets to `{ status: {}, ignore_tabs: [], ignore_sites: [] }`, `_screen_share_cache` to `{}`, `_suppressed_tabs_cache` to `[]`, `_suspended_cache` to `{ idle: false, tab_switch: false, screen_share: false }`. Does NOT write to storage. For unit tests starting from a clean slate.
 
 ## Internal mechanics
 
@@ -271,7 +299,7 @@ Brief window where cache is ahead of storage — acceptable because writes alway
 
 ## Invariants
 
-- Single source of truth for ALL four `chrome.storage.session` automate keys.
+- Single source of truth for ALL five `chrome.storage.session` automate keys.
 - The two phase enums are frozen (`Object.freeze`).
 - The exported `State` object is frozen.
 - The module does not import or depend on any other `blsi.*` module.
@@ -287,7 +315,7 @@ Brief window where cache is ahead of storage — acceptable because writes alway
 | `automate/idle.js` | `PHASES.idle` | `write_idle()` |
 | `automate/visibility.js` | `PHASES.tab_switch`, `read_tab_switch()` | `write_tab_switch()` |
 | `automate/manager.js` | (via `on_session_change` subscriber) | n/a |
-| `storage_model.js` | `get_screen_share_state()`, `get_suppressed_tabs()`, `suppress_screen_share_site()`, `unsuppress_screen_share_site()`, `set_screen_share_inactive()`, `add_suppressed_tab()`, `remove_suppressed_tab()` (via thin wrappers); `on_session_notify` relay registered in `init_cache` | n/a |
+| `storage_model.js` | `get_screen_share_state()`, `get_suppressed_tabs()`, `read_suspended()`, `suppress_screen_share_site()`, `unsuppress_screen_share_site()`, `set_screen_share_inactive()`, `add_suppressed_tab()`, `remove_suppressed_tab()` (via thin wrappers); `on_session_notify` relay registered in `init_cache` | `suspend_trigger()`, `resume_trigger()` |
 | `content_script.js` | `read_idle()`, `read_tab_switch()` for status queries | n/a |
 
 ## Test strategy

@@ -590,10 +590,11 @@ const StorageModel = (() => {
     var tab_suppressed = has_tab_id && _sup_tabs.indexOf(tab_id) >= 0;
     var PH = State ? State.PHASES : null;
     var idle_phase = State ? State.read_idle() : "active";
-    var idle_feature_on = !!(folded.automate_idle && folded.automate_idle.enabled);
+    var suspended = State ? State.read_suspended() : {};
+    var idle_feature_on = !!(folded.automate_idle && folded.automate_idle.enabled) && !suspended.idle;
     var idle_raw = idle_feature_on && PH && (idle_phase === PH.idle.idle || idle_phase === PH.idle.locked);
     var ts_phase = (State && has_tab_id) ? State.read_tab_switch(tab_id) : "off";
-    var ts_feature_on = !!(folded.automate_tab_switch && folded.automate_tab_switch.enabled);
+    var ts_feature_on = !!(folded.automate_tab_switch && folded.automate_tab_switch.enabled) && !suspended.tab_switch;
     var tab_switch_raw = ts_feature_on && PH && ts_phase === PH.tab_switch.fired;
 
     // Per-trigger ignore lists (idle + tab_switch)
@@ -606,7 +607,7 @@ const StorageModel = (() => {
     var ts_site_ignored = ts_ignore.ignore_sites.indexOf(hostname) >= 0;
 
     var ss = State ? State.get_screen_share_state(tab_id) : { active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [], _sharing_tab_ids: [] };
-    var ss_feature_enabled = !!(folded.automate_screen_share && folded.automate_screen_share.enabled);
+    var ss_feature_enabled = !!(folded.automate_screen_share && folded.automate_screen_share.enabled) && !suspended.screen_share;
     var ss_site_suppressed = ss.suppressed_sites.indexOf(hostname) >= 0;
     var ss_is_sharing_tab = has_tab_id && ss._sharing_tab_ids && ss._sharing_tab_ids.indexOf(tab_id) >= 0;
     var ss_blur_raw =
@@ -657,6 +658,9 @@ const StorageModel = (() => {
       tab_switch_suppressed_for_site:     ts_site_ignored,
       screen_share_suppressed_for_host:   ss_site_suppressed,
       screen_share_suppressed_for_tab:    tab_suppressed,
+      idle_suspended:                    !!suspended.idle,
+      tab_switch_suspended:              !!suspended.tab_switch,
+      screen_share_suspended:            !!suspended.screen_share,
       automate_idle:                     folded.automate_idle,
       automate_tab_switch:               folded.automate_tab_switch,
       automate_screen_share:             folded.automate_screen_share,
@@ -820,8 +824,9 @@ const StorageModel = (() => {
       return S ? S.suppress_screen_share_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      await patch_section("automate", { settings: { screen_share: { enabled: false } } });
-      return S ? S.set_screen_share_inactive() : Promise.resolve();
+      if (!S) return Promise.resolve();
+      await S.suspend_trigger('screen_share');
+      return S.set_screen_share_inactive();
     }
   }
 
@@ -835,7 +840,7 @@ const StorageModel = (() => {
       return S ? S.unsuppress_screen_share_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      await patch_section("automate", { settings: { screen_share: { enabled: true } } });
+      return S ? S.resume_trigger('screen_share') : Promise.resolve();
     }
   }
 
@@ -849,7 +854,7 @@ const StorageModel = (() => {
       return S ? S.add_idle_ignore_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      return patch_section("automate", { settings: { idle: { enabled: false } } });
+      return S ? S.suspend_trigger('idle') : Promise.resolve();
     }
   }
 
@@ -863,7 +868,7 @@ const StorageModel = (() => {
       return S ? S.remove_idle_ignore_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      return patch_section("automate", { settings: { idle: { enabled: true } } });
+      return S ? S.resume_trigger('idle') : Promise.resolve();
     }
   }
 
@@ -877,7 +882,7 @@ const StorageModel = (() => {
       return S ? S.add_tab_switch_ignore_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      return patch_section("automate", { settings: { tab_switch: { enabled: false } } });
+      return S ? S.suspend_trigger('tab_switch') : Promise.resolve();
     }
   }
 
@@ -891,7 +896,7 @@ const StorageModel = (() => {
       return S ? S.remove_tab_switch_ignore_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      return patch_section("automate", { settings: { tab_switch: { enabled: true } } });
+      return S ? S.resume_trigger('tab_switch') : Promise.resolve();
     }
   }
 

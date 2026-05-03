@@ -276,12 +276,16 @@ const BlurrySitePopupRender = (() => {
     var idleSettings = settings.automate && settings.automate.settings
                        && settings.automate.settings.idle;
     var idleEnabled  = !!(idleSettings && idleSettings.enabled);
+    var idleSuspended  = !!settings.idle_suspended;
+    var tsSuspended    = !!settings.tab_switch_suspended;
+    var ssSuspended    = !!settings.screen_share_suspended;
 
     var showAny = !!(settings.automate_blur_active || settings.automate_blur_skipped
       || ssSuppressedHost || ssSuppressedTab || ssIsSharingTab
       || idleSuppressedTab || idleSuppressedSite
       || tsSuppressedTab || tsSuppressedSite
-      || idleEnabled);
+      || idleEnabled
+      || idleSuspended || tsSuspended || ssSuspended);
     if (!showAny) return;
 
     // Sharing-tab card — this tab IS the one sharing its screen
@@ -298,7 +302,7 @@ const BlurrySitePopupRender = (() => {
           }
         },
         actions: onSuppressSS
-          ? [{ label: _t('automate_disable_feature'), onClick: function () { onSuppressSS('feature'); }, variant: 'warn', tooltip: _t('automate_tooltip_turn_off') }]
+          ? [{ label: _t('automate_disable_feature'), onClick: function () { onSuppressSS('feature'); }, tooltip: _t('automate_tooltip_turn_off') }]
           : null,
       }));
       return;
@@ -323,14 +327,22 @@ const BlurrySitePopupRender = (() => {
         ssCfg.actions = [
           { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressSS('tab'); }, tooltip: _t('automate_tooltip_skip_tab') },
           { label: _t('automate_stop_site_session'),  onClick: function () { onSuppressSS('site_session'); }, tooltip: _t('automate_tooltip_skip_site') },
-          { label: _t('automate_disable_feature'),    onClick: function () { onSuppressSS('feature'); }, variant: 'warn', tooltip: _t('automate_tooltip_turn_off') },
+          { label: _t('automate_disable_feature'),    onClick: function () { onSuppressSS('feature'); }, tooltip: _t('automate_tooltip_turn_off') },
         ];
       }
       el.appendChild(_buildTriggerSubCard(ssCfg));
     }
 
-    // Idle sub-card — info (pre-trigger) / triggered / suppressed
-    if (idleEnabled || triggers.idle || idleSuppressedTab || idleSuppressedSite) {
+    // Screen-share suspended card
+    if (ssSuspended && !triggers.screen_share && !ssSuppressedTab && !ssSuppressedHost) {
+      el.appendChild(_buildTriggerSubCard({
+        triggerLabel: _t('notif_screen_share_active'),
+        suppression: { label: _t('notif_suspended'), onUndo: function () { if (onUnsuppressSS) onUnsuppressSS('feature'); } },
+      }));
+    }
+
+    // Idle sub-card — info (pre-trigger) / triggered / suppressed / suspended
+    if (idleEnabled || triggers.idle || idleSuppressedTab || idleSuppressedSite || idleSuspended) {
       if (triggers.idle && !_idleStartedAt) _idleStartedAt = Date.now();
       if (!triggers.idle) _idleStartedAt = null;
 
@@ -341,6 +353,9 @@ const BlurrySitePopupRender = (() => {
       } else if (idleSuppressedSite) {
         idleCfg = { triggerLabel: _t('automate_idle') };
         idleCfg.suppression = { label: _t('automate_idle') + ' — ' + _t('notif_suppressed_for_site'), onUndo: function () { if (onUnsuppressIdle) onUnsuppressIdle('site_session'); } };
+      } else if (idleSuspended) {
+        idleCfg = { triggerLabel: _t('automate_idle') };
+        idleCfg.suppression = { label: _t('automate_idle') + ' — ' + _t('notif_suspended'), onUndo: function () { if (onUnsuppressIdle) onUnsuppressIdle('feature'); } };
       } else if (triggers.idle) {
         idleCfg = { triggerLabel: _t('automate_idle'), elapsed: _idleElapsed() };
         idleCfg.onTimerSetup = function (elapsedEl) {
@@ -355,7 +370,7 @@ const BlurrySitePopupRender = (() => {
           idleCfg.actions = [
             { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressIdle('tab'); }, tooltip: _t('automate_tooltip_skip_tab') },
             { label: _t('automate_stop_site_session'),  onClick: function () { onSuppressIdle('site_session'); }, tooltip: _t('automate_tooltip_skip_site') },
-            { label: _t('automate_disable_feature'),    onClick: function () { onSuppressIdle('feature'); }, variant: 'warn', tooltip: _t('automate_tooltip_turn_off') },
+            { label: _t('automate_disable_feature'),    onClick: function () { onSuppressIdle('feature'); }, tooltip: _t('automate_tooltip_turn_off') },
           ];
         }
       } else {
@@ -366,17 +381,19 @@ const BlurrySitePopupRender = (() => {
     }
 
     // Tab-switch sub-card
-    if (triggers.tab_switch || tsSuppressedTab || tsSuppressedSite) {
+    if (triggers.tab_switch || tsSuppressedTab || tsSuppressedSite || tsSuspended) {
       var tsCfg = { triggerLabel: _t('automate_tab_switch') };
       if (tsSuppressedTab) {
         tsCfg.suppression = { label: _t('automate_tab_switch') + ' — ' + _t('notif_suppressed_for_tab'), onUndo: function () { if (onUnsuppressTS) onUnsuppressTS('tab'); } };
       } else if (tsSuppressedSite) {
         tsCfg.suppression = { label: _t('automate_tab_switch') + ' — ' + _t('notif_suppressed_for_site'), onUndo: function () { if (onUnsuppressTS) onUnsuppressTS('site_session'); } };
+      } else if (tsSuspended) {
+        tsCfg.suppression = { label: _t('automate_tab_switch') + ' — ' + _t('notif_suspended'), onUndo: function () { if (onUnsuppressTS) onUnsuppressTS('feature'); } };
       } else if (triggers.tab_switch && onSuppressTS && !tsSuppressedTab) {
         tsCfg.actions = [
           { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressTS('tab'); }, tooltip: _t('automate_tooltip_skip_tab') },
           { label: _t('automate_stop_site_session'),  onClick: function () { onSuppressTS('site_session'); }, tooltip: _t('automate_tooltip_skip_site') },
-          { label: _t('automate_disable_feature'),    onClick: function () { onSuppressTS('feature'); }, variant: 'warn', tooltip: _t('automate_tooltip_turn_off') },
+          { label: _t('automate_disable_feature'),    onClick: function () { onSuppressTS('feature'); }, tooltip: _t('automate_tooltip_turn_off') },
         ];
       }
       el.appendChild(_buildTriggerSubCard(tsCfg));

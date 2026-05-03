@@ -103,6 +103,7 @@ describe('blsi.Shortcuts (v2)', () => {
 
   afterEach(() => {
     if (blsi.Shortcuts) blsi.Shortcuts.destroy();
+    document.querySelectorAll('.bl-si-toast').forEach(el => el.remove());
   });
 
   // ── Match: happy paths ─────────────────────────────────────────────────────
@@ -342,6 +343,24 @@ describe('blsi.Shortcuts (v2)', () => {
 
     test('handles null shortcuts gracefully', () => {
       expect(() => blsi.Shortcuts.init(null, {})).not.toThrow();
+    });
+
+    test('destroy preserves persistent toast', () => {
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, {});
+      blsi.Shortcuts.showToast('persistent msg', 15000, [], { persistent: true });
+      var toast = document.querySelector('.bl-si-toast');
+      expect(toast).not.toBeNull();
+      blsi.Shortcuts.destroy();
+      expect(toast.parentNode).not.toBeNull();
+    });
+
+    test('destroy removes non-persistent toast', () => {
+      blsi.Shortcuts.init(DEFAULT_SHORTCUTS, {});
+      blsi.Shortcuts.showToast('temp msg', 5000);
+      var toast = document.querySelector('.bl-si-toast');
+      expect(toast).not.toBeNull();
+      blsi.Shortcuts.destroy();
+      expect(document.querySelector('.bl-si-toast')).toBeNull();
     });
 
     test('multi-chord bindings (length > 1) are skipped (phase 2)', () => {

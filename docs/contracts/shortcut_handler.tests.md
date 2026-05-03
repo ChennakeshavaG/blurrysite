@@ -72,6 +72,8 @@ throws if `shortcut_handler.js` is absent, making the real file mandatory.
 - `handles empty shortcuts object gracefully` — `init({}, {})` does not throw.
 - `handles null shortcuts gracefully` — `init(null, {})` does not throw.
 - `multi-chord bindings (length > 1) are skipped (phase 2)` — a binding with two chords (`[{code:'KeyG'}, {code:'KeyI'}]`) does not fire on a single keydown matching the first chord (phase-2 sequence matching not yet implemented).
+- `destroy preserves persistent toast` — after `showToast` with `{ persistent: true }`, calling `destroy()` does not remove the toast from the DOM; `currentToastEl` is retained.
+- `destroy removes non-persistent toast` — after `showToast` without persistent flag, calling `destroy()` removes the toast from the DOM.
 
 ## Edge Cases Covered
 

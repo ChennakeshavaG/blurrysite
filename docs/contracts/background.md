@@ -2,14 +2,32 @@
 
 ## Overview
 
-MV3 service worker. Stateless between wake cycles — no module-level mutable state. Handles: keyboard command relay, context menu management, screenshot capture relay, and tab-close cleanup. Screen-share session record ownership, port tracking, WHO_AM_I, and SCREEN_SHARE_NOTIFY broadcast are delegated to `src/automate/screen_share_bg.js` (loaded via `importScripts`). All other storage I/O is handled by `storage_model.js` in content script and popup contexts.
+MV3 background script. Runs as a **service worker** in Chrome, **non-persistent event page** in Firefox. Stateless between wake cycles — no module-level mutable state. Handles: keyboard command relay, context menu management, screenshot capture relay, and tab-close cleanup. Screen-share session record ownership, port tracking, WHO_AM_I, and SCREEN_SHARE_NOTIFY broadcast are delegated to `src/automate/screen_share_bg.js`. All other storage I/O is handled by `storage_model.js` in content script and popup contexts.
 
-## Initialization (Top-Level SW Start)
+## Cross-Browser Background Context
 
-On every SW start:
+Chrome MV3 runs `background.js` as a **service worker**. Firefox MV3 runs it as a **non-persistent event page**. The manifest declares both keys:
+
+```json
+"background": {
+  "service_worker": "background.js",
+  "scripts": ["src/constants.js", "...", "background.js"]
+}
+```
+
+- **Chrome 121+**: uses `service_worker`, ignores `scripts` (cosmetic warning in `chrome://extensions`).
+- **Firefox 121+**: uses `scripts` (event page), ignores `service_worker`.
+
+`importScripts()` is guarded by `typeof importScripts === 'function'` — available in Chrome's SW context, undefined in Firefox's event page context (where the manifest `scripts` array already loaded the dependencies).
+
+The `scripts` array must mirror the `importScripts()` argument list + `background.js` itself as the last entry. When adding a new background-only dependency: update both places.
+
+## Initialization (Top-Level SW/Event Page Start)
+
+On every SW wake (Chrome) or event page start (Firefox):
 1. Calls `chrome.storage.session.setAccessLevel({ areaName: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' })` so content scripts can read/write session storage (MV3 default is background-only). Must run before any session storage writes.
-2. Imports `src/constants.js`, `src/logger.js`, `src/action_registry.js`, `src/url_matcher.js`, `src/automate/state.js`, `src/automate/idle.js`, `src/automate/screen_share_bg.js` via `importScripts`. The automate imports register the `blsi.Automate.State` cache + `chrome.storage.onChanged` listener and the `blsi.Automate.Idle` observer (`chrome.idle.onStateChanged` → `blsi_automate_idle` session key) at SW load.
-3. `Idle.init()` is invoked so the idle listener is registered on every SW wake.
+2. Loads shared modules — via `importScripts` (Chrome SW) or manifest `scripts` array (Firefox event page). The automate imports register the `blsi.Automate.State` cache + `chrome.storage.onChanged` listener and the `blsi.Automate.Idle` observer (`chrome.idle.onStateChanged` → `blsi_automate_idle` session key) at load.
+3. `Idle.init()` is invoked so the idle listener is registered on every wake.
 4. `ScreenShareBg.init()` is invoked — clears stale screen-share session record + suppressed-tabs list, registers port + message listeners. See `docs/contracts/automate/screen_share_bg.md`.
 5. Builds `COMMAND_TO_MESSAGE` map from `blsi.Actions.list()`.
 
@@ -129,7 +147,7 @@ Screen-share port/message handling is delegated to `src/automate/screen_share_bg
 
 ## Invariants
 
-- Service worker MUST be stateless between wake cycles — no module-level mutable state in background.js (`_sharePorts` moved to `screen_share_bg.js`).
+- Background context MUST be stateless between wake cycles — no module-level mutable state in background.js (`_sharePorts` moved to `screen_share_bg.js`). Applies to both Chrome SW and Firefox event page.
 - Session key writes are delegated to `blsi.Automate.ScreenShareBg` (screen-share + suppressed tabs) and `blsi.Automate.Idle` (idle state), both via `blsi.Automate.State` APIs. Tab-close cleanup (`remove_suppressed_tab`, `clear_tab_switch`) remains in background.js.
 - `sendMessage` calls always use `.catch(() => {})` — tab may have no content script (chrome:// pages, etc.).
 - `COMMAND_TO_MESSAGE` auto-builds from action registry — never hardcode command→message mappings in background.js.

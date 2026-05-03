@@ -204,6 +204,12 @@
       }
     }
 
+    // 3b. Screen-share falling edge — dismiss persistent toast.
+    if (!ss_blurring && _last_ss_blurring) {
+      const S = _shortcuts();
+      if (S && typeof S.dismissToast === 'function') S.dismissToast();
+    }
+
     // 4. Skipped toast — automate fired but a different blur reason was already
     //    active. Fire on the rising edge of skipped (avoids re-firing every
     //    evaluation while skipped state persists).

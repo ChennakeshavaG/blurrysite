@@ -43,10 +43,10 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 
 ### destroy()
 
-**What**: Removes all listeners, clears shortcut/callback registrations, removes current toast.  
+**What**: Removes all listeners, clears shortcut/callback registrations, removes current non-persistent toast.  
 **Params**: none  
 **Returns**: `void`  
-**Side effects**: Removes keydown (capture) and blur listeners; clears `registeredShortcuts`, `registeredCallbacks`; removes `currentToastEl` from DOM  
+**Side effects**: Removes keydown (capture) and blur listeners; clears `registeredShortcuts`, `registeredCallbacks`; removes `currentToastEl` from DOM only if it is not persistent (persistent toasts survive `destroy()` so they are preserved across `init()` re-initialization cycles triggered by storage changes).  
 **Handles**: Idempotent — no-op if already destroyed.
 
 ### showToast(text, duration?, actions?, opts?)
@@ -55,7 +55,7 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 **Params**:
 - `text` (string) — main message text
 - `duration` (number, optional) — milliseconds before auto-dismiss (default: 15000)
-- `actions` (Array<{label, onClick, variant?, tooltip?}>, optional) — action buttons in a second row. `tooltip` sets the `title` attribute on the button.
+- `actions` (Array<{label, onClick, variant?, tooltip?}>, optional) — action buttons in a second row. `tooltip` sets `data-tooltip` on the button (CSS `::after` pseudo-element tooltip via `content.css`, not native `title` — immune to viewport overlay interference).
 - `opts` ({persistent?: boolean}, optional) — when `persistent` is truthy: skips the auto-dismiss timer (toast stays until user clicks close or an action button) and blocks replacement by subsequent non-persistent toasts.  
 **Returns**: `void`  
 **Side effects**:
@@ -93,6 +93,13 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 
 **What**: Compares two sorted modifier arrays for equality.  
 **Returns**: `boolean`
+
+### dismissToast()
+
+**What**: Dismisses the current toast (including persistent toasts). No-op if no toast is showing.  
+**Params**: none  
+**Returns**: `void`  
+**Side effects**: Delegates to `_dismissToast(currentToastEl)` — animates out and removes.
 
 ### _dismissToast(toast)
 

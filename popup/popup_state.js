@@ -37,6 +37,9 @@ const BlurrySitePopupState = (() => {
         idle_suppressed_for_site:        !!(resolved && resolved.idle_suppressed_for_site),
         tab_switch_suppressed_for_tab:   !!(resolved && resolved.tab_switch_suppressed_for_tab),
         tab_switch_suppressed_for_site:  !!(resolved && resolved.tab_switch_suppressed_for_site),
+        idle_suspended:                  !!(resolved && resolved.idle_suspended),
+        tab_switch_suspended:            !!(resolved && resolved.tab_switch_suspended),
+        screen_share_suspended:          !!(resolved && resolved.screen_share_suspended),
         // Surface resolve-only rule metadata so render files can call
         // BlurrySitePopupShared.isRuleManaged(settings) without needing ctx.
         _rule_match:     ruleMatch,

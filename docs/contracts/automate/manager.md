@@ -5,8 +5,9 @@
 Single owner of automate-driven Overlay show/hide AND automate transition toasts (idle / tab_switch / screen_share / skipped). The orchestrator for the automate side of the engine/automate split — `engine.js` does not react to live automate state.
 
 Reacts to:
-- `chrome.storage.session` changes (idle / tab_switch / screen_share / suppressed_tabs) via `blsi.Automate.State.on_session_change` — caches are guaranteed fresh before the callback fires (eliminates the race where Manager reads stale data from a separately-ordered onChanged listener).
+- `chrome.storage.session` changes (idle / tab_switch / screen_share / suppressed_tabs / suspended) via `blsi.Automate.State.on_session_change` — caches are guaranteed fresh before the callback fires (eliminates the race where Manager reads stale data from a separately-ordered onChanged listener).
 - `chrome.storage.local` changes that may flip automate gates (popup edits to `automate.*.enabled`, `site_rules` mutations) via `blsi.Model.on_automate_change`.
+- Suspended triggers (session-only, per-trigger) — `resolve_automate()` treats a suspended trigger as feature-off. Browser restart clears the session key and all triggers auto-resume.
 - Explicit URL change notifications from `content_script` on SPA navigation (path-specific site rules can flip automate gates within the same host).
 
 Reads `blsi.Model.resolve_automate(host, url, tab_id)` for the slim automate-decision snapshot. Never reads `blsi.Model.resolve()`. Never invokes engine APIs.
@@ -74,7 +75,7 @@ Manager fires four automate transition toasts:
 |---|---|---|---|---|---|
 | Idle | `automate_toast_idle` | `automate_idle` | 5000ms | If `_idle_stop_actions` set: calls it async → `showToast(msg, 5000, actions)`. Falls back to `showToast(msg, 5000)` if callback not provided or rejects. | `automate_blur_only && triggers.idle && idle phase transitioned to 'idle' or 'locked'` |
 | Tab-switch | `automate_toast_tab_switch` | `automate_tab_switch` | 5000ms | If `_tab_switch_stop_actions` set: same Promise-based pattern as idle. Falls back to `showToast(msg, 5000)`. | `automate_blur_only && triggers.tab_switch && tab_switch phase transitioned to 'fired'` |
-| Screen-share | `automate_toast_screen_share` | `automate_screen_share` | 15000ms | UNCHANGED — uses `_ss_stop_actions` Promise pattern. | rising edge of `triggers.screen_share` |
+| Screen-share | `automate_toast_screen_share` | `automate_screen_share` | persistent | Uses `_ss_stop_actions` Promise pattern; `{ persistent: true }` skips auto-dismiss. On falling edge (`!ss_blurring && _last_ss_blurring`), calls `Shortcuts.dismissToast()` to remove the persistent toast. | rising edge of `triggers.screen_share` (show); falling edge (dismiss) |
 | Skipped | `automate_toast_skipped` | `automate_screen_share` | — | — | rising edge of `automate_blur_skipped && automate_blur_skip_reason` |
 
 All four read the override key off `r._rule_overrides_automate` to decide whether to append "(site rule)". Idle and tab_switch toasts only fire when automate is the **sole** blur reason (`automate_blur_only`) — when manual blur is already on, only the "skipped" toast can fire.

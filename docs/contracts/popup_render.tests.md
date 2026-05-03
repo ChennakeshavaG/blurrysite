@@ -113,7 +113,7 @@ Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Co
 - `single trigger renders one sub-card` — idle active only → exactly 1 `.bl-notif-card` with `.bl-notif-card__actions`.
 - `multiple triggers render separate sub-cards` — idle + tab_switch active → 2 `.bl-notif-card` elements.
 - `suppressed trigger shows undo row, no action buttons` — idle suppressed for tab → card has `.bl-notif-card__suppress`, no `.bl-notif-card__actions`.
-- `sharing-tab renders single card with warn button only` — `is_sharing_tab=true` → 1 card, 1 `.bl-notif-btn--warn` button.
+- `sharing-tab renders single card with suspend button` — `is_sharing_tab=true` → 1 card, 1 `.bl-notif-btn` button (no `--warn` variant — suspend is non-destructive, session-only).
 - `skipped state renders info-only card with no actions` — `automate_blur_skipped=true, skip_reason='manual'` → card has `.bl-notif-card__info`, no actions.
 - `site-rule pill renders before sub-cards` — `activeRule` + idle trigger → first child is `.bl-notif-pill`, second is `.bl-notif-card`.
 - `all three triggers render three sub-cards` — screen_share + idle + tab_switch active → 3 `.bl-notif-card` elements.

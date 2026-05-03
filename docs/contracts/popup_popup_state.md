@@ -36,6 +36,9 @@ Returns current snapshot. `settings` is the model object plus runtime extras der
 - `idle_suppressed_for_site` — boolean
 - `tab_switch_suppressed_for_tab` — boolean
 - `tab_switch_suppressed_for_site` — boolean
+- `idle_suspended` — boolean, true when idle trigger is suspended for this session
+- `tab_switch_suspended` — boolean, true when tab_switch trigger is suspended for this session
+- `screen_share_suspended` — boolean, true when screen_share trigger is suspended for this session
 
 When `_model` is null, falls back to `blsi.build_default_model()`.
 

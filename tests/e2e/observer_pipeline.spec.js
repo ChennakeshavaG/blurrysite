@@ -77,14 +77,10 @@ describeFn('Observer Pipeline — E2E', () => {
     });
 
     // Wait for service worker target.
-    for (let i = 0; i < 15 && !swTarget; i++) {
-      const targets = await browser.targets();
-      swTarget = targets.find(
-        (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://')
-      );
-      if (!swTarget) await new Promise((r) => setTimeout(r, 500));
-    }
-    if (!swTarget) throw new Error('Service worker target not found');
+    swTarget = await browser.waitForTarget(
+      (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://'),
+      { timeout: 15000 }
+    );
 
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });

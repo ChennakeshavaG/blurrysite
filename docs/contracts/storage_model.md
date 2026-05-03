@@ -101,7 +101,7 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 **Params**: same as `resolve()`.
 
-**Returns**: `{ automate_blur_active, automate_blur_triggers, automate_blur_only, automate_blur_skipped, automate_blur_skip_reason, screen_share_state, screen_share_suppressed_for_host, screen_share_suppressed_for_tab, idle_suppressed_for_tab, idle_suppressed_for_site, tab_switch_suppressed_for_tab, tab_switch_suppressed_for_site, automate_idle, automate_tab_switch, automate_screen_share, _rule_match, _rule_overrides_automate }`. `idle_suppressed_for_tab/site` and `tab_switch_suppressed_for_tab/site` are booleans indicating per-trigger suppression (popup undo affordance parity with screen_share). `_rule_overrides_automate` is a slim slice over `resolve()._rule_overrides` carrying only the three automate gate keys (`automate_idle`, `automate_tab_switch`, `automate_screen_share`) — Manager uses these to decide whether each automate toast should carry a "(site rule)" suffix. No manual-blur fields, no `blur_items`, no `shortcuts`, no `engage`. Engine never calls this; Manager never calls `resolve()`.
+**Returns**: `{ automate_blur_active, automate_blur_triggers, automate_blur_only, automate_blur_skipped, automate_blur_skip_reason, screen_share_state, screen_share_suppressed_for_host, screen_share_suppressed_for_tab, idle_suppressed_for_tab, idle_suppressed_for_site, tab_switch_suppressed_for_tab, tab_switch_suppressed_for_site, idle_suspended, tab_switch_suspended, screen_share_suspended, automate_idle, automate_tab_switch, automate_screen_share, _rule_match, _rule_overrides_automate }`. `idle_suspended` / `tab_switch_suspended` / `screen_share_suspended` are booleans — true when the corresponding trigger is suspended for this session (via `State.suspend_trigger()`; auto-resumes on browser restart). `idle_suppressed_for_tab/site` and `tab_switch_suppressed_for_tab/site` are booleans indicating per-trigger suppression (popup undo affordance parity with screen_share). `_rule_overrides_automate` is a slim slice over `resolve()._rule_overrides` carrying only the three automate gate keys (`automate_idle`, `automate_tab_switch`, `automate_screen_share`) — Manager uses these to decide whether each automate toast should carry a "(site rule)" suffix. No manual-blur fields, no `blur_items`, no `shortcuts`, no `engage`. Engine never calls this; Manager never calls `resolve()`.
 
 ### patch_section(section, delta)
 
@@ -212,7 +212,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 **Routing**:
 - `'tab'` → `State.add_suppressed_tab(ctx.tab_id)`  
 - `'site_session'` → `State.suppress_screen_share_site(ctx.hostname)`  
-- `'feature'` → `patch_section('automate', ...)` to disable + `State.set_screen_share_inactive()`  
+- `'feature'` → suspends the trigger in session storage via `State.suspend_trigger('screen_share')` — auto-resumes on browser restart  
 
 **Returns**: `Promise<void>`
 
@@ -222,7 +222,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 **Routing**:
 - `'tab'` → `State.remove_suppressed_tab(ctx.tab_id)`  
 - `'site_session'` → `State.unsuppress_screen_share_site(ctx.hostname)`  
-- `'feature'` → `patch_section('automate', ...)` to re-enable  
+- `'feature'` → resumes the trigger via `State.resume_trigger('screen_share')`  
 
 **Returns**: `Promise<void>`
 
@@ -233,7 +233,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 **Routing**:
 - `'tab'` → `State.add_idle_ignore_tab(ctx.tab_id)`  
 - `'site_session'` → `State.add_idle_ignore_site(ctx.hostname)`  
-- `'feature'` → `patch_section('automate', { settings: { idle: { enabled: false } } })`  
+- `'feature'` → suspends the trigger in session storage via `State.suspend_trigger('idle')` — auto-resumes on browser restart  
 
 **Returns**: `Promise<void>`
 
@@ -243,7 +243,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 **Routing**:
 - `'tab'` → `State.remove_idle_ignore_tab(ctx.tab_id)`  
 - `'site_session'` → `State.remove_idle_ignore_site(ctx.hostname)`  
-- `'feature'` → `patch_section('automate', { settings: { idle: { enabled: true } } })`  
+- `'feature'` → resumes the trigger via `State.resume_trigger('idle')`  
 
 **Returns**: `Promise<void>`
 
@@ -254,7 +254,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 **Routing**:
 - `'tab'` → `State.add_tab_switch_ignore_tab(ctx.tab_id)`  
 - `'site_session'` → `State.add_tab_switch_ignore_site(ctx.hostname)`  
-- `'feature'` → `patch_section('automate', { settings: { tab_switch: { enabled: false } } })`  
+- `'feature'` → suspends the trigger in session storage via `State.suspend_trigger('tab_switch')` — auto-resumes on browser restart  
 
 **Returns**: `Promise<void>`
 
@@ -264,7 +264,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 **Routing**:
 - `'tab'` → `State.remove_tab_switch_ignore_tab(ctx.tab_id)`  
 - `'site_session'` → `State.remove_tab_switch_ignore_site(ctx.hostname)`  
-- `'feature'` → `patch_section('automate', { settings: { tab_switch: { enabled: true } } })`  
+- `'feature'` → resumes the trigger via `State.resume_trigger('tab_switch')`  
 
 **Returns**: `Promise<void>`
 
@@ -337,6 +337,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 | `chrome.storage.session` | `blsi_automate_tab_switch_by_tab` | `{ [tab_id]: 'fired' }` (absent === armed/off) | `automate/state.js` |
 | `chrome.storage.session` | `blsi_screen_share` | Single global record `{ active, sharing_tab_id, started_at, suppressed_sites }` | `automate/state.js` |
 | `chrome.storage.session` | `blsi_automate_suppressed_tabs` | `number[]` of tab ids silenced for ALL automate triggers | `automate/state.js` |
+| `chrome.storage.session` | `blsi_automate_suspended` | `{ idle: false, tab_switch: false, screen_share: false }` — per-trigger session suspend; browser restart clears all | `automate/state.js` |
 
 ## Invariants
 

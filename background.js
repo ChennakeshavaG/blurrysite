@@ -1,14 +1,18 @@
 'use strict';
 
-importScripts(
-  'src/constants.js',
-  'src/logger.js',
-  'src/action_registry.js',
-  'src/url_matcher.js',
-  'src/automate/state.js',
-  'src/automate/idle.js',
-  'src/automate/screen_share_bg.js'
-);
+// Chrome MV3: runs as service worker — importScripts available.
+// Firefox MV3: runs as event page — scripts already loaded by manifest "scripts" array.
+if (typeof importScripts === 'function') {
+  importScripts(
+    'src/constants.js',
+    'src/logger.js',
+    'src/action_registry.js',
+    'src/url_matcher.js',
+    'src/automate/state.js',
+    'src/automate/idle.js',
+    'src/automate/screen_share_bg.js'
+  );
+}
 
 const log = blsi.Logger.scope('bg');
 

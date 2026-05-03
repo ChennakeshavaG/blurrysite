@@ -40,6 +40,10 @@ Settings use **snake_case** keys everywhere. No two-shape duality — same shape
 //   chrome.storage.session['blsi_automate_tab_switch_by_tab']   — { [tab_id]: 'fired' } (per-tab; owned by automate/state.js)
 //   chrome.storage.session['blsi_screen_share']                 — per-tab map { [tab_id]: { started_at, suppressed_sites } } (see below)
 //   chrome.storage.session['blsi_automate_suppressed_tabs']     — number[] (per-tab silence-all)
+//   chrome.storage.session['blsi_automate_suspended']           — { idle: false, tab_switch: false, screen_share: false }
+//     Session-only — browser restart clears it, all triggers auto-resume.
+//     Written by blsi.Automate.State.suspend_trigger() / resume_trigger().
+//     Read by resolve_automate() to gate feature-on checks.
 ```
 
 **`pick_and_blur.items`** — hostname-keyed map storing all pick & blur items:

@@ -163,7 +163,7 @@ const Shortcuts = (() => {
         btn.className = 'bl-si-toast__action' +
           (action.variant === 'warn' ? ' bl-si-toast__action--warn' : '');
         btn.textContent = action.label;
-        if (action.tooltip) btn.title = action.tooltip;
+        if (action.tooltip) btn.dataset.tooltip = action.tooltip;
         btn.addEventListener('click', function() {
           _dismissToast(toast);
           action.onClick();
@@ -295,17 +295,22 @@ const Shortcuts = (() => {
     registeredShortcuts = [];
     registeredCallbacks = {};
 
-    if (currentToastEl && currentToastEl.parentNode) {
+    if (currentToastEl && currentToastEl.parentNode && !currentToastEl._persistent) {
       if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
       currentToastEl.parentNode.removeChild(currentToastEl);
       currentToastEl = null;
     }
   }
 
+  function dismissToast() {
+    if (currentToastEl) _dismissToast(currentToastEl);
+  }
+
   return {
     init,
     destroy,
     showToast,
+    dismissToast,
     _setPickerActive(v) { _isPickerActive = !!v; },
     // Exposed for content_script dedup between JS matcher and chrome.commands.
     _getFireToken() { return FIRE_TOKEN; },
