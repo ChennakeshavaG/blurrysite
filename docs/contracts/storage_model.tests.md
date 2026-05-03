@@ -130,24 +130,22 @@ call-count (via explicit `jest.clearAllMocks(); mockSet();` pair inside the test
 
 ### `automate_blur`
 
-This group uses its own `beforeEach` that seeds and inits a default model.
+This group uses its own `beforeEach` that seeds and inits a default model with idle and tab_switch enabled.
 
-- `save_automate_blur sets a trigger for a hostname` — `save_automate_blur('example.com', 'idle', true)` results in `get_automate_blur` returning `{ idle: true, tab_switch: false, screen_share: false }`.
-- `save_automate_blur rejects unknown trigger` — unknown trigger name is rejected; all triggers remain `false`.
-- `save_automate_blur rejects invalid hostname` — `__proto__` hostname is blocked; no state changes.
-- `patch_automate_blur updates multiple triggers atomically` — `{ idle: false, screen_share: true }` applied in one call updates both fields while leaving `tab_switch: false`.
-- `clear_automate_blur removes the hostname entry` — after clear, `get_automate_blur` returns the all-false default.
-- `resolve includes automate_blur_active and automate_blur_triggers` — after `save_automate_blur('example.com', 'idle', true)`, `resolved.automate_blur_active === true` and `resolved.automate_blur_triggers.idle === true`.
-- `resolve: engage is FALSE when only automate fires (engine no longer activates for automate)` — post-engine/automate-split, `engage` tracks blur-all only. Automate fires the Overlay via `blsi.Automate.Manager`, not the engine. `automate_blur_only` is `true`; `automate_blur_skipped` is `false`. (Previously `engage` was `true` here because the old formula folded automate as a blur reason.)
-- `resolve: automate_blur_skipped = true when blur_all is already enabled` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`; `engage` is still `true` (driven by `blur_all`).
-- `resolve: automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`; `engage` stays `false` (pick-blur reconcile is unconditional inside `engine.handleSite`, not gated by `engage`).
-- `resolve: automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
-- `resolve: manual blur preserved after automate cleared` — after patching idle trigger to `false`, `engage` remains `true` from the persisted manual `blur_all: true`.
-- `clear_host also clears automate_blur for that hostname` — after `clear_host`, `get_automate_blur` returns the all-false default.
-- `save_automate_blur is a no-op when value already matches cache` — second call with the same `(hostname, trigger, value)` triple does not invoke `chrome.storage.session.set`.
-- `save_automate_blur writes when value flips back` — flipping `idle: true → false` issues exactly one session write.
-- `patch_automate_blur is a no-op when patch results in identical entry` — applying the same `{idle, tab_switch}` patch twice issues only one session write.
-- `patch_automate_blur writes when at least one trigger flips` — changing one trigger while leaving the other unchanged still issues a write.
+- `idle phase "idle" + feature-on → idle trigger fires` — `State.write_idle('idle')` results in `automate_blur_active === true` and `automate_blur_triggers.idle === true`.
+- `idle phase "locked" also flips active` — locked phase treated as idle for trigger purposes.
+- `idle phase "active" → no automate firing` — active phase does not fire any trigger.
+- `idle feature OFF: phase "idle" does NOT flip active` — `idle.enabled: false` suppresses idle trigger even when phase is 'idle'.
+- `tab_switch fired (per-tab) + feature-on → tab_switch trigger` — `State.write_tab_switch(7, 'fired')` with tab_id 7 fires the trigger for that tab.
+- `tab_switch fired on a different tab does NOT affect this tab` — per-tab isolation: tab 7 fired does not affect tab 99.
+- `tab_switch feature OFF: fired phase does NOT flip active` — `tab_switch.enabled: false` suppresses the trigger.
+- `per-tab suppression via idle ignore_tabs silences idle for that tab` — `State.add_idle_ignore_tab(7)` silences idle for tab 7; other tabs still affected. `idle_suppressed_for_tab` is `true` for the silenced tab, `false` for others.
+- `per-site suppression via idle ignore_sites silences idle for that site` — `State.add_idle_ignore_site('example.com')` silences idle for that hostname; other sites still affected. `idle_suppressed_for_site` is `true` for the silenced site, `false` for others.
+- `engage is FALSE when only automate fires (engine no longer activates for automate)` — post-engine/automate-split, `engage` tracks blur-all only. `automate_blur_only` is `true`; `automate_blur_skipped` is `false`.
+- `automate_blur_skipped = true when blur_all already on` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`.
+- `automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`.
+- `automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
+- `manual blur preserved after automate cleared` — after clearing idle trigger, `engage` remains `true` from the persisted manual `blur_all: true`.
 
 ### `capture_snapshot`
 
@@ -212,7 +210,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 Slim resolver consumed by the automate Manager. Step 1 of the engine/automate split — currently a thin slice over `resolve()`.
 
-- `returns only the automate-decision fields` — `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_*`, `automate_idle`, `automate_tab_switch`, `automate_screen_share`, `_rule_match` are present; manual-blur / settings-tree fields (`engage`, `blur_mode`, `blur_radius`, `blur_categories`, `blur_items`, `shortcuts`, `pii_*`) are absent.
+- `returns only the automate-decision fields` — `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_*`, `idle_suppressed_for_tab`, `idle_suppressed_for_site`, `tab_switch_suppressed_for_tab`, `tab_switch_suppressed_for_site`, `automate_idle`, `automate_tab_switch`, `automate_screen_share`, `_rule_match` are present; manual-blur / settings-tree fields (`engage`, `blur_mode`, `blur_radius`, `blur_categories`, `blur_items`, `shortcuts`, `pii_*`) are absent.
 - `values match resolve() output for automate keys` — derivation parity with the full resolver across all returned fields.
 - `reflects per-host site-rule fold of automate gates` — site_rule snapshot flipping `automate.settings.idle.enabled = false` propagates into `resolved.automate_idle.enabled`.
 - `omits tab_id → screen_share self-skip cannot apply` — calling with `tab_id = null` produces `screen_share_state.is_sharing_tab = false` (matches popup callers without an active tab id).

@@ -34,6 +34,14 @@ Removes the three event listeners. Writes `'off'` to clear the tab's entry from 
 
 ## Internal mechanics
 
+### Context invalidation (`_context_alive` / `_teardown_stale`)
+
+`_context_alive()` checks `chrome.runtime.id` — returns `false` when the extension context is invalidated (extension reloaded without tab reload).
+
+`_teardown_stale()` removes all three DOM event listeners and resets state (`_tab_id = null`, `_initialized = false`) but does NOT call `State.clear_tab_switch` — the chrome.storage API is dead, so writing would throw. This is the centralized teardown point: once visibility stops firing, the downstream crash chain (State `_fire_subscribers` → Manager `_evaluate` → `chrome.i18n` / `chrome.storage.session`) is eliminated.
+
+`destroy()` is for live teardown (calls `State.clear_tab_switch` to clean up storage). `_teardown_stale()` is for dead-context teardown (skips storage, just removes listeners).
+
 ### Phase derivation
 
 `_evaluate_and_write` reads two live signals on every call:
@@ -81,6 +89,7 @@ Content script does not see `chrome.tabs.onRemoved`. Background owns the cleanup
 ## Edge cases / gotchas
 
 - **Iframes**: `init()` is called from `content_script.init()` only when `IS_MAIN_FRAME` is true. Iframes do not observe presence independently — they would fragment the per-tab state.
+- **Extension context invalidated**: `_evaluate_and_write` checks `chrome.runtime.id` at the top. When the extension is reloaded but the tab is not, `chrome.runtime.id` becomes `undefined` — the handler calls `destroy()` to remove all three event listeners and stop further writes into the dead context. This is the centralized teardown point for the stale-content-script problem: once visibility stops calling `State.write_tab_switch`, the downstream crash chain (State → Manager → `chrome.i18n` / `chrome.storage.session`) is eliminated.
 - **Popup-open false positive**: opening the extension popup steals focus → `window.blur` fires → state becomes `fired` → page blurs. Same problem the old debounce mitigated. Future improvement (out of scope for v1): background broadcasts a `popup-opened` flag that suppresses the next `passive` transition for ~500ms.
 - **DevTools docked**: docking devtools triggers `window.blur` on the page. State becomes `fired`. Acceptable.
 - **iOS Safari `visibilitychange` quirks**: not relevant — extension doesn't run on iOS Safari.

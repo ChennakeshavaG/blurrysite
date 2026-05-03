@@ -11,7 +11,7 @@ Why an overlay primitive instead of reusing the stamp + CSS engine for automate:
 - Privacy-positive: covers everything beneath, including canvas / video / iframes / shadow DOM, regardless of category settings.
 - Symmetric to intent: automate says "hide this page now"; an opaque-ish curtain is more honest than a CSS filter that leaves artifacts (DRM video, transformed ancestors, etc.).
 
-**Single fixed style — no parameters.** The overlay renders a deep frosted curtain (40px backdrop-filter blur + moderate dark tint). The user's blur_mode / blur_radius / color preferences are deliberately NOT consulted: automate is privacy-strongest by design, and threading those settings through to a privacy curtain creates a footgun where a user-chosen "blur 4px" defeats the privacy intent.
+**Single fixed style — no parameters.** The overlay renders a pure frosted curtain (40px backdrop-filter blur, no tint). The user's blur_mode / blur_radius / color preferences are deliberately NOT consulted: automate is privacy-strongest by design, and threading those settings through to a privacy curtain creates a footgun where a user-chosen "blur 4px" defeats the privacy intent.
 
 Loaded in CONTENT context only — never in background.
 
@@ -57,8 +57,8 @@ Hides the overlay and clears `_initialized`. After destroy, `init()` must be cal
 
 | Property | Value | Why |
 |---|---|---|
-| `backdrop-filter: blur(40px)` | deep blur | "high pixel" frosted — heavy obscuration, page motion still hints through |
-| `background: rgba(0, 0, 0, 0.45)` | mid-dark tint | atop the backdrop blur — keeps the curtain feeling solid even where backdrop-filter is unsupported |
+| `backdrop-filter: blur(40px)` | deep blur | heavy obscuration, page motion still hints through |
+| `background: transparent` | no tint | pure frosted glass — no dark overlay; backdrop-filter alone provides sufficient obscuration |
 | `position: fixed; inset: 0; 100vw × 100vh` | viewport cover | independent of page scroll/layout |
 | `z-index: 2147483646` | one below picker toolbar (`2147483647`) | overlay can't accidentally cover the picker UI |
 | `pointer-events: auto` | block clicks | page beneath is non-interactive while overlay is up |
@@ -86,7 +86,7 @@ The overlay element:
 ## Edge cases / gotchas
 
 - **Page CSP**: `style-src` directives do NOT apply to inline styles set via DOM API (`element.style.setProperty`). Overlay works on strict-CSP pages.
-- **`backdrop-filter` support**: Chrome 76+ supports it natively; older browsers fall back to the opaque tint alone (still privacy-preserving — the 0.45 alpha gives meaningful obscuration even without the blur). No fallback code needed for our minimum supported Chrome.
+- **`backdrop-filter` support**: Chrome 76+ supports it natively. With transparent background, older browsers without backdrop-filter support would see no obscuration — acceptable since our minimum supported Chrome version is well above 76.
 - **`100vh` on iOS Safari**: `100vh` includes the URL bar height even when scrolled; minor visual gap possible. Acceptable since iOS Safari isn't a primary target. If we later care, switch to `100dvh` (Chrome 108+, Safari 15.4+).
 - **Print stylesheets**: the overlay carries no `@media print` exclusion. If user prints while automate-blurred, the overlay prints too. Privacy-positive default; matches the existing print rules in `content.css` that preserve blur in print output.
 - **`document.body` swap**: rare frameworks replace `document.body` after init. Our reference becomes stale — the overlay is orphaned. Not a known issue today; would need a `body` mutation watcher to re-mount.

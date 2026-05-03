@@ -2,10 +2,12 @@
 
 ## Overview
 
-Stage 0 whole-node drops. Cheap DOM + text checks that decide whether a text node should bypass the PII pipeline entirely. Five predicates:
-- `isExtensionUI` — extension-owned UI tree
+Stage 0 whole-node drops. Cheap DOM + text checks that decide whether a text node should bypass the PII pipeline entirely. Seven predicates:
+- `isExtensionUI` — extension-owned UI tree (ancestor walk via `closest()`, mutation path only)
+- `isExtensionUIElement` — O(1) element-self check via `matches()` (used by walker filter to reject subtrees)
+- `isCodePre` — O(1) check: is this `<pre>` a code block? (child `<code>`, syntax-highlighting classes, `data-code` attr, or parent `.highlight` div)
+- `isCodeEditorWidget` — O(1) element-self check for web editor roots (`.cm-editor`, `.CodeMirror`, `.monaco-editor`, `.ace_editor`, `[data-code]`, `.codehilite`)
 - `isInsidePiiSpan` — already-wrapped node
-- `isInsideCodeBlock` — `<code>` / `<pre>` / `<kbd>` / `<samp>` / syntax-highlighter ancestor
 - `hasDigit` — M1 whole-node digit pre-screen
 - `hasDigitOrLongAlnum` — extended pre-screen for the numeric branch when the identifier sub-pass is in play; lets pure-alpha tokens with a 8+ char alnum run (Bearer, base64 refresh tokens) through
 
@@ -17,25 +19,28 @@ Sibling sub-modules call into this through `blsi.PiiPreFilter`.
 |---|---|
 | `_HAS_DIGIT_RE` | `/\d/` — module-level shared regex used by `hasDigit`. No `/g` flag (not used in match-position contexts). |
 | `_HAS_DIGIT_OR_LONG_ALNUM_RE` | `/\d|[A-Za-z0-9]{8,}/` — module-level shared regex used by `hasDigitOrLongAlnum`. Same single-pass cost as `_HAS_DIGIT_RE`. |
-| `_CODE_SELECTOR` | `'code, pre, kbd, samp, [data-code], .highlight, .codehilite'` — selector list passed to `closest()` by `isInsideCodeBlock`. |
+| `_EXT_UI_SELECTOR` | `'#bl-si-picker-toolbar, .bl-si-toast, .bl-si-toolbar, [data-bl-si-zone], #bl-si-svg-filters'` — extension-owned UI roots. Used by `isExtensionUI` (ancestor walk via `closest()`) and `isExtensionUIElement` (self check via `matches()`). |
+| `_CODE_EDITOR_SELECTOR` | `'[data-code], .codehilite, .cm-editor, .CodeMirror, .monaco-editor, .ace_editor'` — web-based code editor widget roots. Used by `isCodeEditorWidget`. |
 
 ## Public API
 
 ### isExtensionUI(node)
 
-**What**: Returns `true` if `node` (text or element) sits inside any extension-owned UI tree, so the PII detector should not wrap content there.
+**What**: Returns `true` if `node` (text or element) sits inside any extension-owned UI tree. Ancestor walk via `closest(_EXT_UI_SELECTOR)`. Used by `handleMutations` to guard added nodes.
 **Params**:
 - `node` — `Text | Element`
 **Returns**: `boolean`
-**Logic**: walks to the parent element if `node` is a text node, then checks ancestor chain for any of:
-- `id === blsi.ids.picker_toolbar` (or fallback literal `'bl-si-picker-toolbar'`)
-- `closest('#bl-si-picker-toolbar')`
-- `closest('.bl-si-toast')`
-- `closest('.bl-si-toolbar')`
-- `closest('[data-bl-si-zone]')`
-- `closest('#bl-si-svg-filters')`
+**Logic**: resolves parent element (if text node), then `el.closest(_EXT_UI_SELECTOR)`. No cache — called only on mutation paths (low volume), not during scan (walker filter handles that).
 
-Returns `false` for null/orphaned nodes.
+Returns `true` for null/orphaned nodes (parent element null → skip).
+
+### isExtensionUIElement(el)
+
+**What**: Returns `true` if the element itself matches `_EXT_UI_SELECTOR`. O(1) self-check via `el.matches()` — does NOT walk ancestors. Used by the facade's `TreeWalker` filter (`FILTER_REJECT`) to skip entire extension UI subtrees during scan, eliminating per-node `closest()` cost.
+**Params**:
+- `el` — `Element`
+**Returns**: `boolean`
+**Logic**: `el.matches(_EXT_UI_SELECTOR)`. Returns `false` if `el.matches` is undefined (text nodes should not be passed).
 
 ### isInsidePiiSpan(node)
 
@@ -45,13 +50,27 @@ Returns `false` for null/orphaned nodes.
 **Returns**: `boolean`
 **Logic**: parent-element walk + `closest('[data-bl-si-pii]')` query. Reads attribute name from `blsi.PiiState.PII_ATTR`.
 
-### isInsideCodeBlock(node)
+### isCodePre(el)
 
-**What**: Returns `true` if `node` sits inside a `<code>`, `<pre>`, `<kbd>`, `<samp>`, `[data-code]`, `.highlight`, or `.codehilite` ancestor. Drops the highest-impact false-positive class on technical sites (GitHub, Stack Overflow, MDN, JIRA) — code blocks contain digit-heavy tokens (commit hashes, timestamps, hex, build numbers) that share regex shape with PII but are never user-targeted PII.
+**What**: Returns `true` if the `<pre>` element is a code block (not poetry/legal/preformatted text). Used by the walker filter to `FILTER_REJECT` code `<pre>` subtrees while allowing bare `<pre>` (which may contain real PII like preformatted addresses).
 **Params**:
-- `node` — `Text | Element`
+- `el` — `Element` (must be a `<pre>`)
 **Returns**: `boolean`
-**Logic**: parent-element walk + `closest(_CODE_SELECTOR)` query.
+**Logic**: returns `true` if any of:
+- `el.querySelector("code")` finds a `<code>` child
+- `el.className` contains `"highlight"`, `"lang"`, or `"language"` (syntax-highlighting convention)
+- `el.hasAttribute("data-code")`
+- Parent is a `<div>` with `"highlight"` in its className (GitHub convention: `div.highlight > pre`)
+
+Returns `false` for bare `<pre>` — those may contain poetry, ASCII art, legal text, or preformatted addresses with real PII.
+
+### isCodeEditorWidget(el)
+
+**What**: Returns `true` if the element is a web-based code editor root. O(1) self-check via `el.matches(_CODE_EDITOR_SELECTOR)`. Used by the walker filter to `FILTER_REJECT` editor subtrees.
+**Params**:
+- `el` — `Element`
+**Returns**: `boolean`
+**Logic**: `el.matches(_CODE_EDITOR_SELECTOR)`. Covers `[data-code]`, `.codehilite`, `.cm-editor` (CodeMirror 6), `.CodeMirror` (CodeMirror 5), `.monaco-editor` (VS Code), `.ace_editor` (Ace). Returns `false` if `el.matches` is undefined.
 
 ### hasDigit(text)
 
@@ -73,13 +92,14 @@ Returns `false` for null/orphaned nodes.
 
 ## Dependencies
 
-Reads `blsi.PiiState.PII_ATTR`. Reads `blsi.ids.picker_toolbar` if defined; falls back to literal.
+Reads `blsi.PiiState.PII_ATTR`.
 
 ## Edge cases
 
 - Null `node` → `false` (all DOM predicates).
 - Empty `text` → `hasDigit` returns `false`.
 - Orphaned `Text` node (no parent element) → `false` (all DOM predicates).
+- Parent element lacks `closest()` (SVG elements in some contexts, custom elements) → `isExtensionUI` returns `true` (skip), `isInsidePiiSpan` returns `false` (safe — won't double-wrap since there's no wrapper to detect).
 - `Text` nodes inside `<svg>` → walked via `parentElement`; works.
 - Custom-element shadow roots: `closest()` does not pierce shadow boundaries — same as the rest of the engine. Inside-shadow checks happen at the shadow-root scan level, not here.
 - `<pre>` inside extension UI — `isExtensionUI` runs first in the facade, so the code-block check is reached only on page-owned nodes.

@@ -55,7 +55,7 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 **Params**:
 - `text` (string) — main message text
 - `duration` (number, optional) — milliseconds before auto-dismiss (default: 15000)
-- `actions` (Array<{label, onClick, variant?}>, optional) — action buttons in a second row  
+- `actions` (Array<{label, onClick, variant?, tooltip?}>, optional) — action buttons in a second row. `tooltip` sets the `title` attribute on the button.  
 **Returns**: `void`  
 **Side effects**:
 - Removes and replaces any existing toast (one at a time)

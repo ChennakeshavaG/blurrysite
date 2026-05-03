@@ -41,8 +41,16 @@
   // the live document state and writes through State. Same function reference
   // is used for add + remove, so addEventListener / removeEventListener match
   // by identity without needing alias variables.
+  function _context_alive() {
+    return typeof chrome !== 'undefined' && chrome.runtime && !!chrome.runtime.id;
+  }
+
   function _evaluate_and_write() {
     if (!State || typeof _tab_id !== 'number') return;
+    if (!_context_alive()) {
+      _teardown_stale();
+      return;
+    }
 
     // Active = tab visible AND window focused. Both checks needed: a tab can
     // be 'visible' (rendered on screen) while the user has alt-tabbed to
@@ -84,7 +92,7 @@
     _evaluate_and_write();
   }
 
-  function destroy() {
+  function _remove_listeners() {
     if (typeof document !== 'undefined' && document.removeEventListener) {
       document.removeEventListener('visibilitychange', _evaluate_and_write, true);
     }
@@ -92,6 +100,16 @@
       window.removeEventListener('focus', _evaluate_and_write, true);
       window.removeEventListener('blur',  _evaluate_and_write, true);
     }
+  }
+
+  function _teardown_stale() {
+    _remove_listeners();
+    _tab_id = null;
+    _initialized = false;
+  }
+
+  function destroy() {
+    _remove_listeners();
     if (State && typeof _tab_id === 'number') {
       State.clear_tab_switch(_tab_id);
     }

@@ -47,6 +47,7 @@ global.chrome = {
     getMessage: jest.fn((key) => key),
   },
   runtime: {
+    id: 'test-extension-id',
     sendMessage: jest.fn(),
     getURL: jest.fn((path) => path),
     onMessage: {
@@ -54,6 +55,7 @@ global.chrome = {
       removeListener: jest.fn(),
     },
     lastError: null,
+    connect: jest.fn(() => ({ onDisconnect: { addListener: jest.fn() }, disconnect: jest.fn() })),
   },
   storage: {
     local: {

@@ -22,7 +22,7 @@ Per-module contracts: `docs/contracts/<module>.md` (one per module — read duri
 | Topic | File | Auto-loads for |
 |---|---|---|
 | Module globals, load order, IIFE pattern, CSS classes, per-module rules | `src/CLAUDE.md` | — (loaded when working in src/) |
-| Settings shape (model, resolve, session storage) | `.claude/rules/settings-shape.md` | storage_model, popup, background, content_script, automate, screen_share |
+| Settings shape (model, resolve, session storage) | `.claude/rules/settings-shape.md` | storage_model, popup, background, content_script, automate |
 | Message protocol (type tables, add-new-type checklist) | `.claude/rules/message-protocol.md` | src/, background.js, popup/ |
 | Code contracts (read-before-edit hook) | `.claude/rules/code-contracts.md` | src/, popup/, tests/, background.js |
 | Popup rules, APIs, CSS conventions | `popup/CLAUDE.md` | — (loaded when working in popup/) |

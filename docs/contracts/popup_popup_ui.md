@@ -34,21 +34,24 @@ Depends on: `chrome.storage.local` (theme persistence only), `chrome.runtime.get
 
 ---
 
-### showToast(key, substitutions?)
+### showToast(key, opts?)
 
-**What:** Renders a transient i18n toast in the popup. Auto-dismisses after 15s. Has a logo + close button (logo wired to `var(--bl-icon-32)` background; close wired once at `DOMContentLoaded`).
+**What:** Renders a transient i18n toast in the popup. Auto-dismisses after 15s. Has a logo + close button (logo wired to `var(--bl-icon-32)` background; close wired once at `DOMContentLoaded`). Supports type-based tinted backgrounds.
 
 **Params:**
-- `key` (string) — i18n message key. Resolved via `blsi.ContentI18n.t(key)` when available, falling back to `chrome.i18n.getMessage(key, substitutions) || key`.
-- `substitutions` (any[] | undefined) — passed through to `chrome.i18n.getMessage` fallback only.
+- `key` (string) — i18n message key. Resolved via `blsi.ContentI18n.t(key)` when available, falling back to `chrome.i18n.getMessage(key, opts.substitutions) || key`.
+- `opts` (object | undefined) — optional configuration:
+  - `opts.type` (`'success' | 'error' | 'info'` | undefined) — adds `bl-toast--{type}` class for tinted background. `'success'` = green tint, `'error'` = red tint, `'info'` = amber tint. Omit or `undefined` for default styling.
+  - `opts.substitutions` (any[] | undefined) — passed through to `chrome.i18n.getMessage` fallback only.
 
 **Returns:** void.
 
-**Side effects:** Sets `#bl-toast-msg` text, removes `hidden`, adds `is-visible`. Schedules a 15s timer to remove `is-visible`, then 220ms later sets `hidden=true`. Replaces any in-flight timer.
+**Side effects:** Strips previous type classes (`bl-toast--success`, `--error`, `--info`) before applying the new one. Sets `#bl-toast-msg` text, removes `hidden`, adds `is-visible`. Schedules a 15s timer to remove `is-visible`, then 220ms later sets `hidden=true`. Replaces any in-flight timer.
 
 **Edge cases:**
 - `#bl-toast` missing → no-op.
 - `#bl-toast-msg` missing → falls back to setting `el.textContent` directly (loses logo + close on that toast).
+- No `opts` or `opts.type` undefined → no type class added, default `--bl-raised` background.
 
 ---
 

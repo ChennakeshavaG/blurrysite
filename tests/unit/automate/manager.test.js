@@ -315,6 +315,74 @@ describe('automate/manager.js', () => {
       expect(toastSpy).not.toHaveBeenCalled();
     });
 
+    test('idle_stop_actions invoked on idle toast', async () => {
+      const m = blsi.build_default_model();
+      m.automate.settings.idle.enabled = true;
+      setMockedModel(m);
+      await blsi.Model.init_cache();
+      const idleActions = jest.fn(() => Promise.resolve([
+        { label: 'This tab', onClick: () => {} },
+        { label: 'This site (session)', onClick: () => {} },
+        { label: 'Disable feature', variant: 'warn', onClick: () => {} },
+      ]));
+      blsi.Automate.Manager.init({
+        tab_id: 7,
+        get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
+        idle_stop_actions: idleActions,
+      });
+      await blsi.Automate.State.write_idle('idle');
+      global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } }, 'session');
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(idleActions).toHaveBeenCalled();
+      expect(toastSpy).toHaveBeenCalled();
+      const lastCall = toastSpy.mock.calls.at(-1);
+      expect(lastCall[1]).toBe(5000);
+      expect(lastCall[2]).toHaveLength(3);
+    });
+
+    test('tab_switch_stop_actions invoked on tab_switch toast', async () => {
+      const m = blsi.build_default_model();
+      m.automate.settings.tab_switch.enabled = true;
+      setMockedModel(m);
+      await blsi.Model.init_cache();
+      const tsActions = jest.fn(() => Promise.resolve([
+        { label: 'This tab', onClick: () => {} },
+        { label: 'Disable feature', variant: 'warn', onClick: () => {} },
+      ]));
+      blsi.Automate.Manager.init({
+        tab_id: 7,
+        get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
+        tab_switch_stop_actions: tsActions,
+      });
+      await blsi.Automate.State.write_tab_switch(7, 'fired');
+      global._fireStorageChanged(
+        { blsi_automate_tab_switch_by_tab: { newValue: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } } },
+        'session'
+      );
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(tsActions).toHaveBeenCalled();
+      expect(toastSpy).toHaveBeenCalled();
+      const lastCall = toastSpy.mock.calls.at(-1);
+      expect(lastCall[1]).toBe(5000);
+    });
+
+    test('idle toast falls back to bare toast when idle_stop_actions not provided', async () => {
+      const m = blsi.build_default_model();
+      m.automate.settings.idle.enabled = true;
+      setMockedModel(m);
+      await blsi.Model.init_cache();
+      blsi.Automate.Manager.init({
+        tab_id: 7,
+        get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
+      });
+      await blsi.Automate.State.write_idle('idle');
+      global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } }, 'session');
+      expect(toastSpy).toHaveBeenCalled();
+      const lastCall = toastSpy.mock.calls.at(-1);
+      expect(lastCall[1]).toBe(5000);
+      expect(lastCall[2]).toBeUndefined();
+    });
+
     test('ss_stop_actions invoked on screen-share toast', async () => {
       const m = blsi.build_default_model();
       m.automate.settings.screen_share.enabled = true;
@@ -343,22 +411,10 @@ describe('automate/manager.js', () => {
       const m = blsi.build_default_model();
       m.automate.settings.screen_share.enabled = true;
       setMockedModel(m);
-      // Pre-seed the screen-share record before init_cache so the cache
-      // hydrates with active=true.
-      const ssRecord = {
-        active:           true,
-        sharing_tab_id:   99,    // some other tab is sharing
-        started_at:       Date.now(),
-        suppressed_sites: [],
-      };
-      chrome.storage.local.get.mockImplementation((_keys, cb) => { if (cb) cb({ blsi_model: m }); });
-      chrome.storage.session.get.mockImplementation((keys, cb) => {
-        const r = {};
-        const arr = Array.isArray(keys) ? keys : [keys];
-        if (arr.includes('blsi_screen_share')) r.blsi_screen_share = ssRecord;
-        if (cb) cb(r);
-      });
       await blsi.Model.init_cache();
+      // Seed screen-share as active via State API (simulates background
+      // having written the record before this tab opened).
+      await blsi.Automate.State.set_screen_share_active(99);
       blsi.Automate.Manager.init({
         tab_id: 7,                 // not the sharing tab
         get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),

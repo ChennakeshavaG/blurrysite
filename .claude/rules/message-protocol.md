@@ -22,9 +22,9 @@ paths:
 | Context menu blur | `CONTEXT_BLUR` |
 | Context menu unblur | `CONTEXT_UNBLUR` |
 | Context menu "Open Settings Panel" (PWA) | `TOGGLE_PANEL` |
-| Screen share state changed (broadcast — toast ping; tabs re-resolve from session storage) | `SCREEN_SHARE_NOTIFY` |
+| Screen share state changed (broadcast — toast ping; tabs re-resolve from session storage). Sent by `automate/screen_share_bg.js`. | `SCREEN_SHARE_NOTIFY` |
 
-## content_script.js → background.js
+## automate/screen_share.js → automate/screen_share_bg.js (content → background)
 
 | Event | Type string |
 |---|---|

@@ -33,38 +33,41 @@ const BlurrySitePiiPreFilter = (() => {
   // numeric path uses this helper instead of `hasDigit`.
   const _HAS_DIGIT_OR_LONG_ALNUM_RE = /\d|[A-Za-z0-9]{8,}/;
 
-  // Code-block / technical-token containers — anything inside these is a
-  // dev-doc artefact, never user-facing PII. Highest-impact early-exit on
-  // technical sites (GitHub, Stack Overflow, MDN, JIRA).
-  const _CODE_SELECTOR =
-    "code, pre, kbd, samp, [data-code], .highlight, .codehilite";
+  var _EXT_UI_SELECTOR =
+    "#bl-si-picker-toolbar, .bl-si-toast, .bl-si-toolbar, [data-bl-si-zone], #bl-si-svg-filters";
+
+  var _CODE_EDITOR_SELECTOR =
+    "[data-code], .codehilite, .cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
+
+  function isExtensionUIElement(el) {
+    return el.matches !== undefined && el.matches(_EXT_UI_SELECTOR);
+  }
+
+  function isCodePre(el) {
+    if (el.tagName !== "PRE") return false;
+    if (el.querySelector("code")) return true;
+    var cls = el.className;
+    if (typeof cls === "string" && (cls.indexOf("highlight") !== -1 || cls.indexOf("lang") !== -1 || cls.indexOf("language") !== -1)) return true;
+    if (el.hasAttribute("data-code")) return true;
+    var parent = el.parentElement;
+    if (parent && parent.tagName === "DIV" && typeof parent.className === "string" && parent.className.indexOf("highlight") !== -1) return true;
+    return false;
+  }
+
+  function isCodeEditorWidget(el) {
+    return el.matches !== undefined && el.matches(_CODE_EDITOR_SELECTOR);
+  }
 
   function isExtensionUI(node) {
-    const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-    if (!el) return false;
-    const toolbarId = blsi.ids
-      ? blsi.ids.picker_toolbar
-      : "bl-si-picker-toolbar";
-    return (
-      el.id === toolbarId ||
-      el.closest("#" + toolbarId) !== null ||
-      el.closest(".bl-si-toast") !== null ||
-      el.closest(".bl-si-toolbar") !== null ||
-      el.closest("[data-bl-si-zone]") !== null ||
-      el.closest("#bl-si-svg-filters") !== null
-    );
+    var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    if (!el || !el.closest) return true;
+    return el.closest(_EXT_UI_SELECTOR) !== null;
   }
 
   function isInsidePiiSpan(node) {
-    const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-    if (!el) return false;
+    var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    if (!el || !el.closest) return false;
     return el.closest("[" + blsi.PiiState.PII_ATTR + "]") !== null;
-  }
-
-  function isInsideCodeBlock(node) {
-    const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-    if (!el) return false;
-    return el.closest(_CODE_SELECTOR) !== null;
   }
 
   function hasDigit(text) {
@@ -77,8 +80,10 @@ const BlurrySitePiiPreFilter = (() => {
 
   return Object.freeze({
     isExtensionUI,
+    isExtensionUIElement,
+    isCodePre,
+    isCodeEditorWidget,
     isInsidePiiSpan,
-    isInsideCodeBlock,
     hasDigit,
     hasDigitOrLongAlnum,
   });

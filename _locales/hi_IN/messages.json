@@ -293,6 +293,15 @@
   "shortcut_reserved_browser": {
     "message": "यह की कॉम्बो ब्राउज़र ने रिज़र्व कर रखा है।"
   },
+  "shortcut_conflict": {
+    "message": "पहले से {action} को असाइन किया गया है"
+  },
+  "shortcut_already_set": {
+    "message": "यह शॉर्टकट इस एक्शन के लिए पहले से सेट है।"
+  },
+  "shortcut_reset_all_confirm": {
+    "message": "सभी रीसेट करने के लिए फिर से टैप करें"
+  },
   "rule_pattern": {
     "message": "URL मैच"
   },
@@ -596,6 +605,12 @@
   "automate_idle": {
     "message": "निष्क्रिय"
   },
+  "automate_idle_info": {
+    "message": "निष्क्रिय ब्लर सक्रिय — $1",
+    "placeholders": {
+      "1": { "content": "$1" }
+    }
+  },
   "automate_tab_switch": {
     "message": "टैब बदलना"
   },
@@ -669,13 +684,22 @@
     "message": "बंद करें"
   },
   "automate_stop_per_tab": {
-    "message": "यह टैब"
+    "message": "टैब छोड़ें"
   },
   "automate_stop_site_session": {
-    "message": "यह साइट (सत्र)"
+    "message": "साइट छोड़ें"
   },
   "automate_disable_feature": {
-    "message": "फ़ीचर बंद करें"
+    "message": "बंद करें"
+  },
+  "automate_tooltip_skip_tab": {
+    "message": "इस टैब के लिए ऑटोमेट ब्लर छोड़ें। ब्राउज़र रीस्टार्ट पर रीसेट होगा।"
+  },
+  "automate_tooltip_skip_site": {
+    "message": "इस साइट के लिए ऑटोमेट ब्लर छोड़ें। ब्राउज़र रीस्टार्ट पर रीसेट होगा।"
+  },
+  "automate_tooltip_turn_off": {
+    "message": "इस ऑटोमेट ट्रिगर को स्थायी रूप से बंद करें।"
   },
   "automate_toast_screen_share": {
     "message": "ब्लर लागू — स्क्रीन शेयर चालू"
@@ -692,8 +716,14 @@
   "notif_screen_share_active": {
     "message": "स्क्रीन शेयर चालू"
   },
+  "notif_automate_skipped": {
+    "message": "ऑटोमेट ट्रिगर छोड़ा गया"
+  },
   "notif_sharing_for": {
     "message": "शेयर हो रहा"
+  },
+  "notif_sharing_this_screen": {
+    "message": "यह स्क्रीन शेयर हो रही है"
   },
   "notif_skipped_reason_site_rule": {
     "message": "ब्लर पहले से चालू (साइट नियम)"

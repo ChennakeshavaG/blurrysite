@@ -1,9 +1,9 @@
 const BlurrySitePopupShared = (() => {
   'use strict';
 
-  function t(key) {
-    if (blsi && blsi.ContentI18n) return blsi.ContentI18n.t(key);
-    return chrome.i18n.getMessage(key) || key;
+  function t(key, subs) {
+    if (blsi && blsi.ContentI18n) return blsi.ContentI18n.t(key, subs);
+    return chrome.i18n.getMessage(key, subs) || key;
   }
 
   function makeToggle(id, checked, ariaLabel) {

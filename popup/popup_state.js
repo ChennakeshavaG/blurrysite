@@ -33,6 +33,10 @@ const BlurrySitePopupState = (() => {
         screen_share_state:        resolved ? resolved.screen_share_state : null,
         screen_share_suppressed_for_host: !!(resolved && resolved.screen_share_suppressed_for_host),
         screen_share_suppressed_for_tab:  !!(resolved && resolved.screen_share_suppressed_for_tab),
+        idle_suppressed_for_tab:         !!(resolved && resolved.idle_suppressed_for_tab),
+        idle_suppressed_for_site:        !!(resolved && resolved.idle_suppressed_for_site),
+        tab_switch_suppressed_for_tab:   !!(resolved && resolved.tab_switch_suppressed_for_tab),
+        tab_switch_suppressed_for_site:  !!(resolved && resolved.tab_switch_suppressed_for_site),
         // Surface resolve-only rule metadata so render files can call
         // BlurrySitePopupShared.isRuleManaged(settings) without needing ctx.
         _rule_match:     ruleMatch,
@@ -133,7 +137,8 @@ const BlurrySitePopupState = (() => {
   // Idle is global — there's nothing per-tab/per-host to clear (it auto-resolves
   // when the OS reports active again). Tab-switch is per-tab — strip its
   // 'fired' entry so the overlay drops on the active tab. Per-tab silence-all
-  // suppression is also cleared so toggling automate back on works as expected.
+  // suppression is ADDED so idle/tab_switch don't re-fire on this tab until
+  // the next screen-share resets the suppressed list.
   // Screen-share is global — leave that record alone.
   async function clearAutomateBlur() {
     const State = blsi.Automate && blsi.Automate.State;
@@ -141,7 +146,7 @@ const BlurrySitePopupState = (() => {
       await State.clear_tab_switch(_tabId);
     }
     if (typeof _tabId === 'number') {
-      await blsi.Model.remove_suppressed_tab(_tabId);
+      await blsi.Model.add_suppressed_tab(_tabId);
     }
     refreshFromStorage();
   }
@@ -155,6 +160,28 @@ const BlurrySitePopupState = (() => {
 
   async function unsuppressScreenShare(scope) {
     await blsi.Model.unsuppress_screen_share(scope, { hostname: _hostname, tab_id: _tabId });
+    refreshFromStorage();
+  }
+
+  // ── Suppress/unsuppress idle blur ────────────────────────────────────────
+  async function suppressIdle(scope) {
+    await blsi.Model.suppress_idle(scope, { hostname: _hostname, tab_id: _tabId });
+    refreshFromStorage();
+  }
+
+  async function unsuppressIdle(scope) {
+    await blsi.Model.unsuppress_idle(scope, { hostname: _hostname, tab_id: _tabId });
+    refreshFromStorage();
+  }
+
+  // ── Suppress/unsuppress tab-switch blur ──────────────────────────────────
+  async function suppressTabSwitch(scope) {
+    await blsi.Model.suppress_tab_switch(scope, { hostname: _hostname, tab_id: _tabId });
+    refreshFromStorage();
+  }
+
+  async function unsuppressTabSwitch(scope) {
+    await blsi.Model.unsuppress_tab_switch(scope, { hostname: _hostname, tab_id: _tabId });
     refreshFromStorage();
   }
 
@@ -230,6 +257,7 @@ const BlurrySitePopupState = (() => {
     saveSettings, saveBlurState, removeBlurItem, clearHost,
     saveRules, captureSnapshot, saveSiteSnapshot, getRules,
     clearAutomateBlur, suppressScreenShare, unsuppressScreenShare,
+    suppressIdle, unsuppressIdle, suppressTabSwitch, unsuppressTabSwitch,
     onExternalChange, refreshFromStorage,
     exportModel, importSettings,
   };

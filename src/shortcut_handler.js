@@ -160,6 +160,7 @@ const Shortcuts = (() => {
         btn.className = 'bl-si-toast__action' +
           (action.variant === 'warn' ? ' bl-si-toast__action--warn' : '');
         btn.textContent = action.label;
+        if (action.tooltip) btn.title = action.tooltip;
         btn.addEventListener('click', function() {
           _dismissToast(toast);
           action.onClick();

@@ -66,7 +66,7 @@
     const { settings, blurItems, isPageBlurred, activeRule } = st;
     BlurrySitePopupRender.renderAll(
       settings, blurItems, isPageBlurred,
-      _onSave, _onClearAutomate,
+      _onSave,
       activeRule, _openSiteRulesPage,
       {
         resolved: st.resolved,
@@ -75,6 +75,10 @@
         onOpenManagingRule: _onOpenManagingRule,
         onSuppressScreenShare: _onSuppressScreenShare,
         onUnsuppressScreenShare: _onUnsuppressScreenShare,
+        onSuppressIdle: _onSuppressIdle,
+        onUnsuppressIdle: _onUnsuppressIdle,
+        onSuppressTabSwitch: _onSuppressTabSwitch,
+        onUnsuppressTabSwitch: _onUnsuppressTabSwitch,
       },
     );
     UI.updateClearAll(settings, blurItems, isPageBlurred);
@@ -115,6 +119,26 @@
     _renderCurrent();
   }
 
+  async function _onSuppressIdle(scope) {
+    await State.suppressIdle(scope);
+    _renderCurrent();
+  }
+
+  async function _onUnsuppressIdle(scope) {
+    await State.unsuppressIdle(scope);
+    _renderCurrent();
+  }
+
+  async function _onSuppressTabSwitch(scope) {
+    await State.suppressTabSwitch(scope);
+    _renderCurrent();
+  }
+
+  async function _onUnsuppressTabSwitch(scope) {
+    await State.unsuppressTabSwitch(scope);
+    _renderCurrent();
+  }
+
   // ── Open HTB sub-page ─────────────────────────────────────────────────────
   function _openHtbModify(isBlurAll) {
     const bodyEl = document.getElementById('bl-htb-modify-body');
@@ -149,9 +173,9 @@
           const valid  = blsi.validate_model(parsed);
           await State.importSettings(valid);
           _renderCurrent();
-          UI.showToast('toast_import_success');
+          UI.showToast('toast_import_success', { type: 'success' });
         } catch (_) {
-          UI.showToast('toast_import_error');
+          UI.showToast('toast_import_error', { type: 'error' });
         }
       },
     };
@@ -339,14 +363,14 @@
       await _saveAndApply({ global_default_settings: { enabled: !State.get().settings.global_default_settings.enabled } });
       const { settings } = State.get();
       UI.renderPowerButton(settings.global_default_settings.enabled);
-      UI.showToast(settings.global_default_settings.enabled ? 'toast_enabled' : 'toast_disabled');
+      UI.showToast(settings.global_default_settings.enabled ? 'toast_enabled' : 'toast_disabled', { type: 'info' });
     });
 
     // ── Off-state turn-on ─────────────────────────────────────────────────
     document.getElementById('bl-turn-on').addEventListener('click', async () => {
       await _saveAndApply({ global_default_settings: { enabled: true } });
       UI.renderPowerButton(true);
-      UI.showToast('toast_enabled');
+      UI.showToast('toast_enabled', { type: 'success' });
     });
 
     // ── Mode block toggles ────────────────────────────────────────────────
@@ -355,7 +379,7 @@
         const checked = e.target.checked;
         await State.saveBlurState(checked);
         _renderCurrent();
-        UI.showToast(checked ? 'toast_blur_all' : 'toast_cleared');
+        UI.showToast(checked ? 'toast_blur_all' : 'toast_cleared', { type: checked ? 'success' : 'info' });
         return;
       }
       if (e.target.id === 'bl-pick-blur-toggle') {
@@ -437,7 +461,7 @@
           await State.clearHost();
         }
         _renderCurrent();
-        UI.showToast('toast_cleared');
+        UI.showToast('toast_cleared', { type: 'info' });
         return;
       }
     });

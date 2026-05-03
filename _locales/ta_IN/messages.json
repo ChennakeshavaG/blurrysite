@@ -293,6 +293,15 @@
   "shortcut_reserved_browser": {
     "message": "இந்த கீ காம்போ உலாவியால் ரிசர்வ் செய்யப்பட்டுள்ளது."
   },
+  "shortcut_conflict": {
+    "message": "ஏற்கனவே {action}-க்கு ஒதுக்கப்பட்டுள்ளது"
+  },
+  "shortcut_already_set": {
+    "message": "இந்த குறுக்குவழி ஏற்கனவே இந்த செயலுக்கு அமைக்கப்பட்டுள்ளது."
+  },
+  "shortcut_reset_all_confirm": {
+    "message": "அனைத்தையும் மீட்டமைக்க மீண்டும் தட்டவும்"
+  },
   "rule_pattern": {
     "message": "URL பொருத்தம்"
   },
@@ -596,6 +605,12 @@
   "automate_idle": {
     "message": "செயலற்ற"
   },
+  "automate_idle_info": {
+    "message": "செயலற்ற மங்கல் செயலில் — $1",
+    "placeholders": {
+      "1": { "content": "$1" }
+    }
+  },
   "automate_tab_switch": {
     "message": "டேப் மாற்று"
   },
@@ -669,13 +684,22 @@
     "message": "நிறுத்து"
   },
   "automate_stop_per_tab": {
-    "message": "இந்த டேப்"
+    "message": "டேப் தவிர்"
   },
   "automate_stop_site_session": {
-    "message": "இந்த தளம் (அமர்வு)"
+    "message": "தளம் தவிர்"
   },
   "automate_disable_feature": {
-    "message": "அம்சத்தை முடக்கு"
+    "message": "அணை"
+  },
+  "automate_tooltip_skip_tab": {
+    "message": "இந்த டேப்பிற்கு தானியங்கி மங்கலைத் தவிர்க்கவும். உலாவி மறுதொடக்கத்தில் மீட்டமைக்கப்படும்."
+  },
+  "automate_tooltip_skip_site": {
+    "message": "இந்த தளத்திற்கு தானியங்கி மங்கலைத் தவிர்க்கவும். உலாவி மறுதொடக்கத்தில் மீட்டமைக்கப்படும்."
+  },
+  "automate_tooltip_turn_off": {
+    "message": "இந்த தானியங்கி தூண்டுதலை நிரந்தரமாக முடக்கவும்."
   },
   "automate_toast_screen_share": {
     "message": "ப்ளர் ஆனது — திரை பகிர்வு செயலில்"
@@ -692,8 +716,14 @@
   "notif_screen_share_active": {
     "message": "திரை பகிர்வு செயலில்"
   },
+  "notif_automate_skipped": {
+    "message": "தானியங்கி தூண்டுதல் தவிர்க்கப்பட்டது"
+  },
   "notif_sharing_for": {
     "message": "பகிர்ந்து"
+  },
+  "notif_sharing_this_screen": {
+    "message": "இந்த திரை பகிரப்படுகிறது"
   },
   "notif_skipped_reason_site_rule": {
     "message": "ப்ளர் ஏற்கனவே ஆன் (தள விதி)"

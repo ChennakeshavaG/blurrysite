@@ -52,10 +52,11 @@ A hook fires on every Edit/Write to these files and reminds you of the relevant 
 | `src/automate/overlay.js` | `docs/contracts/automate/overlay.md` |
 | `src/automate/idle.js` | `docs/contracts/automate/idle.md` |
 | `src/automate/visibility.js` | `docs/contracts/automate/visibility.md` |
+| `src/automate/screen_share.js` | `docs/contracts/automate/screen_share.md` |
+| `src/automate/screen_share_bg.js` | `docs/contracts/automate/screen_share_bg.md` |
 | `src/tab_privacy.js` | `docs/contracts/tab_privacy.md` |
 | `src/fonts.js` | `docs/contracts/fonts.md` |
 | `src/main_world_bridge.js` | `docs/contracts/main_world_bridge.md` |
-| `src/screen_share.js` | `docs/contracts/screen_share.md` |
 | `src/selection_blur.js` | `docs/contracts/selection_blur.md` |
 | `src/screenshot.js` | `docs/contracts/screenshot.md` |
 | `background.js` | `docs/contracts/background.md` |

@@ -73,9 +73,9 @@ const ALLOW_LIST = [
   // literals. The linter cannot distinguish a key from a literal string.
   { file: 'popup/popup.js', contains: "showToast('toast_" },
 
-  // screen_share.js injects a JS code string into the page's MAIN world.
+  // automate/screen_share.js injects a JS code string into the page's MAIN world.
   // The textContent assignment holds executable code, not user-visible text.
-  { file: 'src/screen_share.js', contains: 's.textContent' },
+  { file: 'src/automate/screen_share.js', contains: 's.textContent' },
 
   // popup.html aria-label / title attrs carry inline English fallbacks alongside
   // their data-i18n-aria-label / data-i18n-title attributes. The fallback is

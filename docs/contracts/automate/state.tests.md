@@ -58,6 +58,25 @@ across contexts.
   resets the cache to an empty map.
 - `area !== 'session'` is filtered — non-session changes do not touch the cache.
 
+### `idle ignore helpers`
+Per-trigger suppression for idle — `add_idle_ignore_tab`, `remove_idle_ignore_tab`, `add_idle_ignore_site`, `remove_idle_ignore_site`, `read_idle_ignore`.
+- `add_idle_ignore_tab(tab_id)` appends to `ignore_tabs`, persists object shape to session storage.
+- Duplicate tab_id → no-op (no storage write).
+- `remove_idle_ignore_tab(tab_id)` removes from `ignore_tabs`.
+- Removing absent tab_id → no-op.
+- `add_idle_ignore_site(hostname)` / `remove_idle_ignore_site(hostname)` — same pattern for `ignore_sites`.
+- `read_idle_ignore()` returns `{ ignore_tabs, ignore_sites }` snapshot.
+- Non-number tab_id and non-string hostname → no-op.
+
+### `tab_switch ignore helpers`
+Same pattern as idle ignore helpers but for tab_switch.
+- `add_tab_switch_ignore_tab` / `remove_tab_switch_ignore_tab` / `add_tab_switch_ignore_site` / `remove_tab_switch_ignore_site` / `read_tab_switch_ignore`.
+- Storage payload preserves `.status` map alongside ignore arrays.
+
+### `backward compatibility`
+- Old bare-string idle value (`'idle'`) normalizes to `{ status: 'idle', ignore_tabs: [], ignore_sites: [] }` on `onChanged`.
+- Old flat-map tab_switch value (`{ '42': 'fired' }`) normalizes to `{ status: { '42': 'fired' }, ignore_tabs: [], ignore_sites: [] }` on `onChanged`.
+
 ### `_reset`
 - Clears `_idle_cache` and the per-tab map.
 - Does NOT call `chrome.storage.session.set`.
@@ -70,6 +89,9 @@ across contexts.
   redundant clears.
 - Same-value `onChanged` events leave the cache untouched.
 - Non-object `newValue` for the per-tab map is tolerated.
+- Old schema values (bare string idle, flat map tab_switch) auto-migrate.
+- Duplicate ignore entries rejected.
+- Ignore arrays preserved across `write_idle`/`write_tab_switch` calls.
 
 ## Known gaps
 
@@ -86,4 +108,4 @@ across contexts.
 
 ## Test count
 
-26 tests in 6 describe groups.
+44 tests in 9 describe groups.

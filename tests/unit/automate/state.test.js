@@ -76,7 +76,7 @@ describe('automate/state.js', () => {
       expect(ok).toBe(true);
       expect(State.read_idle()).toBe('idle');
       expect(chrome.storage.session.set).toHaveBeenCalledWith(
-        { blsi_automate_idle: 'idle' },
+        { blsi_automate_idle: { status: 'idle', ignore_tabs: [], ignore_sites: [] } },
         expect.any(Function)
       );
     });
@@ -150,7 +150,7 @@ describe('automate/state.js', () => {
       await State.write_tab_switch(2, 'fired');
       const lastCall = chrome.storage.session.set.mock.calls.at(-1);
       expect(lastCall[0]).toEqual({
-        blsi_automate_tab_switch_by_tab: { '1': 'armed', '2': 'fired' },
+        blsi_automate_tab_switch_by_tab: { status: { '1': 'armed', '2': 'fired' }, ignore_tabs: [], ignore_sites: [] },
       });
     });
 
@@ -162,7 +162,15 @@ describe('automate/state.js', () => {
   });
 
   describe('onChanged listener', () => {
-    test('updates idle cache on cross-context write', () => {
+    test('updates idle cache on cross-context write (new shape)', () => {
+      global._fireStorageChanged(
+        { blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } },
+        'session'
+      );
+      expect(State.read_idle()).toBe('idle');
+    });
+
+    test('updates idle cache on cross-context write (legacy string)', () => {
       global._fireStorageChanged(
         { blsi_automate_idle: { newValue: 'idle' } },
         'session'
@@ -172,13 +180,21 @@ describe('automate/state.js', () => {
 
     test('same-value onChanged does not change cache', () => {
       global._fireStorageChanged(
-        { blsi_automate_idle: { newValue: 'active' } },
+        { blsi_automate_idle: { newValue: { status: 'active', ignore_tabs: [], ignore_sites: [] } } },
         'session'
       );
       expect(State.read_idle()).toBe('active');
     });
 
-    test('updates tab_switch cache on cross-context write', () => {
+    test('updates tab_switch cache on cross-context write (new shape)', () => {
+      global._fireStorageChanged(
+        { blsi_automate_tab_switch_by_tab: { newValue: { status: { '5': 'fired' }, ignore_tabs: [], ignore_sites: [] } } },
+        'session'
+      );
+      expect(State.read_tab_switch(5)).toBe('fired');
+    });
+
+    test('updates tab_switch cache on cross-context write (legacy flat map)', () => {
       global._fireStorageChanged(
         { blsi_automate_tab_switch_by_tab: { newValue: { '5': 'fired' } } },
         'session'
@@ -188,7 +204,7 @@ describe('automate/state.js', () => {
 
     test('non-object newValue for tab_switch resets to empty map', () => {
       global._fireStorageChanged(
-        { blsi_automate_tab_switch_by_tab: { newValue: { '5': 'fired' } } },
+        { blsi_automate_tab_switch_by_tab: { newValue: { status: { '5': 'fired' }, ignore_tabs: [], ignore_sites: [] } } },
         'session'
       );
       global._fireStorageChanged(
@@ -204,6 +220,113 @@ describe('automate/state.js', () => {
         'local'
       );
       expect(State.read_idle()).toBe('active');
+    });
+  });
+
+  describe('idle ignore helpers', () => {
+    test('read_idle_ignore returns empty arrays by default', () => {
+      expect(State.read_idle_ignore()).toEqual({ ignore_tabs: [], ignore_sites: [] });
+    });
+
+    test('add_idle_ignore_tab appends and persists', async () => {
+      await State.add_idle_ignore_tab(42);
+      expect(State.read_idle_ignore().ignore_tabs).toEqual([42]);
+      await State.add_idle_ignore_tab(99);
+      expect(State.read_idle_ignore().ignore_tabs).toEqual([42, 99]);
+    });
+
+    test('add_idle_ignore_tab is idempotent', async () => {
+      await State.add_idle_ignore_tab(42);
+      chrome.storage.session.set.mockClear();
+      await State.add_idle_ignore_tab(42);
+      expect(chrome.storage.session.set).not.toHaveBeenCalled();
+      expect(State.read_idle_ignore().ignore_tabs).toEqual([42]);
+    });
+
+    test('remove_idle_ignore_tab removes entry', async () => {
+      await State.add_idle_ignore_tab(42);
+      await State.remove_idle_ignore_tab(42);
+      expect(State.read_idle_ignore().ignore_tabs).toEqual([]);
+    });
+
+    test('add_idle_ignore_site appends and persists', async () => {
+      await State.add_idle_ignore_site('gmail.com');
+      expect(State.read_idle_ignore().ignore_sites).toEqual(['gmail.com']);
+    });
+
+    test('add_idle_ignore_site is idempotent', async () => {
+      await State.add_idle_ignore_site('gmail.com');
+      chrome.storage.session.set.mockClear();
+      await State.add_idle_ignore_site('gmail.com');
+      expect(chrome.storage.session.set).not.toHaveBeenCalled();
+    });
+
+    test('remove_idle_ignore_site removes entry', async () => {
+      await State.add_idle_ignore_site('gmail.com');
+      await State.remove_idle_ignore_site('gmail.com');
+      expect(State.read_idle_ignore().ignore_sites).toEqual([]);
+    });
+
+    test('ignore arrays survive write_idle phase changes', async () => {
+      await State.add_idle_ignore_tab(42);
+      await State.add_idle_ignore_site('gmail.com');
+      await State.write_idle('idle');
+      expect(State.read_idle()).toBe('idle');
+      expect(State.read_idle_ignore()).toEqual({ ignore_tabs: [42], ignore_sites: ['gmail.com'] });
+    });
+
+    test('invalid inputs are no-ops', async () => {
+      chrome.storage.session.set.mockClear();
+      await State.add_idle_ignore_tab('not-a-number');
+      await State.add_idle_ignore_tab(NaN);
+      await State.add_idle_ignore_site('');
+      await State.add_idle_ignore_site(null);
+      await State.remove_idle_ignore_tab('x');
+      await State.remove_idle_ignore_site(42);
+      expect(chrome.storage.session.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tab_switch ignore helpers', () => {
+    test('read_tab_switch_ignore returns empty arrays by default', () => {
+      expect(State.read_tab_switch_ignore()).toEqual({ ignore_tabs: [], ignore_sites: [] });
+    });
+
+    test('add_tab_switch_ignore_tab appends and persists', async () => {
+      await State.add_tab_switch_ignore_tab(42);
+      expect(State.read_tab_switch_ignore().ignore_tabs).toEqual([42]);
+    });
+
+    test('add_tab_switch_ignore_tab is idempotent', async () => {
+      await State.add_tab_switch_ignore_tab(42);
+      chrome.storage.session.set.mockClear();
+      await State.add_tab_switch_ignore_tab(42);
+      expect(chrome.storage.session.set).not.toHaveBeenCalled();
+    });
+
+    test('remove_tab_switch_ignore_tab removes entry', async () => {
+      await State.add_tab_switch_ignore_tab(42);
+      await State.remove_tab_switch_ignore_tab(42);
+      expect(State.read_tab_switch_ignore().ignore_tabs).toEqual([]);
+    });
+
+    test('add_tab_switch_ignore_site appends and persists', async () => {
+      await State.add_tab_switch_ignore_site('meet.google.com');
+      expect(State.read_tab_switch_ignore().ignore_sites).toEqual(['meet.google.com']);
+    });
+
+    test('remove_tab_switch_ignore_site removes entry', async () => {
+      await State.add_tab_switch_ignore_site('meet.google.com');
+      await State.remove_tab_switch_ignore_site('meet.google.com');
+      expect(State.read_tab_switch_ignore().ignore_sites).toEqual([]);
+    });
+
+    test('ignore arrays survive write_tab_switch phase changes', async () => {
+      await State.add_tab_switch_ignore_tab(42);
+      await State.add_tab_switch_ignore_site('meet.google.com');
+      await State.write_tab_switch(7, 'fired');
+      expect(State.read_tab_switch(7)).toBe('fired');
+      expect(State.read_tab_switch_ignore()).toEqual({ ignore_tabs: [42], ignore_sites: ['meet.google.com'] });
     });
   });
 

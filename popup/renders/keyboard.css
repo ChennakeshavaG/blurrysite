@@ -27,6 +27,13 @@
   color: var(--bl-text-muted);
 }
 
+.bl-sc-reset-all-btn--armed {
+  color: var(--bl-danger);
+}
+.bl-sc-reset-all-btn--armed:hover {
+  color: var(--bl-danger);
+}
+
 /* ── Action list ─────────────────────────────────────────────────────── */
 .bl-sc-list {
   display: flex;
@@ -220,6 +227,10 @@
   font-size: var(--bl-text-xs);
   color: var(--bl-danger);
   line-height: 1.35;
+}
+
+.bl-sc-capture__warning--info {
+  color: var(--bl-text-muted);
 }
 
 .bl-sc-capture__actions {

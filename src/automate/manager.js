@@ -4,9 +4,10 @@
  * The single owner of automate-driven Overlay show/hide AND automate
  * transition toasts (idle / tab_switch / screen_share / skipped). Reacts to:
  *   - chrome.storage.session changes (idle / tab_switch / screen_share /
- *     suppressed_tabs) via blsi.Model.on_automate_change
+ *     suppressed_tabs) via blsi.Automate.State.on_session_change (caches
+ *     guaranteed fresh before callback fires)
  *   - chrome.storage.local changes that may flip automate gates (popup edits
- *     to automate.*.enabled, site_rules) via the same subscriber
+ *     to automate.*.enabled, site_rules) via blsi.Model.on_automate_change
  *   - Explicit URL change notifications from content_script (SPA navigation)
  *
  * Reads `blsi.Model.resolve_automate(host, url, tab_id)` for its slim
@@ -24,10 +25,12 @@
 (function () {
   'use strict';
 
-  let _initialized      = false;
-  let _tab_id           = null;
-  let _get_host_url     = null;   // function() → { host, url }
-  let _ss_stop_actions  = null;   // async function() → Array<{label,onClick,variant?}>
+  let _initialized              = false;
+  let _tab_id                   = null;
+  let _get_host_url             = null;   // function() → { host, url }
+  let _ss_stop_actions          = null;   // async function() → Array<{label,onClick,variant?}>
+  let _idle_stop_actions        = null;   // async function() → Array<{label,onClick,variant?}>
+  let _tab_switch_stop_actions  = null;   // async function() → Array<{label,onClick,variant?}>
   let _last_active      = false;  // tracks Overlay state to detect transitions
   // Toast transition tracking — seeded on first _evaluate so the bootstrap
   // call doesn't fire toasts for state that already existed when the tab
@@ -142,14 +145,40 @@
     if (r.automate_blur_only && triggers.idle &&
         idle_phase !== _last_idle_phase &&
         (idle_phase === State.PHASES.idle.idle || idle_phase === State.PHASES.idle.locked)) {
-      Shortcuts.showToast(_toast_msg('automate_toast_idle', 'automate_idle', overrides), 2500);
+      var idle_message = _toast_msg('automate_toast_idle', 'automate_idle', overrides);
+      if (typeof _idle_stop_actions === 'function') {
+        Promise.resolve(_idle_stop_actions()).then(function (actions) {
+          if (!_initialized) return;
+          var S = _shortcuts();
+          if (S) S.showToast(idle_message, 5000, Array.isArray(actions) ? actions : []);
+        }).catch(function () {
+          if (!_initialized) return;
+          var S = _shortcuts();
+          if (S) S.showToast(idle_message, 5000);
+        });
+      } else {
+        Shortcuts.showToast(idle_message, 5000);
+      }
     }
 
     // 2. Tab-switch toast.
     if (r.automate_blur_only && triggers.tab_switch &&
         ts_phase !== _last_tab_switch_phase &&
         ts_phase === State.PHASES.tab_switch.fired) {
-      Shortcuts.showToast(_toast_msg('automate_toast_tab_switch', 'automate_tab_switch', overrides), 2500);
+      var ts_message = _toast_msg('automate_toast_tab_switch', 'automate_tab_switch', overrides);
+      if (typeof _tab_switch_stop_actions === 'function') {
+        Promise.resolve(_tab_switch_stop_actions()).then(function (actions) {
+          if (!_initialized) return;
+          var S = _shortcuts();
+          if (S) S.showToast(ts_message, 5000, Array.isArray(actions) ? actions : []);
+        }).catch(function () {
+          if (!_initialized) return;
+          var S = _shortcuts();
+          if (S) S.showToast(ts_message, 5000);
+        });
+      } else {
+        Shortcuts.showToast(ts_message, 5000);
+      }
     }
 
     // 3. Screen-share toast — fires on the rising edge of ss_blurring.
@@ -190,16 +219,30 @@
     const next_tab_id      = (opts && typeof opts.tab_id === 'number') ? opts.tab_id : null;
     const next_get         = (opts && typeof opts.get_host_url === 'function') ? opts.get_host_url : null;
     const next_ss_actions  = (opts && typeof opts.ss_stop_actions === 'function') ? opts.ss_stop_actions : null;
+    const next_idle_actions = (opts && typeof opts.idle_stop_actions === 'function') ? opts.idle_stop_actions : null;
+    const next_ts_actions  = (opts && typeof opts.tab_switch_stop_actions === 'function') ? opts.tab_switch_stop_actions : null;
     if (next_get === null) return;  // can't operate without a host source
 
     if (_initialized) destroy();
 
-    _tab_id          = next_tab_id;
-    _get_host_url    = next_get;
-    _ss_stop_actions = next_ss_actions;
-    _initialized     = true;
-    _seeded          = false;  // first _evaluate seeds tracking without firing toasts.
+    _tab_id                  = next_tab_id;
+    _get_host_url            = next_get;
+    _ss_stop_actions         = next_ss_actions;
+    _idle_stop_actions       = next_idle_actions;
+    _tab_switch_stop_actions = next_ts_actions;
+    _initialized             = true;
+    _seeded                  = false;  // first _evaluate seeds tracking without firing toasts.
 
+    // Session state changes (idle / tab_switch / screen_share / suppressed_tabs)
+    // — State fires this AFTER all caches are updated, eliminating the race
+    // where Manager reads stale data from a separately-ordered onChanged listener.
+    var State = (typeof blsi !== 'undefined' && blsi.Automate && blsi.Automate.State) || null;
+    if (State && typeof State.on_session_change === 'function') {
+      State.on_session_change(_evaluate);
+    }
+
+    // Local model changes (automate.*.enabled toggles, site_rules) — these
+    // flip automate gates without touching session storage.
     if (blsi.Model && typeof blsi.Model.on_automate_change === 'function') {
       blsi.Model.on_automate_change(_evaluate);
     }
@@ -210,11 +253,13 @@
 
   function destroy() {
     if (!_initialized) return;
-    _initialized      = false;
-    _tab_id           = null;
-    _get_host_url     = null;
-    _ss_stop_actions  = null;
-    _last_active      = false;
+    _initialized              = false;
+    _tab_id                   = null;
+    _get_host_url             = null;
+    _ss_stop_actions          = null;
+    _idle_stop_actions        = null;
+    _tab_switch_stop_actions  = null;
+    _last_active              = false;
     _seeded           = false;
     _last_idle_phase  = 'active';
     _last_tab_switch_phase = 'off';
@@ -222,9 +267,9 @@
     _last_skipped     = false;
     const Overlay = (typeof blsi !== 'undefined' && blsi.Automate && blsi.Automate.Overlay) || null;
     if (Overlay) Overlay.hide();
-    // Note: we cannot unregister the storage subscriber (Model.on_automate_change
-    // is single-slot, no unsubscribe). Subsequent _evaluate calls early-return
-    // via the _initialized guard.
+    // Note: we cannot unregister State.on_session_change or
+    // Model.on_automate_change (both are single-slot, no unsubscribe).
+    // Subsequent _evaluate calls early-return via the _initialized guard.
   }
 
   function on_url_change(host, url) {

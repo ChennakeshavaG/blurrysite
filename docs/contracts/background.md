@@ -2,20 +2,22 @@
 
 ## Overview
 
-MV3 service worker. Stateless between wake cycles — no module-level mutable state except `_sharePorts` (which is empty on every SW restart by design). Handles: keyboard command relay, context menu management, screenshot capture relay, screen-share session record ownership + tab broadcast, and `WHO_AM_I` tab-id discovery. All other storage I/O is handled by `storage_model.js` in content script and popup contexts. Background owns the screen-share session record (`blsi_screen_share`) and the per-tab automate suppression list (`blsi_automate_suppressed_tabs`).
+MV3 service worker. Stateless between wake cycles — no module-level mutable state. Handles: keyboard command relay, context menu management, screenshot capture relay, and tab-close cleanup. Screen-share session record ownership, port tracking, WHO_AM_I, and SCREEN_SHARE_NOTIFY broadcast are delegated to `src/automate/screen_share_bg.js` (loaded via `importScripts`). All other storage I/O is handled by `storage_model.js` in content script and popup contexts.
 
 ## Initialization (Top-Level SW Start)
 
 On every SW start:
-1. Resets `blsi_screen_share` to its empty default `{ active: false, sharing_tab_id: null, started_at: null, suppressed_sites: [] }` and clears `blsi_automate_suppressed_tabs`. Prevents stale state after mid-share SW restart; tab ids from a prior session may have been recycled by Chrome, so the per-tab list is safest to drop. If a share is actually in progress, the port reconnect immediately re-stamps the record via `_setScreenShareActive`.
-2. Imports `src/constants.js`, `src/logger.js`, `src/action_registry.js`, `src/url_matcher.js`, `src/automate/state.js`, `src/automate/idle.js` via `importScripts`. The automate imports register the `blsi.Automate.State` cache + `chrome.storage.onChanged` listener and the `blsi.Automate.Idle` observer (`chrome.idle.onStateChanged` → `blsi_automate_idle` session key) at SW load. `Idle.init()` is invoked from background top-level so the listener is registered on every SW wake.
-3. Builds `COMMAND_TO_MESSAGE` map from `blsi.Actions.list()`.
+1. Calls `chrome.storage.session.setAccessLevel({ areaName: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' })` so content scripts can read/write session storage (MV3 default is background-only). Must run before any session storage writes.
+2. Imports `src/constants.js`, `src/logger.js`, `src/action_registry.js`, `src/url_matcher.js`, `src/automate/state.js`, `src/automate/idle.js`, `src/automate/screen_share_bg.js` via `importScripts`. The automate imports register the `blsi.Automate.State` cache + `chrome.storage.onChanged` listener and the `blsi.Automate.Idle` observer (`chrome.idle.onStateChanged` → `blsi_automate_idle` session key) at SW load.
+3. `Idle.init()` is invoked so the idle listener is registered on every SW wake.
+4. `ScreenShareBg.init()` is invoked — clears stale screen-share session record + suppressed-tabs list, registers port + message listeners. See `docs/contracts/automate/screen_share_bg.md`.
+5. Builds `COMMAND_TO_MESSAGE` map from `blsi.Actions.list()`.
 
 ## Module-Level State
 
 | Variable | Description |
 |---|---|
-| `_sharePorts` | `Map<tabId, port>` — in-memory only, ALWAYS empty on SW restart |
+| `State` | `blsi.Automate.State` — reference to the session state module (loaded via importScripts) |
 | `COMMAND_TO_MESSAGE` | Frozen `{ chromeCommandName: messageType }` map, auto-built from action registry |
 | `log` | Scoped logger: `blsi.Logger.scope('bg')` |
 
@@ -95,54 +97,39 @@ Routes context menu clicks:
 **COMMAND_TO_MESSAGE**: Auto-built from `blsi.Actions.list()` — any action with a `chromeCommand` field is automatically wired. Adding an action with `chromeCommand` automatically creates the relay without editing background.js.  
 **Special case**: `'open-settings'` command → `_openSettingsOrPanel(activeTab)`.
 
-### `chrome.runtime.onConnect`
-
-**What**: Tracks `'blsi-screen-share'` ports; each port's lifetime equals a screen share session.  
-**On connect**: Records port in `_sharePorts[tabId]`; calls `_setScreenShareActive(tabId)` (also handles SW-restart-mid-share reconnect).  
-**On disconnect**: Removes port from `_sharePorts`; calls `_setScreenShareInactive()` and broadcasts `SCREEN_SHARE_NOTIFY` to ALL tabs — crash-safety for when the sharing tab crashes/closes/navigates. Storage `onChanged` re-resolves tabs even if the broadcast misses them.
-
 ### `chrome.runtime.onMessage`
 
-Handles 4 message types:
+Handles 1 message type (screen-share and WHO_AM_I moved to `automate/screen_share_bg.js`):
 
 **`CAPTURE_VIEWPORT`**: Calls `chrome.tabs.captureVisibleTab(null, { format: 'png' })` → responds `{ dataUrl }` or `{ error }`. Returns `true` (async sendResponse).
 
-**`SCREEN_SHARE_STARTED`**: Calls `_setScreenShareActive(senderTabId)` (writes session record + clears suppression maps); broadcasts `SCREEN_SHARE_NOTIFY` to all tabs EXCEPT the sender (toast trigger).
-
-**`SCREEN_SHARE_ENDED`**: Calls `_setScreenShareInactive()`; broadcasts `SCREEN_SHARE_NOTIFY` to ALL tabs.
-
-**`WHO_AM_I`**: Synchronous `sendResponse({ tab_id: sender.tab.id })`. Used by `screen_share.js` so content tabs can self-identify for `Store.resolve(..., tab_id)`.
-
 ### `chrome.tabs.onRemoved`
 
-**What**: When a tab closes, removes its id from `blsi_automate_suppressed_tabs` so a recycled tab id can't inherit a stale suppression.
+**What**: When a tab closes, removes its id from the suppressed-tabs list via `State.remove_suppressed_tab(tabId)`, clears its tab-switch entry via `State.clear_tab_switch(tabId)`, and removes its screen-share map entry via `State.set_screen_share_inactive(tabId)` so a recycled tab id can't inherit stale state.
 
 ## Screen Share Architecture
+
+Screen-share port/message handling is delegated to `src/automate/screen_share_bg.js`. See `docs/contracts/automate/screen_share_bg.md` for the full protocol. Summary:
 
 ```
 [page JS]   → getDisplayMedia() call
               ↓ (main_world_bridge.js patches)
 [MAIN world] → '__blsi_screen_share' CustomEvent on document
-              ↓ (screen_share.js listens)
+              ↓ (automate/screen_share.js listens)
 [isolated]  → opens port 'blsi-screen-share'
               → sendMessage(SCREEN_SHARE_STARTED)
               ↓
-[background] → writes blsi_screen_share = { active:true, sharing_tab_id, started_at, suppressed_sites:[] }
-              → clears blsi_automate_suppressed_tabs
+[background] → automate/screen_share_bg.js handles port + messages
+              → writes blsi_screen_share via State APIs
               → broadcasts SCREEN_SHARE_NOTIFY (toast ping; excludes sharing tab)
               ↓ (storage onChanged re-resolves all tabs)
               ↓ (port disconnect = crash-safety)
 [background] → resets blsi_screen_share to empty + broadcasts NOTIFY
 ```
 
-Content tabs read the live record via `chrome.storage.session.onChanged` in `storage_model.js` — no `_BLUR`/`_UNBLUR` per-tab fan-out needed.
-
-**Mid-share SW restart**: Top-level reset clears the record; the reconnecting port re-stamps it via `_setScreenShareActive` within milliseconds. Any tab that loads in the gap reads the record on `init_cache` once it stabilizes.
-
 ## Invariants
 
-- Service worker MUST be stateless between wake cycles — `_sharePorts` is the only module-level mutable state, and it starts empty on every restart (by design).
-- Background writes `blsi_screen_share`, `blsi_automate_suppressed_tabs`, and (via `blsi.Automate.Idle` → `blsi.Automate.State.write_idle`) `blsi_automate_idle` session keys. The model (`blsi_model`) is owned by `storage_model.js` in content + popup contexts.
+- Service worker MUST be stateless between wake cycles — no module-level mutable state in background.js (`_sharePorts` moved to `screen_share_bg.js`).
+- Session key writes are delegated to `blsi.Automate.ScreenShareBg` (screen-share + suppressed tabs) and `blsi.Automate.Idle` (idle state), both via `blsi.Automate.State` APIs. Tab-close cleanup (`remove_suppressed_tab`, `clear_tab_switch`) remains in background.js.
 - `sendMessage` calls always use `.catch(() => {})` — tab may have no content script (chrome:// pages, etc.).
 - `COMMAND_TO_MESSAGE` auto-builds from action registry — never hardcode command→message mappings in background.js.
-- The sharing tab is excluded from `SCREEN_SHARE_NOTIFY` broadcast on STARTED. Resolve-side check (`tab_id === sharing_tab_id`) is the authoritative blur gate.

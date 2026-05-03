@@ -25,21 +25,25 @@ const BlurrySitePopupUI = (() => {
     _toastTimer = setTimeout(() => { el.hidden = true; }, 220);
   }
 
-  function showToast(key, substitutions) {
-    const el = document.getElementById('bl-toast');
+  function showToast(key, opts) {
+    var el = document.getElementById('bl-toast');
     if (!el) return;
-    const msg = (blsi && blsi.ContentI18n)
+    var type = (opts && opts.type) || '';
+    var subs = (opts && opts.substitutions) || undefined;
+    var msg = (blsi && blsi.ContentI18n)
       ? blsi.ContentI18n.t(key)
-      : (chrome.i18n.getMessage(key, substitutions) || key);
-    const msgEl = document.getElementById('bl-toast-msg');
+      : (chrome.i18n.getMessage(key, subs) || key);
+    var msgEl = document.getElementById('bl-toast-msg');
     if (msgEl) msgEl.textContent = msg;
     else el.textContent = msg;
+    el.classList.remove('bl-toast--success', 'bl-toast--error', 'bl-toast--info');
+    if (type) el.classList.add('bl-toast--' + type);
     el.hidden = false;
     el.classList.add('is-visible');
     if (_toastTimer) clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(() => {
+    _toastTimer = setTimeout(function() {
       el.classList.remove('is-visible');
-      _toastTimer = setTimeout(() => { el.hidden = true; }, 220);
+      _toastTimer = setTimeout(function() { el.hidden = true; }, 220);
     }, 15000);
   }
 

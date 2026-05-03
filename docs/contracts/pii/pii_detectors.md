@@ -6,9 +6,9 @@ Pattern catalog + `findMatches(text, types)` for the PII pipeline. **Phase 5 con
 
 Four layers run inside the numeric branch of `findMatches` (in execution order):
 
-1. **Stage 1 — dispositive detectors** (shape-bound or shape+checksum). Card PAN, IBAN, ETH wallet, ISBN-13 (suppress), Aadhaar, CN ID, NRIC SG, CURP MX, Emirates ID, NIE ES, Codice Fiscale, UK / CA postal, IPv6, GPS DMS, Plus Code. Each entry sets `dispositive: true`; `checksum` runs first when present.
+1. **Stage 1 — dispositive detectors** (shape-bound or shape+checksum). Card PAN, IBAN, ETH wallet, ISBN-13 (suppress), E.164 phone, Aadhaar, CN ID, NRIC SG, CURP MX, Emirates ID, NIE ES, Codice Fiscale, UK / CA postal, IPv6, GPS DMS, Plus Code. Each entry sets `dispositive: true`; `checksum` runs first when present.
 2. **Identifier-context sub-pass** — `DISPOSITIVE_RES` (Bearer / AKIA / ghp_ / sk_/pk_ / AIza / xox- / JWT) + `PREFIX_RE` keyword-prefix value capture. Bespoke logic — its capture-group semantics don't fit the generic descriptor.
-3. **Stage 2 — context-gated detectors**. MAC address, IPv4, IMEI, E.164 phone, SSN_US, NHS_UK, BSN_NL, NPI_US, DNI_ES, ABN_AU, MRN, postal_jp / postal_au / postal_nl / postal_br / us_zip4 / eircode_ie. Validators read country signal via `blsi.PiiState.getCountry()` and/or run keyword windows via `_hasKeywordIn`.
+3. **Stage 2 — context-gated detectors**. MAC address, IPv4, IMEI, SSN_US, NHS_UK, BSN_NL, NPI_US, DNI_ES, ABN_AU, MRN, postal_jp / postal_au / postal_nl / postal_br / us_zip4 / eircode_ie. Validators read country signal via `blsi.PiiState.getCountry()` and/or run keyword windows via `_hasKeywordIn`.
 4. **Stage 3 — generic NUMERIC_RE** (7 alternations) + Stage 4 FP suppressors via `blsi.PiiSuppressors.falsePositivesCheck`.
 
 All four layers share a per-call `consumed[]` overlap tracker. SUPPRESS detectors (ISBN-13) push to `consumed[]` without emitting → Stage 3 bare-numeric overlap is dropped (anti-PII).
@@ -103,12 +103,21 @@ Order is intentional and lower-FP-first so the shared `consumed[]` tracker dedup
 1. If `types.email` AND `text.includes('@')`: fetch cached `EMAIL_RE` via `blsi.PiiState.getCachedRegex`, exec-loop, push `{start, end, type: 'email'}`. Call `recordEmit()` per push.
 2. If `types.numeric`:
    1. Allocate per-call `consumed: Array<[start, end)>` overlap tracker shared across the four numeric layers.
-   2. Run Stage 1 — `_runStage1(text, matches, consumed)` calls `_runDescriptor` for each `STAGE1_DETECTORS` row. The runner applies overlap → checksum → context-gate (`dispositive` / `countries` / `keywordRe`).
-   3. Run identifier sub-pass — `_runIdentifierPass(text, matches, consumed)`. Dispositive provider regexes first, then PREFIX_RE keyword-prefix capture.
-   4. Run Stage 2 — `_runStage2(text, matches, consumed)` calls the same `_runDescriptor` for each `STAGE2_DETECTORS` row.
-   5. Run Stage 3 NUMERIC_RE — for each hit, call `recordCandidate()`, then `_overlapsAny(consumed, …)`; if the range overlaps any prior consumption, `recordSuppress()` and skip. Otherwise call `blsi.PiiSuppressors.falsePositivesCheck`; if it returns `false`, push `{start, end, type: 'numeric'}` and `recordEmit()`. Otherwise `recordSuppress()`.
+   2. **Digit gate** — `hasDigit = /\d/.test(text)`. Stage 1, Stage 2, and Stage 3 (NUMERIC_RE) are skipped entirely when `hasDigit` is false (every detector in those stages requires at least one digit via its preScreen). Only the identifier sub-pass runs on digit-free text (catches prefix-anchored API keys and keyword-value pairs with non-digit values).
+   3. If `hasDigit`: Run Stage 1 — `_runStage1(text, matches, consumed)` calls `_runDescriptor` for each `STAGE1_DETECTORS` row. The runner applies overlap → checksum → context-gate (`dispositive` / `countries` / `keywordRe`).
+   4. Run identifier sub-pass — `_runIdentifierPass(text, matches, consumed)`. Single combined `DISPOSITIVE_RE` alternation regex first, then PREFIX_RE keyword-prefix capture. Always runs regardless of digit gate.
+   5. If `hasDigit`: Run Stage 2 — `_runStage2(text, matches, consumed)` calls the same `_runDescriptor` for each `STAGE2_DETECTORS` row.
+   6. If `hasDigit`: Run Stage 3 NUMERIC_RE — for each hit, call `recordCandidate()`, then `_overlapsAny(consumed, …)`; if the range overlaps any prior consumption, `recordSuppress()` and skip. Otherwise call `blsi.PiiSuppressors.falsePositivesCheck`; if it returns `false`, push `{start, end, type: 'numeric'}` and `recordEmit()`. Otherwise `recordSuppress()`.
 3. Sort by `start`, with ties by `end` desc (longer match first).
 4. Filter: keep matches whose `start >= lastEnd` (drops overlaps).
+
+### hasKeywordTrail(text)
+
+**What**: checks if `text` ends with a PII keyword followed by an optional separator (`:`, `=`, `#`, `-`, `—`) and optional whitespace.
+**Params**: `text` — `string` (typically preceding DOM text collected by the facade's `_precedingText`).
+**Returns**: `boolean`.
+**Use**: called by the facade's cross-node keyword lookaround when a digit-only text node in a separate DOM element wasn't caught by per-node `findMatches`. The facade walks backward through preceding siblings/parents to collect context text, then calls this to decide whether the number should be wrapped despite being in a separate element from the keyword.
+**Internal**: uses `_KEYWORD_TRAIL_RE` — the same `KEYWORD_ALT` alternation anchored to end-of-string with `$`.
 
 ### getPatterns()
 
@@ -125,6 +134,7 @@ Each entry below maps a regex to a dispositive (shape-bound, optionally checksum
 | `iban` | `(?<![A-Za-z\d])[A-Z]{2}\d{2}[A-Z0-9 \-]{11,42}(?![A-Za-z\d])` | `_checksumIban` (per-country length + mod-97) | emit | `_IBAN_LENGTHS` is an alpha-2-keyed snapshot of the ISO 13616 registry (~75 countries). |
 | `eth_wallet` | `\b0x[a-fA-F0-9]{40}\b` | (none — length dispositive) | emit | EIP-55 case-checksum NOT enforced. |
 | `isbn_13` | `\b97[89][\- ]?\d[\- ]?\d{3}[\- ]?\d{5}[\- ]?\d\b` | `_checksumIsbn13` | suppress | Anti-PII. ISBN-10 deferred (bare 10-digit FP risk on phones). |
+| `e164_phone` | `\+\d{1,3}[ .\- ]?\d[\d .\- ]{6,14}\d\b` | — | emit | `+` prefix dispositive. Runs before Aadhaar so `+CC` prefixed numbers are consumed as phone, not split into orphaned prefix + Aadhaar body. |
 | `aadhaar` | `\b[2-9]\d{3}[ \-]?\d{4}[ \-]?\d{4}\b` | `_checksumAadhaar` (Verhoeff) | emit | Not country-gated; sensitive gov ID, over-blur preferred. |
 | `cn_id` | `\b\d{17}[\dXx]\b` | `_checksumCnId` (ISO 7064 mod-11-2) | emit | Activated `iso7064Mod11_2` checksum that previously had no consumer. |
 | `nric_sg` | `\b[STFGM]\d{7}[A-Z]\b` | (none — positional shape dispositive) | emit | Letter-table validator dropped — country/positional shape is enough. |
@@ -171,7 +181,6 @@ Each entry below maps a regex to a context-aware decision. All entries gate via 
 | `mac_address` | `\b(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}\b` | — | — | — (dispositive) | Six hex pairs is rare in non-PII text. |
 | `ipv4` | `\b(?:(?:25[0-5]\|2[0-4]\d\|[01]?\d\d?)\.){3}…\b` | `_checksumIpv4Public` | — | `ip\|ipv4\|address\|server\|host\|client\|connect*\|from` (50) | Suppresses private/reserved ranges + keyword required. |
 | `imei` | `\b\d{15}\b` | `_checksumImei` (Luhn) | — | `imei\|device( id)?` (50) | Luhn + keyword. |
-| `e164_phone` | `\+\d{1,3}[ .\- ]?\d[\d .\- ]{6,14}\d\b` | — | — | — (dispositive) | `+` prefix dispositive. NBSP via `\u00A0` escape. |
 | `ssn_us` | `\b(?!000\|666\|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b` | — | `US` | `ssn\|social security\|social sec` (50) | Range gates baked in via lookaheads. |
 | `nhs_uk` | `\b\d{3}[ \-]?\d{3}[ \-]?\d{4}\b` | `_checksumNhsUk` | `GB` | `nhs\|national health\|patient` (50) | Mod-11 weighted with NHS convention. |
 | `bsn_nl` | `\b\d{9}\b` | `_checksumBsnNl` | `NL` | `bsn\|burgerservicenummer\|sofinummer` (50) | 11-test with `−1` weight on the 9th digit. |
@@ -192,18 +201,28 @@ Each entry below maps a regex to a context-aware decision. All entries gate via 
 
 ### A. Dispositive provider detectors
 
-Frozen list `DISPOSITIVE_RES` (full match wrapped — the prefix word stays inside the span). Order matters: broader-span patterns first so longer wraps win the overlap dedup.
+Single combined regex `DISPOSITIVE_RE` (full match wrapped — the prefix word stays inside the span). All 18 provider patterns are joined into one alternation for a single-pass scan. Order matters: longer/more-specific prefixes first so they win against shorter alternatives at the same position (e.g. `sk-ant-` before `sk-`, `github_pat_` before `ghp_`).
 
 | # | Pattern | Catches |
 |---|---|---|
 | 1 | `\b(?:Bearer\|Basic)\s+[A-Za-z0-9._\-+/=]{20,}\b` | `Authorization: Bearer eyJ…` (whole header) |
-| 2 | `\bAKIA[0-9A-Z]{16}\b` | AWS access key |
+| 2 | `\bAKIA[0-9A-Z]{16}\b` | AWS access key ID |
 | 3 | `\bgithub_pat_[A-Za-z0-9_]{82}\b` | GitHub fine-grained PAT |
 | 4 | `\bghp_[A-Za-z0-9]{36}\b` | GitHub classic PAT |
 | 5 | `\b[sp]k_(?:live\|test)_[A-Za-z0-9]{24,}\b` | Stripe sk_/pk_ live/test |
 | 6 | `\bAIza[A-Za-z0-9_\-]{35}\b` | Google API |
 | 7 | `\bxox[bpoars]-[A-Za-z0-9\-]{10,}\b` | Slack |
 | 8 | `\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b` | Bare 3-segment JWT |
+| 9 | `\bglpat-[A-Za-z0-9_\-]{20,}\b` | GitLab personal access token |
+| 10 | `\bsk-ant-[A-Za-z0-9_\-]{90,}\b` | Anthropic API key |
+| 11 | `\bsk-[A-Za-z0-9]{20,}\b` | OpenAI API key |
+| 12 | `\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b` | SendGrid API key |
+| 13 | `\bnpm_[A-Za-z0-9]{36}\b` | npm access token |
+| 14 | `\bpypi-[A-Za-z0-9_\-]{100,}\b` | PyPI API token |
+| 15 | `\bAC[a-f0-9]{32}\b` | Twilio Account SID |
+| 16 | `\bdop_v1_[a-f0-9]{64}\b` | DigitalOcean personal token |
+| 17 | `\bdckr_pat_[A-Za-z0-9_\-]{20,}\b` | Docker Hub PAT |
+| 18 | `\bhf_[A-Za-z0-9]{34}\b` | HuggingFace token |
 
 A local `consumed[]` array tracks ranges so subsequent dispositive passes and the keyword-prefix pass skip overlapping spans.
 
@@ -223,16 +242,17 @@ Capture group `m[1]` is the value to wrap; offsets read via `/d` flag → `m.ind
 - Credentials — `password`, `secret`, `key`, `token`, `bearer`, `auth`, `credential`, …
 - Dev (multi-word) — `api[ _-]?key`, `access[ _-]?token`, `refresh[ _-]?token`, `client[ _-]?id/secret`, `session[ _-]?id`, `request[ _-]?id`, `trace[ _-]?id`, `correlation[ _-]?id`, `transaction[ _-]?id`, `device[ _-]?id`, `tenant[ _-]?id`, `org[ _-]?id`, …
 - Corporate / consumer — `reference`, `confirmation`, `otp`, `pin`, `verification`, `serial`, `license`, `policy`, `order`, `invoice`, `tracking`, `case`, `ticket`, …
+- Infrastructure — `database`, `connection`, `webhook`, `endpoint`, `dsn`, `mongo`, `redis`, `postgres`, `mysql`, `smtp`, `imap`
 
 #### Value-validator (`_validateValue`)
 
 ```
 length >= 4
-AND (matchText contains a digit OR length >= 16)
+AND contains at least one non-letter character (digit, dot, dash, underscore, etc.)
 AND not all-same-char  (rejects "aaaa", "0000")
 ```
 
-The 4-char floor + digit-or-length-16 gate is the **Decision #3 length gate**: short public references (`Order #5`, `Case 12`) stay unblurred; long unique identifiers (`Order #1234567890`, `Case ABC-12345`, `Tracking 1Z999AA10123456784`) wrap. `isOrderRef` in `pii_suppressors.js` is **unchanged** — still suppresses bare-numeric matches near order-ish keywords on the NUMERIC path when no value of length ≥ 4 follows.
+The 4-char floor + non-alpha gate is the **Decision #3 length gate**: short public references (`Order #5`, `Case 12`) stay unblurred; long unique identifiers (`Order #1234567890`, `Case ABC-12345`, `Tracking 1Z999AA10123456784`) wrap. Pure-alpha strings of any length are rejected — real credential values virtually always contain digits or punctuation; pure-alpha matches are English words (e.g. "responsibilities", "acknowledgements"). `isOrderRef` in `pii_suppressors.js` is **unchanged** — still suppresses bare-numeric matches near order-ish keywords on the NUMERIC path when no value of length ≥ 4 follows.
 
 ### Pre-filter coupling
 

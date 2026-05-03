@@ -108,6 +108,16 @@ Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Co
 - `dynamic item with legacy selector string still populates selectors array` — legacy `selector` string field wrapped in array for `data-highlight-selectors`.
 - `sticky item row has data-highlight-type="sticky" and data-highlight-id` — sticky row has `data-highlight-type="sticky"` and `dataset.highlightId` equal to the zone id.
 
+### renderNotifArea per-trigger sub-cards
+
+- `single trigger renders one sub-card` — idle active only → exactly 1 `.bl-notif-card` with `.bl-notif-card__actions`.
+- `multiple triggers render separate sub-cards` — idle + tab_switch active → 2 `.bl-notif-card` elements.
+- `suppressed trigger shows undo row, no action buttons` — idle suppressed for tab → card has `.bl-notif-card__suppress`, no `.bl-notif-card__actions`.
+- `sharing-tab renders single card with warn button only` — `is_sharing_tab=true` → 1 card, 1 `.bl-notif-btn--warn` button.
+- `skipped state renders info-only card with no actions` — `automate_blur_skipped=true, skip_reason='manual'` → card has `.bl-notif-card__info`, no actions.
+- `site-rule pill renders before sub-cards` — `activeRule` + idle trigger → first child is `.bl-notif-pill`, second is `.bl-notif-card`.
+- `all three triggers render three sub-cards` — screen_share + idle + tab_switch active → 3 `.bl-notif-card` elements.
+
 ## Edge Cases Covered
 
 - Blur radius thresholds: three distinct label tiers (subtle ≤ ~4, moderate ~5-8, strong ≥ 9 approximate range tested at 3/6/10).

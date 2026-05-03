@@ -2,7 +2,7 @@
 
 ## Overview
 
-Unit tests for `src/pii/` — Phase 0 of the PII rewrite split the monolithic `src/pii_detector.js` into seven sub-modules under `src/pii/` (`pii_state.js`, `pii_checksums.js`, `pii_pre_filter.js`, `pii_country.js`, `pii_suppressors.js`, `pii_detectors.js`, `pii.js`). The facade `pii.js` still exposes the same public surface as the legacy detector under `blsi.PiiDetector` with five public members: `scan(rootEl, types)`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()`.
+Unit tests for `src/pii/` — Phase 0 of the PII rewrite split the monolithic `src/pii_detector.js` into seven sub-modules under `src/pii/` (`pii_state.js`, `pii_checksums.js`, `pii_pre_filter.js`, `pii_country.js`, `pii_suppressors.js`, `pii_detectors.js`, `pii.js`). The facade `pii.js` still exposes the same public surface as the legacy detector under `blsi.PiiDetector` with public members: `scan(rootEl, types, onDone?)`, `cancelChunkedScan()`, `clear(rootEl)`, `handleMutations(mutations, root)`, `getMatchCount()`, `getPatterns()`, `getStats()`. Most tests use the synchronous path (no `onDone`); two tests exercise the chunked async path with `jest.useFakeTimers()` to verify mutation buffering during scans.
 
 Tests verify pattern detection for two PII types (EMAIL and NUMERIC), false-positive suppression chains, DOM wrapping behaviour, multi-type detection, PII independence from the blur-all engine, `clear()` restoration, `getMatchCount()` accumulation, `getPatterns()` shape, and `handleMutations()` subscriber-style routing for both `childList` and `characterData` mutations.
 
@@ -127,7 +127,8 @@ No external module dependencies are mocked — the `src/pii/` modules operate pu
 - `STAGE 0 — skips numbers inside <pre>` — content inside `<pre>` is not scanned; returns 0
 - `STAGE 0 — skips numbers inside <kbd>` — content inside `<kbd>` is not scanned; returns 0
 - `STAGE 0 — skips numbers inside <samp>` — content inside `<samp>` is not scanned; returns 0
-- `STAGE 0 — skips numbers inside .highlight (syntax-highlighter)` — `.highlight`/`.codehilite`/`[data-code]` selectors covered
+- `STAGE 0 — skips numbers inside pre.highlight (syntax-highlighter)` — `pre.highlight` variant; bare `<div class="highlight">` no longer matches (apps use `.highlight` for search/UI highlighting)
+- `STAGE 0 — bare .highlight div does NOT suppress (not a code block)` — verifies the tightened selector doesn't suppress non-code `.highlight` containers
 - `STAGE 0 — numbers OUTSIDE code block still detected` — sanity check
 - `STAGE 0 — M1 digit pre-screen skips no-digit nodes when email disabled` — `'No digits here at all.'` with `{ numeric: true }` returns 0 (saves regex work via the `hasDigit` early-exit)
 - `STAGE 0 — M1 pre-screen does NOT skip when email enabled` — email path runs even on no-digit text; sanity check that the email path is preserved
@@ -185,12 +186,35 @@ No external module dependencies are mocked — the `src/pii/` modules operate pu
 ### Identifier-context detection (added — sub-pass inside types.numeric)
 Decision #3 reframe — `Order #12345` / `Tracking 12345` / `Invoice 12345` (previous 3 isOrderRef negatives) **flipped to wrap** the value via the new keyword-prefix detector. `isOrderRef` itself is unchanged.
 
-Keyword-prefix positives: `User ID: 12345`, `user_id=abc123def`, `API Key — 7HsKx9aZ2pQrLm`, `password: hunter2`, `OTP is 4729`, `Confirmation code: VX7-9PQ`, `customer #12345`, `employee no 88421`, `client_secret = "abc123_xyz"`, `Verification: 123456`, `Pin 4242`, `refresh_token: VeryLongAlphaTokenButNoDigits` (16+ alpha path), `Account #12345 / Customer ID 67890`, `Order #1234567890`, `Order ABC-12345`, tie-break `User ID: 12345`.
+Keyword-prefix positives: `User ID: 12345`, `user_id=abc123def`, `API Key — 7HsKx9aZ2pQrLm`, `password: hunter2`, `OTP is 4729`, `Confirmation code: VX7-9PQ`, `customer #12345`, `employee no 88421`, `client_secret = "abc123_xyz"`, `Verification: 123456`, `Pin 4242`, `refresh_token: VeryLongAlpha_Token42` (long value with non-alpha char), `Account #12345 / Customer ID 67890`, `Order #1234567890`, `Order ABC-12345`, tie-break `User ID: 12345`.
 
-Dispositive providers: bare AWS `AKIA…`, GitHub PAT `ghp_…`, 3-segment JWT, `Authorization: Bearer eyJ…`, Stripe `api_key: sk_live_…`, Bearer + JWT overlap → one span.
+Dispositive providers: bare AWS `AKIA…`, GitHub PAT `ghp_…`, 3-segment JWT, `Authorization: Bearer eyJ…`, Stripe `api_key: sk_live_…`, Bearer + JWT overlap → one span, GitLab `glpat-…`, Anthropic `sk-ant-…`, OpenAI `sk-…`, SendGrid `SG.…`, npm `npm_…`, Twilio `AC…`, HuggingFace `hf_…`.
 
-Negatives: `the id is short`, `id="x"`, `account holder smith`, `Order #5`, `Case 12`, `password: aaaaaaaaaaaaaaaa` (all-same-char gate).
+Keyword expansion: `database: prod-db-01.cluster`, `webhook: hook_abc123xyz456`, `smtp: mail.relay-01.internal`.
+
+Negatives: `the id is short`, `id="x"`, `account holder smith`, `Order #5`, `Case 12`, `password: aaaaaaaaaaaaaaaa` (all-same-char gate), `Key responsibilities include managing the team.` (pure-alpha English word rejected by non-alpha gate).
 - `NUMERIC phone — NBSP-separated "+91 94909 73391" wraps as one span` — alt #5 with U+00A0 separators
+
+### Cross-node keyword lookaround (added — facade `_processTextNode` + `_precedingText`)
+
+Bridges the gap when keyword ("Customer ID:") and value ("90002883607") are in different DOM elements. The facade walks backward through preceding siblings/parents (stopping at block-level boundaries) and checks `hasKeywordTrail`. Only fires for digit-only text nodes that `findMatches` returned empty for.
+
+Positives:
+- `<strong>Customer ID:</strong> <span>90002883607</span>` — 11-digit value in sibling span
+- `<strong><u>Org ID:</u></strong> <span>5678</span>` — short value across nested elements
+- `<strong>Customer ID:</strong> <span>2024</span>` — year-suppressed value rescued by keyword context
+
+Negatives:
+- `<strong>Description:</strong> <span>2024</span>` — not a PII keyword
+- `<span>2024</span> <strong>is the account</strong>` — keyword after value, not preceding
+- `<p>Customer ID:</p><p><span>2024</span></p>` — block boundary stops walk
+
+### Chunked scan — mutation buffering (added)
+
+Exercises the async `scan(..., onDone)` path with `jest.useFakeTimers()` and `requestIdleCallback` overridden to `undefined` (forces `setTimeout` fallback). DOM has 210+ text nodes to exceed `CHUNK_SIZE` (200) and force multi-chunk scheduling.
+
+- `mutations during scan are buffered and replayed` — injects a `<p>` with `<strong><u>Org ID:</u></strong> 46387905` during mid-scan (`_scanComplete` false), calls `handleMutations` which buffers. After `jest.runAllTimers()` drains all chunks, verifies the PII span exists.
+- `cancelChunkedScan discards buffered mutations` — buffers a mutation then calls `cancelChunkedScan`. Verifies no PII spans exist (buffer discarded, not drained).
 
 ### Phase 2 — cascade tiers + regex cache + stats (added)
 - `Phase 2 — getCachedRegex returns same RegExp instance per pattern` — two consecutive calls with the same prototype return the identical instance; `lastIndex` is `0` after each call
@@ -232,6 +256,12 @@ Integration coverage for the high-confidence checksum-validated detectors wired 
 #### Stage 1 — Aadhaar
 - `valid Verhoeff-passing 12-digit ID wrapped` — `'234123412346'` → ≥ 1 span (synthetic Aadhaar passing Verhoeff).
 - `Verhoeff-failing 12-digit number falls back to bare-numeric (not Stage 1)` — Off-by-one check digit → ≥ 1 span via Stage 3 (bare-numeric).
+
+#### Stage 1 — E164 phone vs Aadhaar priority
+- `+91 with 4-4-4 grouping wraps full string including country code` — `'+91 9876 5432 1098'` → span includes `+91`; E164 runs before Aadhaar so the full phone is one span.
+- `+91 with no space wraps full string including +` — `'+919876543210'` → span text `+919876543210`; without E164 priority, Aadhaar would consume `919876543210` leaving `+` orphaned.
+- `+91 with Aadhaar-shaped body wraps full string` — `'+91 2345 6789 0123'` → span includes `+91`.
+- `standalone Aadhaar (no + prefix) still detected` — `'234123412346'` → ≥1 span; E164 priority doesn't affect standalone Aadhaar detection.
 
 #### Stage 1 — overlap with bare-numeric
 - `PAN does not double-wrap (Stage 1 + Stage 3)` — Bare 16-digit Visa → exactly 1 span; consumed-tracker prevents Stage 3 from re-emitting.

@@ -46,14 +46,15 @@ const BlurrySitePiiDetector = (() => {
     return count;
   }
 
-  /**
-   * Scan rootEl for PII text and wrap matches in blur spans.
-   * @param {Element} rootEl
-   * @param {Object}  types  — { email: bool, numeric: bool }
-   * @returns {number} match count
-   */
-  function scan(rootEl, types) {
-    if (!rootEl || !types) return 0;
+  var CHUNK_SIZE = 500;
+
+  var _chunkedIdleHandle = null;
+  var _scanComplete = true;
+  var _pendingMutations = null;
+
+  function scan(rootEl, types, onDone) {
+    cancelChunkedScan();
+    if (!rootEl || !types) { if (onDone) onDone(0); return 0; }
     const enabledTypes = {};
     let anyEnabled = false;
     if (types.email) {
@@ -64,63 +65,160 @@ const BlurrySitePiiDetector = (() => {
       enabledTypes.numeric = true;
       anyEnabled = true;
     }
-    if (!anyEnabled) return 0;
+    if (!anyEnabled) { if (onDone) onDone(0); return 0; }
 
     blsi.PiiState.setActiveTypes(enabledTypes);
-    // Phase 4: seed the per-scan country signal once at the top of the
-    // scan via PERF.md M6 cache. Stage 2 validators read it through
-    // blsi.PiiState.getCountry() so the live document is queried at most
-    // once per scan even on heavy pages with thousands of text nodes.
     if (blsi.PiiCountry && typeof blsi.PiiCountry.detect === "function") {
       blsi.PiiState.setCountry(blsi.PiiCountry.detect());
     }
-    // Top-level scan defines the per-scan stats window. Recursive subtree
-    // walks via _scanSubtree (called from handleMutations ELEMENT_NODE)
-    // intentionally skip the reset so counters accumulate across the drain.
     blsi.PiiState.resetStats();
-    return _scanSubtree(rootEl, enabledTypes);
+
+    if (!onDone) {
+      _scanComplete = true;
+      return _scanSubtree(rootEl, enabledTypes);
+    }
+
+    _scanComplete = false;
+    _pendingMutations = [];
+    var walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_ALL, _walkerFilter, false);
+    var schedule = typeof requestIdleCallback !== 'undefined' ? requestIdleCallback : setTimeout;
+    _runChunked(walker, 0, enabledTypes, onDone, schedule);
+    return 0;
+  }
+
+  function _runChunked(walker, total, enabledTypes, onDone, schedule) {
+    var count = 0;
+    var node;
+    while (count < CHUNK_SIZE && (node = walker.nextNode())) {
+      total += _processTextNode(node, enabledTypes);
+      count++;
+    }
+    if (!node) {
+      _chunkedIdleHandle = null;
+      _scanComplete = true;
+      var buffered = _pendingMutations;
+      _pendingMutations = null;
+      if (buffered && buffered.length > 0) {
+        for (var i = 0; i < buffered.length; i++) {
+          handleMutations(buffered[i].m, buffered[i].r);
+        }
+      }
+      onDone(total);
+      return;
+    }
+    _chunkedIdleHandle = schedule(function () {
+      _runChunked(walker, total, enabledTypes, onDone, schedule);
+    });
+  }
+
+  function cancelChunkedScan() {
+    if (_chunkedIdleHandle != null) {
+      if (typeof cancelIdleCallback !== 'undefined') cancelIdleCallback(_chunkedIdleHandle);
+      else clearTimeout(_chunkedIdleHandle);
+      _chunkedIdleHandle = null;
+    }
+    _scanComplete = true;
+    _pendingMutations = null;
+  }
+
+  var _BLOCK_RE = /^(?:P|DIV|LI|TD|TH|TR|SECTION|ARTICLE|HEADER|FOOTER|NAV|ASIDE|MAIN|BLOCKQUOTE|DD|DT|FIGCAPTION|FIGURE|H[1-6]|HR|OL|UL|DL|PRE|TABLE|TBODY|THEAD|TFOOT|DETAILS|SUMMARY|FORM|FIELDSET)$/;
+
+  function _precedingText(textNode, limit) {
+    var parts = [];
+    var len = 0;
+    var node = textNode;
+    while (len < limit) {
+      var prev = node.previousSibling;
+      if (prev) {
+        if (prev.nodeType === Node.ELEMENT_NODE && _BLOCK_RE.test(prev.tagName)) break;
+        var t = prev.textContent || "";
+        if (t) { parts.push(t); len += t.length; }
+        node = prev;
+      } else {
+        var parent = node.parentNode;
+        if (!parent || parent.nodeType !== Node.ELEMENT_NODE || _BLOCK_RE.test(parent.tagName)) break;
+        node = parent;
+      }
+    }
+    parts.reverse();
+    var result = parts.join("");
+    return result.length > limit ? result.slice(result.length - limit) : result;
+  }
+
+  var _SHORT_DIGIT_RE = /^\s*\d[\d \-]{2,14}\d\s*$/;
+
+  var _SKIP_RE = /^(?:CODE|KBD|SAMP)$/;
+
+  var _walkerFilter = {
+    acceptNode: function (node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (blsi.PiiPreFilter.isExtensionUIElement(node)) return NodeFilter.FILTER_REJECT;
+        if (_SKIP_RE.test(node.tagName)) return NodeFilter.FILTER_REJECT;
+        if (node.tagName === "PRE" && blsi.PiiPreFilter.isCodePre(node)) return NodeFilter.FILTER_REJECT;
+        if (blsi.PiiPreFilter.isCodeEditorWidget(node)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_SKIP;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  };
+
+  var _CODE_ANCESTOR_SELECTOR =
+    "code, kbd, samp, [data-code], .codehilite, .cm-editor, .CodeMirror, .monaco-editor, .ace_editor";
+
+  function _isInsideExtensionUI(node) {
+    return blsi.PiiPreFilter.isExtensionUI(node);
+  }
+
+  function _shouldSkipMutation(node) {
+    if (_isInsideExtensionUI(node)) return true;
+    var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    if (!el || !el.closest) return true;
+    if (el.closest(_CODE_ANCESTOR_SELECTOR)) return true;
+    var pre = el.closest("pre");
+    if (pre && blsi.PiiPreFilter.isCodePre(pre)) return true;
+    return false;
+  }
+
+  function _processTextNode(tn, enabledTypes) {
+    if (blsi.PiiPreFilter.isInsidePiiSpan(tn)) return 0;
+    const text = tn.textContent;
+    if (!text || text.length < 4) return 0;
+    const numericPath = enabledTypes.numeric
+      ? blsi.PiiPreFilter.hasDigitOrLongAlnum(text)
+      : false;
+    const digit = blsi.PiiPreFilter.hasDigit(text);
+    if (!digit && !numericPath && !enabledTypes.email) return 0;
+    blsi.PiiState.recordNode(digit);
+    const matches = blsi.PiiDetectors.findMatches(text, enabledTypes);
+    if (matches.length > 0) return _wrapTextNode(tn, matches);
+
+    // Cross-node keyword lookaround: short digit-only text in its own element
+    // (e.g. <span>90002883607</span>) preceded by a keyword in a sibling/parent.
+    if (enabledTypes.numeric && digit && _SHORT_DIGIT_RE.test(text)) {
+      var preceding = _precedingText(tn, 120);
+      if (preceding && blsi.PiiDetectors.hasKeywordTrail(preceding)) {
+        var trimmed = text.trim();
+        var start = text.indexOf(trimmed);
+        return _wrapTextNode(tn, [
+          { start: start, end: start + trimmed.length, type: "numeric" },
+        ]);
+      }
+    }
+    return 0;
   }
 
   /**
    * Walk a subtree without touching active-types or stats. Internal helper
-   * shared by `scan()` (after it resets) and `handleMutations` (which adds
-   * to existing per-drain counters).
+   * shared by `scan()` (synchronous fallback) and `handleMutations` (which
+   * adds to existing per-drain counters).
    */
   function _scanSubtree(rootEl, enabledTypes) {
-    let total = 0;
-
-    const walker = document.createTreeWalker(
-      rootEl,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false,
-    );
-    const nodes = [];
-    let node;
-    while ((node = walker.nextNode())) nodes.push(node);
-
-    for (const tn of nodes) {
-      if (blsi.PiiPreFilter.isExtensionUI(tn)) continue;
-      if (blsi.PiiPreFilter.isInsidePiiSpan(tn)) continue;
-      if (blsi.PiiPreFilter.isInsideCodeBlock(tn)) continue;
-      const text = tn.textContent;
-      // Length floor: shortest PII match (email "a@b.co") is 6 chars; numeric
-      // patterns require 4+. Skipping <4-char nodes drops single-glyph and
-      // whitespace-only text without a trim() allocation.
-      if (!text || text.length < 4) continue;
-      // M1 digit pre-screen: skip detector regex when no digit (and no long
-      // alnum run when numeric is on, so identifier-context detectors that
-      // wrap pure-alpha tokens still see the text). Email path is exempt.
-      const numericPath = enabledTypes.numeric
-        ? blsi.PiiPreFilter.hasDigitOrLongAlnum(text)
-        : false;
-      const digit = blsi.PiiPreFilter.hasDigit(text);
-      if (!digit && !numericPath && !enabledTypes.email) continue;
-      blsi.PiiState.recordNode(digit);
-      const matches = blsi.PiiDetectors.findMatches(text, enabledTypes);
-      if (matches.length > 0) total += _wrapTextNode(tn, matches);
+    var total = 0;
+    var walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_ALL, _walkerFilter, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      total += _processTextNode(node, enabledTypes);
     }
-
     return total;
   }
 
@@ -154,53 +252,29 @@ const BlurrySitePiiDetector = (() => {
    * Precondition: scan() must have run first to seed activeTypes; else no-op.
    */
   function handleMutations(mutations, _root) {
-    const activeTypes = blsi.PiiState.getActiveTypes();
+    if (!_scanComplete) {
+      if (_pendingMutations) _pendingMutations.push({ m: mutations, r: _root });
+      return;
+    }
+    var activeTypes = blsi.PiiState.getActiveTypes();
     if (!activeTypes || !mutations || mutations.length === 0) return;
 
-    for (const mutation of mutations) {
+    for (var i = 0; i < mutations.length; i++) {
+      var mutation = mutations[i];
       if (mutation.type === "childList") {
-        for (const node of mutation.addedNodes) {
+        for (var j = 0; j < mutation.addedNodes.length; j++) {
+          var node = mutation.addedNodes[j];
           if (node.nodeType === Node.TEXT_NODE) {
-            if (blsi.PiiPreFilter.isExtensionUI(node)) continue;
-            if (blsi.PiiPreFilter.isInsidePiiSpan(node)) continue;
-            if (blsi.PiiPreFilter.isInsideCodeBlock(node)) continue;
-            const text = node.textContent;
-            if (text && text.length >= 4) {
-              const numericPath = activeTypes.numeric
-                ? blsi.PiiPreFilter.hasDigitOrLongAlnum(text)
-                : false;
-              if (
-                !blsi.PiiPreFilter.hasDigit(text) &&
-                !numericPath &&
-                !activeTypes.email
-              )
-                continue;
-              const matches = blsi.PiiDetectors.findMatches(text, activeTypes);
-              if (matches.length > 0) _wrapTextNode(node, matches);
-            }
+            if (_shouldSkipMutation(node)) continue;
+            _processTextNode(node, activeTypes);
           } else if (node.nodeType === Node.ELEMENT_NODE) {
-            if (
-              !blsi.PiiPreFilter.isExtensionUI(node) &&
-              !blsi.PiiPreFilter.isInsidePiiSpan(node) &&
-              !blsi.PiiPreFilter.isInsideCodeBlock(node)
-            ) {
-              // Recursive subtree walk — does NOT reset stats so counters
-              // accumulate correctly across multi-subtree mutation drains.
-              _scanSubtree(node, activeTypes);
-            }
+            if (node.hasAttribute && node.hasAttribute(blsi.PiiState.PII_ATTR)) continue;
+            if (_shouldSkipMutation(node)) continue;
+            _scanSubtree(node, activeTypes);
           }
         }
       } else if (mutation.type === "characterData") {
-        const node = mutation.target;
-        if (!node || node.nodeType !== Node.TEXT_NODE) continue;
-        if (blsi.PiiPreFilter.isExtensionUI(node)) continue;
-        if (blsi.PiiPreFilter.isInsidePiiSpan(node)) continue;
-        if (blsi.PiiPreFilter.isInsideCodeBlock(node)) continue;
-        const text = node.textContent;
-        if (!text || text.length < 4) continue;
-        if (!blsi.PiiPreFilter.hasDigit(text) && !activeTypes.email) continue;
-        const matches = blsi.PiiDetectors.findMatches(text, activeTypes);
-        if (matches.length > 0) _wrapTextNode(node, matches);
+        if (mutation.target && !_shouldSkipMutation(mutation.target)) _processTextNode(mutation.target, activeTypes);
       }
     }
   }
@@ -219,6 +293,7 @@ const BlurrySitePiiDetector = (() => {
 
   return Object.freeze({
     scan,
+    cancelChunkedScan,
     clear,
     handleMutations,
     getMatchCount,

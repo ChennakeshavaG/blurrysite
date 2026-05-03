@@ -26,7 +26,7 @@ Tests for `popup/renders/keyboard.js`, exposed as `global.BlurrySitePopupRenderS
 
 - `clicking Change replaces row content with capture UI` — after `.bl-sc-change-btn` click, container contains `.bl-sc-capture`.
 - `save button starts disabled in capture mode` — `.bl-sc-save-btn` has `disabled=true` immediately after entering capture mode.
-- `keydown with modifier enables save and updates preview` — firing `{code:'KeyB', mods:['Alt','Shift']}` enables save button and removes `bl-sc-capture__preview--empty` from the preview element.
+- `keydown with modifier enables save and updates preview` — firing `{code:'KeyM', mods:['Alt','Shift']}` (a chord not assigned to any action) enables save button and removes `bl-sc-capture__preview--empty` from the preview element.
 - `keydown without modifier keeps save disabled` — firing `{code:'KeyB'}` with no mods leaves save button disabled.
 - `Escape cancels capture and restores normal row` — `Escape` keydown removes `.bl-sc-capture` and restores `.bl-sc-change-btn`.
 - `Cancel button restores normal row without calling onSave` — clicking `.bl-sc-cancel-btn` exits capture; `onSave` not called.
@@ -45,6 +45,19 @@ Tests for `popup/renders/keyboard.js`, exposed as `global.BlurrySitePopupRenderS
 - Resetting an already-customized binding sends the original `defaultBinding` from `blsi.Actions`, not the customized value.
 - Empty binding array (`[]`) renders the `--none` placeholder instead of a label.
 - After save, the row re-renders inline without a full `renderBody` call (row rebuilds itself in place).
+
+### renderBody — conflict detection
+
+- `recording a chord assigned to another action blocks save and shows warning` — opens capture on first action, presses second action's default chord; save button disabled, warning visible.
+- `recording the same chord already set on this action blocks save` — opens capture on first action, presses its own current chord; save button disabled, warning visible with `--info` class.
+- `recording a unique chord enables save with no warning` — presses `Alt+Shift+Z` (unassigned); save enabled, warning hidden.
+- `reserved chord shows warning but does not block save` — presses `Ctrl+T` (browser-reserved); save enabled, warning visible.
+
+### renderBody — Reset All confirmation
+
+- `first click arms the button, does not call onSave` — clicking Reset All once adds `--armed` class without calling `onSave`.
+- `second click within window executes reset` — double-clicking calls `onSave` once with shortcuts patch, removes `--armed` class.
+- `armed state reverts after 3s timeout` — uses fake timers; after 3000ms the `--armed` class is removed and `onSave` was never called.
 
 ## Coverage Gaps
 

@@ -305,17 +305,61 @@ const BlurrySitePopupRenderShortcuts = (() => {
         previewEl.appendChild(keycaps[ki]);
       }
 
-      if (blsi.ShortcutLabel.isReserved(recordedChord)) {
-        var reserved = blsi.ShortcutLabel.lookup(recordedChord);
-        warningEl.textContent = '⚠️ ' + ((reserved && reserved.label)
-          ? _t('shortcut_reserved_known').replace('{label}', reserved.label)
-          : _t('shortcut_reserved_browser'));
+      // ── Conflict / duplicate / reserved checks ─────────────────────────────
+      var myKey = blsi.ShortcutLabel.chordKey(recordedChord);
+      var blocked = false;
+
+      // Same shortcut already set on this action
+      var currentBinding = _currentBinding(action, settings);
+      if (currentBinding && currentBinding.length > 0 &&
+          blsi.ShortcutLabel.chordKey(currentBinding[0]) === myKey) {
+        warningEl.textContent = _t('shortcut_already_set');
+        warningEl.className = 'bl-sc-capture__warning bl-sc-capture__warning--info';
         warningEl.hidden = false;
-      } else {
-        warningEl.hidden = true;
+        blocked = true;
       }
 
-      saveBtn.disabled = false;
+      // Conflict with another action
+      if (!blocked) {
+        var conflictAction = null;
+        var allActions = blsi.Actions.list();
+        for (var ai = 0; ai < allActions.length; ai++) {
+          if (allActions[ai].id === action.id) continue;
+          var otherBinding = _currentBinding(allActions[ai], settings);
+          for (var bi = 0; bi < otherBinding.length; bi++) {
+            if (blsi.ShortcutLabel.chordKey(otherBinding[bi]) === myKey) {
+              conflictAction = allActions[ai];
+              break;
+            }
+          }
+          if (conflictAction) break;
+        }
+        if (conflictAction) {
+          var conflictI18n = ACTION_I18N[conflictAction.id] || {};
+          var conflictLabel = _t(conflictI18n.label) || conflictAction.label;
+          warningEl.textContent = '⚠️ ' + _t('shortcut_conflict').replace('{action}', conflictLabel);
+          warningEl.className = 'bl-sc-capture__warning';
+          warningEl.hidden = false;
+          blocked = true;
+        }
+      }
+
+      // Reserved chord (informational — does not block)
+      if (!blocked) {
+        if (blsi.ShortcutLabel.isReserved(recordedChord)) {
+          var reserved = blsi.ShortcutLabel.lookup(recordedChord);
+          warningEl.textContent = '⚠️ ' + ((reserved && reserved.label)
+            ? _t('shortcut_reserved_known').replace('{label}', reserved.label)
+            : _t('shortcut_reserved_browser'));
+          warningEl.className = 'bl-sc-capture__warning';
+          warningEl.hidden = false;
+        } else {
+          warningEl.hidden = true;
+          warningEl.className = 'bl-sc-capture__warning';
+        }
+      }
+
+      saveBtn.disabled = blocked;
     }
 
     document.addEventListener('keydown', onKeyDown, true);
@@ -391,7 +435,23 @@ const BlurrySitePopupRenderShortcuts = (() => {
     resetAllBtn.className = 'bl-sc-reset-all-btn';
     resetAllBtn.textContent = _t('shortcut_reset_all');
     resetAllBtn.type = 'button';
+    var _resetArmed = false;
+    var _resetTimer = null;
     resetAllBtn.addEventListener('click', function() {
+      if (!_resetArmed) {
+        _resetArmed = true;
+        resetAllBtn.textContent = _t('shortcut_reset_all_confirm');
+        resetAllBtn.classList.add('bl-sc-reset-all-btn--armed');
+        _resetTimer = setTimeout(function() {
+          _resetArmed = false;
+          resetAllBtn.textContent = _t('shortcut_reset_all');
+          resetAllBtn.classList.remove('bl-sc-reset-all-btn--armed');
+        }, 3000);
+        return;
+      }
+      clearTimeout(_resetTimer);
+      _resetArmed = false;
+      resetAllBtn.classList.remove('bl-sc-reset-all-btn--armed');
       activeCaptureAction = null;
       var allDefaults = blsi.Actions.defaultBindings();
       onSave({ shortcuts: allDefaults });
@@ -401,6 +461,7 @@ const BlurrySitePopupRenderShortcuts = (() => {
         var rowEl = rowEls[a.id];
         if (rowEl) _buildNormalRow(rowEl, a, resetSettings, onSave, activateCapture);
       }
+      resetAllBtn.textContent = _t('shortcut_reset_all');
     });
     headerEl.appendChild(resetAllBtn);
     containerEl.appendChild(headerEl);

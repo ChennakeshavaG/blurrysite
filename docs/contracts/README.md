@@ -26,7 +26,8 @@ For test files: read `<module>.tests.md` when modifying tests for that module.
 | `src/tab_privacy.js` | [tab_privacy.md](tab_privacy.md) |
 | `src/fonts.js` | [fonts.md](fonts.md) |
 | `src/main_world_bridge.js` | [main_world_bridge.md](main_world_bridge.md) |
-| `src/screen_share.js` | [screen_share.md](screen_share.md) |
+| `src/automate/screen_share.js` | [automate/screen_share.md](automate/screen_share.md) |
+| `src/automate/screen_share_bg.js` | [automate/screen_share_bg.md](automate/screen_share_bg.md) |
 | `src/selection_blur.js` | [selection_blur.md](selection_blur.md) |
 | `src/screenshot.js` | [screenshot.md](screenshot.md) |
 | `content_script.js` | [content_script.md](content_script.md) |

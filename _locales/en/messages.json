@@ -293,6 +293,15 @@
   "shortcut_reserved_browser": {
     "message": "This chord is reserved by the browser."
   },
+  "shortcut_conflict": {
+    "message": "Already assigned to {action}"
+  },
+  "shortcut_already_set": {
+    "message": "This shortcut is already set for this action."
+  },
+  "shortcut_reset_all_confirm": {
+    "message": "Tap again to reset all"
+  },
   "rule_pattern": {
     "message": "Matches URL"
   },
@@ -596,6 +605,12 @@
   "automate_idle": {
     "message": "Idle"
   },
+  "automate_idle_info": {
+    "message": "Idle blur active — $1",
+    "placeholders": {
+      "1": { "content": "$1" }
+    }
+  },
   "automate_tab_switch": {
     "message": "Tab Switch"
   },
@@ -669,13 +684,22 @@
     "message": "Turn Off"
   },
   "automate_stop_per_tab": {
-    "message": "This tab"
+    "message": "Skip tab"
   },
   "automate_stop_site_session": {
-    "message": "This site (session)"
+    "message": "Skip site"
   },
   "automate_disable_feature": {
-    "message": "Disable feature"
+    "message": "Turn off"
+  },
+  "automate_tooltip_skip_tab": {
+    "message": "Skip automate blur for this tab. Resets on browser restart."
+  },
+  "automate_tooltip_skip_site": {
+    "message": "Skip automate blur for this site. Resets on browser restart."
+  },
+  "automate_tooltip_turn_off": {
+    "message": "Disable this automate trigger permanently."
   },
   "automate_toast_screen_share": {
     "message": "Blur applied — screen share active"
@@ -692,8 +716,14 @@
   "notif_screen_share_active": {
     "message": "Screen share active"
   },
+  "notif_automate_skipped": {
+    "message": "Automate trigger skipped"
+  },
   "notif_sharing_for": {
     "message": "sharing for"
+  },
+  "notif_sharing_this_screen": {
+    "message": "Sharing this screen"
   },
   "notif_skipped_reason_site_rule": {
     "message": "blur already on (site rule)"

@@ -8,7 +8,7 @@
  *
  * Public API (blsi.ContentI18n):
  *   init(lang)         async — load fallback (en) + primary (lang)
- *   t(key, fallback)   sync  — lookup with primary → fallback → key
+ *   t(key, subsOrFallback)  sync  — lookup with primary → fallback → key; optional $1/$2/… subs
  *   currentLang        getter — last initialized language code
  *
  * Exposed as blsi.ContentI18n (IIFE — no ES module syntax).
@@ -102,26 +102,31 @@ const ContentI18n = (() => {
    * `{ key: { message: "..." } }`, so this helper unwraps `.message`.
    *
    * @param {string} key       — message key (camelCase per Chrome convention)
-   * @param {string} [fallback] — English literal to use if no translation found
+   * @param {string[]|string} [subsOrFallback] — substitution array for $1/$2/… placeholders, OR English literal fallback
    * @returns {string}
    */
-  function t(key, fallback) {
-    const primary = _strings[key] && _strings[key].message;
-    if (primary) return primary;
-    const fb = _fallback[key] && _fallback[key].message;
-    if (fb) return fb;
-    // Neither primary nor English fallback has this key — probably a
-    // typo in the caller or a key that was added to source but not to
-    // messages.json. Warn once per key so typos surface in devtools.
-    if (!_warnedKeys.has(key)) {
-      _warnedKeys.add(key);
-      if (blsi && blsi.Logger) {
-        blsi.Logger.warn('[ContentI18n] missing key: ' + key);
-      } else {
-        console.warn('[BlurrySite ContentI18n] missing key: ' + key);
+  function t(key, subsOrFallback) {
+    const subs = Array.isArray(subsOrFallback) ? subsOrFallback : null;
+    const fallback = (!subs && typeof subsOrFallback === 'string') ? subsOrFallback : null;
+    let msg = _strings[key] && _strings[key].message;
+    if (!msg) msg = _fallback[key] && _fallback[key].message;
+    if (!msg) {
+      if (!_warnedKeys.has(key)) {
+        _warnedKeys.add(key);
+        if (blsi && blsi.Logger) {
+          blsi.Logger.warn('[ContentI18n] missing key: ' + key);
+        } else {
+          console.warn('[BlurrySite ContentI18n] missing key: ' + key);
+        }
+      }
+      msg = fallback || key;
+    }
+    if (subs) {
+      for (let i = 0; i < subs.length; i++) {
+        msg = msg.replace('$' + (i + 1), subs[i]);
       }
     }
-    return fallback || key;
+    return msg;
   }
 
   return {

@@ -160,13 +160,12 @@ src/
 │   ├── observer.js            one MO per root + idle drain + pub/sub
 │   └── target_engine.js       pick-blur zones + dynamic items
 ├── engine.js                  facade + orchestrator (handleSite)
-├── automate/                  idle / tab-switch / overlay
+├── automate/                  idle / tab-switch / screen-share / overlay
 ├── reveal_controller.js       hover-/click-to-peek
 ├── shortcut_handler.js        chord detection
 ├── selection_blur.js          text-selection driven blur
 ├── screenshot.js              viewport capture (blur preserved)
 ├── picker.js                  point-and-click + sticky zones
-├── screen_share.js            getDisplayMedia bridge + port
 ├── main_world_bridge.js       MAIN-world hook (getDisplayMedia, attachShadow)
 └── content_script.js          orchestrator (wires the rest)
 ```

@@ -17,6 +17,7 @@
 | [`healthcare-insurance.md`](./healthcare-insurance.md) | 313 | Health-system IDs (NHS, MBI, NPI, IHI, ABHA, CNS), MRN, Rx, NDC, private insurance. |
 | [`address-location.md`](./address-location.md) | 350 | Postal codes (25 countries), house numbers, geocoordinates, IP, sensitivity tiers, 5-digit collision table. |
 | [`false-positives.md`](./false-positives.md) | 552 | Date/time, version, identifiers-by-design, units, counts, ordinals, statistics, hex, code-block, sports, math. **Most actionable file.** |
+| [`../identifier-credentials.md`](../identifier-credentials.md) | — | **Identifier sub-pass.** PREFIX_RE FP risks, DISPOSITIVE_RES provider coverage (8/50+), missing KEYWORDS, Tier A/B/C provider roadmap. |
 
 ---
 

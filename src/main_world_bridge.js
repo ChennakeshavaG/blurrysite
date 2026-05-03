@@ -23,8 +23,9 @@
     var _origGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
 
     function _dispatchScreenShare(active) {
-      document.dispatchEvent(
-        new CustomEvent('__blsi_screen_share', { detail: { active: active } })
+      window.postMessage(
+        { type: '__blsi_screen_share', active: active },
+        '*'
       );
     }
 

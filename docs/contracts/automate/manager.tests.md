@@ -55,6 +55,11 @@ test starts from a clean closure (uninitialized Manager, empty caches).
   suppresses all toasts even when triggers fire.
 - `ss_stop_actions` callback is invoked when the screen-share toast fires;
   resulting actions are passed to `Shortcuts.showToast`.
+- `idle_stop_actions` callback is invoked when the idle toast fires;
+  resolved actions array passed to `Shortcuts.showToast(msg, 5000, actions)`.
+- `tab_switch_stop_actions` callback is invoked when the tab-switch toast fires;
+  same Promise-based pattern as idle.
+- Falls back to bare `showToast(msg, 5000)` when stop_actions callback not provided.
 
 ### `init bootstrap evaluation`
 - `init` runs an immediate `_evaluate` so a tab opened mid-share with
@@ -85,7 +90,7 @@ test starts from a clean closure (uninitialized Manager, empty caches).
 
 ## Test count
 
-17 tests in 5 describe groups.
+20 tests in 5 describe groups.
 
 ## jsdom-specific notes
 

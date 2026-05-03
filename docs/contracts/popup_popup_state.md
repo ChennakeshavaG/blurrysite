@@ -32,6 +32,10 @@ Returns current snapshot. `settings` is the model object plus runtime extras der
 - `screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }`
 - `screen_share_suppressed_for_host` — boolean
 - `screen_share_suppressed_for_tab` — boolean
+- `idle_suppressed_for_tab` — boolean
+- `idle_suppressed_for_site` — boolean
+- `tab_switch_suppressed_for_tab` — boolean
+- `tab_switch_suppressed_for_site` — boolean
 
 When `_model` is null, falls back to `blsi.build_default_model()`.
 
@@ -74,6 +78,18 @@ Clears all automate triggers (idle + tab_switch) for `_hostname` AND removes the
 
 ### `unsuppressScreenShare(scope) → Promise<void>`
 Inverse of `suppressScreenShare`. Used by the popup notif card's Undo affordance.
+
+### `suppressIdle(scope) → Promise<void>`
+`scope ∈ 'tab' | 'site_session' | 'feature'`. Wraps `blsi.Model.suppress_idle(scope, { hostname: _hostname, tab_id: _tabId })` then refreshes.
+
+### `unsuppressIdle(scope) → Promise<void>`
+Inverse of `suppressIdle`. Used by the popup notif card's Undo affordance.
+
+### `suppressTabSwitch(scope) → Promise<void>`
+`scope ∈ 'tab' | 'site_session' | 'feature'`. Wraps `blsi.Model.suppress_tab_switch(scope, { hostname: _hostname, tab_id: _tabId })` then refreshes.
+
+### `unsuppressTabSwitch(scope) → Promise<void>`
+Inverse of `suppressTabSwitch`. Used by the popup notif card's Undo affordance.
 
 ### `saveRules(newRules) → Promise<void>`
 Replaces full site_rules array via `blsi.Model.save_rules`. Does not auto-refresh — caller decides (rules don't change derived popup state directly).

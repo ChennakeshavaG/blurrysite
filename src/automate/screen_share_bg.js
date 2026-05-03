@@ -1,0 +1,111 @@
+/**
+ * automate/screen_share_bg.js — Background-only screen-share port/message handler.
+ *
+ * Owns the 'blsi-screen-share' port lifecycle, SCREEN_SHARE_STARTED/ENDED message
+ * handling, WHO_AM_I relay, and SCREEN_SHARE_NOTIFY broadcast. Calls State APIs to
+ * manage the per-tab blsi_screen_share session map; content tabs read it via State's
+ * in-memory caches + chrome.storage.session.onChanged.
+ *
+ * Loaded in BACKGROUND service worker only (importScripts in background.js).
+ *
+ * Contract: docs/contracts/automate/screen_share_bg.md
+ *
+ * Exposed as blsi.Automate.ScreenShareBg (IIFE — no ES module syntax).
+ */
+
+(function () {
+  'use strict';
+
+  var State = (globalThis.blsi && globalThis.blsi.Automate && globalThis.blsi.Automate.State) || null;
+  var log   = (globalThis.blsi && globalThis.blsi.Logger) ? globalThis.blsi.Logger.scope('screenShareBg') : null;
+
+  var _sharePorts       = new Map();
+  var _connect_listener = null;
+  var _message_listener = null;
+
+  function _broadcastScreenShareNotify(excludeTabId) {
+    chrome.tabs.query({}, function (tabs) {
+      for (var i = 0; i < tabs.length; i++) {
+        var tab = tabs[i];
+        if (!tab.id) continue;
+        if (excludeTabId !== undefined && tab.id === excludeTabId) continue;
+        chrome.tabs.sendMessage(tab.id, { type: blsi.command.screen_share_notify }).catch(function () {});
+      }
+    });
+  }
+
+  function _onConnect(port) {
+    if (port.name !== 'blsi-screen-share') return;
+    var tabId = port.sender && port.sender.tab && port.sender.tab.id;
+    if (!tabId) return;
+
+    _sharePorts.set(tabId, port);
+    if (log) log.flow('screenShare.portOpen', { tabId: tabId });
+    State.set_screen_share_active(tabId);
+
+    port.onDisconnect.addListener(function () {
+      _sharePorts.delete(tabId);
+      if (log) log.flow('screenShare.portClose', { tabId: tabId });
+      Promise.resolve(State.set_screen_share_inactive(tabId)).then(function () {
+        _broadcastScreenShareNotify();
+      });
+    });
+  }
+
+  function _onMessage(message, sender, sendResponse) {
+    if (!message) return;
+
+    if (message.type === blsi.command.screen_share_started) {
+      var senderTabId = sender.tab && sender.tab.id;
+      Promise.resolve(State.set_screen_share_active(senderTabId)).then(function () {
+        _broadcastScreenShareNotify(senderTabId);
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
+
+    if (message.type === blsi.command.screen_share_ended) {
+      var endTabId = sender.tab && sender.tab.id;
+      Promise.resolve(State.set_screen_share_inactive(endTabId)).then(function () {
+        _broadcastScreenShareNotify();
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
+
+    if (message.type === blsi.command.who_am_i) {
+      var tabId = sender && sender.tab && sender.tab.id;
+      sendResponse({ tab_id: typeof tabId === 'number' ? tabId : null });
+      return false;
+    }
+  }
+
+  function init() {
+    if (!State) return;
+    State.set_screen_share_inactive();
+    State.clear_suppressed_tabs();
+
+    _connect_listener = _onConnect;
+    chrome.runtime.onConnect.addListener(_connect_listener);
+
+    _message_listener = _onMessage;
+    chrome.runtime.onMessage.addListener(_message_listener);
+  }
+
+  function destroy() {
+    if (_connect_listener) {
+      chrome.runtime.onConnect.removeListener(_connect_listener);
+      _connect_listener = null;
+    }
+    if (_message_listener) {
+      chrome.runtime.onMessage.removeListener(_message_listener);
+      _message_listener = null;
+    }
+  }
+
+  var ScreenShareBg = Object.freeze({ init: init, destroy: destroy });
+
+  globalThis.blsi = globalThis.blsi || {};
+  globalThis.blsi.Automate = globalThis.blsi.Automate || {};
+  globalThis.blsi.Automate.ScreenShareBg = ScreenShareBg;
+})();

@@ -28,7 +28,7 @@
   const ROOT_ID     = 'bl-si-automate-overlay';
   const Z_INDEX     = '2147483646';   // one below the picker toolbar (2147483647)
   const BLUR_RADIUS = '40px';         // deep — heavy obscuration, page motion still hints through
-  const TINT        = 'rgba(0, 0, 0, 0.45)'; // moderate dark tint atop the backdrop blur
+  const TINT        = 'transparent';          // no tint — pure frosted glass
 
   let _el          = null;
   let _initialized = false;

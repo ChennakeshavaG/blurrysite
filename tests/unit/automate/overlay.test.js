@@ -119,10 +119,10 @@ describe('automate/overlay.js', () => {
       }
     });
 
-    test('applies dark tint background', () => {
+    test('applies transparent background (pure frosted — no tint)', () => {
       blsi.Automate.Overlay.show();
       const s = document.getElementById(ROOT_ID).style;
-      expect(s.background).toMatch(/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\.45\s*\)/);
+      expect(s.background).toBe('transparent');
     });
   });
 

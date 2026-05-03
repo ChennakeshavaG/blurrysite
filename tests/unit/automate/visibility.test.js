@@ -65,7 +65,7 @@ describe('automate/visibility.js', () => {
       setHasFocus(true);
       blsi.Automate.Visibility.init({ tab_id: 7 });
       const last = chrome.storage.session.set.mock.calls.at(-1);
-      expect(last[0]).toEqual({ [KEY]: { '7': 'fired' } });
+      expect(last[0]).toEqual({ [KEY]: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } });
       expect(blsi.Automate.State.read_tab_switch(7)).toBe('fired');
     });
 
@@ -89,12 +89,12 @@ describe('automate/visibility.js', () => {
     test('re-init with different tab_id destroys prior + re-binds', () => {
       setVisibility('hidden'); // tab 7 starts hidden → writes fired
       blsi.Automate.Visibility.init({ tab_id: 7 });
-      expect(chrome.storage.session.set.mock.calls.at(-1)[0]).toEqual({ [KEY]: { '7': 'fired' } });
+      expect(chrome.storage.session.set.mock.calls.at(-1)[0]).toEqual({ [KEY]: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } });
 
       setVisibility('visible'); // tab 8 will be armed
       blsi.Automate.Visibility.init({ tab_id: 8 });
       // destroy(7) strips the entry; init(8) is armed = absence → no extra write.
-      expect(chrome.storage.session.set.mock.calls.at(-1)[0]).toEqual({ [KEY]: {} });
+      expect(chrome.storage.session.set.mock.calls.at(-1)[0]).toEqual({ [KEY]: { status: {}, ignore_tabs: [], ignore_sites: [] } });
       expect(blsi.Automate.State.read_tab_switch(8)).toBe('off');
     });
   });
@@ -106,7 +106,7 @@ describe('automate/visibility.js', () => {
       setVisibility('hidden');
       document.dispatchEvent(new Event('visibilitychange'));
       const last = chrome.storage.session.set.mock.calls.at(-1);
-      expect(last[0]).toEqual({ [KEY]: { '7': 'fired' } });
+      expect(last[0]).toEqual({ [KEY]: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } });
     });
 
     test('window.blur writes fired', () => {
@@ -115,7 +115,7 @@ describe('automate/visibility.js', () => {
       setHasFocus(false);
       window.dispatchEvent(new Event('blur'));
       const last = chrome.storage.session.set.mock.calls.at(-1);
-      expect(last[0]).toEqual({ [KEY]: { '7': 'fired' } });
+      expect(last[0]).toEqual({ [KEY]: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } });
     });
 
     test('window.focus after blur strips the fired entry (back to armed=absent)', () => {
@@ -128,7 +128,7 @@ describe('automate/visibility.js', () => {
       setHasFocus(true);
       window.dispatchEvent(new Event('focus'));
       const last = chrome.storage.session.set.mock.calls.at(-1);
-      expect(last[0]).toEqual({ [KEY]: {} });
+      expect(last[0]).toEqual({ [KEY]: { status: {}, ignore_tabs: [], ignore_sites: [] } });
     });
 
     test('same-phase events are absorbed (no extra storage write)', () => {
@@ -147,7 +147,7 @@ describe('automate/visibility.js', () => {
       setHasFocus(true);
       document.dispatchEvent(new Event('visibilitychange'));
       const last = chrome.storage.session.set.mock.calls.at(-1);
-      expect(last[0]).toEqual({ [KEY]: { '7': 'fired' } });
+      expect(last[0]).toEqual({ [KEY]: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } });
     });
   });
 
@@ -159,7 +159,7 @@ describe('automate/visibility.js', () => {
       blsi.Automate.Visibility.destroy();
       // After destroy: 'off' strips the entry, payload becomes empty map.
       const last = chrome.storage.session.set.mock.calls.at(-1);
-      expect(last[0]).toEqual({ [KEY]: {} });
+      expect(last[0]).toEqual({ [KEY]: { status: {}, ignore_tabs: [], ignore_sites: [] } });
     });
 
     test('destroy on an armed (absent) tab does not write', () => {

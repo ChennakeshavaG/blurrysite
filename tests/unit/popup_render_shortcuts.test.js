@@ -143,7 +143,7 @@ describe('renderBody — capture mode', () => {
     BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), jest.fn());
     container.querySelector('.bl-sc-change-btn').click();
 
-    fireKeyDown({ code: 'KeyB', key: 'b', mods: ['Alt', 'Shift'] });
+    fireKeyDown({ code: 'KeyM', key: 'm', mods: ['Alt', 'Shift'] });
 
     const saveBtn = container.querySelector('.bl-sc-save-btn');
     expect(saveBtn.disabled).toBe(false);
@@ -254,5 +254,117 @@ describe('renderBody — save and reset', () => {
     // New binding should be visible (not the --none placeholder)
     const firstRow = container.querySelector('.bl-sc-row');
     expect(firstRow.querySelector('.bl-sc-row__binding--none')).toBeFalsy();
+  });
+});
+
+// ── Case 4: Conflict detection ──────────────────────────────────────────────
+
+describe('renderBody — conflict detection', () => {
+  test('recording a chord assigned to another action blocks save and shows warning', () => {
+    const container = document.getElementById('container');
+    const actions = blsi.Actions.list();
+    const secondDefault = actions[1].defaultBinding[0];
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), jest.fn());
+
+    // Open capture on the first action
+    container.querySelector('.bl-sc-change-btn').click();
+
+    // Press the second action's default chord
+    fireKeyDown({ code: secondDefault.code, key: '', mods: secondDefault.mods });
+
+    const saveBtn = container.querySelector('.bl-sc-save-btn');
+    expect(saveBtn.disabled).toBe(true);
+    const warning = container.querySelector('.bl-sc-capture__warning');
+    expect(warning.hidden).toBe(false);
+  });
+
+  test('recording the same chord already set on this action blocks save', () => {
+    const container = document.getElementById('container');
+    const firstAction = blsi.Actions.list()[0];
+    const chord = firstAction.defaultBinding[0];
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), jest.fn());
+
+    container.querySelector('.bl-sc-change-btn').click();
+    fireKeyDown({ code: chord.code, key: '', mods: chord.mods });
+
+    const saveBtn = container.querySelector('.bl-sc-save-btn');
+    expect(saveBtn.disabled).toBe(true);
+    const warning = container.querySelector('.bl-sc-capture__warning');
+    expect(warning.hidden).toBe(false);
+    expect(warning.classList.contains('bl-sc-capture__warning--info')).toBe(true);
+  });
+
+  test('recording a unique chord enables save with no warning', () => {
+    const container = document.getElementById('container');
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), jest.fn());
+
+    container.querySelector('.bl-sc-change-btn').click();
+    fireKeyDown({ code: 'KeyZ', key: 'z', mods: ['Alt', 'Shift'] });
+
+    const saveBtn = container.querySelector('.bl-sc-save-btn');
+    expect(saveBtn.disabled).toBe(false);
+    const warning = container.querySelector('.bl-sc-capture__warning');
+    expect(warning.hidden).toBe(true);
+  });
+
+  test('reserved chord shows warning but does not block save', () => {
+    const container = document.getElementById('container');
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), jest.fn());
+
+    container.querySelector('.bl-sc-change-btn').click();
+    fireKeyDown({ code: 'KeyT', key: 't', mods: ['Control'] });
+
+    const saveBtn = container.querySelector('.bl-sc-save-btn');
+    expect(saveBtn.disabled).toBe(false);
+    const warning = container.querySelector('.bl-sc-capture__warning');
+    expect(warning.hidden).toBe(false);
+  });
+});
+
+// ── Case 5: Reset All confirmation ──────────────────────────────────────────
+
+describe('renderBody — Reset All confirmation', () => {
+  test('first click arms the button, does not call onSave', () => {
+    const onSave = jest.fn();
+    const container = document.getElementById('container');
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), onSave);
+
+    const resetAllBtn = container.querySelector('.bl-sc-reset-all-btn');
+    resetAllBtn.click();
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(resetAllBtn.classList.contains('bl-sc-reset-all-btn--armed')).toBe(true);
+  });
+
+  test('second click within window executes reset', () => {
+    const onSave = jest.fn();
+    const container = document.getElementById('container');
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), onSave);
+
+    const resetAllBtn = container.querySelector('.bl-sc-reset-all-btn');
+    resetAllBtn.click(); // arm
+    resetAllBtn.click(); // execute
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const patch = onSave.mock.calls[0][0];
+    expect(patch.shortcuts).toBeDefined();
+    expect(resetAllBtn.classList.contains('bl-sc-reset-all-btn--armed')).toBe(false);
+  });
+
+  test('armed state reverts after 3s timeout', () => {
+    jest.useFakeTimers();
+    const onSave = jest.fn();
+    const container = document.getElementById('container');
+    BlurrySitePopupRenderShortcuts.renderBody(container, makeSettings(), onSave);
+
+    const resetAllBtn = container.querySelector('.bl-sc-reset-all-btn');
+    resetAllBtn.click(); // arm
+    expect(resetAllBtn.classList.contains('bl-sc-reset-all-btn--armed')).toBe(true);
+
+    jest.advanceTimersByTime(3000);
+
+    expect(resetAllBtn.classList.contains('bl-sc-reset-all-btn--armed')).toBe(false);
+    expect(onSave).not.toHaveBeenCalled();
+    jest.useRealTimers();
   });
 });

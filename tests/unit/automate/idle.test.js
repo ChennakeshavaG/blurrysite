@@ -98,7 +98,7 @@ describe('automate/idle.js', () => {
       blsi.Automate.Idle.init();
       capturedIdleListener('idle');
       expect(chrome.storage.session.set).toHaveBeenCalledWith(
-        { blsi_automate_idle: 'idle' },
+        { blsi_automate_idle: { status: 'idle', ignore_tabs: [], ignore_sites: [] } },
         expect.any(Function)
       );
       expect(blsi.Automate.Idle.getCurrentPhase()).toBe('idle');
@@ -108,7 +108,7 @@ describe('automate/idle.js', () => {
       blsi.Automate.Idle.init();
       capturedIdleListener('locked');
       expect(chrome.storage.session.set).toHaveBeenCalledWith(
-        { blsi_automate_idle: 'locked' },
+        { blsi_automate_idle: { status: 'locked', ignore_tabs: [], ignore_sites: [] } },
         expect.any(Function)
       );
       expect(blsi.Automate.Idle.getCurrentPhase()).toBe('locked');
@@ -120,7 +120,7 @@ describe('automate/idle.js', () => {
       chrome.storage.session.set.mockClear();
       capturedIdleListener('active');
       expect(chrome.storage.session.set).toHaveBeenCalledWith(
-        { blsi_automate_idle: 'active' },
+        { blsi_automate_idle: { status: 'active', ignore_tabs: [], ignore_sites: [] } },
         expect.any(Function)
       );
     });

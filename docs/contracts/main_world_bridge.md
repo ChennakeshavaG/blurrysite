@@ -2,7 +2,7 @@
 
 ## Overview
 
-A bare IIFE (no `blsi.*` global) that runs in the page's MAIN world at `document_start` — before any page JavaScript. Patches two native browser APIs to emit `CustomEvent`s that the isolated-world content scripts can listen for. Has no `chrome.*` access and no `blsi.*` references; all communication is via `CustomEvent` only.
+A bare IIFE (no `blsi.*` global) that runs in the page's MAIN world at `document_start` — before any page JavaScript. Patches two native browser APIs to signal the isolated-world content scripts. Screen-share signals use `window.postMessage` (crosses the MAIN↔ISOLATED world boundary reliably); shadow-root signals use `CustomEvent` on the host element (same DOM, no data payload needed). Has no `chrome.*` access and no `blsi.*` references.
 
 ## No Public API
 
@@ -12,12 +12,12 @@ This module exports nothing. It operates via side effects on `navigator.mediaDev
 
 ### `navigator.mediaDevices.getDisplayMedia` patch
 
-**What**: Wraps `getDisplayMedia` to fire `'__blsi_screen_share'` CustomEvents on `document` when screen sharing starts and ends.  
+**What**: Wraps `getDisplayMedia` to signal screen-share start/end via `window.postMessage({ type: '__blsi_screen_share', active })`.  
 **Guard**: Only patches if `navigator.mediaDevices` exists and `getDisplayMedia` is a function.  
-**On call**: Awaits the original `getDisplayMedia(constraints)`; fires `{ detail: { active: true } }` on success.  
-**On end**: Attaches `'ended'` listeners to all tracks; fires `{ detail: { active: false } }` when the last track ends.  
-**Edge case**: If the returned stream has 0 tracks, fires `active: false` immediately (avoids an orphaned `active: true` event with no cleanup).  
-**Listener in isolated world**: `screen_share.js` listens for this event on `document`.
+**On call**: Awaits the original `getDisplayMedia(constraints)`; posts `{ active: true }` on success.  
+**On end**: Attaches `'ended'` listeners to all tracks; posts `{ active: false }` when the last track ends.  
+**Edge case**: If the returned stream has 0 tracks, posts `active: false` immediately (avoids an orphaned `active: true` with no cleanup).  
+**Listener in isolated world**: `automate/screen_share.js` listens for `window 'message'` events matching `data.type === '__blsi_screen_share'`.
 
 ### `Element.prototype.attachShadow` patch
 
@@ -31,7 +31,7 @@ This module exports nothing. It operates via side effects on `navigator.mediaDev
 
 ### `_dispatchScreenShare(active)`
 
-**What**: Fires `'__blsi_screen_share'` CustomEvent on `document`.  
+**What**: Posts `{ type: '__blsi_screen_share', active }` via `window.postMessage('*')`. Uses postMessage instead of CustomEvent because `CustomEvent.detail` does not reliably cross the MAIN→ISOLATED world boundary in Chrome.  
 **Params**: `active` (boolean)  
 **Used by**: The patched `getDisplayMedia` on share start and on last-track-ended.
 

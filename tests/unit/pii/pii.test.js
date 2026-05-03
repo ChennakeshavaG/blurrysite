@@ -695,9 +695,14 @@ describe('pii_detector.js', () => {
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
-  test('STAGE 0 — skips numbers inside .highlight (syntax-highlighter)', () => {
-    document.body.innerHTML = '<div class="highlight">var x = 12345;</div>';
+  test('STAGE 0 — skips numbers inside pre.highlight (syntax-highlighter)', () => {
+    document.body.innerHTML = '<pre class="highlight">var x = 12345;</pre>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('STAGE 0 — bare .highlight div does NOT suppress (not a code block)', () => {
+    document.body.innerHTML = '<div class="highlight">ID: 12345</div>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
   });
 
   test('STAGE 0 — numbers OUTSIDE code block still detected', () => {
@@ -1215,10 +1220,15 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('4242');
   });
 
-  test('identifier — long alpha-only value (>=16 chars) wraps via length-gate', () => {
-    document.body.innerHTML = '<p>refresh_token: VeryLongAlphaTokenButNoDigits here.</p>';
+  test('identifier — long value with non-alpha char wraps', () => {
+    document.body.innerHTML = '<p>refresh_token: VeryLongAlpha_Token42 here.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('VeryLongAlphaTokenButNoDigits');
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('VeryLongAlpha_Token42');
+  });
+
+  test('identifier — pure-alpha English word "responsibilities" not wrapped', () => {
+    document.body.innerHTML = '<p>Key responsibilities include managing the team.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('identifier — two values in same paragraph each wrap', () => {
@@ -1292,6 +1302,73 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(`Bearer ${jwt}`);
   });
 
+  test('identifier — GitLab PAT "glpat-..." wraps via dispositive', () => {
+    const tok = 'glpat-AbCdEfGhIjKlMnOpQrSt';
+    document.body.innerHTML = `<p>${tok} is a token.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(tok);
+  });
+
+  test('identifier — Anthropic key "sk-ant-..." wraps via dispositive', () => {
+    const key = 'sk-ant-' + 'a1b2c3d4e5f6g7h8i9j0'.repeat(5);
+    document.body.innerHTML = `<p>${key} leaked.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(key);
+  });
+
+  test('identifier — OpenAI key "sk-..." wraps via dispositive', () => {
+    const key = 'sk-proj1234567890abcdefghij';
+    document.body.innerHTML = `<p>${key} here.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(key);
+  });
+
+  test('identifier — SendGrid key "SG.xxx.yyy" wraps via dispositive', () => {
+    const key = 'SG.' + 'A'.repeat(22) + '.' + 'B'.repeat(43);
+    document.body.innerHTML = `<p>${key} sent.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(key);
+  });
+
+  test('identifier — npm token "npm_..." wraps via dispositive', () => {
+    const tok = 'npm_' + 'aB3dEf4hIjKlMn5pQrStUvWxYz0123456789';
+    document.body.innerHTML = `<p>${tok} published.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(tok);
+  });
+
+  test('identifier — Twilio SID "AC..." wraps via dispositive', () => {
+    const sid = 'AC' + 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4';
+    document.body.innerHTML = `<p>${sid} configured.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(sid);
+  });
+
+  test('identifier — HuggingFace token "hf_..." wraps via dispositive', () => {
+    const tok = 'hf_' + 'AbCdEfGhIjKlMnOpQrStUvWxYz01234567';
+    document.body.innerHTML = `<p>${tok} loaded.</p>`;
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe(tok);
+  });
+
+  test('identifier — keyword "database" wraps adjacent value', () => {
+    document.body.innerHTML = '<p>database: prod-db-01.cluster here.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('prod-db-01.cluster');
+  });
+
+  test('identifier — keyword "webhook" wraps adjacent value', () => {
+    document.body.innerHTML = '<p>webhook: hook_abc123xyz456 firing.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('hook_abc123xyz456');
+  });
+
+  test('identifier — keyword "smtp" wraps adjacent value', () => {
+    document.body.innerHTML = '<p>smtp: mail.relay-01.internal configured.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('mail.relay-01.internal');
+  });
+
   // -- negative cases --
 
   test('identifier — "the id is short" not wrapped (no digit, len < 16)', () => {
@@ -1324,6 +1401,111 @@ describe('pii_detector.js', () => {
     // Bare numeric path doesn't catch (no digit), so total spans = 0.
     document.body.innerHTML = '<p>password: aaaaaaaaaaaaaaaa reset.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  // ── Cross-node keyword lookaround ─────────────────────────────────────────
+  // When keyword and value are in separate DOM elements, the per-node
+  // findMatches can't see both. The facade's _precedingText + hasKeywordTrail
+  // bridges that gap for digit-only values.
+
+  test('cross-node — "Customer ID:" in sibling, "90002883390" in span wraps', () => {
+    document.body.innerHTML =
+      '<p><strong>Customer ID:</strong> <span>90002883390</span></p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('90002883390');
+  });
+
+  test('cross-node — "Org ID:" across nested elements wraps short value', () => {
+    document.body.innerHTML =
+      '<p><strong><u>Org ID:</u></strong> <span>5678</span></p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('5678');
+  });
+
+  test('cross-node — rescues year-suppressed "2024" when keyword precedes', () => {
+    document.body.innerHTML =
+      '<p><strong>Customer ID:</strong> <span>2024</span></p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('2024');
+  });
+
+  test('cross-node — no keyword in preceding text, year-like number not wrapped', () => {
+    document.body.innerHTML =
+      '<p><strong>Description:</strong> <span>2024</span></p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('cross-node — keyword after value does not trigger (trailing keyword)', () => {
+    document.body.innerHTML =
+      '<p><span>2024</span> <strong>is the account</strong></p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('cross-node — block boundary stops preceding text walk', () => {
+    document.body.innerHTML =
+      '<div><p>Customer ID:</p><p><span>2024</span></p></div>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  // ── Chunked scan — mutation buffering ───────────────────────────────────
+  // Mutations arriving during a chunked scan are buffered and replayed after
+  // the scan completes. This covers dynamic content (chat previews, lazy DOM)
+  // inserted while the initial idle-callback scan is still in progress.
+
+  test('chunked scan — mutations during scan are buffered and replayed', (done) => {
+    // Override the synchronous requestIdleCallback stub from setup.js so the
+    // chunked scan actually defers between chunks via setTimeout.
+    var savedRIC = global.requestIdleCallback;
+    global.requestIdleCallback = undefined;
+    jest.useFakeTimers();
+
+    // 510+ text nodes → first chunk (500) doesn't exhaust the walker.
+    var lines = [];
+    for (var i = 0; i < 510; i++) lines.push('<p>Line ' + i + '</p>');
+    document.body.innerHTML = '<div>' + lines.join('') + '</div>';
+
+    blsi.PiiDetector.scan(document.body, { numeric: true }, () => {
+      var piiSpans = document.querySelectorAll('[data-bl-si-pii="numeric"]');
+      expect(piiSpans.length).toBe(1);
+      expect(piiSpans[0].textContent).toBe('46387905');
+      jest.useRealTimers();
+      global.requestIdleCallback = savedRIC;
+      done();
+    });
+
+    // Inject content while chunked scan is mid-flight (_scanComplete false).
+    var preview = document.createElement('p');
+    preview.innerHTML = '<strong><u>Org ID:</u></strong> 46387905';
+    document.body.appendChild(preview);
+
+    blsi.PiiDetector.handleMutations(
+      [{ type: 'childList', addedNodes: [preview], removedNodes: [] }],
+      document.body,
+    );
+
+    // Drain all setTimeout chunks — buffer replays after final chunk.
+    jest.runAllTimers();
+  });
+
+  test('chunked scan — cancelChunkedScan discards buffered mutations', () => {
+    jest.useFakeTimers();
+    document.body.innerHTML = '<div><p>Some text</p></div>';
+
+    blsi.PiiDetector.scan(document.body, { numeric: true }, () => {});
+
+    // Buffer a mutation
+    const node = document.createTextNode('46387905');
+    blsi.PiiDetector.handleMutations(
+      [{ type: 'childList', addedNodes: [node], removedNodes: [] }],
+      document.body,
+    );
+
+    // Cancel — buffered mutations should be discarded, not replayed
+    blsi.PiiDetector.cancelChunkedScan();
+    jest.runAllTimers();
+    jest.useRealTimers();
+
+    expect(document.querySelectorAll('[data-bl-si-pii]').length).toBe(0);
   });
 
   // ── Stage 1 detectors (Phase 3) ─────────────────────────────────────────
@@ -1491,6 +1673,41 @@ describe('pii_detector.js', () => {
       document.body.innerHTML =
         '<p>0x742d35cc6634c0532925a3b844bc9e7595f0beb1</p>';
       expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    });
+  });
+
+  describe('Stage 1 — E164 phone vs Aadhaar priority', () => {
+    afterEach(() => {
+      blsi.PiiDetector.clear(document.body);
+    });
+
+    test('+91 with 4-4-4 grouping wraps full string including country code', () => {
+      document.body.innerHTML = '<p>Call +91 9876 5432 1098 now.</p>';
+      blsi.PiiDetector.scan(document.body, { numeric: true });
+      const span = document.querySelector('[data-bl-si-pii="numeric"]');
+      expect(span).not.toBeNull();
+      expect(span.textContent).toContain('+91');
+    });
+
+    test('+91 with no space wraps full string including +', () => {
+      document.body.innerHTML = '<p>Reach +919876543210 today.</p>';
+      blsi.PiiDetector.scan(document.body, { numeric: true });
+      const span = document.querySelector('[data-bl-si-pii="numeric"]');
+      expect(span).not.toBeNull();
+      expect(span.textContent).toBe('+919876543210');
+    });
+
+    test('+91 with Aadhaar-shaped body wraps full string', () => {
+      document.body.innerHTML = '<p>Number: +91 2345 6789 0123</p>';
+      blsi.PiiDetector.scan(document.body, { numeric: true });
+      const span = document.querySelector('[data-bl-si-pii="numeric"]');
+      expect(span).not.toBeNull();
+      expect(span.textContent).toContain('+91');
+    });
+
+    test('standalone Aadhaar (no + prefix) still detected', () => {
+      document.body.innerHTML = '<p>Aadhaar 234123412346 on file.</p>';
+      expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBeGreaterThanOrEqual(1);
     });
   });
 

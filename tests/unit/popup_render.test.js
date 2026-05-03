@@ -594,7 +594,7 @@ describe('renderAll rule-managed branch', () => {
     const settings = makeSettings();
     BlurrySitePopupRender.renderAll(
       settings, [], false,
-      () => {}, () => {},
+      () => {},
       null, () => {},
       { ruleMatch, ruleOverrides: { blur_mode: true, blur_categories: true } },
     );
@@ -609,7 +609,7 @@ describe('renderAll rule-managed branch', () => {
     const settings = makeSettings();
     BlurrySitePopupRender.renderAll(
       settings, [], false,
-      () => {}, () => {},
+      () => {},
       null, () => {},
       { ruleMatch: null, ruleOverrides: {} },
     );
@@ -622,7 +622,7 @@ describe('renderAll rule-managed branch', () => {
     const onOpen = jest.fn();
     BlurrySitePopupRender.renderAll(
       makeSettings(), [], false,
-      () => {}, () => {},
+      () => {},
       null, () => {},
       { ruleMatch, ruleOverrides: { blur_mode: true }, onOpenManagingRule: onOpen },
     );
@@ -630,5 +630,136 @@ describe('renderAll rule-managed branch', () => {
     expect(cta).not.toBeNull();
     cta.click();
     expect(onOpen).toHaveBeenCalledWith({ focusRule: ruleMatch });
+  });
+});
+
+// ── renderNotifArea per-trigger sub-cards ──────────────────────────────────────
+
+describe('renderNotifArea per-trigger sub-cards', () => {
+  function setupNotifDom() {
+    document.body.innerHTML = `
+      <section id="bl-modes" class="bl-section bl-modes">
+        <div id="bl-notif-area"></div>
+        <div id="bl-mode-blur-all" class="bl-mode-block"></div>
+        <div id="bl-mode-pick-blur" class="bl-mode-block"></div>
+      </section>
+      <section id="bl-pii"><div id="bl-pii-chips"></div><div id="bl-pii-color-row"></div></section>
+      <section id="bl-automate"><div id="bl-automate-summary"></div></section>
+    `;
+  }
+
+  function render(overrides, ctx) {
+    const settings = makeSettings(overrides);
+    BlurrySitePopupRender.renderAll(
+      settings, [], false,
+      () => {},
+      null, () => {},
+      ctx || {},
+    );
+    return document.getElementById('bl-notif-area');
+  }
+
+  beforeEach(() => setupNotifDom());
+
+  test('single trigger renders one sub-card', () => {
+    const area = render({
+      automate_blur_active: true,
+      automate_blur_triggers: { screen_share: false, idle: true, tab_switch: false },
+    }, {
+      onSuppressIdle: jest.fn(),
+      onUnsuppressIdle: jest.fn(),
+    });
+    const cards = area.querySelectorAll('.bl-notif-card');
+    expect(cards.length).toBe(1);
+    expect(cards[0].querySelector('.bl-notif-card__actions')).not.toBeNull();
+  });
+
+  test('multiple triggers render separate sub-cards', () => {
+    const area = render({
+      automate_blur_active: true,
+      automate_blur_triggers: { screen_share: false, idle: true, tab_switch: true },
+    }, {
+      onSuppressIdle: jest.fn(),
+      onUnsuppressIdle: jest.fn(),
+      onSuppressTabSwitch: jest.fn(),
+      onUnsuppressTabSwitch: jest.fn(),
+    });
+    const cards = area.querySelectorAll('.bl-notif-card');
+    expect(cards.length).toBe(2);
+  });
+
+  test('suppressed trigger shows undo row, no action buttons', () => {
+    const area = render({
+      automate_blur_active: false,
+      automate_blur_triggers: { screen_share: false, idle: false, tab_switch: false },
+      idle_suppressed_for_tab: true,
+    }, {
+      onUnsuppressIdle: jest.fn(),
+    });
+    const cards = area.querySelectorAll('.bl-notif-card');
+    expect(cards.length).toBe(1);
+    expect(cards[0].querySelector('.bl-notif-card__suppress')).not.toBeNull();
+    expect(cards[0].querySelector('.bl-notif-card__actions')).toBeNull();
+  });
+
+  test('sharing-tab renders single card with warn button only', () => {
+    const area = render({
+      automate_blur_active: true,
+      automate_blur_triggers: { screen_share: true, idle: false, tab_switch: false },
+      screen_share_state: { active: true, is_sharing_tab: true, started_at: Date.now() - 5000 },
+    }, {
+      onSuppressScreenShare: jest.fn(),
+    });
+    const cards = area.querySelectorAll('.bl-notif-card');
+    expect(cards.length).toBe(1);
+    const btns = cards[0].querySelectorAll('.bl-notif-btn--warn');
+    expect(btns.length).toBe(1);
+  });
+
+  test('skipped state renders info-only card with no actions', () => {
+    const area = render({
+      automate_blur_active: false,
+      automate_blur_skipped: true,
+      automate_blur_skip_reason: 'manual',
+    });
+    const cards = area.querySelectorAll('.bl-notif-card');
+    expect(cards.length).toBe(1);
+    expect(cards[0].querySelector('.bl-notif-card__info')).not.toBeNull();
+    expect(cards[0].querySelector('.bl-notif-card__actions')).toBeNull();
+  });
+
+  test('site-rule pill renders before sub-cards', () => {
+    const activeRule = { hostname_value: 'example.com', hostname_type: 'exact' };
+    const settings = makeSettings({
+      automate_blur_active: true,
+      automate_blur_triggers: { screen_share: false, idle: true, tab_switch: false },
+    });
+    BlurrySitePopupRender.renderAll(
+      settings, [], false,
+      () => {},
+      activeRule, () => {},
+      { onSuppressIdle: jest.fn(), onUnsuppressIdle: jest.fn() },
+    );
+    const area = document.getElementById('bl-notif-area');
+    const children = area.children;
+    expect(children[0].classList.contains('bl-notif-pill')).toBe(true);
+    expect(children[1].classList.contains('bl-notif-card')).toBe(true);
+  });
+
+  test('all three triggers render three sub-cards', () => {
+    const area = render({
+      automate_blur_active: true,
+      automate_blur_triggers: { screen_share: true, idle: true, tab_switch: true },
+      screen_share_state: { active: true, is_sharing_tab: false, started_at: Date.now() - 60000 },
+    }, {
+      onSuppressScreenShare: jest.fn(),
+      onUnsuppressScreenShare: jest.fn(),
+      onSuppressIdle: jest.fn(),
+      onUnsuppressIdle: jest.fn(),
+      onSuppressTabSwitch: jest.fn(),
+      onUnsuppressTabSwitch: jest.fn(),
+    });
+    const cards = area.querySelectorAll('.bl-notif-card');
+    expect(cards.length).toBe(3);
   });
 });

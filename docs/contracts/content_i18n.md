@@ -30,13 +30,13 @@ Runtime i18n loader for content scripts. Loads `_locales/<lang>/messages.json` v
 - Same language already loaded with strings present → no-op (returns immediately)
 - Fetch failure → returns `{}` (silently falls back to English)
 
-### t(key, fallback?)
+### t(key, subsOrFallback?)
 
-**What**: Synchronous string lookup — primary locale → English fallback → `fallback` arg → key itself.  
-**Params**: `key` (string) — message key (camelCase per Chrome messages.json convention); `fallback` (string, optional) — literal to return if no translation found  
-**Returns**: `string` — translated string, fallback string, or the key itself  
+**What**: Synchronous string lookup — primary locale → English fallback → `fallback` arg → key itself. When substitutions are provided, replaces `$1`, `$2`, … in the resolved message.  
+**Params**: `key` (string) — message key (camelCase per Chrome messages.json convention); `subsOrFallback` (string[] | string, optional) — if an array, used as positional substitutions for `$1`/`$2`/… placeholders; if a string, used as literal fallback when no translation found  
+**Returns**: `string` — translated string (with substitutions applied if any), fallback string, or the key itself  
 **Side effects**: Warns via `blsi.Logger.warn` (or `console.warn`) once per missing key per `init()` call  
-**Handles**: Missing key in both primary and fallback → warns once (guarded by `_warnedKeys`) and returns `fallback || key`.
+**Handles**: Missing key in both primary and fallback → warns once (guarded by `_warnedKeys`) and returns `fallback || key`. Array subs replace `$1`…`$N` via simple string replace (first occurrence per index).
 
 ### get currentLang
 

@@ -2,7 +2,7 @@
 paths:
   - "src/storage_model.js"
   - "src/automate/*.js"
-  - "src/screen_share.js"
+  - "src/automate/screen_share.js"
   - "popup/**/*.js"
   - "popup/*.js"
   - "background.js"
@@ -38,7 +38,7 @@ Settings use **snake_case** keys everywhere. No two-shape duality — same shape
 // Session-storage keys live OUTSIDE blsi_model:
 //   chrome.storage.session['blsi_automate_idle']                — 'active'|'idle'|'locked' (global; owned by automate/state.js)
 //   chrome.storage.session['blsi_automate_tab_switch_by_tab']   — { [tab_id]: 'fired' } (per-tab; owned by automate/state.js)
-//   chrome.storage.session['blsi_screen_share']                 — single global record (see below)
+//   chrome.storage.session['blsi_screen_share']                 — per-tab map { [tab_id]: { started_at, suppressed_sites } } (see below)
 //   chrome.storage.session['blsi_automate_suppressed_tabs']     — number[] (per-tab silence-all)
 ```
 
@@ -141,7 +141,7 @@ automate.settings = {
   tab_switch:   { enabled: false },
 }
 ```
-- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `navigator.mediaDevices.getDisplayMedia` in page's MAIN world. On share start, `screen_share.js` opens port (`blsi-screen-share`) + sends `SCREEN_SHARE_STARTED`; background **owns** the live-share state in a single global session record (`blsi_screen_share = { active, sharing_tab_id, started_at, suppressed_sites }`) and broadcasts `SCREEN_SHARE_NOTIFY` (toast ping) to non-sharing tabs. Content tabs read the record via `chrome.storage.session.onChanged` in `storage_model.js` — they do NOT mirror screen-share state into their own per-hostname `automate_blur` entries. Tabs opened mid-share read the record on `init_cache`. On share end (or tab crash/close), port disconnect resets the record + broadcasts NOTIFY. Sharing tab NOT blurred (resolve-side check: `tab_id === sharing_tab_id`). **Smart skip**: if blur-all or pick-and-blur already enabled, automate defers (sets `automate_blur_skipped = true`, populates `automate_blur_skip_reason`), shows "Blur already active — automate skipped" toast.
+- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `navigator.mediaDevices.getDisplayMedia` in page's MAIN world. On share start, `screen_share.js` opens port (`blsi-screen-share`) + sends `SCREEN_SHARE_STARTED`; background **owns** the live-share state in a per-tab session map (`blsi_screen_share = { [tab_id]: { started_at, suppressed_sites } }`) and broadcasts `SCREEN_SHARE_NOTIFY` (toast ping) to non-sharing tabs. Content tabs read the map via `chrome.storage.session.onChanged` in `storage_model.js` — they do NOT mirror screen-share state into their own per-hostname `automate_blur` entries. Tabs opened mid-share read the map on `init_cache`. On share end (or tab crash/close), port disconnect removes only that tab's entry + broadcasts NOTIFY. Multiple tabs can share simultaneously. Sharing tabs NOT blurred (resolve-side check: `tab_id in _sharing_tab_ids`). **Smart skip**: if blur-all or pick-and-blur already enabled, automate defers (sets `automate_blur_skipped = true`, populates `automate_blur_skip_reason`), shows "Blur already active — automate skipped" toast.
 - `idle.unit` accepts `blsi.idle_units` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `value` min 1. UI warns when value exceeds 3000 s.
 - `tab_switch.enabled` boolean only.
 
@@ -149,29 +149,39 @@ automate.settings = {
 
 Three independent session keys, all in **`chrome.storage.session`** (auto-cleared on browser close/crash). Owned and read separately to keep concerns from leaking across each other.
 
-**`blsi_automate_idle`** — single global string: `'active' | 'idle' | 'locked'`. Mirrors the latest `chrome.idle.IdleState`. Written by `blsi.Automate.Idle` (background-only listener). Cleared on browser close.
-
-**`blsi_automate_tab_switch_by_tab`** — per-tab map `{ [tab_id]: 'fired' }`. Only `'fired'` is persisted; absence === `'off'` (=== `'armed'` for resolve purposes — keeps the map small since most tabs are armed most of the time). Written by `blsi.Automate.Visibility` (content-only, per-tab Page Lifecycle observer).
-
+**`blsi_automate_idle`** — object with global idle phase + per-trigger ignore lists:
 ```js
 // chrome.storage.session['blsi_automate_idle']:
-'idle'
-
-// chrome.storage.session['blsi_automate_tab_switch_by_tab']:
-{ '184729322': 'fired' }
+{
+  status: 'idle',                    // 'active' | 'idle' | 'locked'
+  ignore_tabs: [42, 1001],          // tab IDs suppressed for idle trigger
+  ignore_sites: ['gmail.com'],      // hostnames suppressed for idle trigger
+}
 ```
+Mirrors the latest `chrome.idle.IdleState` in `.status`. Written by `blsi.Automate.Idle` (background-only listener). Cleared on browser close. Backward compat: bare string values from old installs are normalized to `{ status: val, ignore_tabs: [], ignore_sites: [] }`.
 
-**`blsi_screen_share`** — single global record describing the live screen-share session. Owned by `background.js`; `storage_model.js` mirrors it into `_screen_share_cache` for synchronous reads.
+**`blsi_automate_tab_switch_by_tab`** — object with per-tab phase map + per-trigger ignore lists:
+```js
+// chrome.storage.session['blsi_automate_tab_switch_by_tab']:
+{
+  status: { '184729322': 'fired' },  // per-tab phase map (unchanged shape, nested under .status)
+  ignore_tabs: [42],                 // tab IDs suppressed for tab_switch trigger
+  ignore_sites: ['meet.google.com'], // hostnames suppressed for tab_switch trigger
+}
+```
+Only `'fired'` is persisted in `.status`; absence === `'off'` (=== `'armed'` for resolve purposes — keeps the map small since most tabs are armed most of the time). Written by `blsi.Automate.Visibility` (content-only, per-tab Page Lifecycle observer). Backward compat: old flat maps (all keys numeric) normalized to `{ status: val, ignore_tabs: [], ignore_sites: [] }`.
+
+**`blsi_screen_share`** — per-tab map of live screen-share sessions. Owned by `automate/screen_share_bg.js` (background); `storage_model.js` mirrors it into `_screen_share_cache` for synchronous reads. Empty map `{}` = no active shares. Presence of a tab key = that tab is sharing.
 
 ```js
 // chrome.storage.session['blsi_screen_share']:
 {
-  active: false,
-  sharing_tab_id: null,    // tab id of the user who initiated the share
-  started_at: null,         // epoch ms
-  suppressed_sites: [],     // hostnames suppressed for this share only (session scope)
+  '42':   { started_at: 1714700000000, suppressed_sites: [] },
+  '1001': { started_at: 1714700005000, suppressed_sites: ['meet.google.com'] }
 }
 ```
+
+`get_screen_share_state(opt_tab_id)` returns a backward-compatible summary: `{ active, sharing_tab_id, started_at, suppressed_sites, _sharing_tab_ids }`. `active` = map non-empty. `suppressed_sites` = union across all tabs. `_sharing_tab_ids` = all sharing tab ids.
 
 **`blsi_automate_suppressed_tabs`** — `number[]` of tab ids silenced for **all** automate triggers. Set when a user picks "This tab" from the toast / popup notif card. `chrome.tabs.onRemoved` strips closed tab ids. Each new share clears this list (mitigates Chrome tab-id reuse).
 
@@ -192,7 +202,7 @@ idle_eff             = !tab_suppressed && idle.enabled && State.read_idle() in {
 tab_switch_eff       = !tab_suppressed && tab_switch.enabled && State.read_tab_switch(tab_id) === 'fired'
 
 ss_blur_for_me_raw   = ss.active
-                        && tab_id !== ss.sharing_tab_id
+                        && ss._sharing_tab_ids.indexOf(tab_id) < 0
                         && !ss.suppressed_sites.includes(host)
                         && model.automate.settings.screen_share.enabled
 ss_eff               = !tab_suppressed && ss_blur_for_me_raw

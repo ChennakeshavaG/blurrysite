@@ -111,9 +111,13 @@ async saveSiteSnapshot(hostname_value, hostname_type, snapshot)
 async getRules()               // → rules array from storage
 
 // Automate
-async clearAutomateBlur()                              // clears idle + tab_switch for current host + per-tab suppression for active tab
+async clearAutomateBlur()                              // clears tab_switch fired state + adds per-tab suppression so triggers don't re-fire
 async suppressScreenShare(scope)                       // scope ∈ 'tab' | 'site_session' | 'feature'
 async unsuppressScreenShare(scope)                     // inverse — used by notif card Undo
+async suppressIdle(scope)                              // scope ∈ 'tab' | 'site_session' | 'feature'
+async unsuppressIdle(scope)                            // inverse — used by notif card Undo
+async suppressTabSwitch(scope)                         // scope ∈ 'tab' | 'site_session' | 'feature'
+async unsuppressTabSwitch(scope)                       // inverse — used by notif card Undo
 
 // Export / Import
 exportModel()                  // returns raw blsi.Model snapshot (no runtime extras) — for JSON export
@@ -169,10 +173,10 @@ updateClearAll(settings, blurItems, isPageBlurred)
 ### BlurrySitePopupRender (renders/main.js)
 
 ```js
-renderAll(settings, blurItems, isPageBlurred, onSave, onClearAutomate, activeRule, onOpenSiteRules, ctx)
+renderAll(settings, blurItems, isPageBlurred, onSave, activeRule, onOpenSiteRules, ctx)
   // Renders modes block, PII section, notif area (site-rule pill + automate card),
   // and automate section. ctx provides resolved/ruleOverrides/ruleMatch +
-  // onSuppressScreenShare(scope) / onUnsuppressScreenShare(scope) callbacks.
+  // onSuppress/onUnsuppress callbacks for all 3 triggers (ScreenShare, Idle, TabSwitch).
 ```
 
 ### Sub-page renderers (renders/*.js)

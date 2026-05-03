@@ -46,6 +46,10 @@ const BlurrySiteObserver = (() => {
   const _subscriberRecordBuffer = new Map();   // root → MutationRecord[]
   let _processScheduled = false;
 
+  // Chunked engine drain: flat work items carried across idle ticks.
+  var ENGINE_CHUNK_SIZE = 500;
+  var _engineWorkRemainder = [];
+
   // Subscribers (PII detector, future modules). Insertion order preserved.
   const _subscribers = new Map();     // name → handler(records, root)
 
@@ -164,6 +168,7 @@ const BlurrySiteObserver = (() => {
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
         if (node.dataset && node.dataset.blSiZone !== undefined) continue;
+        if (node.dataset && node.dataset.blSiPii !== undefined) continue;
         _engineNodeBuffer.push(node);
         collected = true;
       }
@@ -180,43 +185,84 @@ const BlurrySiteObserver = (() => {
 
   function _processObservedChanges() {
     _processScheduled = false;
-    _processEngineNodes();
-    _dispatchToSubscribers();
-  }
 
-  function _processEngineNodes() {
-    const blurAllOn = State.getIsPageBlurred();
-    const pickBlurOn = State.getPickBlurDynamicActive();
-    const settings = State.getCurrentSettings();
-
-    if (!blurAllOn && !pickBlurOn) {
-      // Engine inactive: discard buffered nodes from a stale tick. The
-      // subscriber buffer is left intact for _dispatchToSubscribers.
-      _engineNodeBuffer.length = 0;
-      return;
+    var work;
+    if (_engineWorkRemainder.length > 0) {
+      work = _engineWorkRemainder;
+      _engineWorkRemainder = [];
+    } else {
+      var nodes = _prepareEngineNodes();
+      work = nodes ? _flattenForProcessing(nodes) : null;
     }
-    if (_engineNodeBuffer.length === 0) return;
 
-    const Marker = blsi.MarkerEngine;
-    const Targets = blsi.TargetEngine;
-    const facade = blsi.Engine;
-    const thorough = settings ? !!settings.thorough_blur : false;
-
-    // Drop nodes whose subtree is already covered by an ancestor in the same
-    // batch — prevents double-walking when a SPA inserts a container and its
-    // children across separate MO ticks before the idle fires.
-    const raw = _engineNodeBuffer.splice(0);
-    const nodes = raw.filter(n =>
-      !raw.some(other => other !== n && other.contains && other.contains(n))
-    );
-
-    for (let i = 0; i < nodes.length; i++) {
-      _processNode(nodes[i], blurAllOn, pickBlurOn, settings, thorough, Marker, Targets, facade);
-      const descendants = nodes[i].querySelectorAll('*');
-      for (let j = 0; j < descendants.length; j++) {
-        _processNode(descendants[j], blurAllOn, pickBlurOn, settings, thorough, Marker, Targets, facade);
+    if (work && work.length > 0) {
+      var remaining = _processEngineChunk(work);
+      if (remaining) {
+        _engineWorkRemainder = remaining;
+        _processScheduled = true;
+        _runWhenIdle(_processObservedChanges);
+        return;
       }
     }
+
+    _dispatchToSubscribers();
+
+    if (_engineNodeBuffer.length > 0 || _subscriberRecordBuffer.size > 0) {
+      _processScheduled = true;
+      _runWhenIdle(_processObservedChanges);
+    }
+  }
+
+  function _prepareEngineNodes() {
+    var blurAllOn = State.getIsPageBlurred();
+    var pickBlurOn = State.getPickBlurDynamicActive();
+
+    if (!blurAllOn && !pickBlurOn) {
+      _engineNodeBuffer.length = 0;
+      return null;
+    }
+    if (_engineNodeBuffer.length === 0) return null;
+
+    var raw = _engineNodeBuffer.splice(0);
+    var nodeSet = new Set(raw);
+    return raw.filter(function (n) {
+      var p = n.parentNode;
+      while (p) {
+        if (nodeSet.has(p)) return false;
+        p = p.parentNode;
+      }
+      return true;
+    });
+  }
+
+  function _flattenForProcessing(nodes) {
+    var work = [];
+    for (var i = 0; i < nodes.length; i++) {
+      work.push(nodes[i]);
+      var desc = nodes[i].querySelectorAll('*');
+      for (var j = 0; j < desc.length; j++) work.push(desc[j]);
+    }
+    return work;
+  }
+
+  function _processEngineChunk(work) {
+    var blurAllOn = State.getIsPageBlurred();
+    var pickBlurOn = State.getPickBlurDynamicActive();
+    var settings = State.getCurrentSettings();
+
+    if (!blurAllOn && !pickBlurOn) return null;
+
+    var Marker = blsi.MarkerEngine;
+    var Targets = blsi.TargetEngine;
+    var facade = blsi.Engine;
+    var thorough = settings ? !!settings.thorough_blur : false;
+
+    var end = Math.min(ENGINE_CHUNK_SIZE, work.length);
+    for (var i = 0; i < end; i++) {
+      _processNode(work[i], blurAllOn, pickBlurOn, settings, thorough, Marker, Targets, facade);
+    }
+    if (end >= work.length) return null;
+    return work.slice(end);
   }
 
   function _processNode(node, blurAllOn, pickBlurOn, settings, thorough, Marker, Targets, facade) {

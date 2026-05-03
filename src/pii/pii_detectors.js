@@ -370,6 +370,13 @@ const BlurrySitePiiDetectors = (() => {
       preScreen: (t) => t.indexOf("978") !== -1 || t.indexOf("979") !== -1,
     }),
     Object.freeze({
+      id: "e164_phone",
+      regex: E164_RE,
+      dispositive: true,
+      action: "emit",
+      preScreen: (t) => t.indexOf("+") !== -1,
+    }),
+    Object.freeze({
       id: "aadhaar",
       regex: AADHAAR_RE,
       checksum: _checksumAadhaar,
@@ -488,13 +495,6 @@ const BlurrySitePiiDetectors = (() => {
       keywordWindow: 50,
       action: "emit",
       preScreen: (t) => /\d{15}/.test(t),
-    }),
-    Object.freeze({
-      id: "e164_phone",
-      regex: E164_RE,
-      dispositive: true,
-      action: "emit",
-      preScreen: (t) => t.indexOf("+") !== -1,
     }),
     Object.freeze({
       id: "ssn_us",
@@ -698,6 +698,17 @@ const BlurrySitePiiDetectors = (() => {
     "pwd",
     "pin",
     "otp",
+    "database",
+    "connection",
+    "webhook",
+    "endpoint",
+    "dsn",
+    "mongo",
+    "redis",
+    "postgres",
+    "mysql",
+    "smtp",
+    "imap",
     "id",
   ]);
 
@@ -718,20 +729,35 @@ const BlurrySitePiiDetectors = (() => {
     "gid",
   );
 
-  const DISPOSITIVE_RES = Object.freeze([
-    /\b(?:Bearer|Basic)\s+[A-Za-z0-9._\-+/=]{20,}\b/g,
-    /\bAKIA[0-9A-Z]{16}\b/g,
-    /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-    /\bghp_[A-Za-z0-9]{36}\b/g,
-    /\b[sp]k_(?:live|test)_[A-Za-z0-9]{24,}\b/g,
-    /\bAIza[A-Za-z0-9_\-]{35}\b/g,
-    /\bxox[bpoars]-[A-Za-z0-9\-]{10,}\b/g,
-    /\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b/g,
-  ]);
+  // Single alternation — longer/more-specific prefixes first to prevent
+  // shorter alternatives from winning at the same position.
+  const DISPOSITIVE_RE = new RegExp(
+    "\\b(?:" +
+      "(?:Bearer|Basic)\\s+[A-Za-z0-9._\\-+/=]{20,}" +
+      "|github_pat_[A-Za-z0-9_]{82}" +
+      "|dckr_pat_[A-Za-z0-9_\\-]{20,}" +
+      "|dop_v1_[a-f0-9]{64}" +
+      "|sk-ant-[A-Za-z0-9_\\-]{90,}" +
+      "|[sp]k_(?:live|test)_[A-Za-z0-9]{24,}" +
+      "|glpat-[A-Za-z0-9_\\-]{20,}" +
+      "|pypi-[A-Za-z0-9_\\-]{100,}" +
+      "|AKIA[0-9A-Z]{16}" +
+      "|AIza[A-Za-z0-9_\\-]{35}" +
+      "|xox[bpoars]-[A-Za-z0-9\\-]{10,}" +
+      "|eyJ[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}\\.[A-Za-z0-9_\\-]{10,}" +
+      "|SG\\.[A-Za-z0-9_\\-]{22}\\.[A-Za-z0-9_\\-]{43}" +
+      "|npm_[A-Za-z0-9]{36}" +
+      "|ghp_[A-Za-z0-9]{36}" +
+      "|sk-[A-Za-z0-9]{20,}" +
+      "|AC[a-f0-9]{32}" +
+      "|hf_[A-Za-z0-9]{34}" +
+    ")\\b",
+    "g",
+  );
 
   function _validateValue(val) {
     if (val.length < 4) return false;
-    if (val.length < 16 && !/\d/.test(val)) return false;
+    if (!/[^a-zA-Z]/.test(val)) return false;
     if (/^(.)\1+$/.test(val)) return false;
     return true;
   }
@@ -796,19 +822,17 @@ const BlurrySitePiiDetectors = (() => {
   }
 
   function _runIdentifierPass(text, matches, consumed) {
-    for (const proto of DISPOSITIVE_RES) {
-      const r = blsi.PiiState.getCachedRegex(proto);
-      let m;
-      while ((m = r.exec(text)) !== null) {
-        const start = m.index;
-        const end = m.index + m[0].length;
-        if (!_overlapsAny(consumed, start, end)) {
-          matches.push({ start, end, type: "numeric" });
-          consumed.push([start, end]);
-          blsi.PiiState.recordEmit();
-        }
-        if (m[0].length === 0) r.lastIndex++;
+    const r = blsi.PiiState.getCachedRegex(DISPOSITIVE_RE);
+    let dm;
+    while ((dm = r.exec(text)) !== null) {
+      const start = dm.index;
+      const end = dm.index + dm[0].length;
+      if (!_overlapsAny(consumed, start, end)) {
+        matches.push({ start, end, type: "numeric" });
+        consumed.push([start, end]);
+        blsi.PiiState.recordEmit();
       }
+      if (dm[0].length === 0) r.lastIndex++;
     }
 
     const re = blsi.PiiState.getCachedRegex(PREFIX_RE);
@@ -856,30 +880,33 @@ const BlurrySitePiiDetectors = (() => {
 
     if (types.numeric) {
       const consumed = [];
+      const hasDigit = /\d/.test(text);
 
-      _runStage1(text, matches, consumed);
+      if (hasDigit) _runStage1(text, matches, consumed);
       _runIdentifierPass(text, matches, consumed);
-      _runStage2(text, matches, consumed);
+      if (hasDigit) _runStage2(text, matches, consumed);
 
-      const re = blsi.PiiState.getCachedRegex(NUMERIC_RE);
-      let m;
-      while ((m = re.exec(text)) !== null) {
-        const start = m.index;
-        const end = start + m[0].length;
-        const advanceFallback = m[0].length === 0;
-        blsi.PiiState.recordCandidate();
-        if (_overlapsAny(consumed, start, end)) {
-          blsi.PiiState.recordSuppress();
+      if (hasDigit) {
+        const re = blsi.PiiState.getCachedRegex(NUMERIC_RE);
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          const start = m.index;
+          const end = start + m[0].length;
+          const advanceFallback = m[0].length === 0;
+          blsi.PiiState.recordCandidate();
+          if (_overlapsAny(consumed, start, end)) {
+            blsi.PiiState.recordSuppress();
+            if (advanceFallback) re.lastIndex++;
+            continue;
+          }
+          if (!blsi.PiiSuppressors.falsePositivesCheck(m[0], text, start)) {
+            matches.push({ start, end, type: "numeric" });
+            blsi.PiiState.recordEmit();
+          } else {
+            blsi.PiiState.recordSuppress();
+          }
           if (advanceFallback) re.lastIndex++;
-          continue;
         }
-        if (!blsi.PiiSuppressors.falsePositivesCheck(m[0], text, start)) {
-          matches.push({ start, end, type: "numeric" });
-          blsi.PiiState.recordEmit();
-        } else {
-          blsi.PiiState.recordSuppress();
-        }
-        if (advanceFallback) re.lastIndex++;
       }
     }
 
@@ -895,6 +922,20 @@ const BlurrySitePiiDetectors = (() => {
     return filtered;
   }
 
+  // Cross-node keyword check — matches a keyword + separator at the end of
+  // preceding text. Used by the facade when a digit-only text node in its own
+  // DOM element wasn't caught by the per-node findMatches (keyword is in a
+  // sibling/parent element).
+  const _KEYWORD_TRAIL_RE = new RegExp(
+    KEYWORD_ALT +
+      "\\s*[:=#\\-\\u2014]?\\s*$",
+    "i",
+  );
+
+  function hasKeywordTrail(text) {
+    return _KEYWORD_TRAIL_RE.test(text);
+  }
+
   function getPatterns() {
     return PATTERNS;
   }
@@ -906,6 +947,7 @@ const BlurrySitePiiDetectors = (() => {
     STAGE1_DETECTORS,
     STAGE2_DETECTORS,
     findMatches,
+    hasKeywordTrail,
     getPatterns,
   });
 })();

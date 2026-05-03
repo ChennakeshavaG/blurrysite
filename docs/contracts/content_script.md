@@ -32,7 +32,7 @@
 11. `Engine.resetCounters()` — clears dynamic/sticky name counters before applying stored items.
 12. `Automate.Overlay.init()` (main frame only, idempotent) — readies the viewport overlay primitive used by automate intent. Mounts only on first `show()`.
 13. `applyState(resolved, null)` — applies full settings: shortcuts, picker, tab privacy, reveal, engine sync, automate observers (`Automate.Visibility.init({tab_id})` / `ScreenShare.init`), PII scan.
-13. Screen-share catch-up: if the resolved snapshot already carries `automate_blur_triggers.screen_share === true` (i.e. tab opened mid-share), shows the 3-action toast — no separate session-storage read; `Store.resolve()` already factors in the global session record.
+13. Automate catch-up: if the resolved snapshot already carries an active automate trigger (screen_share > idle > tab_switch priority), shows the appropriate 3-action toast — no separate session-storage read; `Store.resolve()` already factors in the per-tab session map.
 14. `_checkPwaHint()` — shows one-time PWA tip (IS_PWA only).
 15. `Store.on_change(handleStorageChange)` — subscribes to storage changes AFTER initial restore to avoid cold-start race conditions.
 16. If not main frame: register `window.message` listener to receive `BLSI_SETTINGS_CHANGED` from parent frame.
@@ -57,6 +57,32 @@
 | `lastUrl` | `string` | Last observed `location.href` for SPA navigation change detection |
 
 > Removed in the engine/automate split: `_ssCurrentlyBlurring`, `_lastIdlePhase`, `_lastTabSwitchPhase`, `_autoBlurCfgKey`, `_idleToastShown`. Toast tracking now lives in `blsi.Automate.Manager`.
+
+### Automate toast action builders (private)
+
+Three async functions build the 3-action button arrays passed to `Manager.init()`. Each returns `[{label, onClick, variant?, tooltip?}]` with actions: "Skip tab", "Skip site", "Turn off". All reuse i18n keys `automate_stop_per_tab`, `automate_stop_site_session`, `automate_disable_feature`. Each button carries a `tooltip` (via `automate_tooltip_skip_tab`, `automate_tooltip_skip_site`, `automate_tooltip_turn_off`) describing the action scope and permanence.
+
+| Builder | Suppress call | Manager init key |
+|---|---|---|
+| `_ssBlurStopActions()` | `Store.suppress_screen_share(scope, ctx)` | `ss_stop_actions` |
+| `_idleStopActions()` | `Store.suppress_idle(scope, ctx)` | `idle_stop_actions` |
+| `_tabSwitchStopActions()` | `Store.suppress_tab_switch(scope, ctx)` | `tab_switch_stop_actions` |
+
+Each `onClick` calls the suppress function then `await _sync()`. Manager calls the builder async at toast-fire time so each invocation captures the *current* `_topHostname` / `_initTabId` closure.
+
+### Manager.init wiring
+
+```js
+blsi.Automate.Manager.init({
+  tab_id: _initTabId,
+  get_host_url: () => ({ host: _topHostname, url: location.href }),
+  ss_stop_actions: _ssBlurStopActions,
+  idle_stop_actions: _idleStopActions,
+  tab_switch_stop_actions: _tabSwitchStopActions,
+});
+```
+
+Wired once during `init()` (main frame only, after `Overlay.init()`). Runs even when `enabled === false` so re-enabling flips automate on without reload.
 
 Module aliases (set at top of IIFE, not re-assigned):
 - `Engine` → `blsi.BlurEngine`
@@ -107,8 +133,8 @@ Module aliases (set at top of IIFE, not re-assigned):
 4. Tab privacy (main frame only): enables/disables `blsi.TabPrivacy` based on `resolved.tab_privacy && resolved.enabled`.
 5. Reveal: calls `Reveal.clearAll()` if `reveal_mode` changed or extension is disabled.
 6. Calls `await _sync(resolved)` — passes the snapshot through so engine does not re-resolve.
-7. AutoBlur (main frame only): manages `blsi.ScreenShare.init()`/`destroy()` for screen-share detection (always evaluated). Manages `blsi.AutoBlur.init(...)`/`destroy()` for idle and tab-switch triggers — **gated by `_autoBlurCfgKey`** so unrelated storage echoes don't tear down the live idle timer. AutoBlur callbacks write idle/tab_switch to `Store.save_automate_blur` and call `_sync()`. Screen-share state never goes through `save_automate_blur` — it lives in the global session record owned by background.
-8. PII detection: if any PII type enabled and extension enabled, calls `BlurEngine.injectPiiRules()` synchronously, then schedules `PiiDetector.scan() + BlurEngine.subscribeMutations('pii', PiiDetector.handleMutations)` via `requestIdleCallback({ timeout: 2000 })` (falls back to `setTimeout(0)` when rIC unavailable). The deferral keeps the initial text-node walk + DOM rewraps off the LCP critical path; the subscription is also deferred so `handleMutations` doesn't no-op on records arriving before `scan()` seeds active types. Module-level `_piiScanIdleHandle` is cancelled on every fresh `applyState` (settings change / disable) so a stale pending scan can't outlive the latest decision. Otherwise calls `BlurEngine.unsubscribeMutations('pii')`, `BlurEngine.removePiiRules()`, `PiiDetector.clear()`. PII detector owns no observer of its own.
+7. AutoBlur (main frame only): manages `blsi.Automate.ScreenShare.init()`/`destroy()` for screen-share detection (always evaluated). Manages `blsi.Automate.Visibility.init({tab_id})`/`destroy()` for tab-switch triggers. Screen-share state lives in the per-tab session map owned by background via `automate/screen_share_bg.js`.
+8. PII detection: if any PII type enabled and extension enabled, calls `BlurEngine.injectPiiRules()` synchronously, then registers `BlurEngine.subscribeMutations('pii', PiiDetector.handleMutations)` **before** scheduling the scan — so dynamic content arriving between chunks is caught by `handleMutations` (which no-ops until `scan()` seeds `activeTypes`, and `isInsidePiiSpan` guards against re-wrapping nodes the scan already processed). Then schedules `PiiDetector.scan(body, types, onDone)` via `setTimeout(runScan, 0)` — starts on the next tick to avoid blocking the current frame but does not defer to idle (the previous `requestIdleCallback({ timeout: 2000 })` caused visible PII-detection lag on busy pages). The scan itself is **chunked** — it processes `CHUNK_SIZE` (500) text nodes per idle callback to avoid long-task violations. `scan()` cancels any in-flight chunked scan at the top, preventing concurrent scans from interleaving on rapid settings changes. Module-level `_piiScanIdleHandle` is cancelled on every fresh `applyState`, and the disable path also calls `PiiDetector.cancelChunkedScan()` to abort any in-flight chunked scan. Otherwise calls `BlurEngine.unsubscribeMutations('pii')`, `BlurEngine.removePiiRules()`, `PiiDetector.clear()`. PII detector owns no observer of its own.
 
 **Handles:**
 - Language change detection inside `handleStorageChange` (not inside `applyState` itself) triggers `ContentI18n.init(newLang)` and `Picker.rebuildToolbar()` before calling `applyState`.
@@ -442,7 +468,7 @@ Handles SPA navigation in the main frame only. Wraps `history.pushState` and `hi
 
 ### Main frame to iframes: `_broadcastToFrames()`
 
-**What:** Posts `{ type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }` to every direct child frame via `postMessage`. Uses `location.origin` as the target origin.
+**What:** Posts `{ type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }` to every direct child frame via `postMessage`. Uses `'*'` as the target origin so cross-origin iframes (e.g. `avcliq.zoho.in` inside `cliq.zoho.in`) receive the message. Safe because the payload is non-sensitive and the iframe listener validates `event.source === window.parent`.
 
 **When called:** After `init()` completes, and after every `handleStorageChange()`.
 

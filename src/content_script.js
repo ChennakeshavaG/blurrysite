@@ -59,11 +59,6 @@
   /** Last observed URL — SPA navigation change detection */
   let lastUrl = location.href;
 
-  // (Toast transition tracking moved to blsi.Automate.Manager — step 4 of the
-  // engine/automate split. Manager owns _lastIdlePhase / _lastTabSwitchPhase /
-  // _ssCurrentlyBlurring / _lastSkipped and fires the four automate toasts
-  // independently.)
-
   // Idle handle for the deferred initial PII scan. Tracked so a follow-up
   // applyState (settings change, disable) can cancel a stale pending scan.
   let _piiScanIdleHandle = null;
@@ -108,12 +103,13 @@
    *   - 'feature'       → flip automate.settings.screen_share.enabled = false.
    */
   async function _ssBlurStopActions() {
-    const myTabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
-      ? blsi.ScreenShare.getTabId()
+    const myTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
+      ? blsi.Automate.ScreenShare.getTabId()
       : null;
     return [
       {
         label: chrome.i18n.getMessage('automate_stop_per_tab'),
+        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_tab'),
         onClick: async () => {
           await Store.suppress_screen_share('tab', { tab_id: myTabId, hostname });
           await _sync();
@@ -121,6 +117,7 @@
       },
       {
         label: chrome.i18n.getMessage('automate_stop_site_session'),
+        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_site'),
         onClick: async () => {
           await Store.suppress_screen_share('site_session', { hostname, tab_id: myTabId });
           await _sync();
@@ -129,8 +126,77 @@
       {
         label: chrome.i18n.getMessage('automate_disable_feature'),
         variant: 'warn',
+        tooltip: chrome.i18n.getMessage('automate_tooltip_turn_off'),
         onClick: async () => {
           await Store.suppress_screen_share('feature', { hostname, tab_id: myTabId });
+          await _sync();
+        },
+      },
+    ];
+  }
+
+  // ── Idle / tab-switch helpers ────────────────────────────────────────────
+
+  async function _idleStopActions() {
+    const myTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
+      ? blsi.Automate.ScreenShare.getTabId()
+      : null;
+    return [
+      {
+        label: chrome.i18n.getMessage('automate_stop_per_tab'),
+        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_tab'),
+        onClick: async () => {
+          await Store.suppress_idle('tab', { tab_id: myTabId });
+          await _sync();
+        },
+      },
+      {
+        label: chrome.i18n.getMessage('automate_stop_site_session'),
+        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_site'),
+        onClick: async () => {
+          await Store.suppress_idle('site_session', { hostname });
+          await _sync();
+        },
+      },
+      {
+        label: chrome.i18n.getMessage('automate_disable_feature'),
+        variant: 'warn',
+        tooltip: chrome.i18n.getMessage('automate_tooltip_turn_off'),
+        onClick: async () => {
+          await Store.suppress_idle('feature', {});
+          await _sync();
+        },
+      },
+    ];
+  }
+
+  async function _tabSwitchStopActions() {
+    const myTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
+      ? blsi.Automate.ScreenShare.getTabId()
+      : null;
+    return [
+      {
+        label: chrome.i18n.getMessage('automate_stop_per_tab'),
+        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_tab'),
+        onClick: async () => {
+          await Store.suppress_tab_switch('tab', { tab_id: myTabId });
+          await _sync();
+        },
+      },
+      {
+        label: chrome.i18n.getMessage('automate_stop_site_session'),
+        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_site'),
+        onClick: async () => {
+          await Store.suppress_tab_switch('site_session', { hostname });
+          await _sync();
+        },
+      },
+      {
+        label: chrome.i18n.getMessage('automate_disable_feature'),
+        variant: 'warn',
+        tooltip: chrome.i18n.getMessage('automate_tooltip_turn_off'),
+        onClick: async () => {
+          await Store.suppress_tab_switch('feature', {});
           await _sync();
         },
       },
@@ -145,8 +211,8 @@
    * from storage when called directly (picker callbacks, message handlers).
    */
   async function _sync(preResolved) {
-    const tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
-      ? blsi.ScreenShare.getTabId()
+    const tabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
+      ? blsi.Automate.ScreenShare.getTabId()
       : null;
     // Engine path uses resolve_settings (no automate decision fields). Manager
     // owns automate state and reads resolve_automate independently. The full
@@ -335,7 +401,7 @@
 
       // ── Toggle element picker ───────────────────────────────────────────
       case blsi.command.toggle_picker: {
-        const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+        const _tabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId ? blsi.Automate.ScreenShare.getTabId() : null;
         const resolved = Store.resolve_settings(_topHostname, location.href, _tabId);
         const pickerMode = message.picker_mode || resolved.picker_mode;
         log.flow('trigger.togglePicker', { nextState: !isPickerActive, mode: pickerMode });
@@ -543,16 +609,16 @@
 
       // Screen share detection — inject getDisplayMedia wrapper if enabled.
       if (screen_share.enabled && resolved.enabled) {
-        blsi.ScreenShare.init();
+        blsi.Automate.ScreenShare.init();
       } else {
-        blsi.ScreenShare.destroy();
+        blsi.Automate.ScreenShare.destroy();
       }
 
       // Per-tab visibility observer. Init is idempotent — only re-binds when
       // tab_id changes. tab_switch.enabled gating is enforced by resolve();
       // the listener can run continuously because absence === armed === no overlay.
-      const tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId
-        ? blsi.ScreenShare.getTabId()
+      const tabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
+        ? blsi.Automate.ScreenShare.getTabId()
         : null;
       if (resolved.enabled && typeof tabId === 'number' &&
           blsi.Automate && blsi.Automate.Visibility) {
@@ -578,24 +644,21 @@
     }
     if (anyDetect && resolved.enabled) {
       blsi.Engine.injectPiiRules(resolved.pii_mode, resolved.pii_redaction_color);
-      // Defer the initial scan past LCP — walking every text node and wrapping
-      // matches synchronously at document_idle adds hundreds of ms to LCP on
-      // image-heavy pages (YouTube, etc.) and triggers reflow during the CLS
-      // measurement window. Subscription is also deferred so handleMutations
-      // doesn't no-op on records that arrive before scan() seeds activeTypes.
+      // Defer the initial scan past LCP. The scan is chunked across idle
+      // callbacks (CHUNK_SIZE nodes per tick) so no single frame exceeds ~50ms
+      // even on heavy pages. Subscription is registered before the scan so
+      // dynamic content arriving between chunks is caught by handleMutations
+      // (no-ops until scan() seeds activeTypes; isInsidePiiSpan guards re-wrap).
       const types = { email: resolved.pii_email, numeric: resolved.pii_numeric };
+      blsi.Engine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
       const runScan = () => {
         _piiScanIdleHandle = null;
         if (!document.body) return;
-        blsi.PiiDetector.scan(document.body, types);
-        blsi.Engine.subscribeMutations('pii', blsi.PiiDetector.handleMutations);
+        blsi.PiiDetector.scan(document.body, types, function onDone() {});
       };
-      if (typeof requestIdleCallback !== 'undefined') {
-        _piiScanIdleHandle = requestIdleCallback(runScan, { timeout: 2000 });
-      } else {
-        _piiScanIdleHandle = setTimeout(runScan, 0);
-      }
+      _piiScanIdleHandle = setTimeout(runScan, 0);
     } else {
+      blsi.PiiDetector.cancelChunkedScan();
       blsi.Engine.unsubscribeMutations('pii');
       blsi.Engine.removePiiRules();
       // document.body can be momentarily null in early-disable paths during
@@ -673,7 +736,7 @@
     for (let i = 0; i < window.frames.length; i++) {
       try {
         window.frames[i].postMessage(
-          { type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }, location.origin
+          { type: 'BLSI_SETTINGS_CHANGED', topHostname: location.hostname }, '*'
         );
       } catch (_) {}
     }
@@ -685,7 +748,7 @@
   async function handleStorageChange(newModel, _oldModel) {
     if (!Engine) return;
 
-    const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+    const _tabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId ? blsi.Automate.ScreenShare.getTabId() : null;
     const resolved = Store.resolve_settings(_topHostname, location.href, _tabId);
     const prev = { ...settings };
 
@@ -719,7 +782,7 @@
       lastUrl = currentUrl;
       try {
         const prev = { ...settings };
-        const _tabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+        const _tabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId ? blsi.Automate.ScreenShare.getTabId() : null;
         const resolved = Store.resolve_settings(_topHostname, currentUrl, _tabId);
         await applyState(resolved, prev);
         // Honor path-specific site rules in the automate path too.
@@ -771,14 +834,14 @@
     try {
       await Promise.all([
         Store.init_cache(),
-        IS_MAIN_FRAME && blsi.ScreenShare && blsi.ScreenShare.whoAmI
-          ? blsi.ScreenShare.whoAmI()
+        IS_MAIN_FRAME && blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.whoAmI
+          ? blsi.Automate.ScreenShare.whoAmI()
           : Promise.resolve(),
       ]);
     } catch (_e) { /* fall through with empty cache */ }
 
     // 2. Resolve settings for the current URL from cached model.
-    const _initTabId = blsi.ScreenShare && blsi.ScreenShare.getTabId ? blsi.ScreenShare.getTabId() : null;
+    const _initTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId ? blsi.Automate.ScreenShare.getTabId() : null;
     const resolved = Store.resolve_settings(_topHostname, location.href, _initTabId);
     settings = resolved;
 
@@ -826,6 +889,8 @@
         tab_id: _initTabId,
         get_host_url: () => ({ host: _topHostname, url: location.href }),
         ss_stop_actions: _ssBlurStopActions,
+        idle_stop_actions: _idleStopActions,
+        tab_switch_stop_actions: _tabSwitchStopActions,
       });
     }
 
@@ -842,18 +907,26 @@
     Engine.resetCounters();
     await applyState(resolved, null);
 
-    // 9b. Catch-up toast for tabs opened mid-share. Manager seeds its
+    // 9b. Catch-up toast for tabs opened mid-automate. Manager seeds its
     //     transition tracking on init without firing toasts (so users aren't
     //     spammed for state that already existed when the tab opened); we
-    //     issue one explicit screen-share toast here if this tab landed in
-    //     screen-share-blur on initial load. Manager handles every subsequent
-    //     transition independently.
+    //     issue one explicit toast here if this tab landed in automate-blur
+    //     on initial load. Manager handles every subsequent transition
+    //     independently. Priority: screen_share > idle > tab_switch.
     if (IS_MAIN_FRAME) {
       const _autoSnap = Store.resolve_automate(_topHostname, location.href, _initTabId);
-      const _ss_blurring_now = !!(_autoSnap.automate_blur_triggers && _autoSnap.automate_blur_triggers.screen_share);
-      if (_ss_blurring_now && _autoSnap.automate_blur_only) {
-        const _initActions = await _ssBlurStopActions();
-        Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions);
+      if (_autoSnap.automate_blur_only) {
+        const _triggers = _autoSnap.automate_blur_triggers || {};
+        if (_triggers.screen_share) {
+          const _initActions = await _ssBlurStopActions();
+          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions);
+        } else if (_triggers.idle) {
+          const _initActions = await _idleStopActions();
+          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_idle'), 5000, _initActions);
+        } else if (_triggers.tab_switch) {
+          const _initActions = await _tabSwitchStopActions();
+          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_tab_switch'), 5000, _initActions);
+        }
       }
     }
 
