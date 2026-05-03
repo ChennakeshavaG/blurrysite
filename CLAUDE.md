@@ -89,8 +89,7 @@ Docs are load-bearing references used by humans and Claude. Code changes → rel
 
 1. **Same-commit rule** — doc updates go in same commit as code change. Never leave docs for follow-up.
 2. **Update, don't append** — behavior changes: find and update existing entry. Don't add contradicting entry.
-3. **Test count** — keep test count in `tests/CLAUDE.md` current. Run `npm run test:unit`, update number.
-4. **Don't document internals** — only document things affecting how other code interacts with module (public API, message types, settings shapes, CSS classes). Private details in code comments, not docs.
+3. **Don't document internals** — only document things affecting how other code interacts with module (public API, message types, settings shapes, CSS classes). Private details in code comments, not docs.
 
 ---
 

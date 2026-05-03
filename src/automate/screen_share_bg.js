@@ -80,10 +80,24 @@
     }
   }
 
+  function _reconcile_stale_shares() {
+    var ss = State.get_screen_share_state();
+    if (!ss.active || !ss._sharing_tab_ids || !ss._sharing_tab_ids.length) return;
+    chrome.tabs.query({}, function (tabs) {
+      var live = new Set(tabs.map(function (t) { return t.id; }));
+      ss._sharing_tab_ids.forEach(function (id) {
+        if (!live.has(id)) State.set_screen_share_inactive(id);
+      });
+      var suppressed = State.get_suppressed_tabs();
+      suppressed.forEach(function (id) {
+        if (!live.has(id)) State.remove_suppressed_tab(id);
+      });
+    });
+  }
+
   function init() {
     if (!State) return;
-    State.set_screen_share_inactive();
-    State.clear_suppressed_tabs();
+    _reconcile_stale_shares();
 
     _connect_listener = _onConnect;
     chrome.runtime.onConnect.addListener(_connect_listener);

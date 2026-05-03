@@ -2,7 +2,7 @@
 
 ## Overview
 
-Viewport-covering frosted blur overlay used by automate-driven blur (idle / tab-switch / screen-share). A single `<div id="bl-si-automate-overlay">` mounted on `document.body` with inline `position: fixed; inset: 0; z-index: 2147483646`.
+Viewport-covering frosted blur overlay used by automate-driven blur (idle / tab-switch / screen-share). A single `<div id="bl-si-automate-overlay">` mounted on `document.body` with inline `position: fixed; inset: 0; z-index: 2147483640`.
 
 This is the render path for **automate intent only**. Manual blur-all, pick-blur, and PII detection continue to use the existing stamp + CSS-injection engine; their granularity (per-element, per-text-node, per-category) is finer than what an overlay can express.
 
@@ -60,7 +60,7 @@ Hides the overlay and clears `_initialized`. After destroy, `init()` must be cal
 | `backdrop-filter: blur(40px)` | deep blur | heavy obscuration, page motion still hints through |
 | `background: transparent` | no tint | pure frosted glass — no dark overlay; backdrop-filter alone provides sufficient obscuration |
 | `position: fixed; inset: 0; 100vw × 100vh` | viewport cover | independent of page scroll/layout |
-| `z-index: 2147483646` | one below picker toolbar (`2147483647`) | overlay can't accidentally cover the picker UI |
+| `z-index: 2147483640` | below toast (`2147483646`) and picker toolbar (`2147483647`) | overlay can't cover toast actions or picker UI |
 | `pointer-events: auto` | block clicks | page beneath is non-interactive while overlay is up |
 
 Constants are private to the IIFE. Changing them is a single-place edit; no public knob.
@@ -76,7 +76,7 @@ The overlay element:
 ## Invariants
 
 - Only one overlay element per document (we hold the reference internally).
-- The overlay is always above page content but below the picker toolbar — `z-index: 2147483646` enforces this.
+- The overlay is always above page content but below the toast (`2147483646`) and picker toolbar (`2147483647`) — `z-index: 2147483640` enforces this.
 - Inline styles use `!important` for every property — page CSS cannot override our positioning, z-index, or backdrop-filter.
 - `hide()` followed by `show()` produces a fresh element; no stale event listeners or attributes carry over.
 - The overlay does not register any DOM event listeners of its own (no click handlers, no keydown handlers).

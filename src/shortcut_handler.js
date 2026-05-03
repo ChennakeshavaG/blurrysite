@@ -67,7 +67,7 @@ const Shortcuts = (() => {
   // ── Modifier extraction ────────────────────────────────────────────────────
 
   /** The subset of mods to consider. Always sorted alphabetically. */
-  const MOD_NAMES = ['Alt', 'Control', 'Meta', 'Shift'];
+  const _MOD_NAMES = ['Alt', 'Control', 'Meta', 'Shift'];
 
   /**
    * Read the normalized modifier set for an event. Returns a sorted array
@@ -107,10 +107,13 @@ const Shortcuts = (() => {
    * @param {Array<{label:string, onClick:function, variant?:string}>} [actions]
    *   Optional action buttons shown in a second row below the message.
    *   variant 'warn' renders with amber styling.
+   * @param {{persistent?:boolean}} [opts]
+   *   persistent: skip auto-dismiss timer; block replacement by non-persistent toasts.
    */
-  function showToast(text, duration, actions) {
+  function showToast(text, duration, actions, opts) {
     if (duration === undefined) duration = 15000;
     if (currentToastEl && currentToastEl.parentNode) {
+      if (currentToastEl._persistent) return;
       if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
       currentToastEl.parentNode.removeChild(currentToastEl);
       currentToastEl = null;
@@ -173,8 +176,11 @@ const Shortcuts = (() => {
     document.body.appendChild(toast);
     currentToastEl = toast;
 
-    const removeTimer = setTimeout(() => _dismissToast(toast), duration);
-    toast._removeTimer = removeTimer;
+    if (opts && opts.persistent) {
+      toast._persistent = true;
+    } else {
+      toast._removeTimer = setTimeout(() => _dismissToast(toast), duration);
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────

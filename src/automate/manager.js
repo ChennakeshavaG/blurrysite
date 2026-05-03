@@ -193,14 +193,14 @@
         Promise.resolve(_ss_stop_actions()).then(function (actions) {
           if (!_initialized) return;
           const S = _shortcuts();
-          if (S) S.showToast(message, 15000, Array.isArray(actions) ? actions : []);
+          if (S) S.showToast(message, 15000, Array.isArray(actions) ? actions : [], { persistent: true });
         }).catch(function () {
           if (!_initialized) return;
           const S = _shortcuts();
-          if (S) S.showToast(message, 15000);
+          if (S) S.showToast(message, 15000, undefined, { persistent: true });
         });
       } else {
-        Shortcuts.showToast(message, 15000);
+        Shortcuts.showToast(message, 15000, undefined, { persistent: true });
       }
     }
 

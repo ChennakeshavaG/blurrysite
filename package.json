@@ -17,7 +17,7 @@
     "test:unit": "npm run i18n:lint && npm run string:lint && jest tests/unit",
     "test:e2e": "jest tests/e2e --testTimeout=30000",
     "test:watch": "jest --watch",
-    "lint": "eslint src/ tests/ --ext .js",
+    "lint": "eslint src/ popup/ tests/ background.js build.js scripts/",
     "i18n:lint": "node scripts/i18n_lint.js",
     "string:lint": "node scripts/string_lint.js",
     "build": "node build.js",

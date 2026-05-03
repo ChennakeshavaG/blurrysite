@@ -16,7 +16,9 @@ Port objects are created via a `makePort(tabId, name)` helper that tracks
 ## Describe groups
 
 ### `init`
-- Clears stale session state (`set_screen_share_inactive` + `clear_suppressed_tabs`).
+- No-op when no active shares exist (no session writes).
+- Removes stale share entries for dead tabs (tab no longer in `chrome.tabs.query`).
+- Preserves active share for live tabs (tab still exists).
 - Registers `onConnect` and `onMessage` listeners.
 
 ### `port handler`

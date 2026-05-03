@@ -26,7 +26,7 @@
   'use strict';
 
   const ROOT_ID     = 'bl-si-automate-overlay';
-  const Z_INDEX     = '2147483646';   // one below the picker toolbar (2147483647)
+  const Z_INDEX     = '2147483640';   // below toast (2147483646) and picker toolbar (2147483647)
   const BLUR_RADIUS = '40px';         // deep — heavy obscuration, page motion still hints through
   const TINT        = 'transparent';          // no tint — pure frosted glass
 

@@ -919,7 +919,7 @@
         const _triggers = _autoSnap.automate_blur_triggers || {};
         if (_triggers.screen_share) {
           const _initActions = await _ssBlurStopActions();
-          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions);
+          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions, { persistent: true });
         } else if (_triggers.idle) {
           const _initActions = await _idleStopActions();
           Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_idle'), 5000, _initActions);

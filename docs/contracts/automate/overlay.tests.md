@@ -27,7 +27,7 @@ to `document.body`.
 ### `base styles`
 - The overlay uses inline `!important` styles for `position`, `top/right/bottom/left`,
   `width`, `height`, `z-index`, `pointer-events`, `background`.
-- `z-index` is one below the picker toolbar (`2147483646`).
+- `z-index` is below the toast (`2147483646`) and picker toolbar (`2147483647`) at `2147483640`.
 - `position: fixed` covers the entire viewport (`100vw × 100vh`).
 - `background` is also marked `!important` (overlay primitive owns its tint).
 

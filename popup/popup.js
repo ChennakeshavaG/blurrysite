@@ -355,6 +355,10 @@
       const chip = e.target.closest('[data-tooltip-media], [data-tooltip-caption]');
       if (chip) _hideTip();
     });
+    document.body.addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-tooltip-media], [data-tooltip-caption]');
+      if (chip) _hideTip();
+    });
 
     // ── Header ───────────────────────────────────────────────────────────
     document.getElementById('bl-theme-toggle').addEventListener('click', UI.toggleTheme);

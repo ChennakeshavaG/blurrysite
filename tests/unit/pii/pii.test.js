@@ -1569,7 +1569,7 @@ describe('pii_detector.js', () => {
       document.body.innerHTML = '<p>Bogus GB99 NWBK 6016 1331 9268 19 here.</p>';
       // Bare-numeric NUMERIC_RE still wraps the embedded digits, but the
       // IBAN itself doesn't trigger Stage 1.
-      const count = blsi.PiiDetector.scan(document.body, { numeric: true });
+      blsi.PiiDetector.scan(document.body, { numeric: true });
       // At least one bare-numeric run will match — assert no IBAN-shaped
       // single-span wrap of the full 27-char string.
       const span = document.querySelector('[data-bl-si-pii="numeric"]');

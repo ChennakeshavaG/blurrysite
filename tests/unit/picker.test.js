@@ -1019,7 +1019,7 @@ describe('blsi.Picker', () => {
 
     test('toolbar uses ContentI18n.t for chip label and Clear button', () => {
       blsi.ContentI18n = {
-        t: (key, fallback) => 'HI:' + key,
+        t: (key, _fallback) => 'HI:' + key,
       };
       blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
       const toolbar = document.getElementById('bl-si-picker-toolbar');
@@ -1032,7 +1032,7 @@ describe('blsi.Picker', () => {
 
     test('empty pickerPrefixLabel hides the prefix span entirely', () => {
       blsi.ContentI18n = {
-        t: (key, fallback) => key === 'pickerPrefixLabel' ? '' : 'HI:' + key,
+        t: (key, _fallback) => key === 'pickerPrefixLabel' ? '' : 'HI:' + key,
       };
       blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
       const toolbar = document.getElementById('bl-si-picker-toolbar');
@@ -1042,7 +1042,7 @@ describe('blsi.Picker', () => {
 
     test('rebuildToolbar() tears down and rebuilds with new strings', () => {
       blsi.ContentI18n = {
-        t: (key, fallback) => 'V1:' + key,
+        t: (key, _fallback) => 'V1:' + key,
       };
       blsi.Picker.activate({ pickerMode: 'dynamic' }, {});
       let toolbar = document.getElementById('bl-si-picker-toolbar');
@@ -1050,7 +1050,7 @@ describe('blsi.Picker', () => {
 
       // Swap the i18n stub mid-session and rebuild.
       blsi.ContentI18n = {
-        t: (key, fallback) => 'V2:' + key,
+        t: (key, _fallback) => 'V2:' + key,
       };
       blsi.Picker.rebuildToolbar();
       toolbar = document.getElementById('bl-si-picker-toolbar');

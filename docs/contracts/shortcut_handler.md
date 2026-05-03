@@ -49,20 +49,22 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 **Side effects**: Removes keydown (capture) and blur listeners; clears `registeredShortcuts`, `registeredCallbacks`; removes `currentToastEl` from DOM  
 **Handles**: Idempotent — no-op if already destroyed.
 
-### showToast(text, duration?, actions?)
+### showToast(text, duration?, actions?, opts?)
 
 **What**: Shows a floating notification toast at the bottom of the page.  
 **Params**:
 - `text` (string) — main message text
 - `duration` (number, optional) — milliseconds before auto-dismiss (default: 15000)
-- `actions` (Array<{label, onClick, variant?, tooltip?}>, optional) — action buttons in a second row. `tooltip` sets the `title` attribute on the button.  
+- `actions` (Array<{label, onClick, variant?, tooltip?}>, optional) — action buttons in a second row. `tooltip` sets the `title` attribute on the button.
+- `opts` ({persistent?: boolean}, optional) — when `persistent` is truthy: skips the auto-dismiss timer (toast stays until user clicks close or an action button) and blocks replacement by subsequent non-persistent toasts.  
 **Returns**: `void`  
 **Side effects**:
-- Removes and replaces any existing toast (one at a time)
+- Removes and replaces any existing non-persistent toast (one at a time)
+- A persistent toast cannot be replaced by another `showToast` call — the new call is silently dropped
 - Appends `<div class="bl-si-toast" role="status" aria-live="polite">` to `document.body`
 - Close button `aria-label` is resolved via `chrome.i18n.getMessage('aria_toast_dismiss')` with English fallback `'Dismiss'`
 - `actions` with `variant: 'warn'` renders with amber styling  
-**Handles**: Replaces existing toast synchronously; action items with missing `label` or non-function `onClick` are skipped; `chrome.runtime.getURL` guarded for test environments.
+**Handles**: Replaces existing non-persistent toast synchronously; action items with missing `label` or non-function `onClick` are skipped; `chrome.runtime.getURL` guarded for test environments.
 
 ### _setPickerActive(v)
 
@@ -102,6 +104,6 @@ Pure keyboard matcher + toast renderer. Matches user-configurable shortcuts agai
 - All listeners registered at **capture phase** (`addEventListener(_, _, true)`) — fires before target/bubble handlers so `preventDefault()` is effective for links and buttons.
 - `Escape` NEVER dispatches to a bound shortcut — only to `onExitPicker`.
 - `FIRE_TOKEN` is stamped by `handleMessage`, NOT inside `onKeyDown` — avoids self-dedup where the fresh stamp would cause the message handler to drop its own call.
-- Only one toast visible at a time — `showToast` replaces existing toast synchronously.
+- Only one toast visible at a time — `showToast` replaces existing toast synchronously, unless the current toast is persistent (replacement silently dropped).
 - `_isPickerActive` is updated only through `_setPickerActive()` — always called via `content_script.setPickerActive()`.
 - Multi-chord bindings (`binding.length > 1`) are reserved for Phase 2 — silently skipped in Phase 1 with a logger warning.

@@ -184,7 +184,7 @@ const SelectorUtils = (() => {
     if (element === document.body || element === document.documentElement) return [];
 
     var results = [];
-    var seen = new Set ? new Set() : { _m: {}, has: function(v) { return !!this._m[v]; }, add: function(v) { this._m[v] = true; } };
+    var seen = new Set();
 
     function push(sel) {
       if (sel && !seen.has(sel)) { seen.add(sel); results.push(sel); }

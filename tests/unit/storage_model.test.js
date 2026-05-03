@@ -84,7 +84,7 @@ function mockSet() {
   chrome.storage.local.set.mockImplementation((data, cb) => { if (cb) cb(); });
 }
 
-function makeModel(overrides) {
+function _makeModel(overrides) {
   const m = blsi.build_default_model();
   return Object.assign(m, overrides);
 }

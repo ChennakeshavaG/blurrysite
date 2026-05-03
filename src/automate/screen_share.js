@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  var State = (globalThis.blsi && globalThis.blsi.Automate && globalThis.blsi.Automate.State) || null;
+  var _State = (globalThis.blsi && globalThis.blsi.Automate && globalThis.blsi.Automate.State) || null;
 
   var _handler        = null;
   var _sharePort      = null;

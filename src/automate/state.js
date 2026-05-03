@@ -151,7 +151,6 @@
       payload[key] = value;
       chrome.storage.session.set(payload, function () {
         if (chrome.runtime.lastError) {
-          // eslint-disable-next-line no-console
           console.warn('[blsi.State] session write failed:', chrome.runtime.lastError.message);
         }
         resolve();
@@ -164,7 +163,6 @@
     return new Promise(function (resolve) {
       chrome.storage.session.set(obj, function () {
         if (chrome.runtime.lastError) {
-          // eslint-disable-next-line no-console
           console.warn('[blsi.State] session write failed:', chrome.runtime.lastError.message);
         }
         resolve();

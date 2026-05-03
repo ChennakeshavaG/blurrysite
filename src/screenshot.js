@@ -116,7 +116,7 @@ const BlurrySiteScreenshot = (() => {
         const fullDataUrl = await captureViewport();
         const cropped = await _cropImage(fullDataUrl, x, y, w, h);
         if (_cropCallback) _cropCallback({ x, y, width: w, height: h, dataUrl: cropped });
-      } catch (err) {
+      } catch (_err) {
         if (_cropCallback) _cropCallback(null);
       }
     }

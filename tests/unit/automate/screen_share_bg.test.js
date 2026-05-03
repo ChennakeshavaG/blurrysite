@@ -13,7 +13,7 @@ const STATE_PATH = path.resolve(__dirname, '../../../src/automate/state.js');
 const MODULE_PATH = path.resolve(__dirname, '../../../src/automate/screen_share_bg.js');
 
 const SS_KEY = 'blsi_screen_share';
-const SUPPRESSED_KEY = 'blsi_automate_suppressed_tabs';
+const _SUPPRESSED_KEY = 'blsi_automate_suppressed_tabs';
 
 let capturedConnectListener;
 let capturedMessageListener;
@@ -69,17 +69,33 @@ describe('automate/screen_share_bg.js', () => {
   });
 
   describe('init', () => {
-    test('clears stale session state on init', () => {
+    test('no-op when no active shares exist', () => {
       chrome.storage.session.set.mockClear();
       blsi.Automate.ScreenShareBg.init();
       var setCalls = chrome.storage.session.set.mock.calls;
-      var wrote_empty_map = setCalls.some(function (c) {
-        var data = c[0];
-        if (!data || !data[SS_KEY]) return false;
-        var val = data[SS_KEY];
-        return typeof val === 'object' && Object.keys(val).length === 0;
+      var wrote_ss_key = setCalls.some(function (c) {
+        return c[0] && SS_KEY in c[0];
       });
-      expect(wrote_empty_map).toBe(true);
+      expect(wrote_ss_key).toBe(false);
+    });
+
+    test('removes stale share entries for dead tabs', () => {
+      blsi.Automate.State.set_screen_share_active(999);
+      chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb([]); });
+      chrome.storage.session.set.mockClear();
+      blsi.Automate.ScreenShareBg.init();
+      var ss = blsi.Automate.State.get_screen_share_state();
+      expect(ss.active).toBe(false);
+    });
+
+    test('preserves active share for live tabs', () => {
+      blsi.Automate.State.set_screen_share_active(42);
+      chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb([{ id: 42 }]); });
+      chrome.storage.session.set.mockClear();
+      blsi.Automate.ScreenShareBg.init();
+      var ss = blsi.Automate.State.get_screen_share_state();
+      expect(ss.active).toBe(true);
+      expect(ss._sharing_tab_ids).toEqual([42]);
     });
 
     test('registers onConnect and onMessage listeners', () => {

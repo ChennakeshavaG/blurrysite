@@ -805,8 +805,8 @@ describe('blsi.Engine', () => {
   // OPTIMIZE: hgroup/audio/progress+meter tests all call injectRules then css.toContain(tag) — use test.each
   describe('category coverage additions', () => {
     const onlyTextCats = { text: true, media: false, form: false, table: false, structure: false };
-    const onlyMediaCats = { text: false, media: true, form: false, table: false, structure: false };
-    const onlyFormCats = { text: false, media: false, form: true, table: false, structure: false };
+    const _onlyMediaCats = { text: false, media: true, form: false, table: false, structure: false };
+    const _onlyFormCats = { text: false, media: false, form: true, table: false, structure: false };
     const onlyStructCats = { text: false, media: false, form: false, table: false, structure: true };
 
     test('hgroup is stamped when TEXT is on (alwaysBlur rule)', () => {

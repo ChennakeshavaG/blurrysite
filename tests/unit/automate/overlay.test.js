@@ -87,9 +87,9 @@ describe('automate/overlay.js', () => {
       expect(s.height).toBe('100vh');
     });
 
-    test('z-index sits below the picker toolbar (2147483647)', () => {
+    test('z-index sits below the toast (2147483646) and picker toolbar (2147483647)', () => {
       blsi.Automate.Overlay.show();
-      expect(document.getElementById(ROOT_ID).style.zIndex).toBe('2147483646');
+      expect(document.getElementById(ROOT_ID).style.zIndex).toBe('2147483640');
     });
 
     test('important markers applied so page CSS cannot disable', () => {

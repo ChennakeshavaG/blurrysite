@@ -78,7 +78,7 @@ const Picker = (() => {
   // ─── Toolbar DOM references ───────────────────────────────────────────────────
 
   let toolbarEl = null;
-  let toolbarLabelEl = null;
+  let _toolbarLabelEl = null;
   let modeSelectEl = null;
   let selectorWarningEl = null;
 
@@ -312,7 +312,7 @@ const Picker = (() => {
     // toolbarLabelEl is retained as null — legacy code paths that touched
     // it must check for null. The long "sketch a box on the page..." label
     // is gone; the chip tooltip carries the description now.
-    toolbarLabelEl = null;
+    _toolbarLabelEl = null;
 
     document.body.appendChild(toolbarEl);
     // No position restore: the pill always opens at top-center of the
@@ -409,7 +409,7 @@ const Picker = (() => {
     if (toolbarEl) {
       toolbarEl.remove();
       toolbarEl = null;
-      toolbarLabelEl = null;
+      _toolbarLabelEl = null;
       modeSelectEl = null;
       selectorWarningEl = null;
     }

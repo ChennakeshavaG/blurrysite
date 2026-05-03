@@ -22,18 +22,18 @@ Exposed as `blsi.Automate.ScreenShareBg` (IIFE — no ES module syntax).
 
 ### init()
 
-**What**: Clears stale session state and registers port + message listeners.
+**What**: Reconciles stale session state and registers port + message listeners.
 **Params**: none
 **Returns**: `void`
 **Side effects**:
-- Calls `State.set_screen_share_inactive()` — clears any stale session record from prior SW lifetime
-- Calls `State.clear_suppressed_tabs()` — clears suppressed tab list (Chrome may reuse tab ids)
+- Calls `_reconcile_stale_shares()` — queries live tabs and removes screen-share entries and suppressed-tab entries for tabs that no longer exist. Preserves active shares for tabs that are still open (survives SW idle/wake cycle).
 - Registers `chrome.runtime.onConnect` listener for port `'blsi-screen-share'`
 - Registers `chrome.runtime.onMessage` listener for STARTED/ENDED/WHO_AM_I
 
 **Edge cases**:
 - `State` unavailable (null) → no-op; module exports stay defined but init does nothing
-- SW restart mid-share: session record cleared by init, then port reconnection from content restores active state via the onConnect handler
+- SW restart mid-share: session record preserved by reconcile (tab still exists); port reconnection from content re-establishes the port via onConnect handler
+- Tab closed while SW was idle: reconcile detects the dead tab id via `chrome.tabs.query` and removes only that entry
 
 ### destroy()
 
@@ -72,7 +72,7 @@ Queries all tabs via `chrome.tabs.query({})` and sends `{ type: SCREEN_SHARE_NOT
 
 ## Invariants
 
-- Session record is always cleared on SW startup before listeners register — prevents stale "active" state from a crashed prior session
+- Session records are reconciled on SW startup — entries for tabs that no longer exist are removed; active shares for live tabs are preserved across SW idle/wake cycles
 - Port disconnect is the crash-safety signal: even if `SCREEN_SHARE_ENDED` message never arrives (tab crash, navigation), `onDisconnect` fires and clears the record
 - `_onMessage` returns `undefined` for unhandled message types — does not interfere with other `chrome.runtime.onMessage` listeners in background.js
 - `_sharePorts` is in-memory only — always empty on SW restart; repopulated by reconnecting content scripts
