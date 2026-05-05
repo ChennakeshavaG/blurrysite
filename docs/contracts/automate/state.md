@@ -198,16 +198,29 @@ Params: `opt_tab_id: number` (optional) — when provided and that tab is sharin
 
 Returns: `{ active: boolean, sharing_tab_id: number|null, started_at: number|null, suppressed_sites: string[], _sharing_tab_ids: number[] }`. `active` is `true` when any tab is sharing. `suppressed_sites` is the union across all sharing tabs. `_sharing_tab_ids` lists all currently-sharing tab ids.
 
-### `set_screen_share_active(tabId)` → Promise
+### `set_screen_share_active(tabId, streamKey?)` → Promise
 
-Adds a tab to the per-tab screen-share map. Additive — does not clear other tabs' entries. Each new share clears the suppressed_tabs list (mitigates Chrome tab-id reuse).
+Adds a stream to a tab's screen-share entry. Additive — does not clear other tabs' entries or other streams within the same tab. Each new share clears the suppressed_tabs list (mitigates Chrome tab-id reuse).
 
-Params: `tabId: number` — required. Non-number returns without writing.
-Side effects: Updates both screen_share and suppressed_tabs caches; fires subscribers; writes both session keys.
+Params:
+- `tabId: number` — required. Non-number returns without writing.
+- `streamKey: string` (optional) — port name (e.g. `'blsi-ss-<streamId>'`). Defaults to `'_default'` if omitted.
+
+Side effects: Creates or extends the tab's `streams` sub-object with `{ [streamKey]: { started_at: Date.now() } }`; updates both screen_share and suppressed_tabs caches; fires subscribers; writes both session keys.
+
+### `remove_stream(tabId, streamKey)` → Promise
+
+Removes a single stream from a tab's entry. If this was the last stream, the entire tab entry is deleted.
+
+Params:
+- `tabId: number` — required.
+- `streamKey: string` — the stream key to remove (e.g. `'blsi-ss-<streamId>'`).
+
+Side effects: Updates `_screen_share_cache`; fires subscribers; writes screen_share session key. No-op if tabId not in cache.
 
 ### `set_screen_share_inactive(opt_tabId?)` → Promise
 
-With `opt_tabId: number`: removes only that tab's entry from the map. No-op if the tab is not sharing.
+With `opt_tabId: number`: removes only that tab's entire entry (all streams) from the map. No-op if the tab is not sharing.
 Without argument: clears the entire map (used by `init()` on SW startup to clear stale state).
 
 ### `suppress_screen_share_site(hostname, opt_tabId?)` → Promise

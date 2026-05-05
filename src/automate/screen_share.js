@@ -22,7 +22,7 @@
   var _State = (globalThis.blsi && globalThis.blsi.Automate && globalThis.blsi.Automate.State) || null;
 
   var _handler        = null;
-  var _sharePort      = null;
+  var _sharePorts     = {};
   var _myTabId        = null;
   var _whoAmIPromise  = null;
 
@@ -32,7 +32,7 @@
     _whoAmIPromise = new Promise(function (resolve) {
       try {
         chrome.runtime.sendMessage({ type: blsi.command.who_am_i }, function (resp) {
-          void chrome.runtime.lastError;
+          if (chrome.runtime.lastError && globalThis.blsi && blsi.Logger) blsi.Logger.scope('screenShare').warn('whoAmI', chrome.runtime.lastError.message);
           if (resp && typeof resp.tab_id === 'number') {
             _myTabId = resp.tab_id;
           }
@@ -50,13 +50,23 @@
     whoAmI();
     _handler = function (e) {
       if (!e.data || e.data.type !== '__blsi_screen_share') return;
+      var sid = e.data.streamId;
+      if (!sid) return;
       try {
         if (e.data.active) {
-          _sharePort = chrome.runtime.connect({ name: 'blsi-screen-share' });
-          chrome.runtime.sendMessage({ type: blsi.command.screen_share_started }).catch(function () {});
+          var port = chrome.runtime.connect({ name: 'blsi-ss-' + sid });
+          _sharePorts[sid] = port;
+          chrome.runtime.sendMessage({
+            type: blsi.command.screen_share_started,
+            streamId: sid
+          }).catch(function () {});
         } else {
-          if (_sharePort) { _sharePort.disconnect(); _sharePort = null; }
-          chrome.runtime.sendMessage({ type: blsi.command.screen_share_ended }).catch(function () {});
+          var p = _sharePorts[sid];
+          if (p) { p.disconnect(); delete _sharePorts[sid]; }
+          chrome.runtime.sendMessage({
+            type: blsi.command.screen_share_ended,
+            streamId: sid
+          }).catch(function () {});
         }
       } catch (_) { /* extension context invalidated — stale content script */ }
     };
@@ -64,7 +74,11 @@
   }
 
   function destroy() {
-    if (_sharePort) { _sharePort.disconnect(); _sharePort = null; }
+    var keys = Object.keys(_sharePorts);
+    for (var i = 0; i < keys.length; i++) {
+      _sharePorts[keys[i]].disconnect();
+    }
+    _sharePorts = {};
     if (_handler) window.removeEventListener('message', _handler);
     _handler = null;
   }

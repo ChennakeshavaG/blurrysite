@@ -48,7 +48,7 @@ function freshLoad() {
 function makePort(tabId, name) {
   var disconnectListeners = [];
   return {
-    name: name || 'blsi-screen-share',
+    name: name || 'blsi-ss-default',
     sender: { tab: { id: tabId } },
     onDisconnect: {
       addListener: jest.fn((fn) => { disconnectListeners.push(fn); }),
@@ -80,7 +80,7 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('removes stale share entries for dead tabs', () => {
-      blsi.Automate.State.set_screen_share_active(999);
+      blsi.Automate.State.set_screen_share_active(999, 'blsi-ss-stale');
       chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb([]); });
       chrome.storage.session.set.mockClear();
       blsi.Automate.ScreenShareBg.init();
@@ -89,7 +89,7 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('preserves active share for live tabs', () => {
-      blsi.Automate.State.set_screen_share_active(42);
+      blsi.Automate.State.set_screen_share_active(42, 'blsi-ss-live');
       chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb([{ id: 42 }]); });
       chrome.storage.session.set.mockClear();
       blsi.Automate.ScreenShareBg.init();
@@ -112,7 +112,7 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('sets screen share active on port connect', () => {
-      var port = makePort(42);
+      var port = makePort(42, 'blsi-ss-stream1');
       capturedConnectListener(port);
       var ss = blsi.Automate.State.get_screen_share_state();
       expect(ss.active).toBe(true);
@@ -123,7 +123,7 @@ describe('automate/screen_share_bg.js', () => {
       var tabs = [{ id: 1 }, { id: 2 }];
       chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb(tabs); });
 
-      var port = makePort(42);
+      var port = makePort(42, 'blsi-ss-stream1');
       capturedConnectListener(port);
       port._fireDisconnect();
 
@@ -139,7 +139,7 @@ describe('automate/screen_share_bg.js', () => {
       );
     });
 
-    test('ignores ports with wrong name', () => {
+    test('ignores ports with wrong name prefix', () => {
       var port = makePort(42, 'some-other-port');
       capturedConnectListener(port);
       var ss = blsi.Automate.State.get_screen_share_state();
@@ -147,7 +147,7 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('ignores ports with no sender tab id', () => {
-      var port = { name: 'blsi-screen-share', sender: {}, onDisconnect: { addListener: jest.fn() } };
+      var port = { name: 'blsi-ss-stream1', sender: {}, onDisconnect: { addListener: jest.fn() } };
       capturedConnectListener(port);
       var ss = blsi.Automate.State.get_screen_share_state();
       expect(ss.active).toBe(false);
@@ -166,7 +166,7 @@ describe('automate/screen_share_bg.js', () => {
       var sendResponse = jest.fn();
 
       var result = capturedMessageListener(
-        { type: blsi.command.screen_share_started },
+        { type: blsi.command.screen_share_started, streamId: 'stream-x' },
         { tab: { id: 10 } },
         sendResponse
       );
@@ -184,9 +184,8 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('SCREEN_SHARE_ENDED clears state + broadcasts + responds', async () => {
-      // First set active so there's state to clear
       capturedMessageListener(
-        { type: blsi.command.screen_share_started },
+        { type: blsi.command.screen_share_started, streamId: 'stream-x' },
         { tab: { id: 5 } },
         jest.fn()
       );
@@ -198,7 +197,7 @@ describe('automate/screen_share_bg.js', () => {
       var sendResponse = jest.fn();
 
       var result = capturedMessageListener(
-        { type: blsi.command.screen_share_ended },
+        { type: blsi.command.screen_share_ended, streamId: 'stream-x' },
         { tab: { id: 5 } },
         sendResponse
       );
@@ -274,7 +273,7 @@ describe('automate/screen_share_bg.js', () => {
       chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb(tabs); });
 
       capturedMessageListener(
-        { type: blsi.command.screen_share_started },
+        { type: blsi.command.screen_share_started, streamId: 'stream-bc' },
         { tab: { id: 10 } },
         jest.fn()
       );
@@ -292,7 +291,7 @@ describe('automate/screen_share_bg.js', () => {
       chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb(tabs); });
 
       capturedMessageListener(
-        { type: blsi.command.screen_share_ended },
+        { type: blsi.command.screen_share_ended, streamId: 'stream-bc' },
         { tab: { id: 10 } },
         jest.fn()
       );
@@ -313,8 +312,8 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('two tabs sharing simultaneously — both entries exist', () => {
-      var port1 = makePort(42);
-      var port2 = makePort(1001);
+      var port1 = makePort(42, 'blsi-ss-stream-a');
+      var port2 = makePort(1001, 'blsi-ss-stream-b');
       capturedConnectListener(port1);
       capturedConnectListener(port2);
       var ss = blsi.Automate.State.get_screen_share_state();
@@ -324,8 +323,8 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('port disconnect clears only that tab — other tab persists', async () => {
-      var port1 = makePort(42);
-      var port2 = makePort(1001);
+      var port1 = makePort(42, 'blsi-ss-stream-a');
+      var port2 = makePort(1001, 'blsi-ss-stream-b');
       capturedConnectListener(port1);
       capturedConnectListener(port2);
       port1._fireDisconnect();
@@ -339,12 +338,12 @@ describe('automate/screen_share_bg.js', () => {
 
     test('ENDED message clears only sender tab', async () => {
       capturedMessageListener(
-        { type: blsi.command.screen_share_started },
+        { type: blsi.command.screen_share_started, streamId: 'stream-c' },
         { tab: { id: 42 } },
         jest.fn()
       );
       capturedMessageListener(
-        { type: blsi.command.screen_share_started },
+        { type: blsi.command.screen_share_started, streamId: 'stream-d' },
         { tab: { id: 1001 } },
         jest.fn()
       );
@@ -352,7 +351,7 @@ describe('automate/screen_share_bg.js', () => {
       await Promise.resolve();
 
       capturedMessageListener(
-        { type: blsi.command.screen_share_ended },
+        { type: blsi.command.screen_share_ended, streamId: 'stream-c' },
         { tab: { id: 42 } },
         jest.fn()
       );
@@ -366,10 +365,56 @@ describe('automate/screen_share_bg.js', () => {
     });
 
     test('get_screen_share_state reports queried tab info when sharing', () => {
-      var port = makePort(42);
+      var port = makePort(42, 'blsi-ss-stream-e');
       capturedConnectListener(port);
       var ss = blsi.Automate.State.get_screen_share_state(42);
       expect(ss.sharing_tab_id).toBe(42);
+    });
+  });
+
+  describe('per-stream isolation (same tab)', () => {
+    beforeEach(() => {
+      blsi.Automate.ScreenShareBg.init();
+      chrome.storage.session.set.mockClear();
+      chrome.tabs.query.mockImplementation((_opts, cb) => { if (cb) cb([]); });
+    });
+
+    test('two streams from same tab — both tracked', () => {
+      var port1 = makePort(42, 'blsi-ss-stream-1');
+      var port2 = makePort(42, 'blsi-ss-stream-2');
+      capturedConnectListener(port1);
+      capturedConnectListener(port2);
+      var ss = blsi.Automate.State.get_screen_share_state();
+      expect(ss.active).toBe(true);
+      expect(ss._sharing_tab_ids).toEqual([42]);
+    });
+
+    test('disconnecting one stream keeps tab active when another remains', async () => {
+      var port1 = makePort(42, 'blsi-ss-stream-1');
+      var port2 = makePort(42, 'blsi-ss-stream-2');
+      capturedConnectListener(port1);
+      capturedConnectListener(port2);
+      port1._fireDisconnect();
+      await Promise.resolve();
+      await Promise.resolve();
+      var ss = blsi.Automate.State.get_screen_share_state();
+      expect(ss.active).toBe(true);
+      expect(ss._sharing_tab_ids).toContain(42);
+    });
+
+    test('disconnecting last stream clears tab', async () => {
+      var port1 = makePort(42, 'blsi-ss-stream-1');
+      var port2 = makePort(42, 'blsi-ss-stream-2');
+      capturedConnectListener(port1);
+      capturedConnectListener(port2);
+      port1._fireDisconnect();
+      await Promise.resolve();
+      await Promise.resolve();
+      port2._fireDisconnect();
+      await Promise.resolve();
+      await Promise.resolve();
+      var ss = blsi.Automate.State.get_screen_share_state();
+      expect(ss.active).toBe(false);
     });
   });
 

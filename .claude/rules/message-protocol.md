@@ -26,11 +26,11 @@ paths:
 
 ## automate/screen_share.js → automate/screen_share_bg.js (content → background)
 
-| Event | Type string |
-|---|---|
-| `getDisplayMedia()` call succeeded in page | `SCREEN_SHARE_STARTED` |
-| All display tracks ended | `SCREEN_SHARE_ENDED` |
-| Content asks background for its own tab id (so resolve can identify sharing tab + per-tab suppression) | `WHO_AM_I` |
+| Event | Type string | Extra fields |
+|---|---|---|
+| `getDisplayMedia()` call succeeded in page | `SCREEN_SHARE_STARTED` | `streamId: string` (browser-assigned `stream.id` GUID) |
+| Stream ended (track.stop, OS kill, or poll detect) | `SCREEN_SHARE_ENDED` | `streamId: string` |
+| Content asks background for its own tab id (so resolve can identify sharing tab + per-tab suppression) | `WHO_AM_I` | — |
 
 ## popup.js → content_script.js
 

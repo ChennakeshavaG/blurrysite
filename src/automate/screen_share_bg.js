@@ -25,6 +25,7 @@
 
   function _broadcastScreenShareNotify(excludeTabId) {
     chrome.tabs.query({}, function (tabs) {
+      if (chrome.runtime.lastError) { if (log) log.warn('broadcast query', chrome.runtime.lastError.message); return; }
       for (var i = 0; i < tabs.length; i++) {
         var tab = tabs[i];
         if (!tab.id) continue;
@@ -34,19 +35,33 @@
     });
   }
 
+  function _tabHasActivePorts(tabId) {
+    var iter = _sharePorts.values();
+    var entry;
+    while (!(entry = iter.next()).done) {
+      if (entry.value.tabId === tabId) return true;
+    }
+    return false;
+  }
+
   function _onConnect(port) {
-    if (port.name !== 'blsi-screen-share') return;
+    if (!port.name || port.name.indexOf('blsi-ss-') !== 0) return;
     var tabId = port.sender && port.sender.tab && port.sender.tab.id;
     if (!tabId) return;
 
-    _sharePorts.set(tabId, port);
-    if (log) log.flow('screenShare.portOpen', { tabId: tabId });
-    State.set_screen_share_active(tabId);
+    _sharePorts.set(port.name, { tabId: tabId, port: port });
+    if (log) log.flow('screenShare.portOpen', { tabId: tabId, port: port.name });
+    State.set_screen_share_active(tabId, port.name);
 
     port.onDisconnect.addListener(function () {
-      _sharePorts.delete(tabId);
-      if (log) log.flow('screenShare.portClose', { tabId: tabId });
-      Promise.resolve(State.set_screen_share_inactive(tabId)).then(function () {
+      _sharePorts.delete(port.name);
+      if (log) log.flow('screenShare.portClose', { tabId: tabId, port: port.name });
+      var tabHasMore = _tabHasActivePorts(tabId);
+      Promise.resolve(
+        tabHasMore
+          ? State.remove_stream(tabId, port.name)
+          : State.set_screen_share_inactive(tabId)
+      ).then(function () {
         _broadcastScreenShareNotify();
       });
     });
@@ -57,7 +72,9 @@
 
     if (message.type === blsi.command.screen_share_started) {
       var senderTabId = sender.tab && sender.tab.id;
-      Promise.resolve(State.set_screen_share_active(senderTabId)).then(function () {
+      var sid = message.streamId;
+      var streamKey = sid ? 'blsi-ss-' + sid : null;
+      Promise.resolve(State.set_screen_share_active(senderTabId, streamKey)).then(function () {
         _broadcastScreenShareNotify(senderTabId);
         sendResponse({ ok: true });
       });
@@ -66,7 +83,14 @@
 
     if (message.type === blsi.command.screen_share_ended) {
       var endTabId = sender.tab && sender.tab.id;
-      Promise.resolve(State.set_screen_share_inactive(endTabId)).then(function () {
+      var endSid = message.streamId;
+      var endStreamKey = endSid ? 'blsi-ss-' + endSid : null;
+      var tabHasMore = endStreamKey ? _tabHasActivePorts(endTabId) : false;
+      Promise.resolve(
+        tabHasMore
+          ? State.remove_stream(endTabId, endStreamKey)
+          : State.set_screen_share_inactive(endTabId)
+      ).then(function () {
         _broadcastScreenShareNotify();
         sendResponse({ ok: true });
       });
@@ -84,6 +108,7 @@
     var ss = State.get_screen_share_state();
     if (!ss.active || !ss._sharing_tab_ids || !ss._sharing_tab_ids.length) return;
     chrome.tabs.query({}, function (tabs) {
+      if (chrome.runtime.lastError) { if (log) log.warn('reconcile query', chrome.runtime.lastError.message); return; }
       var live = new Set(tabs.map(function (t) { return t.id; }));
       ss._sharing_tab_ids.forEach(function (id) {
         if (!live.has(id)) State.set_screen_share_inactive(id);

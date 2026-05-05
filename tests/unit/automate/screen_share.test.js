@@ -12,7 +12,7 @@ const path = require('path');
 const STATE_PATH = path.resolve(__dirname, '../../../src/automate/state.js');
 const MODULE_PATH = path.resolve(__dirname, '../../../src/automate/screen_share.js');
 
-let mockPort;
+let mockPorts;
 
 function makeMockPort() {
   return {
@@ -26,8 +26,12 @@ function freshLoad() {
   delete globalThis.blsi.Automate;
   jest.resetModules();
 
-  mockPort = makeMockPort();
-  chrome.runtime.connect = jest.fn(() => mockPort);
+  mockPorts = {};
+  chrome.runtime.connect = jest.fn((opts) => {
+    var p = makeMockPort();
+    if (opts && opts.name) mockPorts[opts.name] = p;
+    return p;
+  });
   chrome.runtime.sendMessage = jest.fn();
 
   require(STATE_PATH);
@@ -35,12 +39,13 @@ function freshLoad() {
   blsi.Automate.State._reset();
 }
 
-function fireShareEvent(active) {
+function fireShareEvent(active, streamId) {
+  var sid = streamId || 'test-stream-001';
   var listeners = window.addEventListener.mock.calls
     .filter(function (c) { return c[0] === 'message'; });
   var last = listeners[listeners.length - 1];
   if (!last) throw new Error('No message listener registered');
-  last[1]({ data: { type: '__blsi_screen_share', active: active } });
+  last[1]({ data: { type: '__blsi_screen_share', active: active, streamId: sid } });
 }
 
 describe('automate/screen_share.js', () => {
@@ -100,60 +105,106 @@ describe('automate/screen_share.js', () => {
       listeners[0][1]({});
       expect(chrome.runtime.connect).not.toHaveBeenCalled();
     });
+
+    test('ignores messages with no streamId', () => {
+      chrome.runtime.sendMessage.mockReturnValue({ catch: jest.fn() });
+      blsi.Automate.ScreenShare.init();
+      var listeners = window.addEventListener.mock.calls
+        .filter(function (c) { return c[0] === 'message'; });
+      listeners[0][1]({ data: { type: '__blsi_screen_share', active: true } });
+      expect(chrome.runtime.connect).not.toHaveBeenCalled();
+    });
   });
 
   describe('share start', () => {
-    test('opens port with name blsi-screen-share', () => {
+    test('opens port with name blsi-ss-<streamId>', () => {
       chrome.runtime.sendMessage.mockImplementation(() => ({ catch: () => {} }));
       blsi.Automate.ScreenShare.init();
-      fireShareEvent(true);
-      expect(chrome.runtime.connect).toHaveBeenCalledWith({ name: 'blsi-screen-share' });
+      fireShareEvent(true, 'abc-123');
+      expect(chrome.runtime.connect).toHaveBeenCalledWith({ name: 'blsi-ss-abc-123' });
     });
 
-    test('sends SCREEN_SHARE_STARTED message', () => {
+    test('sends SCREEN_SHARE_STARTED message with streamId', () => {
       var sentPromise = { catch: jest.fn() };
       chrome.runtime.sendMessage.mockReturnValue(sentPromise);
       blsi.Automate.ScreenShare.init();
-      fireShareEvent(true);
+      fireShareEvent(true, 'stream-x');
       var startedCalls = chrome.runtime.sendMessage.mock.calls
         .filter(function (c) { return c[0] && c[0].type === blsi.command.screen_share_started; });
       expect(startedCalls.length).toBe(1);
+      expect(startedCalls[0][0].streamId).toBe('stream-x');
     });
   });
 
   describe('share end', () => {
-    test('disconnects port and sends SCREEN_SHARE_ENDED', () => {
+    test('disconnects port and sends SCREEN_SHARE_ENDED with streamId', () => {
       var sentPromise = { catch: jest.fn() };
       chrome.runtime.sendMessage.mockReturnValue(sentPromise);
       blsi.Automate.ScreenShare.init();
-      fireShareEvent(true);
-      fireShareEvent(false);
-      expect(mockPort.disconnect).toHaveBeenCalled();
+      fireShareEvent(true, 'stream-y');
+      fireShareEvent(false, 'stream-y');
+      var port = mockPorts['blsi-ss-stream-y'];
+      expect(port.disconnect).toHaveBeenCalled();
       var endedCalls = chrome.runtime.sendMessage.mock.calls
         .filter(function (c) { return c[0] && c[0].type === blsi.command.screen_share_ended; });
       expect(endedCalls.length).toBe(1);
+      expect(endedCalls[0][0].streamId).toBe('stream-y');
     });
 
-    test('sends ENDED even if no port was open', () => {
+    test('sends ENDED even if no port was open for that stream', () => {
       var sentPromise = { catch: jest.fn() };
       chrome.runtime.sendMessage.mockReturnValue(sentPromise);
       blsi.Automate.ScreenShare.init();
-      fireShareEvent(false);
-      expect(mockPort.disconnect).not.toHaveBeenCalled();
+      fireShareEvent(false, 'no-such-stream');
+      expect(chrome.runtime.connect).not.toHaveBeenCalled();
       var endedCalls = chrome.runtime.sendMessage.mock.calls
         .filter(function (c) { return c[0] && c[0].type === blsi.command.screen_share_ended; });
       expect(endedCalls.length).toBe(1);
+      expect(endedCalls[0][0].streamId).toBe('no-such-stream');
+    });
+  });
+
+  describe('per-stream tracking', () => {
+    test('two streams open independently — ending one does not disconnect the other', () => {
+      var sentPromise = { catch: jest.fn() };
+      chrome.runtime.sendMessage.mockReturnValue(sentPromise);
+      blsi.Automate.ScreenShare.init();
+      fireShareEvent(true, 'stream-a');
+      fireShareEvent(true, 'stream-b');
+      expect(Object.keys(mockPorts).length).toBe(2);
+
+      fireShareEvent(false, 'stream-a');
+      var portA = mockPorts['blsi-ss-stream-a'];
+      var portB = mockPorts['blsi-ss-stream-b'];
+      expect(portA.disconnect).toHaveBeenCalled();
+      expect(portB.disconnect).not.toHaveBeenCalled();
+    });
+
+    test('ending second stream disconnects its port', () => {
+      var sentPromise = { catch: jest.fn() };
+      chrome.runtime.sendMessage.mockReturnValue(sentPromise);
+      blsi.Automate.ScreenShare.init();
+      fireShareEvent(true, 'stream-a');
+      fireShareEvent(true, 'stream-b');
+      fireShareEvent(false, 'stream-a');
+      fireShareEvent(false, 'stream-b');
+      var portB = mockPorts['blsi-ss-stream-b'];
+      expect(portB.disconnect).toHaveBeenCalled();
     });
   });
 
   describe('destroy', () => {
-    test('disconnects open port and removes listener', () => {
+    test('disconnects all open ports and removes listener', () => {
       var sentPromise = { catch: jest.fn() };
       chrome.runtime.sendMessage.mockReturnValue(sentPromise);
       blsi.Automate.ScreenShare.init();
-      fireShareEvent(true);
+      fireShareEvent(true, 'stream-1');
+      fireShareEvent(true, 'stream-2');
       blsi.Automate.ScreenShare.destroy();
-      expect(mockPort.disconnect).toHaveBeenCalled();
+      var port1 = mockPorts['blsi-ss-stream-1'];
+      var port2 = mockPorts['blsi-ss-stream-2'];
+      expect(port1.disconnect).toHaveBeenCalled();
+      expect(port2.disconnect).toHaveBeenCalled();
       var removeCalls = window.removeEventListener.mock.calls
         .filter(function (c) { return c[0] === 'message'; });
       expect(removeCalls.length).toBeGreaterThanOrEqual(1);

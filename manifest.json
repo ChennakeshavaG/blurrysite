@@ -29,7 +29,8 @@
       "js": ["src/main_world_bridge.js"],
       "run_at": "document_start",
       "world": "MAIN",
-      "all_frames": false
+      "all_frames": true,
+      "match_origin_as_fallback": true
     },
     {
       "matches": ["<all_urls>"],

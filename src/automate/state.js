@@ -42,8 +42,21 @@
 
   function _normalize_ss_entry(v) {
     if (!v || typeof v !== 'object') return null;
+    var streams = {};
+    if (v.streams && typeof v.streams === 'object') {
+      var skeys = Object.keys(v.streams);
+      for (var si = 0; si < skeys.length; si++) {
+        var sv = v.streams[skeys[si]];
+        if (sv && typeof sv === 'object' && typeof sv.started_at === 'number') {
+          streams[skeys[si]] = { started_at: sv.started_at };
+        }
+      }
+    } else if (typeof v.started_at === 'number') {
+      streams['_migrated'] = { started_at: v.started_at };
+    }
+    if (Object.keys(streams).length === 0) return null;
     return {
-      started_at: typeof v.started_at === 'number' ? v.started_at : null,
+      streams: streams,
       suppressed_sites: Array.isArray(v.suppressed_sites)
         ? v.suppressed_sites.filter(function (s) { return typeof s === 'string' && s; })
         : [],
@@ -52,19 +65,19 @@
 
   function _normalize_screen_share(raw) {
     if (!raw || typeof raw !== 'object') return {};
-    // Migrate old single-record shape
+    // Migrate old single-record shape (v1: { active, sharing_tab_id, started_at })
     if ('active' in raw) {
       if (!raw.active || typeof raw.sharing_tab_id !== 'number') return {};
       var entry = {};
       entry[String(raw.sharing_tab_id)] = {
-        started_at: typeof raw.started_at === 'number' ? raw.started_at : null,
+        streams: { '_migrated': { started_at: typeof raw.started_at === 'number' ? raw.started_at : Date.now() } },
         suppressed_sites: Array.isArray(raw.suppressed_sites)
           ? raw.suppressed_sites.filter(function (s) { return typeof s === 'string' && s; })
           : [],
       };
       return entry;
     }
-    // New per-tab map shape
+    // Per-tab map shape (v2 flat + v3 streams)
     var out = {};
     var keys = Object.keys(raw);
     for (var i = 0; i < keys.length; i++) {
@@ -377,34 +390,53 @@
   function get_screen_share_state(opt_tab_id) {
     var map = _screen_share_cache;
     var keys = Object.keys(map);
-    var active = keys.length > 0;
+    var active = false;
     var all_suppressed = [];
     var first_tab_id = null;
+    var sharing_tab_ids = [];
     for (var i = 0; i < keys.length; i++) {
       var tid = Number(keys[i]);
       var entry = map[keys[i]];
+      var streamCount = entry.streams ? Object.keys(entry.streams).length : 0;
+      if (streamCount === 0) continue;
+      active = true;
+      sharing_tab_ids.push(tid);
       if (first_tab_id === null) first_tab_id = tid;
       var sites = entry.suppressed_sites;
       for (var j = 0; j < sites.length; j++) {
         if (all_suppressed.indexOf(sites[j]) < 0) all_suppressed.push(sites[j]);
       }
     }
-    var report_tab = (typeof opt_tab_id === 'number' && map[String(opt_tab_id)])
+    var report_tab = (typeof opt_tab_id === 'number' && map[String(opt_tab_id)]
+      && map[String(opt_tab_id)].streams && Object.keys(map[String(opt_tab_id)].streams).length > 0)
       ? opt_tab_id : first_tab_id;
     var report_entry = report_tab !== null ? map[String(report_tab)] : null;
+    var earliest_started = null;
+    if (report_entry && report_entry.streams) {
+      var skeys = Object.keys(report_entry.streams);
+      for (var si = 0; si < skeys.length; si++) {
+        var st = report_entry.streams[skeys[si]].started_at;
+        if (st && (earliest_started === null || st < earliest_started)) earliest_started = st;
+      }
+    }
     return {
       active:           active,
       sharing_tab_id:   report_tab,
-      started_at:       report_entry ? report_entry.started_at : null,
+      started_at:       earliest_started,
       suppressed_sites: all_suppressed,
-      _sharing_tab_ids: keys.map(Number),
+      _sharing_tab_ids: sharing_tab_ids,
     };
   }
 
-  function set_screen_share_active(tabId) {
+  function set_screen_share_active(tabId, streamKey) {
     if (typeof tabId !== 'number') return Promise.resolve();
     var next = Object.assign({}, _screen_share_cache);
-    next[String(tabId)] = { started_at: Date.now(), suppressed_sites: [] };
+    var entry = next[String(tabId)]
+      ? Object.assign({}, next[String(tabId)])
+      : { streams: {}, suppressed_sites: [] };
+    entry.streams = Object.assign({}, entry.streams);
+    entry.streams[streamKey || '_default'] = { started_at: Date.now() };
+    next[String(tabId)] = entry;
     _screen_share_cache = next;
     _suppressed_tabs_cache = [];
     _fire_subscribers();
@@ -412,6 +444,23 @@
     payload[KEYS.screen_share] = next;
     payload[KEYS.suppressed_tabs] = [];
     return _session_set_multi(payload);
+  }
+
+  function remove_stream(tabId, streamKey) {
+    var key = String(tabId);
+    if (!(key in _screen_share_cache)) return Promise.resolve();
+    var next = Object.assign({}, _screen_share_cache);
+    var entry = Object.assign({}, next[key]);
+    entry.streams = Object.assign({}, entry.streams);
+    delete entry.streams[streamKey];
+    if (Object.keys(entry.streams).length === 0) {
+      delete next[key];
+    } else {
+      next[key] = entry;
+    }
+    _screen_share_cache = next;
+    _fire_subscribers();
+    return _session_set(KEYS.screen_share, next);
   }
 
   function set_screen_share_inactive(opt_tabId) {
@@ -567,6 +616,7 @@
     // screen_share
     get_screen_share_state,
     set_screen_share_active,
+    remove_stream,
     set_screen_share_inactive,
     suppress_screen_share_site,
     unsuppress_screen_share_site,
