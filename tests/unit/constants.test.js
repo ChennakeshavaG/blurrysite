@@ -371,10 +371,10 @@ describe('BlurrySite constants', () => {
       expect(PB.validate_model(m).global_default_settings.blur_radius).toBe(2);
     });
 
-    test('blur_radius accepts max boundary (32)', () => {
+    test('blur_radius accepts max boundary (20)', () => {
       const m = PB.build_default_model();
-      m.global_default_settings.blur_radius = 32;
-      expect(PB.validate_model(m).global_default_settings.blur_radius).toBe(32);
+      m.global_default_settings.blur_radius = 20;
+      expect(PB.validate_model(m).global_default_settings.blur_radius).toBe(20);
     });
 
     test('blur_radius rejects below min (1)', () => {
@@ -383,9 +383,9 @@ describe('BlurrySite constants', () => {
       expect(PB.validate_model(m).global_default_settings.blur_radius).toBe(PB.DEFAULT_MODEL.global_default_settings.blur_radius);
     });
 
-    test('blur_radius rejects above max (33)', () => {
+    test('blur_radius rejects above max (21)', () => {
       const m = PB.build_default_model();
-      m.global_default_settings.blur_radius = 33;
+      m.global_default_settings.blur_radius = 21;
       expect(PB.validate_model(m).global_default_settings.blur_radius).toBe(PB.DEFAULT_MODEL.global_default_settings.blur_radius);
     });
 

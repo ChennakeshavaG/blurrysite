@@ -27,8 +27,6 @@ Initializes hostname/url/tabId, calls `blsi.Model.init_cache()`, then `refreshFr
 Returns current snapshot. `settings` is the model object plus runtime extras derived from `Store.resolve(_hostname, _url, _tabId)`:
 - `automate_blur_active` — boolean, any trigger active (after suppression filters)
 - `automate_blur_triggers` — `{ idle, tab_switch, screen_share }`
-- `automate_blur_skipped` — boolean
-- `automate_blur_skip_reason` — `'site_rule' | 'manual' | 'pick_blur' | null`
 - `screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }`
 - `screen_share_suppressed_for_host` — boolean
 - `screen_share_suppressed_for_tab` — boolean

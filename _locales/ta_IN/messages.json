@@ -84,7 +84,7 @@
     "message": "பொது"
   },
   "nav_general_desc": {
-    "message": "மொழி, டேப் தனியுரிமை, மற்றும் இன்னும் பல"
+    "message": "மொழி, காப்புப்பிரதி & மீட்டமைப்பு, மற்றும் இன்னும் பல"
   },
   "setting_language": {
     "message": "பாப்-அப் மொழி"
@@ -647,6 +647,16 @@
       }
     }
   },
+  "popup_pick_blur_cap_reached": {
+    "message": "$COUNT$ / $MAX$ — இந்த தளத்திற்கு அதிகபட்ச உருப்படிகள் எட்டப்பட்டன. ஒன்றை அகற்றினால் மற்றொன்றைச் சேர்க்கலாம்.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "10" },
+      "max":   { "content": "$2", "example": "10" }
+    }
+  },
+  "toast_pick_blur_cap_reached": {
+    "message": "Pick & Blur — இந்த தளத்திற்கு அதிகபட்ச உருப்படிகள் எட்டப்பட்டன"
+  },
   "mode_open_picker": {
     "message": "பிக்கரைத் திற"
   },
@@ -722,29 +732,14 @@
   "automate_toast_tab_switch": {
     "message": "ப்ளர் ஆனது — டேப் மாற்றம்"
   },
-  "automate_toast_skipped": {
-    "message": "ப்ளர் ஏற்கனவே ஆன் — தானியக்கு தவிர்க்கப்பட்டது"
-  },
   "notif_screen_share_active": {
     "message": "திரை பகிர்வு செயலில்"
-  },
-  "notif_automate_skipped": {
-    "message": "தானியங்கி தூண்டுதல் தவிர்க்கப்பட்டது"
   },
   "notif_sharing_for": {
     "message": "பகிர்ந்து"
   },
   "notif_sharing_this_screen": {
     "message": "இந்த திரை பகிரப்படுகிறது"
-  },
-  "notif_skipped_reason_site_rule": {
-    "message": "ப்ளர் ஏற்கனவே ஆன் (தள விதி)"
-  },
-  "notif_skipped_reason_manual": {
-    "message": "ப்ளர் ஏற்கனவே ஆன்"
-  },
-  "notif_skipped_reason_pick_blur": {
-    "message": "Pick & Blur ஏற்கனவே ஆன்"
   },
   "notif_suppressed_for_tab": {
     "message": "இந்த டேபுக்கு அமைதியாக்கப்பட்டது"
@@ -767,5 +762,95 @@
   },
   "site_rule_managed_edit_cta": {
     "message": "தள விதிகளில் மாற்று"
+  },
+  "section_stay_blurry": {
+    "message": "மங்கலாக வை"
+  },
+  "section_stay_blurry_desc": {
+    "message": "தேவைப்படும்போது உங்கள் திரை மங்கலாக இருக்கும்"
+  },
+  "section_activity": {
+    "message": "செயல்பாடு"
+  },
+  "section_how_to_blur": {
+    "message": "எப்படி மங்கச்செய்வது"
+  },
+  "section_how_to_blur_desc": {
+    "message": "எதையும் மங்கச்செய்யுங்கள். உங்கள் வழியில்."
+  },
+  "section_smart_triggers": {
+    "message": "ஸ்மார்ட் ட்ரிகர்கள்"
+  },
+  "section_smart_triggers_desc": {
+    "message": "நீங்கள் விலகும்போது தானியங்கி மங்கல்"
+  },
+  "subpage_blur_settings_title": {
+    "message": "மங்கல் அமைப்புகள்"
+  },
+  "protect_screen_share": {
+    "message": "திரை பகிர்வு"
+  },
+  "protect_screen_share_desc": {
+    "message": "திரையைப் பகிரும்போது தானாக மங்கலாக்கும்"
+  },
+  "protect_sensitive_info": {
+    "message": "முக்கிய தகவல்"
+  },
+  "protect_sensitive_info_desc": {
+    "message": "மின்னஞ்சல், அட்டை, தொலைபேசி எண்களை மறைக்கும்"
+  },
+  "protect_hide_tab_title": {
+    "message": "டேப் தலைப்பை மறை"
+  },
+  "protect_hide_tab_title_desc": {
+    "message": "டேப் தலைப்பை மாற்றும், மற்றவர்கள் பார்க்க முடியாது"
+  },
+  "trigger_tab_switch": {
+    "message": "டேப் மாற்றம்"
+  },
+  "trigger_tab_switch_desc": {
+    "message": "மற்ற டேப்புக்கு மாறும்போது மங்கலாக்கும்"
+  },
+  "trigger_idle_timer": {
+    "message": "செயலற்ற நேரம்"
+  },
+  "trigger_idle_timer_desc": {
+    "message": "சிறிது நேரம் செயலற்றிருந்தால் மங்கலாக்கும்"
+  },
+  "welcome_headline": {
+    "message": "Blurry Site-க்கு வரவேற்கிறோம்"
+  },
+  "welcome_intro": {
+    "message": "உங்கள் உலாவி இப்போது பாதுகாக்கப்பட்டுள்ளது:"
+  },
+  "welcome_screen_share_title": {
+    "message": "திரை பகிர்வு பாதுகாப்பு"
+  },
+  "welcome_screen_share_desc": {
+    "message": "பகிரும்போது தானியங்கி மங்கல்"
+  },
+  "welcome_pii_title": {
+    "message": "முக்கிய தகவல் மறைப்பு"
+  },
+  "welcome_pii_desc": {
+    "message": "மின்னஞ்சல், கார்டுகள், தொலைபேசி மறைக்கும்"
+  },
+  "welcome_pick_blur_title": {
+    "message": "தேர்ந்தெடுத்து மங்கச்செய்"
+  },
+  "welcome_pick_blur_desc": {
+    "message": "எந்த உறுப்பையும் கிளிக் செய்து மங்கச்செய்யுங்கள்"
+  },
+  "welcome_triggers_title": {
+    "message": "ஸ்மார்ட் ட்ரிகர்கள்"
+  },
+  "welcome_triggers_desc": {
+    "message": "டேப் மாற்றம் / செயலற்ற நிலையில் தானியங்கி மங்கல்"
+  },
+  "welcome_cta": {
+    "message": "புரிந்தது, போகலாம் →"
+  },
+  "welcome_badge_on": {
+    "message": "இயக்கம்"
   }
 }

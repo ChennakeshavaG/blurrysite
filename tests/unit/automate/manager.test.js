@@ -231,7 +231,7 @@ describe('automate/manager.js', () => {
     let toastSpy;
     beforeEach(() => {
       toastSpy = jest.fn();
-      blsi.Shortcuts = { showToast: toastSpy };
+      blsi.Toast = { show: toastSpy, dismiss: jest.fn(), clearIfTransient: jest.fn() };
     });
 
     test('seeds tracking on init without firing toasts', async () => {
@@ -261,7 +261,7 @@ describe('automate/manager.js', () => {
       // User goes idle.
       await blsi.Automate.State.write_idle('idle');
       global._fireStorageChanged({ blsi_automate_idle: { newValue: 'idle' } }, 'session');
-      // Manager fires the idle toast (automate_blur_only is true — no manual blur).
+      // Manager fires the idle toast.
       expect(toastSpy).toHaveBeenCalled();
     });
 
@@ -282,10 +282,10 @@ describe('automate/manager.js', () => {
       expect(toastSpy).toHaveBeenCalled();
     });
 
-    test('idle toast suppressed when manual blur already on', async () => {
+    test('idle toast fires independently when manual blur already on', async () => {
       const m = blsi.build_default_model();
       m.automate.settings.idle.enabled = true;
-      m.blur_all.status = true;  // manual blur on → automate fires but is "skipped"
+      m.blur_all.status = true;  // manual blur on — automate is independent
       setMockedModel(m);
       await blsi.Model.init_cache();
       blsi.Automate.Manager.init({
@@ -294,10 +294,8 @@ describe('automate/manager.js', () => {
       });
       await blsi.Automate.State.write_idle('idle');
       global._fireStorageChanged({ blsi_automate_idle: { newValue: 'idle' } }, 'session');
-      // Idle toast NOT fired — automate_blur_only is false. Skipped toast fires instead.
-      const messages = toastSpy.mock.calls.map(c => c[0]);
-      expect(messages.some(msg => /idle/i.test(msg))).toBe(false);
-      // (Skipped toast may have fired — we accept it as the correct behavior.)
+      // Manual blur and automate are independent — idle toast still fires.
+      expect(toastSpy).toHaveBeenCalled();
     });
 
     test('master switch off suppresses all toasts', async () => {
@@ -315,58 +313,100 @@ describe('automate/manager.js', () => {
       expect(toastSpy).not.toHaveBeenCalled();
     });
 
-    test('idle_stop_actions invoked on idle toast', async () => {
+    test('idle toast is persistent info-only (no actions, no duration)', async () => {
       const m = blsi.build_default_model();
       m.automate.settings.idle.enabled = true;
       setMockedModel(m);
       await blsi.Model.init_cache();
-      const idleActions = jest.fn(() => Promise.resolve([
-        { label: 'This tab', onClick: () => {} },
-        { label: 'This site (session)', onClick: () => {} },
-        { label: 'Disable feature', variant: 'warn', onClick: () => {} },
-      ]));
       blsi.Automate.Manager.init({
         tab_id: 7,
         get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
-        idle_stop_actions: idleActions,
       });
       await blsi.Automate.State.write_idle('idle');
       global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } }, 'session');
-      await new Promise(resolve => setTimeout(resolve, 0));
-      expect(idleActions).toHaveBeenCalled();
       expect(toastSpy).toHaveBeenCalled();
       const lastCall = toastSpy.mock.calls.at(-1);
-      expect(lastCall[1]).toBe(5000);
-      expect(lastCall[2]).toHaveLength(3);
+      // Persistent: no auto-dismiss timer, no actions row.
+      expect(lastCall[1]).toBeUndefined();
+      expect(lastCall[2]).toBeUndefined();
+      expect(lastCall[3]).toEqual({ persistent: true });
     });
 
-    test('tab_switch_stop_actions invoked on tab_switch toast', async () => {
+    test('tab_switch toast is short 3s info notification (no actions)', async () => {
       const m = blsi.build_default_model();
       m.automate.settings.tab_switch.enabled = true;
       setMockedModel(m);
       await blsi.Model.init_cache();
-      const tsActions = jest.fn(() => Promise.resolve([
-        { label: 'This tab', onClick: () => {} },
-        { label: 'Disable feature', variant: 'warn', onClick: () => {} },
-      ]));
       blsi.Automate.Manager.init({
         tab_id: 7,
         get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
-        tab_switch_stop_actions: tsActions,
       });
       await blsi.Automate.State.write_tab_switch(7, 'fired');
       global._fireStorageChanged(
         { blsi_automate_tab_switch_by_tab: { newValue: { status: { '7': 'fired' }, ignore_tabs: [], ignore_sites: [] } } },
         'session'
       );
-      await new Promise(resolve => setTimeout(resolve, 0));
-      expect(tsActions).toHaveBeenCalled();
       expect(toastSpy).toHaveBeenCalled();
       const lastCall = toastSpy.mock.calls.at(-1);
-      expect(lastCall[1]).toBe(5000);
+      expect(lastCall[1]).toBe(3000);
+      // No actions, no opts.
+      expect(lastCall[2]).toBeUndefined();
+      expect(lastCall[3]).toBeUndefined();
     });
 
-    test('idle toast falls back to bare toast when idle_stop_actions not provided', async () => {
+    test('idle toast honors blsi.idle_toast_duration_seconds when > 0', async () => {
+      // Save and override the constant for this test.
+      const originalDur = blsi.idle_toast_duration_seconds;
+      // jsdom doesn't allow direct re-assignment to frozen modules; the
+      // constants module exposes the value as a regular property on blsi.
+      Object.defineProperty(blsi, 'idle_toast_duration_seconds', { value: 5, configurable: true });
+
+      try {
+        const m = blsi.build_default_model();
+        m.automate.settings.idle.enabled = true;
+        setMockedModel(m);
+        await blsi.Model.init_cache();
+        blsi.Automate.Manager.init({
+          tab_id: 7,
+          get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
+        });
+        await blsi.Automate.State.write_idle('idle');
+        global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } }, 'session');
+        expect(toastSpy).toHaveBeenCalled();
+        const lastCall = toastSpy.mock.calls.at(-1);
+        // Transient: duration in ms, no actions, no opts.
+        expect(lastCall[1]).toBe(5000);
+        expect(lastCall[2]).toBeUndefined();
+        expect(lastCall[3]).toBeUndefined();
+      } finally {
+        Object.defineProperty(blsi, 'idle_toast_duration_seconds', { value: originalDur, configurable: true });
+      }
+    });
+
+    test('idle toast skipped while screen-share is active (priority gate)', async () => {
+      const m = blsi.build_default_model();
+      m.automate.settings.idle.enabled = true;
+      m.automate.settings.screen_share.enabled = true;
+      setMockedModel(m);
+      await blsi.Model.init_cache();
+      // Seed an active screen-share record from another tab.
+      await blsi.Automate.State.set_screen_share_active(99);
+      blsi.Automate.Manager.init({
+        tab_id: 7,
+        get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
+      });
+      // First _evaluate seeds tracking. Reset spy so we only count post-seed fires.
+      toastSpy.mockClear();
+      // Idle fires while ss is already up.
+      await blsi.Automate.State.write_idle('idle');
+      global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } }, 'session');
+      // No idle toast should fire — ss has priority.
+      const idleMessage = chrome.i18n.getMessage('automate_toast_idle');
+      const fired = toastSpy.mock.calls.some(c => c[0] === idleMessage);
+      expect(fired).toBe(false);
+    });
+
+    test('idle persistent toast auto-dismisses on falling edge (idle → active)', async () => {
       const m = blsi.build_default_model();
       m.automate.settings.idle.enabled = true;
       setMockedModel(m);
@@ -375,12 +415,45 @@ describe('automate/manager.js', () => {
         tab_id: 7,
         get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
       });
+      // Rising edge: idle fires.
       await blsi.Automate.State.write_idle('idle');
       global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'idle', ignore_tabs: [], ignore_sites: [] } } }, 'session');
       expect(toastSpy).toHaveBeenCalled();
-      const lastCall = toastSpy.mock.calls.at(-1);
-      expect(lastCall[1]).toBe(5000);
-      expect(lastCall[2]).toBeUndefined();
+      // Falling edge: user becomes active again.
+      await blsi.Automate.State.write_idle('active');
+      global._fireStorageChanged({ blsi_automate_idle: { newValue: { status: 'active', ignore_tabs: [], ignore_sites: [] } } }, 'session');
+      expect(blsi.Toast.dismiss).toHaveBeenCalled();
+    });
+
+    test('master switch off mid-share dismisses persistent screen-share toast', async () => {
+      const m = blsi.build_default_model();
+      m.automate.settings.screen_share.enabled = true;
+      setMockedModel(m);
+      await blsi.Model.init_cache();
+      blsi.Automate.Manager.init({
+        tab_id: 7,
+        get_host_url: () => ({ host: 'example.com', url: 'https://example.com/' }),
+        ss_stop_actions: () => Promise.resolve([]),
+      });
+
+      // 1. Screen share starts → persistent toast fires + Manager seeds
+      //    `_last_ss_blurring = true`.
+      const ssRecord = { active: true, sharing_tab_id: 99, started_at: 1000, suppressed_sites: [] };
+      global._fireStorageChanged({ blsi_screen_share: { newValue: ssRecord } }, 'session');
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(toastSpy).toHaveBeenCalled();
+      expect(blsi.Toast.dismiss).not.toHaveBeenCalled();
+
+      // 2. User flips global enabled off mid-share. Manager re-evaluates via
+      //    Model.on_automate_change with master_off=true. The persistent toast
+      //    must be dismissed — _fire_toasts is unreachable on this path.
+      const m2 = blsi.build_default_model();
+      m2.global_default_settings.enabled = false;
+      m2.automate.settings.screen_share.enabled = true;
+      setMockedModel(m2);
+      global._fireStorageChanged({ blsi_model: { newValue: m2 } }, 'local');
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(blsi.Toast.dismiss).toHaveBeenCalled();
     });
 
     test('ss_stop_actions invoked on screen-share toast', async () => {

@@ -65,6 +65,7 @@
         "src/automate/visibility.js",
         "src/automate/manager.js",
         "src/reveal_controller.js",
+        "src/toast.js",
         "src/shortcut_handler.js",
         "src/selection_blur.js",
         "src/screenshot.js",

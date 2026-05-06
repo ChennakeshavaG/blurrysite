@@ -135,73 +135,9 @@
     ];
   }
 
-  // ── Idle / tab-switch helpers ────────────────────────────────────────────
-
-  async function _idleStopActions() {
-    const myTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
-      ? blsi.Automate.ScreenShare.getTabId()
-      : null;
-    return [
-      {
-        label: chrome.i18n.getMessage('automate_stop_per_tab'),
-        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_tab'),
-        onClick: async () => {
-          await Store.suppress_idle('tab', { tab_id: myTabId });
-          await _sync();
-        },
-      },
-      {
-        label: chrome.i18n.getMessage('automate_stop_site_session'),
-        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_site'),
-        onClick: async () => {
-          await Store.suppress_idle('site_session', { hostname });
-          await _sync();
-        },
-      },
-      {
-        label: chrome.i18n.getMessage('automate_disable_feature'),
-        variant: 'warn',
-        tooltip: chrome.i18n.getMessage('automate_tooltip_turn_off'),
-        onClick: async () => {
-          await Store.suppress_idle('feature', {});
-          await _sync();
-        },
-      },
-    ];
-  }
-
-  async function _tabSwitchStopActions() {
-    const myTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
-      ? blsi.Automate.ScreenShare.getTabId()
-      : null;
-    return [
-      {
-        label: chrome.i18n.getMessage('automate_stop_per_tab'),
-        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_tab'),
-        onClick: async () => {
-          await Store.suppress_tab_switch('tab', { tab_id: myTabId });
-          await _sync();
-        },
-      },
-      {
-        label: chrome.i18n.getMessage('automate_stop_site_session'),
-        tooltip: chrome.i18n.getMessage('automate_tooltip_skip_site'),
-        onClick: async () => {
-          await Store.suppress_tab_switch('site_session', { hostname });
-          await _sync();
-        },
-      },
-      {
-        label: chrome.i18n.getMessage('automate_disable_feature'),
-        variant: 'warn',
-        tooltip: chrome.i18n.getMessage('automate_tooltip_turn_off'),
-        onClick: async () => {
-          await Store.suppress_tab_switch('feature', {});
-          await _sync();
-        },
-      },
-    ];
-  }
+  // Idle and tab-switch toasts no longer carry action buttons (idle = persistent
+  // info-only, tab-switch = 3s info notification). Per-trigger Skip-tab /
+  // Skip-site / Disable controls live in the popup notif card only.
 
   // ── Core sync ─────────────────────────────────────────────────────────────
 
@@ -228,6 +164,13 @@
     return 's_' + Math.random().toString(36).slice(2, 10);
   }
 
+  function _showCapToast() {
+    if (!blsi.Toast) return;
+    const msg = chrome.i18n.getMessage('toast_pick_blur_cap_reached')
+      || ('Max ' + (blsi.max_pick_blur_items_per_host || 10) + ' items per site reached');
+    blsi.Toast.show(msg);
+  }
+
   const pickerCallbacks = {
     async onBlur(el) {
       const selectors = Selector.getSelectors(el);
@@ -235,7 +178,8 @@
       const name = Engine.allocateElementName();
       const item = { type: 'dynamic', name, selectors };
       log.flow('picker.blur', { name, selectors });
-      await Store.save_blur_item(hostname, item);
+      const result = await Store.save_blur_item(hostname, item);
+      if (result && result.reason === 'cap') _showCapToast();
       await _sync();
     },
 
@@ -266,9 +210,10 @@
       };
 
       log.flow('picker.stickyBlur', { name, id, anchor, rect: { x: zoneRect.x, y: zoneRect.y, w: zoneRect.width, h: zoneRect.height }, scrollW, scrollH });
-      await Store.save_blur_item(hostname, item);
+      const result = await Store.save_blur_item(hostname, item);
       await _sync();
-      Shortcuts.showToast(name);
+      if (result && result.reason === 'cap') _showCapToast();
+      else if (blsi.Toast) blsi.Toast.show(name);
     },
 
     async onStickyUnblur(zoneId) {
@@ -468,9 +413,10 @@
         const item = { type: 'dynamic', name, selectors: sels };
         log.flow('trigger.contextBlur', { name, selectors: sels });
         (async () => {
-          await Store.save_blur_item(hostname, item);
+          const result = await Store.save_blur_item(hostname, item);
+          if (result && result.reason === 'cap') _showCapToast();
           await _sync();
-          if (sendResponse) sendResponse({ ok: true });
+          if (sendResponse) sendResponse({ ok: result && result.ok !== false, reason: result && result.reason });
         })();
         return true;
       }
@@ -726,7 +672,7 @@
     const shortcut = isMac ? '⌥⇧O' : 'Alt+Shift+O';
     const msg = chrome.i18n.getMessage('toast_pwa_hint', shortcut)
       || ('PWA — right-click or press ' + shortcut + ' to open settings');
-    Shortcuts.showToast(msg);
+    if (blsi.Toast) blsi.Toast.show(msg);
   }
 
   // ── iframe postMessage broadcast ──────────────────────────────────────────
@@ -889,8 +835,6 @@
         tab_id: _initTabId,
         get_host_url: () => ({ host: _topHostname, url: location.href }),
         ss_stop_actions: _ssBlurStopActions,
-        idle_stop_actions: _idleStopActions,
-        tab_switch_stop_actions: _tabSwitchStopActions,
       });
     }
 
@@ -913,25 +857,27 @@
     //     issue one explicit toast here if this tab landed in automate-blur
     //     on initial load. Manager handles every subsequent transition
     //     independently. Priority: screen_share > idle > tab_switch.
-    if (IS_MAIN_FRAME) {
+    //     Fires regardless of whether blur-all or pick-blur is also active —
+    //     each automate trigger is independent of manual blur.
+    if (IS_MAIN_FRAME && blsi.Toast) {
       const _autoSnap = Store.resolve_automate(_topHostname, location.href, _initTabId);
-      if (_autoSnap.automate_blur_only) {
+      if (_autoSnap.automate_blur_active) {
         const _triggers = _autoSnap.automate_blur_triggers || {};
         if (_triggers.screen_share) {
           const _initActions = await _ssBlurStopActions();
-          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_screen_share'), 15000, _initActions, { persistent: true });
+          blsi.Toast.show(chrome.i18n.getMessage('automate_toast_screen_share'), undefined, _initActions, { persistent: true });
         } else if (_triggers.idle) {
-          const _initActions = await _idleStopActions();
-          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_idle'), 5000, _initActions);
+          // Persistent info-only toast — auto-dismisses when user becomes active.
+          blsi.Toast.show(chrome.i18n.getMessage('automate_toast_idle'), undefined, undefined, { persistent: true });
         } else if (_triggers.tab_switch) {
-          const _initActions = await _tabSwitchStopActions();
-          Shortcuts.showToast(chrome.i18n.getMessage('automate_toast_tab_switch'), 5000, _initActions);
+          // Short 3s info notification — no actions.
+          blsi.Toast.show(chrome.i18n.getMessage('automate_toast_tab_switch'), 3000);
         }
       }
     }
 
     // 9c. Show one-time PWA hint after Shortcuts is initialized (applyState
-    //     calls Shortcuts.init so showToast is available).
+    //     calls Shortcuts.init; blsi.Toast is loaded earlier in manifest order).
     if (IS_PWA) _checkPwaHint();
 
     // 10. Subscribe AFTER initial restore so we don't race with cross-tab events

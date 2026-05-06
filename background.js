@@ -29,40 +29,53 @@ const log = blsi.Logger.scope('bg');
  */
 
 // Allow content scripts to read/write chrome.storage.session (MV3 default is background-only).
-chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' })
+  .catch(e => log.warn('setAccessLevel', e && e.message));
 
 // ── Context menu setup ─────────────────────────────────────────────────────
+var _menuCreating = false;
 function createContextMenus() {
+  if (_menuCreating) return;
+  _menuCreating = true;
+  var _lastErrorCb = () => { if (chrome.runtime.lastError) log.warn('contextMenus.create', chrome.runtime.lastError.message); };
   chrome.contextMenus.removeAll(() => {
+    if (chrome.runtime.lastError) {
+      log.warn('contextMenus.removeAll', chrome.runtime.lastError.message);
+      _menuCreating = false;
+      return;
+    }
     chrome.contextMenus.create({
       id:       'bl-si-blur-element',
       title:    chrome.i18n.getMessage('ctxBlurElement') || 'Blur this element',
       contexts: ['all'],
-    });
+    }, _lastErrorCb);
     chrome.contextMenus.create({
       id:       'bl-si-unblur-element',
       title:    chrome.i18n.getMessage('ctxUnblurElement') || 'Unblur this element',
       contexts: ['all'],
-    });
+    }, _lastErrorCb);
     chrome.contextMenus.create({
       id:       'bl-si-blur-selection',
       title:    chrome.i18n.getMessage('ctxBlurSelection') || 'Blur selected text',
       contexts: ['selection'],
-    });
+    }, _lastErrorCb);
     chrome.contextMenus.create({
       id:       'bl-si-settings-sep',
       type:     'separator',
       contexts: ['all'],
-    });
+    }, _lastErrorCb);
     chrome.contextMenus.create({
       id:       'bl-si-settings-panel',
       title:    chrome.i18n.getMessage('ctx_open_settings_panel') || 'Open Settings Panel',
       contexts: ['all'],
-    });
+    }, _lastErrorCb);
     chrome.contextMenus.create({
       id:       'bl-si-settings-tab',
       title:    chrome.i18n.getMessage('ctx_open_settings_tab') || 'Open Settings in Tab',
       contexts: ['all'],
+    }, () => {
+      if (chrome.runtime.lastError) log.warn('contextMenus.create', chrome.runtime.lastError.message);
+      _menuCreating = false;
     });
   });
 }
@@ -184,7 +197,9 @@ chrome.runtime.onInstalled.addListener((details) => {
   log.flow('onInstalled', { reason });
   createContextMenus();
   // Clean up stale storage keys from pre-refactor versions
-  chrome.storage.local.remove(['blurred_selectors', 'settings', 'rules', 'blurred_items', 'blur_all_hosts']);
+  chrome.storage.local.remove(['blurred_selectors', 'settings', 'rules', 'blurred_items', 'blur_all_hosts'], () => {
+    if (chrome.runtime.lastError) log.warn('storage.remove stale keys', chrome.runtime.lastError.message);
+  });
   if (reason === 'install' || reason === 'update') {
     _reinjectAllTabs();
   }
@@ -209,7 +224,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   } else if (info.menuItemId === 'bl-si-settings-panel') {
     await _openSettingsOrPanel(tab);
   } else if (info.menuItemId === 'bl-si-settings-tab') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') }, () => {
+      if (chrome.runtime.lastError) log.warn('tabs.create', chrome.runtime.lastError.message);
+    });
   }
 });
 
@@ -224,7 +241,9 @@ async function _openSettingsOrPanel(tab) {
       return;
     }
   } catch (_) { /* fall through to tab */ }
-  chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') }, () => {
+    if (chrome.runtime.lastError) log.warn('tabs.create', chrome.runtime.lastError.message);
+  });
 }
 
 // ── Commands API relay — forward keyboard commands to the active tab ────────

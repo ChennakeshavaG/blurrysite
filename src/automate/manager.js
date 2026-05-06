@@ -2,7 +2,7 @@
  * automate/manager.js — Automate orchestrator.
  *
  * The single owner of automate-driven Overlay show/hide AND automate
- * transition toasts (idle / tab_switch / screen_share / skipped). Reacts to:
+ * transition toasts (idle / tab_switch / screen_share). Reacts to:
  *   - chrome.storage.session changes (idle / tab_switch / screen_share /
  *     suppressed_tabs) via blsi.Automate.State.on_session_change (caches
  *     guaranteed fresh before callback fires)
@@ -28,9 +28,7 @@
   let _initialized              = false;
   let _tab_id                   = null;
   let _get_host_url             = null;   // function() → { host, url }
-  let _ss_stop_actions          = null;   // async function() → Array<{label,onClick,variant?}>
-  let _idle_stop_actions        = null;   // async function() → Array<{label,onClick,variant?}>
-  let _tab_switch_stop_actions  = null;   // async function() → Array<{label,onClick,variant?}>
+  let _ss_stop_actions          = null;   // async function() → Array<{label,onClick,variant?}> — screen-share only
   let _last_active      = false;  // tracks Overlay state to detect transitions
   // Toast transition tracking — seeded on first _evaluate so the bootstrap
   // call doesn't fire toasts for state that already existed when the tab
@@ -39,13 +37,12 @@
   let _last_idle_phase         = 'active';
   let _last_tab_switch_phase   = 'off';
   let _last_ss_blurring        = false;
-  let _last_skipped            = false;
 
   // ── Toast helpers ─────────────────────────────────────────────────────────
 
-  function _shortcuts() {
-    return (typeof blsi !== 'undefined' && blsi.Shortcuts && typeof blsi.Shortcuts.showToast === 'function')
-      ? blsi.Shortcuts
+  function _toast() {
+    return (typeof blsi !== 'undefined' && blsi.Toast && typeof blsi.Toast.show === 'function')
+      ? blsi.Toast
       : null;
   }
 
@@ -107,6 +104,14 @@
     // without alerting the user about pre-existing state). Also skip when the
     // master switch is off — no toasts when the extension itself is disabled.
     if (master_off) {
+      // If the persistent screen-share toast was up when the extension was
+      // turned off, dismiss it explicitly. The falling-edge cleanup in
+      // _fire_toasts is unreachable on the master_off path and Toast.show's
+      // own auto-dismiss is suppressed by `persistent: true`.
+      if (_last_ss_blurring) {
+        const T = _toast();
+        if (T && typeof T.dismiss === 'function') T.dismiss();
+      }
       _seed_tracking(r);
       return;
     }
@@ -126,12 +131,11 @@
       ? State.read_tab_switch(_tab_id)
       : 'off';
     _last_ss_blurring = !!(r && r.automate_blur_triggers && r.automate_blur_triggers.screen_share);
-    _last_skipped = !!(r && r.automate_blur_skipped && r.automate_blur_skip_reason);
   }
 
   function _fire_toasts(r) {
-    const Shortcuts = _shortcuts();
-    if (!Shortcuts) return;  // Shortcuts not yet initialized — first storage event after Shortcuts.init will catch up.
+    const Toast = _toast();
+    if (!Toast) return;  // Toast module not yet loaded — first storage event after load will catch up.
     const State = _state();
     if (!State) return;
 
@@ -139,83 +143,69 @@
     const triggers  = (r && r.automate_blur_triggers)    || {};
     const idle_phase = State.read_idle();
     const ts_phase   = (typeof _tab_id === 'number') ? State.read_tab_switch(_tab_id) : 'off';
+    const ss_blurring = !!triggers.screen_share;
 
-    // 1. Idle toast — automate is the SOLE blur reason AND idle just transitioned
-    //    into a fired state on this evaluation.
-    if (r.automate_blur_only && triggers.idle &&
+    // 1. Idle toast — info-only on rising edge; dismissed on the falling edge
+    //    when the user becomes active again. Duration is controlled by
+    //    `blsi.idle_toast_duration_seconds` (0 = persistent forever; N = N
+    //    seconds auto-dismiss). Skipped while screen-share holds the slot —
+    //    SS has higher priority.
+    if (triggers.idle &&
         idle_phase !== _last_idle_phase &&
-        (idle_phase === State.PHASES.idle.idle || idle_phase === State.PHASES.idle.locked)) {
-      var idle_message = _toast_msg('automate_toast_idle', 'automate_idle', overrides);
-      if (typeof _idle_stop_actions === 'function') {
-        Promise.resolve(_idle_stop_actions()).then(function (actions) {
-          if (!_initialized) return;
-          var S = _shortcuts();
-          if (S) S.showToast(idle_message, 5000, Array.isArray(actions) ? actions : []);
-        }).catch(function () {
-          if (!_initialized) return;
-          var S = _shortcuts();
-          if (S) S.showToast(idle_message, 5000);
-        });
+        (idle_phase === State.PHASES.idle.idle || idle_phase === State.PHASES.idle.locked) &&
+        !ss_blurring) {
+      const idle_dur_s = (typeof blsi !== 'undefined' && typeof blsi.idle_toast_duration_seconds === 'number')
+        ? blsi.idle_toast_duration_seconds
+        : 0;
+      const idle_msg = _toast_msg('automate_toast_idle', 'automate_idle', overrides);
+      if (idle_dur_s <= 0) {
+        Toast.show(idle_msg, undefined, undefined, { persistent: true });
       } else {
-        Shortcuts.showToast(idle_message, 5000);
+        Toast.show(idle_msg, idle_dur_s * 1000);
       }
+    } else if (!triggers.idle && _last_idle_phase !== 'active' && idle_phase === 'active' && !ss_blurring) {
+      // Falling edge: idle cleared and screen-share isn't holding the toast slot.
+      const T = _toast();
+      if (T && typeof T.dismiss === 'function') T.dismiss();
     }
 
-    // 2. Tab-switch toast.
-    if (r.automate_blur_only && triggers.tab_switch &&
+    // 2. Tab-switch toast — short 3s notification, no actions.
+    if (triggers.tab_switch &&
         ts_phase !== _last_tab_switch_phase &&
         ts_phase === State.PHASES.tab_switch.fired) {
-      var ts_message = _toast_msg('automate_toast_tab_switch', 'automate_tab_switch', overrides);
-      if (typeof _tab_switch_stop_actions === 'function') {
-        Promise.resolve(_tab_switch_stop_actions()).then(function (actions) {
-          if (!_initialized) return;
-          var S = _shortcuts();
-          if (S) S.showToast(ts_message, 5000, Array.isArray(actions) ? actions : []);
-        }).catch(function () {
-          if (!_initialized) return;
-          var S = _shortcuts();
-          if (S) S.showToast(ts_message, 5000);
-        });
-      } else {
-        Shortcuts.showToast(ts_message, 5000);
-      }
+      Toast.show(_toast_msg('automate_toast_tab_switch', 'automate_tab_switch', overrides), 3000);
     }
 
     // 3. Screen-share toast — fires on the rising edge of ss_blurring.
-    const ss_blurring = !!triggers.screen_share;
+    //    `override: true` forces replacement of any current toast (e.g. an
+    //    idle persistent toast from a prior eval) so screen-share's actionable
+    //    UI always wins. Without override the persistent-blocks-replacement
+    //    rule in Toast.show would silently drop this call.
     if (ss_blurring && !_last_ss_blurring) {
       const message = _toast_msg('automate_toast_screen_share', 'automate_screen_share', overrides);
       if (typeof _ss_stop_actions === 'function') {
         // ss_stop_actions returns a Promise. Re-check _initialized + look up
-        // Shortcuts again inside .then so a destroy() racing with the Promise
+        // Toast again inside .then so a destroy() racing with the Promise
         // doesn't fire the toast on a torn-down Manager (or worse, on the next
         // re-initialized session).
         Promise.resolve(_ss_stop_actions()).then(function (actions) {
           if (!_initialized) return;
-          const S = _shortcuts();
-          if (S) S.showToast(message, 15000, Array.isArray(actions) ? actions : [], { persistent: true });
+          const T = _toast();
+          if (T) T.show(message, undefined, Array.isArray(actions) ? actions : [], { persistent: true, override: true });
         }).catch(function () {
           if (!_initialized) return;
-          const S = _shortcuts();
-          if (S) S.showToast(message, 15000, undefined, { persistent: true });
+          const T = _toast();
+          if (T) T.show(message, undefined, undefined, { persistent: true, override: true });
         });
       } else {
-        Shortcuts.showToast(message, 15000, undefined, { persistent: true });
+        Toast.show(message, undefined, undefined, { persistent: true, override: true });
       }
     }
 
     // 3b. Screen-share falling edge — dismiss persistent toast.
     if (!ss_blurring && _last_ss_blurring) {
-      const S = _shortcuts();
-      if (S && typeof S.dismissToast === 'function') S.dismissToast();
-    }
-
-    // 4. Skipped toast — automate fired but a different blur reason was already
-    //    active. Fire on the rising edge of skipped (avoids re-firing every
-    //    evaluation while skipped state persists).
-    const skipped_now = !!(r.automate_blur_skipped && r.automate_blur_skip_reason);
-    if (skipped_now && !_last_skipped) {
-      Shortcuts.showToast(_toast_msg('automate_toast_skipped', 'automate_screen_share', overrides), 2500);
+      const T = _toast();
+      if (T && typeof T.dismiss === 'function') T.dismiss();
     }
   }
 
@@ -225,8 +215,6 @@
     const next_tab_id      = (opts && typeof opts.tab_id === 'number') ? opts.tab_id : null;
     const next_get         = (opts && typeof opts.get_host_url === 'function') ? opts.get_host_url : null;
     const next_ss_actions  = (opts && typeof opts.ss_stop_actions === 'function') ? opts.ss_stop_actions : null;
-    const next_idle_actions = (opts && typeof opts.idle_stop_actions === 'function') ? opts.idle_stop_actions : null;
-    const next_ts_actions  = (opts && typeof opts.tab_switch_stop_actions === 'function') ? opts.tab_switch_stop_actions : null;
     if (next_get === null) return;  // can't operate without a host source
 
     if (_initialized) destroy();
@@ -234,8 +222,6 @@
     _tab_id                  = next_tab_id;
     _get_host_url            = next_get;
     _ss_stop_actions         = next_ss_actions;
-    _idle_stop_actions       = next_idle_actions;
-    _tab_switch_stop_actions = next_ts_actions;
     _initialized             = true;
     _seeded                  = false;  // first _evaluate seeds tracking without firing toasts.
 
@@ -263,14 +249,11 @@
     _tab_id                   = null;
     _get_host_url             = null;
     _ss_stop_actions          = null;
-    _idle_stop_actions        = null;
-    _tab_switch_stop_actions  = null;
     _last_active              = false;
     _seeded           = false;
     _last_idle_phase  = 'active';
     _last_tab_switch_phase = 'off';
     _last_ss_blurring = false;
-    _last_skipped     = false;
     const Overlay = (typeof blsi !== 'undefined' && blsi.Automate && blsi.Automate.Overlay) || null;
     if (Overlay) Overlay.hide();
     // Note: we cannot unregister State.on_session_change or

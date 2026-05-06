@@ -10,9 +10,8 @@ Renders the General sub-page body. Stateless — receives settings + callbacks, 
 
 Populates the General sub-page body with rows:
 - **Language** (`global_default_settings.language`) — picker
-- **Tab privacy** (`global_default_settings.tab_privacy`) — toggle. Hidden when `BlurrySitePopupShared.isRuleManaged(settings)` is true (rule snapshot owns this field for the current host).
-- **Debug** — toggle, sets `blsi.Logger.enable/disable`
 - **Backup / restore** — Export + Import buttons
+- **Debug** — toggle, sets `blsi.Logger.enable/disable`
 
 `containerEl` is replaced via `replaceChildren()` on every call.
 

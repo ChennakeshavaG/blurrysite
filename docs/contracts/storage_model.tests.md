@@ -84,7 +84,9 @@ call-count (via explicit `jest.clearAllMocks(); mockSet();` pair inside the test
 - `deduplicates new-shape selectors[] items by selectors[0]` — duplicate `selectors[0]` values are collapsed to one entry.
 - `rejects dynamic item with empty selectors array` — `selectors: []` suppresses the storage write.
 - `deduplicates sticky items by id` — two saves with the same `id` yield one item.
-- `enforces per-host limit of 10` — an 11th item is rejected (no write).
+- `enforces per-host limit of 10 (constant from blsi.max_pick_blur_items_per_host)` — first 10 saves return `{ ok: true }`; 11th returns `{ ok: false, reason: 'cap' }` and the storage write is suppressed.
+- `returns reason "duplicate" when item with same id already saved` — second save of the same selector returns `{ ok: false, reason: 'duplicate' }`.
+- `returns reason "invalid" when item shape is bad` — items with unknown `type` return `{ ok: false, reason: 'invalid' }`.
 - `rejects invalid item type` — unknown `type: 'bad'` suppresses the storage write.
 - `rejects null item` — `null` item suppresses the storage write.
 - `rejects empty hostname` — empty string hostname suppresses the storage write.
@@ -141,10 +143,10 @@ This group uses its own `beforeEach` that seeds and inits a default model with i
 - `tab_switch feature OFF: fired phase does NOT flip active` — `tab_switch.enabled: false` suppresses the trigger.
 - `per-tab suppression via idle ignore_tabs silences idle for that tab` — `State.add_idle_ignore_tab(7)` silences idle for tab 7; other tabs still affected. `idle_suppressed_for_tab` is `true` for the silenced tab, `false` for others.
 - `per-site suppression via idle ignore_sites silences idle for that site` — `State.add_idle_ignore_site('example.com')` silences idle for that hostname; other sites still affected. `idle_suppressed_for_site` is `true` for the silenced site, `false` for others.
-- `engage is FALSE when only automate fires (engine no longer activates for automate)` — post-engine/automate-split, `engage` tracks blur-all only. `automate_blur_only` is `true`; `automate_blur_skipped` is `false`.
-- `automate_blur_skipped = true when blur_all already on` — global `blur_all.status: true` + automate firing sets `automate_blur_skipped: true` and `automate_blur_only: false`.
-- `automate_blur_skipped = true when pick_and_blur is enabled` — `pick_and_blur.status: true` + automate firing sets `automate_blur_skipped: true`.
-- `automate_blur_only and automate_blur_skipped are false when automate not firing` — both flags are `false` by default.
+- `engage is FALSE when only automate fires (engine no longer activates for automate)` — post-engine/automate-split, `engage` tracks blur-all only. `automate_blur_active` reflects the live trigger.
+- `automate fires independently when blur_all already on` — global `blur_all.status: true` + automate firing keeps `automate_blur_active: true` AND `engage: true`. Manual blur and automate are independent — Overlay layers on top.
+- `automate fires independently when pick_and_blur enabled` — `pick_and_blur.status: true` + screen-share firing sets `automate_blur_active: true`. Pick-blur reconciles via engine.handleSite; engage tracks blur-all only.
+- `automate_blur_active is false when nothing firing` — flag is `false` by default.
 - `manual blur preserved after automate cleared` — after clearing idle trigger, `engage` remains `true` from the persisted manual `blur_all: true`.
 
 ### `screen_share session record`
@@ -157,10 +159,10 @@ This group uses its own `beforeEach` that seeds and inits a default model with `
 - `resolve: feature disabled silences screen-share blur even when record is active` — `screen_share.enabled: false` suppresses the trigger even when session record is active.
 - `suppress_screen_share("site_session") silences screen-share for that hostname only` — suppressing `example.com` sets `screen_share_suppressed_for_host: true` and silences the trigger for that host; `other.test` still fires.
 - `suppress_screen_share("tab") silences screen_share for that tab (idle has own ignore)` — tab-scoped suppression silences screen_share for that tab only; idle trigger on the same tab is unaffected; other tabs still fire screen_share.
-- `suppress_screen_share("feature") suspends trigger in session AND clears the session record` — suspending the feature writes `read_suspended().screen_share === true` but leaves `enabled` as `true` in the persisted model; the session record is cleared (`active: false`).
+- `suppress_screen_share("feature") suspends the trigger but preserves the live share record` — suspending the feature writes `read_suspended().screen_share === true` and leaves `enabled` as `true` in the persisted model. **The live screen-share session record is preserved** (`ss.active === true`, `_sharing_tab_ids` still contains the sharing tab) — the suspend-gate alone is enough to silence receiver tabs via `resolve_automate`, and keeping the record means Resume re-blurs the still-running share without requiring the user to restart sharing. Real share teardown remains owned by `screen_share_bg.js` port disconnect.
 - `unsuppress_screen_share reverses tab + site_session suppressions` — after suppressing both scopes then unsuppressing both, `screen_share_suppressed_for_host` and `screen_share_suppressed_for_tab` return to `false`; trigger fires again.
 - `set_screen_share_active resets per-tab suppression list (mitigates tab-id reuse)` — starting a new share clears stale per-tab suppression entries from the previous share session.
-- `resolve: skip_reason is "site_rule" when an exact rule blurs and ss is also live` — when a site rule pins blur-all on and screen_share is also active, `automate_blur_skipped: true` with `skip_reason: 'site_rule'`.
+- `resolve: screen_share fires independently when an exact rule blurs and ss is also live` — when a site rule pins blur-all on and screen_share is also active, both `engage: true` AND `automate_blur_triggers.screen_share: true` — manual blur (rule-driven) and automate layer independently.
 
 ### `capture_snapshot`
 
@@ -225,7 +227,7 @@ This group uses its own `beforeEach` that seeds and inits a default model.
 
 Slim resolver consumed by the automate Manager. Step 1 of the engine/automate split — currently a thin slice over `resolve()`.
 
-- `returns only the automate-decision fields` — `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_*`, `idle_suppressed_for_tab`, `idle_suppressed_for_site`, `tab_switch_suppressed_for_tab`, `tab_switch_suppressed_for_site`, `automate_idle`, `automate_tab_switch`, `automate_screen_share`, `_rule_match` are present; manual-blur / settings-tree fields (`engage`, `blur_mode`, `blur_radius`, `blur_categories`, `blur_items`, `shortcuts`, `pii_*`) are absent.
+- `returns only the automate-decision fields` — `automate_blur_active`, `automate_blur_triggers`, `screen_share_state`, `screen_share_suppressed_for_*`, `idle_suppressed_for_tab`, `idle_suppressed_for_site`, `tab_switch_suppressed_for_tab`, `tab_switch_suppressed_for_site`, `automate_idle`, `automate_tab_switch`, `automate_screen_share`, `_rule_match` are present; manual-blur / settings-tree fields (`engage`, `blur_mode`, `blur_radius`, `blur_categories`, `blur_items`, `shortcuts`, `pii_*`) are absent. No skip-related fields.
 - `values match resolve() output for automate keys` — derivation parity with the full resolver across all returned fields.
 - `reflects per-host site-rule fold of automate gates` — site_rule snapshot flipping `automate.settings.idle.enabled = false` propagates into `resolved.automate_idle.enabled`.
 - `omits tab_id → screen_share self-skip cannot apply` — calling with `tab_id = null` produces `screen_share_state.is_sharing_tab = false` (matches popup callers without an active tab id).
@@ -251,8 +253,7 @@ Slim resolver consumed by the automate Manager. Step 1 of the engine/automate sp
 - `validate_model` coerces out-of-range `blur_radius` (999) to default 8.
 - `validate_model` strips unknown snapshot keys; repairs non-boolean `blur_categories` and invalid `pick_blur_color`.
 - Empty snapshot `{}` passes through `validate_model` unmodified.
-- `automate_blur_only` forces all blur-relevant keys to defaults even when global settings or exact site-rule overrides are in effect.
-- `automate_blur_skipped` is set when blur-all or pick-and-blur is already active (avoids double-blur).
+- Each automate trigger fires independently of manual blur — there is no skip path or "automate-only" classification.
 - Manual blur survives after automate trigger is cleared (only automate keys are cleared, not `blur_all`).
 - `clear_host` atomically clears both `site_rules` entry and `automate_blur` session entry.
 

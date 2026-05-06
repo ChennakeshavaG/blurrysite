@@ -2,7 +2,8 @@
 
 > **Post-engine/automate-split notes (current state):**
 > - `_sync()`, `handleStorageChange`, `onUrlChange`, `init`, and `TOGGLE_PICKER` call **`Store.resolve_settings(...)`** (engine surface — no automate decision fields). Older paragraphs in this contract that say `Store.resolve()` should be read as `Store.resolve_settings()` unless explicitly noted otherwise. The bootstrap screen-share catch-up toast (step 9b) calls `Store.resolve_automate(...)` directly for its slim snapshot.
-> - `blsi.Automate.Manager` owns automate Overlay show/hide AND the four automate transition toasts (idle / tab_switch / screen_share / skipped). The previous content_script-level toast attribution and the `_ssCurrentlyBlurring` / `_lastIdlePhase` / `_lastTabSwitchPhase` module-level fields have been removed.
+> - `blsi.Automate.Manager` owns automate Overlay show/hide AND the three automate transition toasts (idle / tab_switch / screen_share). The previous content_script-level toast attribution and the `_ssCurrentlyBlurring` / `_lastIdlePhase` / `_lastTabSwitchPhase` module-level fields have been removed.
+> - All in-page toast rendering goes through `blsi.Toast.show` (see `docs/contracts/toast.md`). content_script never reaches into `blsi.Shortcuts` for toast surface.
 > - `TOGGLE_BLUR_ALL` reads `blur_all.status` from `Store.get()` directly rather than deriving from `Engine.isPageBlurred` (the latter only reflects engine-driven blur post-split).
 
 ## Overview
@@ -32,7 +33,7 @@
 11. `Engine.resetCounters()` — clears dynamic/sticky name counters before applying stored items.
 12. `Automate.Overlay.init()` (main frame only, idempotent) — readies the viewport overlay primitive used by automate intent. Mounts only on first `show()`.
 13. `applyState(resolved, null)` — applies full settings: shortcuts, picker, tab privacy, reveal, engine sync, automate observers (`Automate.Visibility.init({tab_id})` / `ScreenShare.init`), PII scan.
-13. Automate catch-up: if the resolved snapshot already carries an active automate trigger (screen_share > idle > tab_switch priority), shows the appropriate 3-action toast — no separate session-storage read; `Store.resolve()` already factors in the per-tab session map.
+13. Automate catch-up: if the resolved snapshot already carries an active automate trigger (screen_share > idle > tab_switch priority), shows the appropriate toast — screen-share = persistent + 3 stop-share actions; idle = persistent info-only (no actions); tab-switch = 3s info notification (no actions). No separate session-storage read; `Store.resolve_automate()` already factors in the per-tab session map.
 14. `_checkPwaHint()` — shows one-time PWA tip (IS_PWA only).
 15. `Store.on_change(handleStorageChange)` — subscribes to storage changes AFTER initial restore to avoid cold-start race conditions.
 16. If not main frame: register `window.message` listener to receive `BLSI_SETTINGS_CHANGED` from parent frame.
@@ -60,15 +61,13 @@
 
 ### Automate toast action builders (private)
 
-Three async functions build the 3-action button arrays passed to `Manager.init()`. Each returns `[{label, onClick, variant?, tooltip?}]` with actions: "Skip tab", "Skip site", "Turn off". All reuse i18n keys `automate_stop_per_tab`, `automate_stop_site_session`, `automate_disable_feature`. Each button carries a `tooltip` (via `automate_tooltip_skip_tab`, `automate_tooltip_skip_site`, `automate_tooltip_turn_off`) describing the action scope and permanence.
+Only screen-share carries action buttons in-page. `_ssBlurStopActions()` returns `[{label, onClick, variant?, tooltip?}]` with the 3 actions: "Skip tab", "Skip site", "Turn off" (i18n keys `automate_stop_per_tab`, `automate_stop_site_session`, `automate_disable_feature`; tooltips `automate_tooltip_skip_*`). Each `onClick` calls `Store.suppress_screen_share(scope, ctx)` then `await _sync()`. Manager calls the builder async at toast-fire time so each invocation captures the *current* `_topHostname` / `_initTabId` closure.
+
+`_idleStopActions` and `_tabSwitchStopActions` were removed in the toast-redesign — idle is a persistent info-only toast (no buttons), tab-switch is a 3s info notification (no buttons). Per-trigger Skip-tab / Skip-site / Disable controls remain available in the popup notif card via `Store.suppress_idle` / `Store.suppress_tab_switch`.
 
 | Builder | Suppress call | Manager init key |
 |---|---|---|
 | `_ssBlurStopActions()` | `Store.suppress_screen_share(scope, ctx)` | `ss_stop_actions` |
-| `_idleStopActions()` | `Store.suppress_idle(scope, ctx)` | `idle_stop_actions` |
-| `_tabSwitchStopActions()` | `Store.suppress_tab_switch(scope, ctx)` | `tab_switch_stop_actions` |
-
-Each `onClick` calls the suppress function then `await _sync()`. Manager calls the builder async at toast-fire time so each invocation captures the *current* `_topHostname` / `_initTabId` closure.
 
 ### Manager.init wiring
 
@@ -77,8 +76,6 @@ blsi.Automate.Manager.init({
   tab_id: _initTabId,
   get_host_url: () => ({ host: _topHostname, url: location.href }),
   ss_stop_actions: _ssBlurStopActions,
-  idle_stop_actions: _idleStopActions,
-  tab_switch_stop_actions: _tabSwitchStopActions,
 });
 ```
 
@@ -269,13 +266,15 @@ Handlers that do async work (storage write + `_sync()`) return `true` from `hand
 - Calls `Selector.getSelectors(target)` to get selector list.
 - Calls `Engine.allocateElementName()` for a unique blur item name.
 - Constructs `{ type: 'dynamic', name, selectors }` item.
-- Calls `Store.save_blur_item(hostname, item)`.
+- Calls `Store.save_blur_item(hostname, item)` and inspects the `{ ok, reason }` result.
+- If `reason === 'cap'`: fires the in-page cap toast via `_showCapToast()` (i18n `toast_pick_blur_cap_reached`).
 - Calls `_sync()`.
-- Responds with `{ ok: true }`.
+- Responds with `{ ok: true }` on save, or `{ ok: false, reason }` when storage rejected (`'cap' | 'duplicate' | 'invalid'`).
 
 **Handles:**
 - No target: responds `{ ok: false, reason: 'no_target' }`, returns `false`.
 - No selector: responds `{ ok: false, reason: 'no_selector' }`, returns `false`.
+- Per-host cap reached: cap toast fired; storage untouched; response carries `reason: 'cap'`.
 
 **Returns:** `true` if async path taken; `false` if early-exit.
 
@@ -339,8 +338,7 @@ Handlers that do async work (storage write + `_sync()`) return `true` from `hand
 **Side effects:**
 - Captures `wasBlurring = _ssCurrentlyBlurring`.
 - Calls `_sync()` — `Store.resolve()` factors the global record + per-site/per-tab suppression + sharing-tab skip; `_ssCurrentlyBlurring` is then re-stamped from `resolved.automate_blur_triggers.screen_share`.
-- If `!wasBlurring && nowBlurring`: shows the 3-action stop-toast (15s) — `[This tab]`, `[This site (session)]`, `[Disable feature]`. Each action calls `Store.suppress_screen_share(scope, { hostname, tab_id })`.
-- If a transition into "skipped" (blur already on for another reason): shows the 2.5s skipped toast.
+- If `!wasBlurring && nowBlurring`: shows the 3-action stop-toast (15s) — `[This tab]`, `[This site (session)]`, `[Disable feature]`. Each action calls `Store.suppress_screen_share(scope, { hostname, tab_id })`. Fires regardless of whether blur-all or pick-and-blur is also active on the page.
 - Responds `{ ok: true }`.
 
 **Returns:** `true` (async).
@@ -363,8 +361,8 @@ Handlers that do async work (storage write + `_sync()`) return `true` from `hand
 - Calls `Selector.getSelectors(el)` — returns early if empty.
 - Calls `Engine.allocateElementName()` for a unique name.
 - Constructs `{ type: 'dynamic', name, selectors }` item.
-- Calls `Store.save_blur_item(hostname, item)`.
-- Calls `_sync()`.
+- Calls `Store.save_blur_item(hostname, item)` — when the result reports `reason: 'cap'`, fires `_showCapToast()`.
+- Calls `_sync()` (always, so the engine reconciles with whatever is in storage).
 
 ---
 
@@ -392,9 +390,10 @@ Handlers that do async work (storage write + `_sync()`) return `true` from `hand
 - Calls `Engine.allocateStickyName(anchor)` for a unique name matching the picker UI label.
 - Generates a zone id via `_generateZoneId()` (format: `'s_' + 8 random alphanumeric chars`).
 - Constructs full zone item including `xPct`, `yPct`, `widthPct`, `heightPct` (percentages relative to scroll dimensions, for re-projection on layout changes).
-- Calls `Store.save_blur_item(hostname, item)`.
+- Calls `Store.save_blur_item(hostname, item)` and inspects the result.
 - Calls `_sync()`.
-- Calls `Shortcuts.showToast(name)` — briefly shows the zone name.
+- When `reason === 'cap'`: fires the cap toast (`_showCapToast()`) and skips the zone-name toast.
+- Otherwise: calls `blsi.Toast.show(name)` — briefly shows the zone name.
 
 ---
 
@@ -506,7 +505,7 @@ Handles SPA navigation in the main frame only. Wraps `history.pushState` and `hi
 **Side effects:**
 - Reads `chrome.storage.local['blsi_pwa_hint_shown']`; no-op if already shown.
 - Sets `blsi_pwa_hint_shown: true` in local storage.
-- Calls `Shortcuts.showToast(...)` with the i18n message `toast_pwa_hint`, passing the platform-appropriate shortcut label (Mac: `⌥⇧O`, others: `Alt+Shift+O`) as the `$SHORTCUT$` placeholder. Falls back to English when `chrome.i18n.getMessage` returns empty.
+- Calls `blsi.Toast.show(...)` with the i18n message `toast_pwa_hint`, passing the platform-appropriate shortcut label (Mac: `⌥⇧O`, others: `Alt+Shift+O`) as the `$SHORTCUT$` placeholder. Falls back to English when `chrome.i18n.getMessage` returns empty.
 
 ---
 

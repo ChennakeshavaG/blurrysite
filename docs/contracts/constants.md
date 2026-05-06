@@ -120,6 +120,16 @@ CSS class name constants shared across blur_engine, content_script, picker, shor
 ### `reveal_dfs_max_depth`
 `2` — max depth for reveal ancestor chain walk.
 
+### `max_pick_blur_items_per_host`
+`10` — per-host cap on Pick & Blur items. Enforced by `blsi.Model.save_blur_item` (rejects with `{ ok: false, reason: 'cap' }` when reached). Surfaced by the popup pick-blur block (inline "10/10 — max reached" message at cap) and by an in-page toast fired by picker / context-menu callbacks when a save is rejected for cap. Single source of truth — never hardcode `10` elsewhere.
+
+### `idle_toast_duration_seconds`
+`0` (forever / persistent) by default. Controls the in-page idle automate toast lifecycle:
+- `0` → persistent toast (no auto-dismiss; dismissed on the idle falling edge when the user becomes active, or via the close button).
+- `N` (positive integer) → `N`-second auto-dismiss. The falling-edge dismiss still applies if the toast is still on screen.
+
+Tunable for UX experiments. Other automate toasts are fixed: tab-switch is 3s (no actions), screen-share is persistent (with stop-share actions). Single source of truth — `blsi.Automate.Manager` reads this directly.
+
 ### `modifier_codes` (Set, frozen)
 
 All `KeyboardEvent.code` strings for modifier keys. Left/right kept separate (browser reports both). Used by `shortcut_handler` to skip pure-modifier keydowns.
@@ -133,7 +143,7 @@ Single source of truth for the `blsi_model` storage shape. Feature-grouped. **Sh
 ```js
 {
   global_default_settings: {
-    blur_radius:         8,          // int 2–32
+    blur_radius:         8,          // int 2–20
     transition_duration: 300,        // int 0–2000 ms
     highlight_color:     '#f59e0b',  // 6-char hex
     redaction_color:     '#000000',  // 6-char hex
@@ -168,7 +178,7 @@ Single source of truth for the `blsi_model` storage shape. Feature-grouped. **Sh
   },
   automate: {
     settings: {
-      screen_share: { enabled: false },
+      screen_share: { enabled: true },
       idle:         { value: 5, unit: 'min', enabled: false },
       tab_switch:   { enabled: false },
     },
@@ -220,7 +230,7 @@ Single source of truth for the `blsi_model` storage shape. Feature-grouped. **Sh
 
 **`global_default_settings`**:
 - Reads from `model.global_default_settings` OR legacy `model.settings` (backwards compat migration)
-- `blur_radius`: int 2–32; else default
+- `blur_radius`: int 2–20; else default
 - `transition_duration`: int 0–2000; else default
 - `highlight_color` / `redaction_color`: `/^#[0-9a-fA-F]{6}$/`; else default
 - `reveal_mode`: must be in `reveal_modes` values; else default

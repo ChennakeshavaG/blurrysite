@@ -17,7 +17,6 @@ const StorageModel = (() => {
   "use strict";
 
   const STORAGE_KEY = "blsi_model";
-  const ITEM_LIMIT = 10;
   const RULES_LIMIT = 200;
 
   // ── Private state ──────────────────────────────────────────────────────────
@@ -622,20 +621,6 @@ const StorageModel = (() => {
 
     var automate_blur_active = !!(idle_eff || tab_switch_eff || ss_eff);
 
-    // skipped vs only depends on whether a manual blur reason is also active.
-    var manual_blur = !!folded.blur_all_status;
-    var pick_blur_present = !!folded.pick_blur_enabled;
-    var blur_present = manual_blur || pick_blur_present;
-    var automate_blur_only = automate_blur_active && !blur_present;
-    var automate_blur_skipped = automate_blur_active && blur_present;
-    var automate_blur_skip_reason = !automate_blur_skipped
-      ? null
-      : folded._rule_match
-      ? "site_rule"
-      : manual_blur
-      ? "manual"
-      : "pick_blur";
-
     return {
       automate_blur_active:              automate_blur_active,
       automate_blur_triggers: {
@@ -643,9 +628,6 @@ const StorageModel = (() => {
         tab_switch:   tab_switch_eff,
         screen_share: ss_eff,
       },
-      automate_blur_only:                automate_blur_only,
-      automate_blur_skipped:             automate_blur_skipped,
-      automate_blur_skip_reason:         automate_blur_skip_reason,
       screen_share_state: {
         active:         ss.active,
         sharing_tab_id: ss.sharing_tab_id,
@@ -755,17 +737,27 @@ const StorageModel = (() => {
   }
 
   async function save_blur_item(hostname, item) {
-    if (!_is_valid_hostname(hostname) || !_is_valid_item(item)) return;
+    if (!_is_valid_hostname(hostname) || !_is_valid_item(item)) {
+      return { ok: false, reason: 'invalid' };
+    }
     var current = get();
     var pb_items = Object.assign({}, current.pick_and_blur.items || {});
     var items = pb_items[hostname] ? pb_items[hostname].slice() : [];
-    if (items.length >= ITEM_LIMIT) return;
+    var cap = (typeof blsi !== 'undefined' && typeof blsi.max_pick_blur_items_per_host === 'number')
+      ? blsi.max_pick_blur_items_per_host
+      : 10;
+    if (items.length >= cap) {
+      return { ok: false, reason: 'cap' };
+    }
     var new_id = _get_item_id(item);
-    if (items.some(function(e) { return _get_item_id(e) === new_id; })) return;
+    if (items.some(function(e) { return _get_item_id(e) === new_id; })) {
+      return { ok: false, reason: 'duplicate' };
+    }
     pb_items[hostname] = items.concat([item]);
     await _write(Object.assign({}, current, {
       pick_and_blur: Object.assign({}, current.pick_and_blur, { items: pb_items }),
     }));
+    return { ok: true };
   }
 
   async function remove_blur_item(hostname, item_id) {
@@ -824,9 +816,12 @@ const StorageModel = (() => {
       return S ? S.suppress_screen_share_site(ctx.hostname) : Promise.resolve();
     }
     if (scope === "feature") {
-      if (!S) return Promise.resolve();
-      await S.suspend_trigger('screen_share');
-      return S.set_screen_share_inactive();
+      // Suspend ONLY flips the session-suspend gate. We must NOT clear the
+      // live screen_share map — doing so loses every active share record, so
+      // when the user clicks Resume the receiver tabs see ss.active=false
+      // and don't re-blur even though the share is still going. Real share
+      // teardown happens via port disconnect (screen_share_bg.js).
+      return S ? S.suspend_trigger('screen_share') : Promise.resolve();
     }
   }
 

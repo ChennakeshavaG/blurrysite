@@ -1,5 +1,6 @@
 const BlurrySitePopupUI = (() => {
   'use strict';
+  var log = blsi.Logger.scope('popupUI');
 
   // ── Theme ────────────────────────────────────────────────────────────────
   function applyTheme(theme) {
@@ -11,7 +12,9 @@ const BlurrySitePopupUI = (() => {
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const next = isDark ? 'light' : 'dark';
     applyTheme(next);
-    chrome.storage.local.set({ blsi_popup_theme: next });
+    chrome.storage.local.set({ blsi_popup_theme: next }, () => {
+      if (chrome.runtime.lastError) log.warn('theme set', chrome.runtime.lastError.message);
+    });
   }
 
   // ── Toast ────────────────────────────────────────────────────────────────
@@ -104,7 +107,6 @@ const BlurrySitePopupUI = (() => {
   // ── Navigation ────────────────────────────────────────────────────────────
   const SUB_VIEWS = [
     'bl-view-htb-modify',
-    'bl-view-automate-modify',
     'bl-view-shortcuts',
     'bl-view-site-rules',
     'bl-view-general',

@@ -344,19 +344,43 @@ describe('save_blur_item', () => {
     expect(items).toHaveLength(1);
   });
 
-  test('enforces per-host limit of 10', async () => {
+  test('enforces per-host limit of 10 (constant from blsi.max_pick_blur_items_per_host)', async () => {
     const stored = blsi.build_default_model();
     mockGet(stored);
     await blsi.Model.init_cache();
 
-    for (let i = 0; i < 10; i++) {
-      await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: `#el${i}`, name: `D${i}` });
+    expect(blsi.max_pick_blur_items_per_host).toBe(10);
+    for (let i = 0; i < blsi.max_pick_blur_items_per_host; i++) {
+      const ok = await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: `#el${i}`, name: `D${i}` });
+      expect(ok).toEqual({ ok: true });
     }
     jest.clearAllMocks();
     mockSet();
 
-    await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: '#el10', name: 'D10' });
+    const result = await blsi.Model.save_blur_item('example.com', { type: 'dynamic', selector: '#el10', name: 'D10' });
+    expect(result).toEqual({ ok: false, reason: 'cap' });
     expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  test('returns reason "duplicate" when item with same id already saved', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    const item = { type: 'dynamic', selector: '#foo', name: 'Foo' };
+    const first = await blsi.Model.save_blur_item('example.com', item);
+    expect(first).toEqual({ ok: true });
+    const second = await blsi.Model.save_blur_item('example.com', { ...item, name: 'Foo2' });
+    expect(second).toEqual({ ok: false, reason: 'duplicate' });
+  });
+
+  test('returns reason "invalid" when item shape is bad', async () => {
+    const stored = blsi.build_default_model();
+    mockGet(stored);
+    await blsi.Model.init_cache();
+
+    const result = await blsi.Model.save_blur_item('example.com', { type: 'bad', name: 'X' });
+    expect(result).toEqual({ ok: false, reason: 'invalid' });
   });
 
   test('rejects invalid item type', async () => {
@@ -851,20 +875,20 @@ describe('automate_blur', () => {
     // Post-split: engage tracks blur-all only. Automate fires the Overlay
     // via blsi.Automate.Manager, not the engine.
     expect(r.engage).toBe(false);
-    expect(r.automate_blur_only).toBe(true);
-    expect(r.automate_blur_skipped).toBe(false);
+    expect(r.automate_blur_active).toBe(true);
   });
 
-  test('automate_blur_skipped = true when blur_all already on', async () => {
+  test('automate fires independently when blur_all already on', async () => {
     await blsi.Model.save_blur_state(true);
     await blsi.Automate.State.write_idle('idle');
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(r.automate_blur_skipped).toBe(true);
-    expect(r.automate_blur_only).toBe(false);
+    // Each automate trigger fires regardless of manual blur — Overlay layers on top.
+    expect(r.automate_blur_active).toBe(true);
+    expect(r.automate_blur_triggers.idle).toBe(true);
     expect(r.engage).toBe(true);
   });
 
-  test('automate_blur_skipped = true when pick_and_blur enabled', async () => {
+  test('automate fires independently when pick_and_blur enabled', async () => {
     const m = blsi.build_default_model();
     m.pick_and_blur.status = true;
     m.automate.settings.screen_share.enabled = true;
@@ -874,18 +898,16 @@ describe('automate_blur', () => {
 
     await blsi.Automate.State.set_screen_share_active(99);
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(r.automate_blur_skipped).toBe(true);
-    expect(r.automate_blur_skip_reason).toBe('pick_blur');
-    expect(r.automate_blur_only).toBe(false);
+    expect(r.automate_blur_active).toBe(true);
+    expect(r.automate_blur_triggers.screen_share).toBe(true);
     // Pick-blur reconcile runs unconditionally inside engine.handleSite —
     // engage tracks blur-all only.
     expect(r.engage).toBe(false);
   });
 
-  test('automate_blur_only and skipped both false when nothing firing', () => {
+  test('automate_blur_active is false when nothing firing', () => {
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 1);
-    expect(r.automate_blur_only).toBe(false);
-    expect(r.automate_blur_skipped).toBe(false);
+    expect(r.automate_blur_active).toBe(false);
   });
 
   test('manual blur preserved after automate clears', async () => {
@@ -974,15 +996,18 @@ describe('screen_share session record', () => {
     expect(other.automate_blur_triggers.idle).toBe(true);
   });
 
-  test('suppress_screen_share("feature") suspends trigger in session AND clears the session record', async () => {
+  test('suppress_screen_share("feature") suspends the trigger but preserves the live share record', async () => {
     await blsi.Automate.State.set_screen_share_active(7);
     await blsi.Model.suppress_screen_share('feature', {});
     const m = blsi.Model.get();
     expect(m.automate.settings.screen_share.enabled).toBe(true);
     const suspended = blsi.Automate.State.read_suspended();
     expect(suspended.screen_share).toBe(true);
+    // Live share record must stay — receiver tabs read it on Resume to
+    // re-blur automatically without requiring the user to restart sharing.
     const ss = blsi.Model.get_screen_share_state();
-    expect(ss.active).toBe(false);
+    expect(ss.active).toBe(true);
+    expect(ss._sharing_tab_ids).toContain(7);
   });
 
   test('unsuppress_screen_share reverses tab + site_session suppressions', async () => {
@@ -1006,14 +1031,15 @@ describe('screen_share session record', () => {
     expect(blsi.Model.get_suppressed_tabs()).toEqual([]);
   });
 
-  test('resolve: skip_reason is "site_rule" when an exact rule blurs and ss is also live', async () => {
+  test('resolve: screen_share fires independently when an exact rule blurs and ss is also live', async () => {
     // Snapshot pins blur_all on for the host; auto-fill carries global screen_share.enabled too.
     await blsi.Model.save_site_snapshot('example.com', 'exact',
       { blur_all: { status: true, settings: { blur_mode: 'redacted' } } });
     await blsi.Automate.State.set_screen_share_active(7);
     const r = blsi.Model.resolve('example.com', 'https://example.com/', 8);
-    expect(r.automate_blur_skipped).toBe(true);
-    expect(r.automate_blur_skip_reason).toBe('site_rule');
+    // Manual blur and screen-share automate are independent — both engage.
+    expect(r.engage).toBe(true);
+    expect(r.automate_blur_triggers.screen_share).toBe(true);
   });
 });
 
@@ -1651,9 +1677,6 @@ describe('resolve_automate', () => {
     // Automate decision keys present
     expect(r).toHaveProperty('automate_blur_active');
     expect(r).toHaveProperty('automate_blur_triggers');
-    expect(r).toHaveProperty('automate_blur_only');
-    expect(r).toHaveProperty('automate_blur_skipped');
-    expect(r).toHaveProperty('automate_blur_skip_reason');
     expect(r).toHaveProperty('screen_share_state');
     expect(r).toHaveProperty('screen_share_suppressed_for_host');
     expect(r).toHaveProperty('screen_share_suppressed_for_tab');
@@ -1676,9 +1699,6 @@ describe('resolve_automate', () => {
     const slim = blsi.Model.resolve_automate('example.com', 'https://example.com/', 1);
     expect(slim.automate_blur_active).toBe(full.automate_blur_active);
     expect(slim.automate_blur_triggers).toEqual(full.automate_blur_triggers);
-    expect(slim.automate_blur_only).toBe(full.automate_blur_only);
-    expect(slim.automate_blur_skipped).toBe(full.automate_blur_skipped);
-    expect(slim.automate_blur_skip_reason).toBe(full.automate_blur_skip_reason);
     expect(slim.screen_share_state).toEqual(full.screen_share_state);
     expect(slim.screen_share_suppressed_for_host).toBe(full.screen_share_suppressed_for_host);
     expect(slim.screen_share_suppressed_for_tab).toBe(full.screen_share_suppressed_for_tab);

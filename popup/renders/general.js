@@ -4,41 +4,6 @@ const BlurrySitePopupRenderGeneral = (() => {
   var _t           = BlurrySitePopupShared.t;
   var _makeToggle  = BlurrySitePopupShared.makeToggle;
 
-  function _buildTabPrivacyRow(settings, onSave) {
-    var block = document.createElement('div');
-    block.className = 'bl-gen-block';
-
-    var header = document.createElement('div');
-    header.className = 'bl-gen-block__header';
-
-    var labelWrap = document.createElement('div');
-    labelWrap.className = 'bl-gen-block__label-wrap';
-
-    var label = document.createElement('span');
-    label.className = 'bl-gen-block__label';
-    label.textContent = _t('setting_tab_privacy');
-
-    var hint = document.createElement('span');
-    hint.className = 'bl-gen-block__hint';
-    hint.textContent = _t('setting_tab_privacy_hint');
-
-    labelWrap.appendChild(label);
-    labelWrap.appendChild(hint);
-
-    var checked = !!(settings.global_default_settings && settings.global_default_settings.tab_privacy);
-    var tog = _makeToggle('bl-gen-tab-privacy', checked, _t('setting_tab_privacy'));
-
-    tog.input.addEventListener('change', function () {
-      onSave({ global_default_settings: { tab_privacy: tog.input.checked } });
-    });
-
-    header.appendChild(labelWrap);
-    header.appendChild(tog.label);
-    block.appendChild(header);
-
-    return block;
-  }
-
   function _buildLanguageRow(settings, onSave) {
     var block = document.createElement('div');
     block.className = 'bl-gen-block';
@@ -198,13 +163,8 @@ const BlurrySitePopupRenderGeneral = (() => {
 
     containerEl.replaceChildren();
     containerEl.appendChild(_buildLanguageRow(settings, onSave));
-    // Hide tab_privacy when current host is rule-managed — the rule snapshot
-    // owns that field; editing it from General would be a no-op for this host.
-    if (!BlurrySitePopupShared.isRuleManaged(settings)) {
-      containerEl.appendChild(_buildTabPrivacyRow(settings, onSave));
-    }
-    containerEl.appendChild(_buildDebugRow(debugEnabled, onToggleDebug));
     containerEl.appendChild(_buildBackupRow(onExport, onImport));
+    containerEl.appendChild(_buildDebugRow(debugEnabled, onToggleDebug));
   }
 
   return { renderBody };

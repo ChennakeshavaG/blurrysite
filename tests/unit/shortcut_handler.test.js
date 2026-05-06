@@ -55,8 +55,10 @@ const fs = require('fs');
 const path = require('path');
 
 const MODULE_PATH = path.resolve(__dirname, '../../src/shortcut_handler.js');
+const TOAST_PATH  = path.resolve(__dirname, '../../src/toast.js');
 
 function loadShortcutHandler() {
+  if (!blsi.Toast && fs.existsSync(TOAST_PATH)) require(TOAST_PATH);
   if (blsi.Shortcuts) return;
   if (!fs.existsSync(MODULE_PATH)) {
     throw new Error('shortcut_handler.js not found — stub removed, real file required');
@@ -345,18 +347,18 @@ describe('blsi.Shortcuts (v2)', () => {
       expect(() => blsi.Shortcuts.init(null, {})).not.toThrow();
     });
 
-    test('destroy preserves persistent toast', () => {
+    test('destroy preserves persistent toast (via blsi.Toast.clearIfTransient)', () => {
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, {});
-      blsi.Shortcuts.showToast('persistent msg', 15000, [], { persistent: true });
+      blsi.Toast.show('persistent msg', 15000, [], { persistent: true });
       var toast = document.querySelector('.bl-si-toast');
       expect(toast).not.toBeNull();
       blsi.Shortcuts.destroy();
       expect(toast.parentNode).not.toBeNull();
     });
 
-    test('destroy removes non-persistent toast', () => {
+    test('destroy removes non-persistent toast (via blsi.Toast.clearIfTransient)', () => {
       blsi.Shortcuts.init(DEFAULT_SHORTCUTS, {});
-      blsi.Shortcuts.showToast('temp msg', 5000);
+      blsi.Toast.show('temp msg', 5000);
       var toast = document.querySelector('.bl-si-toast');
       expect(toast).not.toBeNull();
       blsi.Shortcuts.destroy();

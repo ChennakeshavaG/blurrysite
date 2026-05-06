@@ -35,6 +35,7 @@ A hook fires on every Edit/Write to these files and reminds you of the relevant 
 | `src/constants.js` | `docs/contracts/constants.md` |
 | `src/url_matcher.js` | `docs/contracts/url_matcher.md` |
 | `src/shortcut_handler.js` | `docs/contracts/shortcut_handler.md` |
+| `src/toast.js` | `docs/contracts/toast.md` |
 | `src/shortcut_label.js` | `docs/contracts/shortcut_label.md` |
 | `src/action_registry.js` | `docs/contracts/action_registry.md` |
 | `src/reveal_controller.js` | `docs/contracts/reveal_controller.md` |

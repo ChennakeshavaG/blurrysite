@@ -145,7 +145,7 @@ automate.settings = {
   tab_switch:   { enabled: false },
 }
 ```
-- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `MediaDevices.prototype.getDisplayMedia` in page's MAIN world. On share start, `screen_share.js` opens a per-stream port (`blsi-ss-<streamId>`) + sends `SCREEN_SHARE_STARTED` with `streamId` (`stream.id` GUID); background **owns** the live-share state in a per-tab, per-stream session map (`blsi_screen_share = { [tab_id]: { streams: { [streamKey]: { started_at } }, suppressed_sites } }`) and broadcasts `SCREEN_SHARE_NOTIFY` (toast ping) to non-sharing tabs. Content tabs read the map via `chrome.storage.session.onChanged` in `storage_model.js` — they do NOT mirror screen-share state into their own per-hostname `automate_blur` entries. Tabs opened mid-share read the map on `init_cache`. On share end (or tab crash/close), port disconnect removes only that stream's entry (or the entire tab if it was the last stream) + broadcasts NOTIFY. Multiple streams from the same tab are tracked independently. Multiple tabs can share simultaneously. Sharing tabs NOT blurred (resolve-side check: `tab_id in _sharing_tab_ids`). **Smart skip**: if blur-all or pick-and-blur already enabled, automate defers (sets `automate_blur_skipped = true`, populates `automate_blur_skip_reason`), shows "Blur already active — automate skipped" toast.
+- `screen_share.enabled` — when true, `blsi.ScreenShare.init()` wraps `MediaDevices.prototype.getDisplayMedia` in page's MAIN world. On share start, `screen_share.js` opens a per-stream port (`blsi-ss-<streamId>`) + sends `SCREEN_SHARE_STARTED` with `streamId` (`stream.id` GUID); background **owns** the live-share state in a per-tab, per-stream session map (`blsi_screen_share = { [tab_id]: { streams: { [streamKey]: { started_at } }, suppressed_sites } }`) and broadcasts `SCREEN_SHARE_NOTIFY` (toast ping) to non-sharing tabs. Content tabs read the map via `chrome.storage.session.onChanged` in `storage_model.js` — they do NOT mirror screen-share state into their own per-hostname `automate_blur` entries. Tabs opened mid-share read the map on `init_cache`. On share end (or tab crash/close), port disconnect removes only that stream's entry (or the entire tab if it was the last stream) + broadcasts NOTIFY. Multiple streams from the same tab are tracked independently. Multiple tabs can share simultaneously. Sharing tabs NOT blurred (resolve-side check: `tab_id in _sharing_tab_ids`). **Independence**: screen-share (and the other automate triggers) fire regardless of whether blur-all or pick-and-blur is already active on the page — the Overlay layers on top. There is no "skipped" gate; users opted into the trigger and always see the toast + Overlay.
 - `idle.unit` accepts `blsi.idle_units` (`'sec'` | `'min'`) only — `'hr'` rejected (Chrome idle API cap ~3000 s). `value` min 1. UI warns when value exceeds 3000 s.
 - `tab_switch.enabled` boolean only.
 
@@ -232,10 +232,7 @@ automate_blur_active = idle_eff || tab_switch_eff || ss_eff
 Automate triggers NEVER write `blur_all`. `onActive()` only clears idle/tab_switch — manual blur survives idle return.
 
 Derived keys exposed by `resolve_automate` (mirrored on the `resolve()` shim):
-- `automate_blur_active`, `automate_blur_triggers` — `{ idle, tab_switch, screen_share }` booleans (post-suppression)
-- `automate_blur_only` — true when automate is **sole** blur reason (no manual blur, no pick-blur)
-- `automate_blur_skipped` — true when automate fired but deferred (blur-all or pick-blur already on)
-- `automate_blur_skip_reason` — `'site_rule' | 'manual' | 'pick_blur' | null`
+- `automate_blur_active`, `automate_blur_triggers` — `{ idle, tab_switch, screen_share }` booleans (post-suppression). Each trigger fires independently of manual blur.
 - `screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }` (popup card label)
 - `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab` — booleans (Undo affordance)
 - `_rule_overrides_automate` — `{ automate_idle, automate_tab_switch, automate_screen_share }` booleans — used by Manager to attach "(site rule)" suffix to toasts

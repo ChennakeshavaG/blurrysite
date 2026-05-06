@@ -230,7 +230,7 @@ A local `consumed[]` array tracks ranges so subsequent dispositive passes and th
 
 ```
 \bKEYWORD_ALT\b\s*[:=#\-—]?\s*(?:is\s+|of\s+)?["']?
-([A-Za-z0-9][A-Za-z0-9._\-]{3,63})
+([A-Za-z0-9][A-Za-z0-9._\-]{11,63})
 ["']?
 ```
 
@@ -247,12 +247,12 @@ Capture group `m[1]` is the value to wrap; offsets read via `/d` flag → `m.ind
 #### Value-validator (`_validateValue`)
 
 ```
-length >= 4
+length >= 12
 AND contains at least one non-letter character (digit, dot, dash, underscore, etc.)
 AND not all-same-char  (rejects "aaaa", "0000")
 ```
 
-The 4-char floor + non-alpha gate is the **Decision #3 length gate**: short public references (`Order #5`, `Case 12`) stay unblurred; long unique identifiers (`Order #1234567890`, `Case ABC-12345`, `Tracking 1Z999AA10123456784`) wrap. Pure-alpha strings of any length are rejected — real credential values virtually always contain digits or punctuation; pure-alpha matches are English words (e.g. "responsibilities", "acknowledgements"). `isOrderRef` in `pii_suppressors.js` is **unchanged** — still suppresses bare-numeric matches near order-ish keywords on the NUMERIC path when no value of length ≥ 4 follows.
+The 12-char floor eliminates false positives on short identifiers (`sdk-alpha`, `page-3`, `v2-beta`, `ABC-001`, `Ctrl-K`) while preserving catches on real credentials (DB passwords, OAuth secrets, webhook secrets are 16–64 chars). DISPOSITIVE_RE already catches all known-prefix credentials (sk-, ghp_, AKIA, Bearer, etc.) at their exact lengths — PREFIX_RE is the fallback for unknown-prefix values. Short pure-digit secrets (OTP, PIN) are caught by NUMERIC_RE Stage 3, not PREFIX_RE. Pure-alpha strings of any length are rejected — real credential values virtually always contain digits or punctuation; pure-alpha matches are English words (e.g. "responsibilities", "acknowledgements").
 
 ### Pre-filter coupling
 

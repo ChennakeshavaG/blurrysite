@@ -174,7 +174,7 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   padding: 12px 14px;
   margin: 0 10px 8px;
   border-radius: 12px;
-  border: 1px solid var(--bl-raised);
+  border: 1px solid var(--bl-border);
   background: var(--bl-surface);
 }
 
@@ -182,31 +182,29 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .bl-section__title {
-  font-size: var(--bl-text-sm);
+  font-size: var(--bl-text-lg);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
   color: var(--bl-text-primary);
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border-left: 2px solid var(--bl-amber);
-  padding-left: 7px;
 }
 
 .bl-section__title svg {
-  color: var(--bl-amber);
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
 .bl-section__desc {
-  font-size: var(--bl-text-sm);
+  font-size: var(--bl-text-md);
   color: var(--bl-text-muted);
-  margin-top: 3px;
+  margin-top: 2px;
+  margin-bottom: 8px;
   line-height: 1.4;
 }
 
@@ -216,6 +214,25 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   margin-top: 6px;
 }
 
+
+/* ── Feature row (shared by protect + triggers toggle rows) ────────── */
+.bl-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  user-select: none;
+}
+
+.bl-feature-row__label {
+  font-size: var(--bl-text-md);
+  font-weight: 500;
+  color: var(--bl-text-primary);
+  flex: 1;
+}
+
+/* ── Per-section title accents ──────────────────────────────────────── */
+.bl-htb-title svg { color: var(--bl-amber); }
 
 /* ── Swappable modes section ────────────────────────────────────────── */
 .bl-mode-block {
@@ -257,6 +274,14 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 #bl-notif-area:empty { display: none; }
 #bl-notif-area { display: flex; flex-direction: column; gap: 6px; }
 
+.bl-notif-heading {
+  font-size: var(--bl-text-md);
+  font-weight: 600;
+  color: var(--bl-text-primary);
+  letter-spacing: 0.2px;
+  margin-bottom: 2px;
+}
+
 .bl-notif-pill {
   display: flex;
   align-items: center;
@@ -291,9 +316,9 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   border: 1px solid color-mix(in srgb, var(--bl-green) 35%, transparent);
   border-radius: 4px;
   color: var(--bl-green);
-  font-size: var(--bl-text-xs);
-  font-weight: 500;
-  padding: 2px 7px;
+  font-size: var(--bl-text-sm);
+  font-weight: 600;
+  padding: 4px 10px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
@@ -310,11 +335,27 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-notif-btn--warn:hover {
   background: color-mix(in srgb, var(--bl-danger, #ef4444) 26%, transparent);
 }
+.bl-notif-btn--skip {
+  background: color-mix(in srgb, var(--bl-amber) 16%, transparent);
+  border-color: color-mix(in srgb, var(--bl-amber) 42%, transparent);
+  color: var(--bl-amber);
+}
+.bl-notif-btn--skip:hover {
+  background: color-mix(in srgb, var(--bl-amber) 28%, transparent);
+}
+.bl-notif-btn--suspend {
+  background: color-mix(in srgb, var(--bl-danger) 16%, transparent);
+  border-color: color-mix(in srgb, var(--bl-danger) 42%, transparent);
+  color: var(--bl-danger);
+}
+.bl-notif-btn--suspend:hover {
+  background: color-mix(in srgb, var(--bl-danger) 30%, transparent);
+}
 
 /* ── Notif card (live automate state + per-scope dismiss) ─────────────── */
 .bl-notif-card {
-  background: color-mix(in srgb, var(--bl-cyan) 10%, var(--bl-surface));
-  border: 1px solid color-mix(in srgb, var(--bl-cyan) 30%, transparent);
+  background: color-mix(in srgb, var(--bl-sky) 12%, var(--bl-surface));
+  border: 1px solid color-mix(in srgb, var(--bl-sky) 34%, transparent);
   border-radius: 6px;
   padding: 8px 10px;
   display: flex;
@@ -395,6 +436,17 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
   font-size: var(--bl-text-sm);
   color: var(--bl-text-muted);
   line-height: 1.5;
+}
+
+.bl-pick-cap-reached {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: var(--bl-text-sm);
+  color: var(--bl-amber, #d97706);
+  background: color-mix(in srgb, var(--bl-amber, #d97706) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl-amber, #d97706) 30%, transparent);
+  border-radius: 6px;
+  line-height: 1.4;
 }
 
 
@@ -588,7 +640,7 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
 .bl-nav-rows {
   margin: 0 10px 8px;
   border-radius: 12px;
-  border: 1px solid var(--bl-raised);
+  border: 1px solid var(--bl-border);
   background: var(--bl-surface);
   overflow: hidden;
 }
@@ -1358,9 +1410,7 @@ html[data-theme="light"] #bl-theme-toggle .bl-icon-moon { display: block; }
    Pin .bl-main height so sub-pages keep their normal modal size when the
    collapsed main view would otherwise shrink the parent .bl-mid. */
 body.bl-rule-managed #bl-mode-blur-all,
-body.bl-rule-managed #bl-mode-pick-blur,
-body.bl-rule-managed #bl-pii,
-body.bl-rule-managed #bl-automate {
+body.bl-rule-managed #bl-mode-pick-blur {
   display: none;
 }
 /* #bl-modes is a .bl-section — its own padding/border/background would wrap
@@ -1374,3 +1424,96 @@ body.bl-rule-managed #bl-modes {
 body.bl-rule-managed .bl-main {
   min-height: 490px;
 }
+
+/* ── Welcome card overlay ─────────────────────────────────────────────── */
+.bl-welcome {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: var(--bl-base);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  text-align: center;
+}
+.bl-welcome[hidden] { display: none; }
+
+.bl-welcome__headline {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--bl-amber);
+  margin-bottom: 6px;
+}
+
+.bl-welcome__intro {
+  font-size: var(--bl-text-base);
+  color: var(--bl-text-muted);
+  margin-bottom: 16px;
+}
+
+.bl-welcome__features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.bl-welcome__feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bl-surface);
+  border: 1px solid var(--bl-divider);
+  border-radius: 8px;
+}
+
+.bl-welcome__feature-icon {
+  flex-shrink: 0;
+  color: var(--bl-text-muted);
+}
+
+.bl-welcome__feature-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.bl-welcome__feature-title {
+  font-size: var(--bl-text-md);
+  font-weight: 600;
+  color: var(--bl-text-primary);
+}
+
+.bl-welcome__feature-desc {
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-muted);
+}
+
+.bl-welcome__badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--bl-green);
+  background: color-mix(in srgb, var(--bl-green) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl-green) 30%, transparent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.bl-welcome__cta {
+  background: var(--bl-amber);
+  color: var(--bl-base);
+  border: none;
+  border-radius: 8px;
+  font-size: var(--bl-text-md);
+  font-weight: 600;
+  padding: 10px 28px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.bl-welcome__cta:hover { opacity: 0.88; }

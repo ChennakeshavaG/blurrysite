@@ -1,0 +1,54 @@
+/* protect.css — Stay Blurry section (3 accent cards: cyan-blue → cyan → cyan-green) */
+
+.bl-protect-card {
+  --bl-protect-accent: var(--bl-cyan);
+  background: color-mix(in srgb, var(--bl-protect-accent) 28%, var(--bl-surface));
+  border: 1px solid color-mix(in srgb, var(--bl-protect-accent) 55%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.bl-protect-card--screen-share { --bl-protect-accent: #38bdf8; }
+.bl-protect-card--pii          { --bl-protect-accent: #06b6d4; }
+.bl-protect-card--tab-privacy  { --bl-protect-accent: #34d399; }
+
+.bl-protect-title { color: var(--bl-text-primary); }
+.bl-protect-title svg { color: var(--bl-cyan); }
+
+/* Toggle track needs contrast against tinted card bg */
+.bl-protect-card .bl-toggle__track {
+  background: color-mix(in srgb, var(--bl-protect-accent) 8%, var(--bl-base));
+}
+
+/* Inline description below each toggle row — replaces the old hover tooltip
+   so users see the explanation without hovering. */
+.bl-protect-card__desc {
+  margin: 4px 0 0;
+  padding-left: 16px;  /* aligns with label text after the status dot */
+  font-size: var(--bl-text-sm);
+  color: var(--bl-text-muted);
+  line-height: 1.4;
+}
+
+/* ── PII chips (inline below Sensitive Info) ────────────────────────── */
+.bl-protect-chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--bl-protect-accent) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bl-protect-accent) 6%, var(--bl-surface));
+}
+
+.bl-protect-chips .bl-chip {
+  justify-content: center;
+  text-align: center;
+}
+
+/* ── Color row (redacted mode) ──────────────────────────────────────── */
+.bl-protect-color-row {
+  padding: 4px 0 2px;
+}

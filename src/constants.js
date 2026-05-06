@@ -143,6 +143,19 @@ const Constants = (() => {
   // ── Reveal constants ───────────────────────────────────────────────────────
   const reveal_dfs_max_depth = 2;
 
+  // Pick & Blur per-host item cap. Storage rejects saves above this; popup
+  // surfaces the count + an inline warning; picker / context-menu callbacks
+  // fire a toast when the cap blocks a save.
+  const max_pick_blur_items_per_host = 10;
+
+  // Idle automate toast duration, in seconds.
+  //   0 → forever (persistent toast — auto-dismissed only on the falling edge
+  //                when the user becomes active again, or via the close button)
+  //   N (>0) → N-second auto-dismiss (still dismissed on falling edge if up)
+  // Tweak as UX evolves. Other automate toasts have fixed durations
+  // (tab-switch 3s, screen-share persistent).
+  const idle_toast_duration_seconds = 0;
+
   // ── Modifier codes ─────────────────────────────────────────────────────────
   // KeyboardEvent.code strings for every modifier key. Used by shortcut_handler
   // to short-circuit on modifier-only keydowns, and by the capture UI to
@@ -212,7 +225,7 @@ const Constants = (() => {
 
     automate: Object.freeze({
       settings: Object.freeze({
-        screen_share: Object.freeze({ enabled: false }),
+        screen_share: Object.freeze({ enabled: true }),
         idle:         Object.freeze({ value: 5, unit: 'min', enabled: false }),
         tab_switch:   Object.freeze({ enabled: false }),
       }),
@@ -362,7 +375,7 @@ const Constants = (() => {
       const s = (raw && typeof raw === 'object') ? raw : {};
 
       r.global_default_settings = {
-        blur_radius: (typeof s.blur_radius === 'number' && s.blur_radius >= 2 && s.blur_radius <= 32)
+        blur_radius: (typeof s.blur_radius === 'number' && s.blur_radius >= 2 && s.blur_radius <= 20)
           ? s.blur_radius : d.global_default_settings.blur_radius,
 
         transition_duration: (typeof s.transition_duration === 'number' && s.transition_duration >= 0 && s.transition_duration <= 2000)
@@ -749,6 +762,8 @@ const Constants = (() => {
     // model
     DEFAULT_MODEL,
     reveal_dfs_max_depth,
+    max_pick_blur_items_per_host,
+    idle_toast_duration_seconds,
     modifier_codes,
     // utilities
     deep_merge,

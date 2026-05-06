@@ -2,12 +2,12 @@
 
 ## Overview
 
-Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Covers four render functions used by the popup UI: `renderHtbSection`, `renderPiiSection`, `renderAutomateSection`, and `renderModesSection` (including `renderAll`). All tests run against the real file — no stub fallback is provided (stub throws). `chrome.i18n.getMessage` returns the key string verbatim so assertions use i18n key names, not translated strings.
+Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Covers render functions used by the popup UI: `renderHtbSection` and `renderModesSection` (including `renderAll`), plus `renderNotifArea` per-trigger sub-cards and the rule-managed branch. PII rendering moved to `protect.js`; automate section replaced by `triggers.js` — both are stubbed as `jest.fn()` globals so `renderAll` can call through without errors. All tests run against the real file — no stub fallback is provided (stub throws). `chrome.i18n.getMessage` returns the key string verbatim so assertions use i18n key names, not translated strings.
 
 ## Setup & Teardown
 
-- `beforeAll`: loads `popup/renders/main.js` via `require()` (once per suite).
-- `beforeEach`: rebuilds DOM scaffold with `setupDom()` (creates `#bl-htb-chips`, `#bl-htb-summary`, `#bl-pii`, `#bl-pii-master`, `#bl-pii-chips`, `#bl-pii-color-row`, `#bl-automate-summary`, `#bl-mode-blur-all`, `#bl-mode-pick-blur`); mocks `chrome.i18n.getMessage` to return the raw key.
+- `beforeAll`: stubs `global.BlurrySitePopupRenderProtect` and `global.BlurrySitePopupRenderTriggers` (both with `renderSection: jest.fn()`), then loads `popup/renders/main.js` via `require()` (once per suite).
+- `beforeEach`: rebuilds DOM scaffold with `setupDom()` (creates `#bl-htb-chips`, `#bl-htb-summary`, `#bl-stay-blurry`, `#bl-mode-blur-all`, `#bl-mode-pick-blur`, `#bl-smart-triggers`); mocks `chrome.i18n.getMessage` to return the raw key.
 - `afterEach`: clears `document.body.innerHTML`.
 - `makeSettings(overrides?)` — deep-merges overrides into a baseline settings object with known defaults; used across all test groups.
 
@@ -24,19 +24,6 @@ Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Co
 - `summary Strength row uses Strong label for radius 10` — strength row value contains `htb_strength_strong` when `blur_radius=10`.
 - `pick-blur mode has no Covers row in summary` — when `isBlurAll=false`, no `htb_label_covers` label exists in the summary.
 - `color mode shows Color row and no Strength/Reveal rows` — when `blur_type='color'`, summary includes `htb_label_color` and excludes `htb_label_strength` and `htb_label_reveal`.
-
-### renderPiiSection
-
-- `master toggle is checked when EMAIL is true` — `#bl-pii-master` checkbox is `checked` when `email=true`.
-- `master toggle is unchecked when both are false` — `#bl-pii-master` is unchecked when both `email` and `numeric` are `false`.
-- `renders 4 PII mode chips` — `#bl-pii-chips` contains exactly 4 `.bl-chip` elements.
-- `active PII chip has bl-chip--active (amber, no sky class)` — active chip's `dataset.piiMode` matches `pii_mode`; chip does not carry `bl-chip--sky`; verified for `'redacted'`.
-
-### renderAutomateSection
-
-- `renders 3 summary rows` — `#bl-automate-summary` always renders 3 `.bl-summary-row` elements.
-- `IDLE enabled with value=5 unit=min shows value and unit key` — idle row value text is `'5 automate_unit_min'` when idle is enabled.
-- `TAB_SWITCH enabled shows On value` — tab_switch row value is `'automate_on'` when `tab_switch.enabled=true`.
 
 ### renderModesSection
 
@@ -108,14 +95,20 @@ Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Co
 - `dynamic item with legacy selector string still populates selectors array` — legacy `selector` string field wrapped in array for `data-highlight-selectors`.
 - `sticky item row has data-highlight-type="sticky" and data-highlight-id` — sticky row has `data-highlight-type="sticky"` and `dataset.highlightId` equal to the zone id.
 
+### renderAll rule-managed branch
+
+- `rule-managed: stamps body class, renders banner, clears mode blocks` — body gets `bl-rule-managed`; banner appears in `#bl-notif-area`; `#bl-mode-blur-all`, `#bl-mode-pick-blur`, `#bl-stay-blurry`, `#bl-smart-triggers` all emptied.
+- `non-rule-managed: removes body class, renders modes normally` — body class removed; no banner; Protect and Triggers stubs called.
+- `rule-managed: banner CTA invokes onOpenManagingRule with focusRule` — clicking `.bl-rule-banner__cta` calls the provided callback with `{ focusRule: ruleMatch }`.
+
 ### renderNotifArea per-trigger sub-cards
 
 - `single trigger renders one sub-card` — idle active only → exactly 1 `.bl-notif-card` with `.bl-notif-card__actions`.
 - `multiple triggers render separate sub-cards` — idle + tab_switch active → 2 `.bl-notif-card` elements.
 - `suppressed trigger shows undo row, no action buttons` — idle suppressed for tab → card has `.bl-notif-card__suppress`, no `.bl-notif-card__actions`.
 - `sharing-tab renders single card with suspend button` — `is_sharing_tab=true` → 1 card, 1 `.bl-notif-btn` button (no `--warn` variant — suspend is non-destructive, session-only).
-- `skipped state renders info-only card with no actions` — `automate_blur_skipped=true, skip_reason='manual'` → card has `.bl-notif-card__info`, no actions.
-- `site-rule pill renders before sub-cards` — `activeRule` + idle trigger → first child is `.bl-notif-pill`, second is `.bl-notif-card`.
+- `manual blur active alone (no automate trigger) renders no notif card` — when no automate trigger fires and nothing is suspended/suppressed, the notif area is empty. There is no "skipped" card; manual blur and automate triggers are independent.
+- `site-rule pill renders before sub-cards` — `activeRule` + idle trigger → first child is the `.bl-notif-heading` (Activity), second is `.bl-notif-pill`, third is `.bl-notif-card`.
 - `all three triggers render three sub-cards` — screen_share + idle + tab_switch active → 3 `.bl-notif-card` elements.
 
 ## Edge Cases Covered
@@ -124,13 +117,12 @@ Tests for `popup/renders/main.js`, exposed as `global.BlurrySitePopupRender`. Co
 - Pick-blur with items while disabled shows paused state instead of empty hint.
 - Legacy `selector` (string) field on items is normalized to a `selectors` array for highlight data attributes.
 - `renderAll` is callable with missing optional arguments (items, isPageBlurred default to falsy).
+- Rule-managed branch clears both new section containers (`#bl-stay-blurry`, `#bl-smart-triggers`).
 
 ## Coverage Gaps
 
 - `renderHtbSection` with `blur_mode='redacted'` or `'censored'` not directly asserted for blur-all chip count (implied by 4-chip test).
-- `renderPiiSection` color row behavior for `pii_redaction_color` not tested.
-- `renderAutomateSection` screen_share row enabled state not tested.
-- No test for automate_blur_active / trigger state reflected in the automate section.
 - No test for the reveal mode summary row in renderHtbSection (only strength and covers tested explicitly).
 - `renderAll` with actual items and `isPageBlurred=true` combination not tested together.
 - Pick-blur items with `type='sticky'` not tested in `renderModesSection` item list rendering.
+- `BlurrySitePopupRenderProtect.renderSection` and `BlurrySitePopupRenderTriggers.renderSection` are stubbed — their internal rendering is not tested in this file. Separate test files needed.

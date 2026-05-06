@@ -3,8 +3,8 @@
  *
  * Matches user-configurable shortcuts against KeyboardEvent and fires action
  * callbacks. All action metadata (labels, default bindings, chrome.commands
- * ids) lives in src/action_registry.js — this module is a pure matcher +
- * toast renderer.
+ * ids) lives in src/action_registry.js — this module is a pure matcher.
+ * Toast rendering is delegated to blsi.Toast.
  *
  * Binding shape (enforced by validateSettings):
  *   { binding: [{ code: 'KeyB', mods: ['Alt', 'Shift'] }] }
@@ -16,7 +16,7 @@
  *     NOT from a held-keys Set. MDN says these are the authoritative source.
  *     This folds AltLeft/AltRight together automatically, as users expect.
  *  3. For each registered binding, compare {code, mods} against the event.
- *     First match wins, preventDefault + fire callback + showToast.
+ *     First match wins, preventDefault + fire callback + show toast.
  *  4. Escape is special-cased: when picker is active, fire onExitPicker and
  *     do not dispatch to any bound shortcut.
  *
@@ -30,7 +30,6 @@
 const Shortcuts = (() => {
   'use strict';
 
-  const _CSS = (blsi.css) || {};
   const _log = blsi.Logger ? blsi.Logger.scope('shortcuts') : null;
 
   // ── Internal state ─────────────────────────────────────────────────────────
@@ -38,9 +37,6 @@ const Shortcuts = (() => {
   /** The keydown/blur listeners currently attached, or null. */
   let activeKeydownListener = null;
   let activeBlurListener    = null;
-
-  /** Reference to the current toast element so we can remove it early. */
-  let currentToastEl = null;
 
   /** Whether the element picker is currently active (set by content_script). */
   let _isPickerActive = false;
@@ -66,9 +62,6 @@ const Shortcuts = (() => {
 
   // ── Modifier extraction ────────────────────────────────────────────────────
 
-  /** The subset of mods to consider. Always sorted alphabetically. */
-  const _MOD_NAMES = ['Alt', 'Control', 'Meta', 'Shift'];
-
   /**
    * Read the normalized modifier set for an event. Returns a sorted array
    * from {"Alt","Control","Meta","Shift"}. Left/right is folded away.
@@ -88,99 +81,6 @@ const Shortcuts = (() => {
       if (a[i] !== b[i]) return false;
     }
     return true;
-  }
-
-  // ── Toast notification ─────────────────────────────────────────────────────
-
-  function _dismissToast(toast) {
-    if (toast._removeTimer) clearTimeout(toast._removeTimer);
-    toast.classList.add(_CSS.toast_exiting || 'bl-si-toast--exiting');
-    setTimeout(() => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-      if (currentToastEl === toast) currentToastEl = null;
-    }, 250);
-  }
-
-  /**
-   * @param {string}   text
-   * @param {number}   [duration=15000]
-   * @param {Array<{label:string, onClick:function, variant?:string}>} [actions]
-   *   Optional action buttons shown in a second row below the message.
-   *   variant 'warn' renders with amber styling.
-   * @param {{persistent?:boolean}} [opts]
-   *   persistent: skip auto-dismiss timer; block replacement by non-persistent toasts.
-   */
-  function showToast(text, duration, actions, opts) {
-    if (duration === undefined) duration = 15000;
-    if (currentToastEl && currentToastEl.parentNode) {
-      if (currentToastEl._persistent) return;
-      if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
-      currentToastEl.parentNode.removeChild(currentToastEl);
-      currentToastEl = null;
-    }
-
-    const toast = document.createElement('div');
-    toast.className = _CSS.toast || 'bl-si-toast';
-    toast.setAttribute('role', 'status');
-    toast.setAttribute('aria-live', 'polite');
-
-    // ── Top row: logo + message + close ────────────────────────────────────
-    const topRow = document.createElement('div');
-    topRow.className = 'bl-si-toast__top';
-
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-      const logo = document.createElement('img');
-      logo.src = chrome.runtime.getURL('icons/icon32.png');
-      logo.className = 'bl-si-toast__logo';
-      logo.setAttribute('aria-hidden', 'true');
-      logo.alt = '';
-      topRow.appendChild(logo);
-    }
-
-    const msgSpan = document.createElement('span');
-    msgSpan.className = _CSS.toast_message || 'bl-si-toast__message';
-    msgSpan.textContent = text;
-    topRow.appendChild(msgSpan);
-
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'bl-si-toast__close';
-    closeBtn.textContent = '✕';
-    closeBtn.setAttribute('aria-label',
-      chrome.i18n.getMessage('aria_toast_dismiss') || 'Dismiss');
-    closeBtn.addEventListener('click', () => _dismissToast(toast));
-    topRow.appendChild(closeBtn);
-
-    toast.appendChild(topRow);
-
-    // ── Actions row (optional) ──────────────────────────────────────────────
-    const actionList = Array.isArray(actions) ? actions : [];
-    if (actionList.length > 0) {
-      const actionsRow = document.createElement('div');
-      actionsRow.className = 'bl-si-toast__actions';
-      actionList.forEach(function(action) {
-        if (!action || !action.label || typeof action.onClick !== 'function') return;
-        const btn = document.createElement('button');
-        btn.className = 'bl-si-toast__action' +
-          (action.variant === 'warn' ? ' bl-si-toast__action--warn' : '');
-        btn.textContent = action.label;
-        if (action.tooltip) btn.dataset.tooltip = action.tooltip;
-        btn.addEventListener('click', function() {
-          _dismissToast(toast);
-          action.onClick();
-        });
-        actionsRow.appendChild(btn);
-      });
-      toast.appendChild(actionsRow);
-    }
-
-    document.body.appendChild(toast);
-    currentToastEl = toast;
-
-    if (opts && opts.persistent) {
-      toast._persistent = true;
-    } else {
-      toast._removeTimer = setTimeout(() => _dismissToast(toast), duration);
-    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -264,7 +164,7 @@ const Shortcuts = (() => {
 
         const action = (blsi.Actions && blsi.Actions.get) ? blsi.Actions.get(sc.actionId) : null;
         const toastText = 'Blurry Site — ' + (action ? action.label : sc.actionId);
-        showToast(toastText);
+        if (blsi.Toast) blsi.Toast.show(toastText, 3000);
         return;
       }
     }
@@ -295,22 +195,14 @@ const Shortcuts = (() => {
     registeredShortcuts = [];
     registeredCallbacks = {};
 
-    if (currentToastEl && currentToastEl.parentNode && !currentToastEl._persistent) {
-      if (currentToastEl._removeTimer) clearTimeout(currentToastEl._removeTimer);
-      currentToastEl.parentNode.removeChild(currentToastEl);
-      currentToastEl = null;
+    if (blsi.Toast && typeof blsi.Toast.clearIfTransient === 'function') {
+      blsi.Toast.clearIfTransient();
     }
-  }
-
-  function dismissToast() {
-    if (currentToastEl) _dismissToast(currentToastEl);
   }
 
   return {
     init,
     destroy,
-    showToast,
-    dismissToast,
     _setPickerActive(v) { _isPickerActive = !!v; },
     // Exposed for content_script dedup between JS matcher and chrome.commands.
     _getFireToken() { return FIRE_TOKEN; },

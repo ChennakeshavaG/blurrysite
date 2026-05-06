@@ -84,7 +84,7 @@
     "message": "सामान्य"
   },
   "nav_general_desc": {
-    "message": "भाषा, टैब प्राइवेसी, और बहुत कुछ"
+    "message": "भाषा, बैकअप और रीस्टोर, और बहुत कुछ"
   },
   "setting_language": {
     "message": "पॉपअप की भाषा"
@@ -647,6 +647,16 @@
       }
     }
   },
+  "popup_pick_blur_cap_reached": {
+    "message": "$COUNT$ / $MAX$ — इस साइट के लिए अधिकतम आइटम पहुँच गए। एक हटाकर ही नया जोड़ें।",
+    "placeholders": {
+      "count": { "content": "$1", "example": "10" },
+      "max":   { "content": "$2", "example": "10" }
+    }
+  },
+  "toast_pick_blur_cap_reached": {
+    "message": "Pick & Blur — इस साइट के लिए अधिकतम आइटम पहुँच गए"
+  },
   "mode_open_picker": {
     "message": "पिकर खोलें"
   },
@@ -722,29 +732,14 @@
   "automate_toast_tab_switch": {
     "message": "ब्लर लागू — टैब बदला"
   },
-  "automate_toast_skipped": {
-    "message": "ब्लर पहले से चालू — ऑटोमेट छोड़ा"
-  },
   "notif_screen_share_active": {
     "message": "स्क्रीन शेयर चालू"
-  },
-  "notif_automate_skipped": {
-    "message": "ऑटोमेट ट्रिगर छोड़ा गया"
   },
   "notif_sharing_for": {
     "message": "शेयर हो रहा"
   },
   "notif_sharing_this_screen": {
     "message": "यह स्क्रीन शेयर हो रही है"
-  },
-  "notif_skipped_reason_site_rule": {
-    "message": "ब्लर पहले से चालू (साइट नियम)"
-  },
-  "notif_skipped_reason_manual": {
-    "message": "ब्लर पहले से चालू"
-  },
-  "notif_skipped_reason_pick_blur": {
-    "message": "Pick & Blur पहले से चालू"
   },
   "notif_suppressed_for_tab": {
     "message": "इस टैब के लिए चुप कर दिया"
@@ -767,5 +762,95 @@
   },
   "site_rule_managed_edit_cta": {
     "message": "साइट नियमों में बदलें"
+  },
+  "section_stay_blurry": {
+    "message": "ब्लर बनाए रखें"
+  },
+  "section_stay_blurry_desc": {
+    "message": "जब ज़रूरत हो तब आपकी स्क्रीन ब्लर रहती है"
+  },
+  "section_activity": {
+    "message": "गतिविधि"
+  },
+  "section_how_to_blur": {
+    "message": "कैसे ब्लर करें"
+  },
+  "section_how_to_blur_desc": {
+    "message": "कुछ भी ब्लर करें। अपने तरीके से।"
+  },
+  "section_smart_triggers": {
+    "message": "स्मार्ट ट्रिगर"
+  },
+  "section_smart_triggers_desc": {
+    "message": "जब आप दूर हों तो ऑटो ब्लर"
+  },
+  "subpage_blur_settings_title": {
+    "message": "ब्लर सेटिंग्स"
+  },
+  "protect_screen_share": {
+    "message": "स्क्रीन शेयर"
+  },
+  "protect_screen_share_desc": {
+    "message": "स्क्रीन शेयर करते समय स्वतः ब्लर करता है"
+  },
+  "protect_sensitive_info": {
+    "message": "संवेदनशील जानकारी"
+  },
+  "protect_sensitive_info_desc": {
+    "message": "ईमेल, कार्ड और फ़ोन नंबर छुपाता है"
+  },
+  "protect_hide_tab_title": {
+    "message": "टैब शीर्षक छुपाएं"
+  },
+  "protect_hide_tab_title_desc": {
+    "message": "टैब शीर्षक बदलता है ताकि दूसरे न देख सकें"
+  },
+  "trigger_tab_switch": {
+    "message": "टैब स्विच"
+  },
+  "trigger_tab_switch_desc": {
+    "message": "दूसरे टैब पर जाने पर ब्लर करता है"
+  },
+  "trigger_idle_timer": {
+    "message": "निष्क्रिय टाइमर"
+  },
+  "trigger_idle_timer_desc": {
+    "message": "कुछ देर निष्क्रिय रहने पर ब्लर करता है"
+  },
+  "welcome_headline": {
+    "message": "Blurry Site में आपका स्वागत है"
+  },
+  "welcome_intro": {
+    "message": "आपका ब्राउज़र अब सुरक्षित है:"
+  },
+  "welcome_screen_share_title": {
+    "message": "स्क्रीन शेयर सुरक्षा"
+  },
+  "welcome_screen_share_desc": {
+    "message": "शेयर करते समय ऑटो-ब्लर"
+  },
+  "welcome_pii_title": {
+    "message": "संवेदनशील जानकारी छुपाना"
+  },
+  "welcome_pii_desc": {
+    "message": "ईमेल, कार्ड, फ़ोन छुपाता है"
+  },
+  "welcome_pick_blur_title": {
+    "message": "चुनें और ब्लर करें"
+  },
+  "welcome_pick_blur_desc": {
+    "message": "किसी भी एलीमेंट पर क्लिक करके ब्लर करें"
+  },
+  "welcome_triggers_title": {
+    "message": "स्मार्ट ट्रिगर"
+  },
+  "welcome_triggers_desc": {
+    "message": "टैब स्विच / निष्क्रिय पर ऑटो-ब्लर"
+  },
+  "welcome_cta": {
+    "message": "समझ गया, चलें →"
+  },
+  "welcome_badge_on": {
+    "message": "चालू"
   }
 }

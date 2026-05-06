@@ -3,6 +3,7 @@
 
   const State = window.BlurrySitePopupState;
   const UI    = window.BlurrySitePopupUI;
+  const log   = blsi.Logger.scope('popup');
 
   let _highlightedRowKey = null;
 
@@ -29,7 +30,7 @@
   // ── Open Site Rules sub-page ──────────────────────────────────────────────
   // `opts.focusRule` (optional): { hostname_value, hostname_type } — auto-expand
   // the matching rule card after render. Used by the "Managed by site rule"
-  // badges in the Automate / PII sub-pages.
+  // badge in the Stay Blurry / Smart Triggers sections.
   function _openSiteRulesPage(opts) {
     const bodyEl = document.getElementById('bl-site-rules-body');
     UI.showView('bl-view-site-rules', true);
@@ -103,10 +104,6 @@
     await _saveAndApply(patch);
   }
 
-  async function _onClearAutomate() {
-    await State.clearAutomateBlur();
-    _renderCurrent();
-  }
 
   // scope ∈ 'tab' | 'site_session' | 'feature'
   async function _onSuppressScreenShare(scope) {
@@ -192,7 +189,7 @@
         { type: blsi.popup.get_status },
         { frameId: 0 },
         (response) => {
-          void chrome.runtime.lastError;
+          if (chrome.runtime.lastError) log.warn('sendMessage get_status', chrome.runtime.lastError.message);
           if (response && response.isPickerActive) {
             window.close();
           } else {
@@ -200,12 +197,91 @@
               tabs[0].id,
               { type: blsi.command.toggle_picker, picker_mode: mode },
               { frameId: 0 },
-              () => { void chrome.runtime.lastError; window.close(); }
+              () => { if (chrome.runtime.lastError) log.warn('sendMessage toggle_picker', chrome.runtime.lastError.message); window.close(); }
             );
           }
         }
       );
     });
+  }
+
+  // ── Welcome card (first install) ──────────────────────────────────────────
+  function _showWelcomeCard() {
+    var _t = BlurrySitePopupShared.t;
+    var el = document.getElementById('bl-welcome');
+    if (!el) return;
+
+    var features = [
+      { titleKey: 'welcome_screen_share_title', descKey: 'welcome_screen_share_desc', badgeOn: true,
+        svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
+      { titleKey: 'welcome_pii_title', descKey: 'welcome_pii_desc', badgeOn: true,
+        svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 11h1a3 3 0 0 1 0 6h-1"/><path d="M9 12v6"/><path d="M13 12v6"/><circle cx="12" cy="6" r="4"/></svg>' },
+      { titleKey: 'welcome_pick_blur_title', descKey: 'welcome_pick_blur_desc', badgeOn: false,
+        svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>' },
+      { titleKey: 'welcome_triggers_title', descKey: 'welcome_triggers_desc', badgeOn: false,
+        svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' },
+    ];
+
+    var frag = document.createDocumentFragment();
+
+    var headline = document.createElement('div');
+    headline.className = 'bl-welcome__headline';
+    headline.textContent = _t('welcome_headline');
+    frag.appendChild(headline);
+
+    var intro = document.createElement('div');
+    intro.className = 'bl-welcome__intro';
+    intro.textContent = _t('welcome_intro');
+    frag.appendChild(intro);
+
+    var list = document.createElement('div');
+    list.className = 'bl-welcome__features';
+    for (var i = 0; i < features.length; i++) {
+      var f = features[i];
+      var row = document.createElement('div');
+      row.className = 'bl-welcome__feature';
+
+      var icon = document.createElement('span');
+      icon.className = 'bl-welcome__feature-icon';
+      icon.innerHTML = f.svg;
+      row.appendChild(icon);
+
+      var body = document.createElement('div');
+      body.className = 'bl-welcome__feature-body';
+      var title = document.createElement('div');
+      title.className = 'bl-welcome__feature-title';
+      title.textContent = _t(f.titleKey);
+      body.appendChild(title);
+      var desc = document.createElement('div');
+      desc.className = 'bl-welcome__feature-desc';
+      desc.textContent = _t(f.descKey);
+      body.appendChild(desc);
+      row.appendChild(body);
+
+      if (f.badgeOn) {
+        var badge = document.createElement('span');
+        badge.className = 'bl-welcome__badge';
+        badge.textContent = _t('welcome_badge_on');
+        row.appendChild(badge);
+      }
+      list.appendChild(row);
+    }
+    frag.appendChild(list);
+
+    var cta = document.createElement('button');
+    cta.className = 'bl-welcome__cta';
+    cta.textContent = _t('welcome_cta');
+    cta.addEventListener('click', function () {
+      chrome.storage.local.set({ welcome_dismissed: true }, () => {
+        if (chrome.runtime.lastError) log.warn('welcome_dismissed set', chrome.runtime.lastError.message);
+      });
+      el.hidden = true;
+    });
+    frag.appendChild(cta);
+
+    el.replaceChildren();
+    el.appendChild(frag);
+    el.hidden = false;
   }
 
   // ── Init ─────────────────────────────────────────────────────────────────
@@ -243,6 +319,12 @@
 
     UI.renderPowerButton(State.get().settings.global_default_settings.enabled);
     _renderCurrent();
+
+    // ── Welcome card (first install) ────────────────────────────────────
+    var welcomeDismissed = await new Promise(function (resolve) {
+      chrome.storage.local.get('welcome_dismissed', function (r) { resolve(!!r.welcome_dismissed); });
+    });
+    if (!welcomeDismissed) _showWelcomeCard();
 
     // ── Live reactivity via external storage changes ─────────────────────
     State.onExternalChange((newModel) => {
@@ -407,7 +489,7 @@
                 tabs[0].id,
                 { type: blsi.popup.clear_highlight },
                 { frameId: 0 },
-                () => { void chrome.runtime.lastError; }
+                () => { if (chrome.runtime.lastError) log.warn('sendMessage clear_highlight', chrome.runtime.lastError.message); }
               );
             }
           });
@@ -487,7 +569,7 @@
             tabs[0].id,
             { type: blsi.popup.highlight_item, item_type: row.dataset.highlightType, selectors, id: row.dataset.highlightId },
             { frameId: 0 },
-            () => { void chrome.runtime.lastError; }
+            () => { if (chrome.runtime.lastError) log.warn('sendMessage highlight_item', chrome.runtime.lastError.message); }
           );
         }
       });
@@ -506,7 +588,7 @@
             tabs[0].id,
             { type: blsi.popup.clear_highlight },
             { frameId: 0 },
-            () => { void chrome.runtime.lastError; }
+            () => { if (chrome.runtime.lastError) log.warn('sendMessage clear_highlight', chrome.runtime.lastError.message); }
           );
         }
       });
@@ -520,39 +602,10 @@
             tabs[0].id,
             { type: blsi.popup.clear_highlight },
             { frameId: 0 },
-            () => { void chrome.runtime.lastError; }
+            () => { if (chrome.runtime.lastError) log.warn('sendMessage clear_highlight', chrome.runtime.lastError.message); }
           );
         }
       });
-    });
-
-    // ── PII master toggle ─────────────────────────────────────────────────
-    document.getElementById('bl-pii').addEventListener('change', async (e) => {
-      if (e.target.id !== 'bl-pii-master') return;
-      if (e.target.disabled) { e.preventDefault(); return; }
-      const on = e.target.checked;
-      await _saveAndApply({ auto_detect_pii: { settings: { email: on, numeric: on } } });
-    });
-
-    // ── PII mode chip click ───────────────────────────────────────────────
-    document.getElementById('bl-pii-chips').addEventListener('click', async (e) => {
-      const chip = e.target.closest('[data-pii-mode]');
-      if (!chip || chip.disabled) return;
-      await _saveAndApply({ auto_detect_pii: { settings: { pii_mode: chip.dataset.piiMode } } });
-    });
-
-    // ── Automate modify sub-page ──────────────────────────────────────────
-    document.getElementById('bl-automate-modify').addEventListener('click', () => {
-      const bodyEl = document.getElementById('bl-automate-modify-body');
-      const st = State.get();
-      BlurrySitePopupRenderAutomate.renderBody(bodyEl, st.settings, _onSave, {
-        resolved:        st.resolved,
-        ruleOverrides:   st.ruleOverrides,
-        ruleMatch:       st.ruleMatch,
-        onOpenManagingRule: _onOpenManagingRule,
-      });
-      UI.showView('bl-view-automate-modify', true);
-      _updateSubpageArrows(bodyEl);
     });
 
     // ── Shortcuts sub-page ────────────────────────────────────────────────

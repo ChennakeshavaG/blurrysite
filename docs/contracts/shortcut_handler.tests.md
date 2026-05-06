@@ -9,6 +9,8 @@ bindings, modifier matching semantics (exact set, side-agnostic), early-return g
 for noisy key events, Escape routing to the picker-exit callback, fire-token
 exposure, and lifecycle (destroy / re-init / edge input handling).
 
+`loadShortcutHandler()` requires `src/toast.js` first when present so `blsi.Toast` is available — `Shortcuts.destroy()` delegates to `blsi.Toast.clearIfTransient()`.
+
 Unlike other test files this one has no stub fallback — `loadShortcutHandler()`
 throws if `shortcut_handler.js` is absent, making the real file mandatory.
 
@@ -72,8 +74,8 @@ throws if `shortcut_handler.js` is absent, making the real file mandatory.
 - `handles empty shortcuts object gracefully` — `init({}, {})` does not throw.
 - `handles null shortcuts gracefully` — `init(null, {})` does not throw.
 - `multi-chord bindings (length > 1) are skipped (phase 2)` — a binding with two chords (`[{code:'KeyG'}, {code:'KeyI'}]`) does not fire on a single keydown matching the first chord (phase-2 sequence matching not yet implemented).
-- `destroy preserves persistent toast` — after `showToast` with `{ persistent: true }`, calling `destroy()` does not remove the toast from the DOM; `currentToastEl` is retained.
-- `destroy removes non-persistent toast` — after `showToast` without persistent flag, calling `destroy()` removes the toast from the DOM.
+- `destroy preserves persistent toast (via blsi.Toast.clearIfTransient)` — after `blsi.Toast.show(..., { persistent: true })`, calling `Shortcuts.destroy()` does not remove the toast from the DOM. `Shortcuts.destroy` delegates to `blsi.Toast.clearIfTransient`, which preserves persistent toasts.
+- `destroy removes non-persistent toast (via blsi.Toast.clearIfTransient)` — after `blsi.Toast.show(...)` without persistent flag, calling `Shortcuts.destroy()` removes the toast from the DOM.
 
 ## Edge Cases Covered
 
@@ -89,7 +91,6 @@ throws if `shortcut_handler.js` is absent, making the real file mandatory.
 ## Coverage Gaps
 
 - No test that `event.defaultPrevented === true` after a matched shortcut fires (expected: `preventDefault()` is called on the matched event).
-- `showToast()` is a public method with timer-based auto-dismiss logic that is entirely untested.
-- No test for calling `destroy()` while a `showToast` animation/timer is still pending — potential timer leak risk.
+- Toast lifecycle (timer-based auto-dismiss, persistent flag, replacement semantics) is owned by `blsi.Toast` (`docs/contracts/toast.md`). `shortcut_handler` no longer renders or owns any toast DOM — it only delegates teardown via `blsi.Toast.clearIfTransient()`.
 - No test for `init()` called with a binding whose `chord.mods` is `undefined` (defensive path for malformed binding objects).
 - No integration test confirming that `chrome.commands` relay stamping plus the JS keydown path together produce exactly one callback invocation — requires content_script involvement.

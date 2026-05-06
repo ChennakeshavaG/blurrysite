@@ -724,7 +724,7 @@ const BlurrySitePiiDetectors = (() => {
       "\\s*[:=#\\-\\u2014]?\\s*" +
       "(?:is\\s+|of\\s+)?" +
       "[\"']?" +
-      "([A-Za-z0-9][A-Za-z0-9._\\-]{3,63})" +
+      "([A-Za-z0-9][A-Za-z0-9._\\-]{11,63})" +
       "[\"']?",
     "gid",
   );
@@ -756,7 +756,7 @@ const BlurrySitePiiDetectors = (() => {
   );
 
   function _validateValue(val) {
-    if (val.length < 4) return false;
+    if (val.length < 12) return false;
     if (!/[^a-zA-Z]/.test(val)) return false;
     if (/^(.)\1+$/.test(val)) return false;
     return true;

@@ -38,6 +38,7 @@ On every SW wake (Chrome) or event page start (Firefox):
 | `State` | `blsi.Automate.State` — reference to the session state module (loaded via importScripts) |
 | `COMMAND_TO_MESSAGE` | Frozen `{ chromeCommandName: messageType }` map, auto-built from action registry |
 | `log` | Scoped logger: `blsi.Logger.scope('bg')` |
+| `_menuCreating` | Boolean guard — prevents concurrent `createContextMenus()` calls from racing (onInstalled + onStartup can fire in same wake cycle) |
 
 ## Lifecycle Events
 

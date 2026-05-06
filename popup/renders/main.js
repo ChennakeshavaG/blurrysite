@@ -14,13 +14,6 @@ const BlurrySitePopupRender = (() => {
     color:    'htb_chip_color',
   };
 
-  const _PII_KEY = {
-    blur:     'pii_chip_blur',
-    frosted:  'pii_chip_frosted',
-    redacted: 'pii_chip_redacted',
-    starred:  'pii_chip_starred',
-  };
-
   const _CAT_KEY = {
     text:      'cat_text',
     media:     'cat_media',
@@ -135,91 +128,6 @@ const BlurrySitePopupRender = (() => {
     }
   }
 
-  // ── PII section ────────────────────────────────────────────────────────────
-
-  function renderPiiSection(settings, onSave, ctx) {
-    const toggleEl   = document.getElementById('bl-pii-master');
-    const chipsEl    = document.getElementById('bl-pii-chips');
-    const colorRowEl = document.getElementById('bl-pii-color-row');
-    if (!toggleEl || !chipsEl) return;
-
-    const ov = (ctx && ctx.ruleOverrides) || {};
-    const resolved = ctx && ctx.resolved;
-    // For the master toggle, if any of the four PII fields is rule-overridden,
-    // gate the whole section to read-only. Display value uses resolved when available.
-    const piiManaged = !!(ov.pii_email || ov.pii_numeric || ov.pii_mode || ov.pii_redaction_color);
-    const emailVal   = resolved && typeof resolved.pii_email === 'boolean' ? resolved.pii_email : settings.auto_detect_pii.settings.email;
-    const numericVal = resolved && typeof resolved.pii_numeric === 'boolean' ? resolved.pii_numeric : settings.auto_detect_pii.settings.numeric;
-    const modeVal    = (resolved && resolved.pii_mode) || settings.auto_detect_pii.settings.pii_mode;
-    const colorVal   = (resolved && resolved.pii_redaction_color) || settings.auto_detect_pii.settings.pii_redaction_color || '#000000';
-
-    const masterOn = !!(emailVal || numericVal);
-    toggleEl.checked = masterOn;
-    toggleEl.disabled = piiManaged;
-
-    chipsEl.replaceChildren();
-    for (const t of ['blur', 'frosted', 'redacted', 'starred']) {
-      const btn = document.createElement('button');
-      const isActive = t === modeVal;
-      btn.className = 'bl-chip' + (isActive ? ' bl-chip--active' + (masterOn ? ' bl-glow-active' : '') : '');
-      btn.dataset.piiMode = t;
-      btn.textContent = _t(_PII_KEY[t]);
-      if (_MODE_ASSET[t]) btn.dataset.tooltipMedia = _MODE_ASSET[t];
-      if (ov.pii_mode) btn.disabled = true;
-      chipsEl.appendChild(btn);
-    }
-
-    // Render / clear the "Managed by site rule" badge on the PII section.
-    let pii = document.getElementById('bl-pii');
-    if (pii) {
-      let badge = pii.querySelector('.bl-managed-badge');
-      if (piiManaged) {
-        if (!badge) {
-          badge = document.createElement('button');
-          badge.type = 'button';
-          badge.className = 'bl-managed-badge';
-          badge.textContent = _t('popup_badge_managed_by_rule') || 'Managed by site rule';
-          badge.title = badge.textContent;
-          if (ctx && ctx.onOpenManagingRule) badge.addEventListener('click', ctx.onOpenManagingRule);
-          pii.appendChild(badge);
-        }
-      } else if (badge) {
-        badge.remove();
-      }
-    }
-
-    if (colorRowEl) {
-      const isRedacted = modeVal === 'redacted';
-      colorRowEl.hidden = !isRedacted;
-      if (isRedacted && onSave) {
-        let colorInput = colorRowEl.querySelector('input[type="color"]');
-        if (!colorInput) {
-          colorInput = document.createElement('input');
-          colorInput.type = 'color';
-          colorInput.className = 'bl-color-input';
-          colorInput.addEventListener('input', function () {
-            if (!colorInput.disabled) {
-              onSave({ auto_detect_pii: { settings: { pii_redaction_color: colorInput.value } } });
-            }
-          });
-          const colorLabel = document.createElement('span');
-          colorLabel.className = 'bl-form-row__label';
-          colorLabel.textContent = _t('setting_redaction_color');
-          const row = document.createElement('div');
-          row.className = 'bl-color-row';
-          row.appendChild(colorInput);
-          row.appendChild(colorLabel);
-          colorRowEl.appendChild(row);
-        }
-        // Update value without recreating the element — keeps picker open during drag.
-        colorInput.value = colorVal;
-        colorInput.disabled = !!ov.pii_redaction_color;
-      } else {
-        colorRowEl.replaceChildren();
-      }
-    }
-  }
-
   // ── Notification area (site-rule pill + per-trigger sub-cards) ────────────
 
   function renderNotifArea(activeRule, settings, onOpenSiteRules, ctx) {
@@ -262,7 +170,6 @@ const BlurrySitePopupRender = (() => {
 
     // ── Automate sub-cards (one per trigger) ────────────────────────────
     var triggers     = settings.automate_blur_triggers || {};
-    var skipReason   = settings.automate_blur_skip_reason || null;
     var ssState      = settings.screen_share_state || null;
     var ssSuppressedHost = !!settings.screen_share_suppressed_for_host;
     var ssSuppressedTab  = !!settings.screen_share_suppressed_for_tab;
@@ -280,7 +187,7 @@ const BlurrySitePopupRender = (() => {
     var tsSuspended    = !!settings.tab_switch_suspended;
     var ssSuspended    = !!settings.screen_share_suspended;
 
-    var showAny = !!(settings.automate_blur_active || settings.automate_blur_skipped
+    var showAny = !!(settings.automate_blur_active
       || ssSuppressedHost || ssSuppressedTab || ssIsSharingTab
       || idleSuppressedTab || idleSuppressedSite
       || tsSuppressedTab || tsSuppressedSite
@@ -302,9 +209,10 @@ const BlurrySitePopupRender = (() => {
           }
         },
         actions: onSuppressSS
-          ? [{ label: _t('automate_disable_feature'), onClick: function () { onSuppressSS('feature'); }, tooltip: _t('automate_tooltip_turn_off') }]
+          ? [{ label: _t('automate_disable_feature'), onClick: function () { onSuppressSS('feature'); }, variant: 'suspend', tooltip: _t('automate_tooltip_turn_off') }]
           : null,
       }));
+      _prependActivityHeading(el);
       return;
     }
 
@@ -325,9 +233,9 @@ const BlurrySitePopupRender = (() => {
         ssCfg.suppression = { label: _t('notif_suppressed_for_site'), onUndo: function () { if (onUnsuppressSS) onUnsuppressSS('site_session'); } };
       } else if (triggers.screen_share && onSuppressSS && !ssSuppressedTab) {
         ssCfg.actions = [
-          { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressSS('tab'); }, tooltip: _t('automate_tooltip_skip_tab') },
-          { label: _t('automate_stop_site_session'),  onClick: function () { onSuppressSS('site_session'); }, tooltip: _t('automate_tooltip_skip_site') },
-          { label: _t('automate_disable_feature'),    onClick: function () { onSuppressSS('feature'); }, tooltip: _t('automate_tooltip_turn_off') },
+          { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressSS('tab'); },          variant: 'skip',    tooltip: _t('automate_tooltip_skip_tab') },
+          { label: _t('automate_stop_site_session'), onClick: function () { onSuppressSS('site_session'); }, variant: 'skip',    tooltip: _t('automate_tooltip_skip_site') },
+          { label: _t('automate_disable_feature'),   onClick: function () { onSuppressSS('feature'); },      variant: 'suspend', tooltip: _t('automate_tooltip_turn_off') },
         ];
       }
       el.appendChild(_buildTriggerSubCard(ssCfg));
@@ -368,9 +276,9 @@ const BlurrySitePopupRender = (() => {
         };
         if (onSuppressIdle && !idleSuppressedTab) {
           idleCfg.actions = [
-            { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressIdle('tab'); }, tooltip: _t('automate_tooltip_skip_tab') },
-            { label: _t('automate_stop_site_session'),  onClick: function () { onSuppressIdle('site_session'); }, tooltip: _t('automate_tooltip_skip_site') },
-            { label: _t('automate_disable_feature'),    onClick: function () { onSuppressIdle('feature'); }, tooltip: _t('automate_tooltip_turn_off') },
+            { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressIdle('tab'); },          variant: 'skip',    tooltip: _t('automate_tooltip_skip_tab') },
+            { label: _t('automate_stop_site_session'), onClick: function () { onSuppressIdle('site_session'); }, variant: 'skip',    tooltip: _t('automate_tooltip_skip_site') },
+            { label: _t('automate_disable_feature'),   onClick: function () { onSuppressIdle('feature'); },      variant: 'suspend', tooltip: _t('automate_tooltip_turn_off') },
           ];
         }
       } else {
@@ -391,24 +299,24 @@ const BlurrySitePopupRender = (() => {
         tsCfg.suppression = { label: _t('automate_tab_switch') + ' — ' + _t('notif_suspended'), onUndo: function () { if (onUnsuppressTS) onUnsuppressTS('feature'); } };
       } else if (triggers.tab_switch && onSuppressTS && !tsSuppressedTab) {
         tsCfg.actions = [
-          { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressTS('tab'); }, tooltip: _t('automate_tooltip_skip_tab') },
-          { label: _t('automate_stop_site_session'),  onClick: function () { onSuppressTS('site_session'); }, tooltip: _t('automate_tooltip_skip_site') },
-          { label: _t('automate_disable_feature'),    onClick: function () { onSuppressTS('feature'); }, tooltip: _t('automate_tooltip_turn_off') },
+          { label: _t('automate_stop_per_tab'),      onClick: function () { onSuppressTS('tab'); },          variant: 'skip',    tooltip: _t('automate_tooltip_skip_tab') },
+          { label: _t('automate_stop_site_session'), onClick: function () { onSuppressTS('site_session'); }, variant: 'skip',    tooltip: _t('automate_tooltip_skip_site') },
+          { label: _t('automate_disable_feature'),   onClick: function () { onSuppressTS('feature'); },      variant: 'suspend', tooltip: _t('automate_tooltip_turn_off') },
         ];
       }
       el.appendChild(_buildTriggerSubCard(tsCfg));
     }
 
-    // Skipped state — info-only card (no active triggers)
-    if (settings.automate_blur_skipped && !settings.automate_blur_active) {
-      var reasonKey = skipReason === 'site_rule' ? 'notif_skipped_reason_site_rule'
-        : skipReason === 'manual'    ? 'notif_skipped_reason_manual'
-        : skipReason === 'pick_blur' ? 'notif_skipped_reason_pick_blur'
-        : null;
-      el.appendChild(_buildTriggerSubCard({
-        infoText: _t('notif_automate_skipped') + (reasonKey ? ' — ' + _t(reasonKey) : ''),
-      }));
-    }
+    _prependActivityHeading(el);
+  }
+
+  function _prependActivityHeading(el) {
+    if (!el.children.length) return;
+    if (el.firstElementChild && el.firstElementChild.classList.contains('bl-notif-heading')) return;
+    var h = document.createElement('div');
+    h.className = 'bl-notif-heading';
+    h.textContent = _t('section_activity');
+    el.insertBefore(h, el.firstChild);
   }
 
   function _buildTriggerSubCard(cfg) {
@@ -485,7 +393,11 @@ const BlurrySitePopupRender = (() => {
 
   function _cardBtn(text, onClick, variant, tooltip) {
     const b = document.createElement('button');
-    b.className = 'bl-notif-btn' + (variant === 'warn' ? ' bl-notif-btn--warn' : '');
+    var cls = 'bl-notif-btn';
+    if (variant === 'warn')         cls += ' bl-notif-btn--warn';
+    else if (variant === 'skip')    cls += ' bl-notif-btn--skip';
+    else if (variant === 'suspend') cls += ' bl-notif-btn--suspend';
+    b.className = cls;
     b.textContent = text;
     if (tooltip) b.dataset.tooltipCaption = tooltip;
     b.addEventListener('click', function () { onClick(); });
@@ -504,29 +416,6 @@ const BlurrySitePopupRender = (() => {
     var sec = Math.max(0, Math.floor((Date.now() - _idleStartedAt) / 1000));
     if (sec < 60) return sec + 's';
     return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
-  }
-
-  // ── Automate section ───────────────────────────────────────────────────────
-
-  function renderAutomateSection(settings) {
-    const summaryEl = document.getElementById('bl-automate-summary');
-    if (!summaryEl) return;
-    summaryEl.replaceChildren();
-
-    const idle       = settings.automate.settings.idle        || { value: 5, unit: 'min', enabled: false };
-    const tab_switch = settings.automate.settings.tab_switch  || { enabled: false };
-    const ss         = settings.automate.settings.screen_share || { enabled: false };
-
-    const idleVal = (idle.enabled && idle.value > 0)
-      ? idle.value + ' ' + _t('automate_unit_' + idle.unit)
-      : _t('automate_off');
-    summaryEl.appendChild(_summaryRow(_t('automate_idle'), idleVal));
-
-    const tabVal = tab_switch.enabled ? _t('automate_on') : _t('automate_off');
-    summaryEl.appendChild(_summaryRow(_t('automate_tab_switch'), tabVal));
-
-    const ssVal = ss.enabled ? _t('automate_on') : _t('automate_off');
-    summaryEl.appendChild(_summaryRow(_t('automate_screen_share'), ssVal));
   }
 
   // ── Shared mode block helpers ──────────────────────────────────────────────
@@ -764,6 +653,18 @@ const BlurrySitePopupRender = (() => {
       const r = settings.global_default_settings.blur_radius;
       const strengthKey = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
       wrap.appendChild(_summaryRow(_t('htb_label_strength'), _t(strengthKey)));
+
+      const cap = (typeof blsi !== 'undefined' && typeof blsi.max_pick_blur_items_per_host === 'number')
+        ? blsi.max_pick_blur_items_per_host
+        : 10;
+      if (blurItems.length >= cap) {
+        const capMsg = document.createElement('p');
+        capMsg.className = 'bl-pick-cap-reached';
+        capMsg.textContent = _t('popup_pick_blur_cap_reached')
+          .replace('$COUNT$', String(blurItems.length))
+          .replace('$MAX$', String(cap));
+        wrap.appendChild(capMsg);
+      }
     } else {
       const countEl = document.createElement('p');
       countEl.className = 'bl-pick-count';
@@ -828,16 +729,18 @@ const BlurrySitePopupRender = (() => {
     document.body.classList.toggle('bl-rule-managed', ruleManaged);
 
     if (ruleManaged) {
-      // Banner replaces the modes/PII/automate UI on rule-managed hosts.
+      // Banner replaces the modes/protect/triggers UI on rule-managed hosts.
       _renderRuleManagedBanner(ctx.ruleMatch, ctx.onOpenManagingRule || onOpenSiteRules);
       _clearRuleManagedSections();
       return;
     }
 
     renderNotifArea(activeRule, settings, onOpenSiteRules, ctx);
+    BlurrySitePopupRenderProtect.renderSection(
+      document.getElementById('bl-stay-blurry'), ruleSettings, onSave, ctx);
     renderModesSection(settings, blurItems, isPageBlurred);
-    renderPiiSection(settings, onSave, ctx);
-    renderAutomateSection(settings);
+    BlurrySitePopupRenderTriggers.renderSection(
+      document.getElementById('bl-smart-triggers'), ruleSettings, onSave, ctx);
   }
 
   function _renderRuleManagedBanner(ruleMatch, onOpen) {
@@ -858,14 +761,14 @@ const BlurrySitePopupRender = (() => {
   }
 
   function _clearRuleManagedSections() {
-    var ids = ['bl-pii-chips', 'bl-pii-color-row', 'bl-automate-summary'];
+    var ids = ['bl-stay-blurry', 'bl-smart-triggers'];
     for (var i = 0; i < ids.length; i++) {
       var el = document.getElementById(ids[i]);
       if (el) el.replaceChildren();
     }
   }
 
-  return { renderAll, renderHtbSection, renderPiiSection, renderAutomateSection, renderModesSection, renderNotifArea };
+  return { renderAll, renderHtbSection, renderModesSection, renderNotifArea };
 })();
 
 window.BlurrySitePopupRender = BlurrySitePopupRender;

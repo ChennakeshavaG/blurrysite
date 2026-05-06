@@ -44,22 +44,27 @@ test starts from a clean closure (uninitialized Manager, empty caches).
 - Manager seeds tracking on `init` without firing toasts (so users aren't
   alerted about pre-existing state when a tab opens). Verified by writing
   `tab_switch[7]='fired'` to State *before* `Manager.init` and asserting
-  `Shortcuts.showToast` was not called during init's first `_evaluate`.
-- Idle toast fires on transition `'active' → 'idle'` (storage event) when
-  `automate_blur_only` is true.
-- Tab-switch toast fires on transition `'off' → 'fired'` (storage event)
-  when `automate_blur_only` is true.
-- Idle toast suppressed when manual blur is already active
-  (`automate_blur_only === false` → only the "skipped" toast can fire).
+  `blsi.Toast.show` was not called during init's first `_evaluate`.
+- Idle toast fires on transition `'active' → 'idle'` (storage event).
+- Tab-switch toast fires on transition `'off' → 'fired'` (storage event).
+- Idle toast still fires when manual blur is already active —
+  manual blur and automate triggers are independent (Overlay layers on top).
 - Master switch off (`global_default_settings.enabled === false`)
   suppresses all toasts even when triggers fire.
+- Master switch flipped off **mid-share** dismisses the persistent
+  screen-share toast: with `_last_ss_blurring === true`, an `enabled=false`
+  storage change must call `blsi.Toast.dismiss()` (the falling-edge cleanup
+  in `_fire_toasts` is unreachable on the `master_off` path, and the
+  toast's own auto-dismiss is suppressed by `persistent: true`).
 - `ss_stop_actions` callback is invoked when the screen-share toast fires;
-  resulting actions are passed to `Shortcuts.showToast`.
-- `idle_stop_actions` callback is invoked when the idle toast fires;
-  resolved actions array passed to `Shortcuts.showToast(msg, 5000, actions)`.
-- `tab_switch_stop_actions` callback is invoked when the tab-switch toast fires;
-  same Promise-based pattern as idle.
-- Falls back to bare `showToast(msg, 5000)` when stop_actions callback not provided.
+  resulting actions are passed to `blsi.Toast.show`.
+- Idle toast is **persistent info-only when `blsi.idle_toast_duration_seconds === 0`**: `Toast.show(msg, undefined, undefined, { persistent: true })` — no duration, no actions.
+- Idle toast honors `blsi.idle_toast_duration_seconds` when `> 0`: switches to a transient toast `Toast.show(msg, N*1000)` (N seconds, no actions, no opts).
+- Tab-switch toast is a **3s info notification**: `Toast.show(msg, 3000)` — no actions, no opts.
+- Idle persistent toast auto-dismisses on the falling edge: when idle phase returns to `'active'` after firing, Manager calls `blsi.Toast.dismiss()`.
+- Idle toast is **skipped while screen-share is active** — the rising-edge fire is gated on `!ss_blurring` so SS's actionable toast keeps the slot.
+
+Tests stub `blsi.Toast = { show, dismiss, clearIfTransient }` per-spec; Manager calls `blsi.Toast.show` exclusively (no `Shortcuts.showToast` ever).
 
 ### `init bootstrap evaluation`
 - `init` runs an immediate `_evaluate` so a tab opened mid-share with
@@ -90,7 +95,7 @@ test starts from a clean closure (uninitialized Manager, empty caches).
 
 ## Test count
 
-20 tests in 5 describe groups.
+21 tests in 5 describe groups.
 
 ## jsdom-specific notes
 

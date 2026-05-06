@@ -2,7 +2,7 @@
 
 ## Overview
 
-`popup/renders/main.js` is the main popup renderer exposed as `BlurrySitePopupRender`. It owns the central panel of the popup: the blur-all mode block, the pick-and-blur mode block (including the saved-items list), the PII section, and the automate section. It is a **pure render module** — it receives state as arguments and produces DOM; it never reads from `blsi.Model` or `BlurrySitePopupState` directly. All storage writes go through `onSave` callbacks passed by `popup.js`.
+`popup/renders/main.js` is the main popup renderer exposed as `BlurrySitePopupRender`. It owns the central panel of the popup: the blur-all mode block, the pick-and-blur mode block (including the saved-items list), and the notification area. It delegates the Stay Blurry section to `BlurrySitePopupRenderProtect` and the Smart Triggers section to `BlurrySitePopupRenderTriggers`. It is a **pure render module** — it receives state as arguments and produces DOM; it never reads from `blsi.Model` or `BlurrySitePopupState` directly. All storage writes go through `onSave` callbacks passed by `popup.js`.
 
 Depends on: `BlurrySitePopupShared.t` (i18n), `chrome.runtime.getURL` (asset URLs), `chrome.i18n.getMessage` (indirect via `_t`).
 
@@ -16,8 +16,7 @@ Depends on: `BlurrySitePopupShared.t` (i18n), `chrome.runtime.getURL` (asset URL
 
 **Params:**
 - `settings` (object) — full resolved settings snapshot in `blsi.DEFAULT_MODEL` shape, plus runtime extras:
-  - `settings.automate_blur_active`, `automate_blur_triggers`, `automate_blur_skipped`
-  - `settings.automate_blur_skip_reason` — `'site_rule' | 'manual' | 'pick_blur' | null`
+  - `settings.automate_blur_active`, `automate_blur_triggers`
   - `settings.screen_share_state` — `{ active, sharing_tab_id, started_at, is_sharing_tab }`
   - `settings.screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab` — booleans
   - `settings.idle_suppressed_for_tab`, `idle_suppressed_for_site` — booleans
@@ -36,7 +35,7 @@ Depends on: `BlurrySitePopupShared.t` (i18n), `chrome.runtime.getURL` (asset URL
 
 **Returns:** `void`
 
-**Rule-managed branch:** When `BlurrySitePopupShared.isRuleManaged(settings)` is true (computed against `_rule_match` + `_rule_overrides` merged from `ctx`), `renderAll` short-circuits: stamps `body.bl-rule-managed`, renders the `makeBanner(...)` element into `#bl-notif-area`, clears `#bl-mode-blur-all`, `#bl-mode-pick-blur`, `#bl-pii-chips`, `#bl-pii-color-row`, `#bl-automate-summary`, and skips the regular section renders. CSS hides `#bl-pii` and `#bl-automate` while the body class is set. Banner CTA calls `ctx.onOpenManagingRule(...)` (or falls back to `onOpenSiteRules`) with `{ focusRule }` so the deep-link auto-expands the matching rule.
+**Rule-managed branch:** When `BlurrySitePopupShared.isRuleManaged(settings)` is true (computed against `_rule_match` + `_rule_overrides` merged from `ctx`), `renderAll` short-circuits: stamps `body.bl-rule-managed`, renders the `makeBanner(...)` element into `#bl-notif-area`, clears `#bl-mode-blur-all`, `#bl-mode-pick-blur`, `#bl-stay-blurry`, `#bl-smart-triggers`, and skips the regular section renders. Banner CTA calls `ctx.onOpenManagingRule(...)` (or falls back to `onOpenSiteRules`) with `{ focusRule }` so the deep-link auto-expands the matching rule.
 
 **Side effects:**
 - Writes to DOM elements with fixed ids/classes defined in `popup.html`: `#bl-blur-all-toggle`, `#bl-pick-blur-toggle`, `#bl-htb-chips`, `#bl-htb-summary`, `#bl-pick-mode-chips`, `#bl-pick-items`, `#bl-pii-toggle`, `#bl-pii-section`, `#bl-automate-indicator`, `#bl-automate-indicator-screen-share`.
@@ -63,13 +62,14 @@ Renders the "How to Blur" chip row and summary for either blur-all or pick-and-b
 ### _renderPickItemList(blurItems)
 Renders the list of saved pick-and-blur items into `#bl-pick-items`. Each row: colored dot (cyan for sticky, amber for dynamic) + item name + type badge + remove button.
 
-### renderPiiSection(settings, onSave)
-Renders the PII detection sub-section into `#bl-pii-section`. Master toggle reflects `email || numeric`. Mode chip for the active blur type carries `bl-chip--active` always; `bl-glow-active` is added **only when master toggle is on** — chips do not glow when the feature is disabled.
+### Pick & Blur cap-reached inline message
+When `blurItems.length >= blsi.max_pick_blur_items_per_host` (default 10), `_renderPickBlurInfo` appends a `<p class="bl-pick-cap-reached">` below the strength row. Text comes from i18n key `popup_pick_blur_cap_reached` with `$COUNT$` and `$MAX$` placeholders. The message disappears automatically once the user removes an item.
 
 ### renderNotifArea(activeRule, settings, onOpenSiteRules, ctx)
-Renders into `#bl-notif-area`: site-rule pill on top (when `activeRule` truthy), then **per-trigger sub-cards** (one `bl-notif-card` per automate trigger). Each sub-card is self-contained: trigger label row + its own action buttons or suppression undo row.
+Renders into `#bl-notif-area`: an "Activity" section heading (when any pill or sub-card renders), the site-rule pill (when `activeRule` truthy), then **per-trigger sub-cards** (one `bl-notif-card` per automate trigger). Each sub-card is self-contained: trigger label row + its own action buttons or suppression undo row.
 
 **Rendering order:**
+0. **Activity heading** — `bl-notif-heading` element (text from `_t('section_activity')`) prepended once via `_prependActivityHeading(el)` after sub-card rendering completes, only if at least one child was appended. Suppressed entirely when the notif area is empty (so `:empty` hide rule still applies).
 1. **Site-rule pill** — unchanged, `bl-notif-pill` class.
 2. **Sharing-tab card** — when `ssIsSharingTab && ssShareLive`. This tab IS the one sharing its screen. Shows "Sharing this screen" trigger row with live elapsed timer + only "Suspend feature" button (no `variant: 'warn'` — suspend is non-destructive, session-only). Early-returns — no other sub-cards rendered.
 3. **Screen-share sub-card** — when `triggers.screen_share` is active, screen-share is suppressed (tab/host), or screen-share is suspended (`settings.screen_share_suspended`). Priority: suspended > suppressed > triggered. If suspended: shows "Suspended — resumes on restart" label + Resume/Undo button calling `ctx.onUnsuppressScreenShare('feature')`. If suppressed: shows undo row only, no actions. If active: trigger label + elapsed timer + 3-button action row.
@@ -79,9 +79,10 @@ Renders into `#bl-notif-area`: site-rule pill on top (when `activeRule` truthy),
    - **Triggered:** when `triggers.idle` is active. Shows trigger label + elapsed timer + 3-button action row (Skip tab / Skip site / Suspend feature).
    - **Suppressed:** when idle is suppressed (tab/site). Shows suppression undo row only.
 5. **Tab-switch sub-card** — when `triggers.tab_switch` is active, tab-switch is suppressed (tab/site), or tab-switch is suspended (`settings.tab_switch_suspended`). Same four-mode pattern as idle (suspended > suppressed > triggered), with Resume/Undo calling `ctx.onUnsuppressTabSwitch('feature')`.
-6. **Skipped info card** — when `automate_blur_skipped && !automate_blur_active`. Info-only card with trigger-neutral prefix (`notif_automate_skipped`) + skip reason suffix. No actions.
 
-No sub-cards rendered when none of `automate_blur_active`, `automate_blur_skipped`, `ssIsSharingTab`, any active suppression, any suspended trigger, or `idleEnabled` are true.
+There is no "skipped" card. Each automate trigger fires independently of manual blur, so the popup never renders a skip-reason placeholder.
+
+No sub-cards rendered when none of `automate_blur_active`, `ssIsSharingTab`, any active suppression, any suspended trigger, or `idleEnabled` are true.
 
 **Live elapsed timers**: `_shareTimer` and `_idleTimer` (module-level `setInterval` handles) tick every 1s, updating the elapsed-time span. Both cleared at the top of every `renderNotifArea` call via `clearInterval`. `_idleStartedAt` tracks when the popup first observes `triggers.idle === true` (reset to `null` when idle clears).
 
@@ -93,8 +94,12 @@ Private helper. Builds a single `bl-notif-card` element from a config object:
 - `cfg.triggerLabel` — string → dot + name row (only when no suppression).
 - `cfg.elapsed` — string → passed to `_triggerRow` detail.
 - `cfg.onTimerSetup(elapsedEl)` — callback to wire setInterval on the elapsed span.
-- `cfg.infoText` — string → italic info text (skipped state).
-- `cfg.actions` — `[{ label, onClick, variant?, tooltip? }]` → button row. `tooltip` sets `title` attribute on the button.
+- `cfg.infoText` — string → italic info text (e.g. idle pre-trigger duration hint).
+- `cfg.actions` — `[{ label, onClick, variant?, tooltip? }]` → button row. `tooltip` sets `data-tooltip-caption` on the button (popup tooltip system reads it). `variant` selects a CSS modifier on `.bl-notif-btn`:
+  - `'skip'` → `.bl-notif-btn--skip` (amber/yellow — used for "Skip tab" / "Skip site" actions).
+  - `'suspend'` → `.bl-notif-btn--suspend` (red/danger — used for the "Suspend feature" action).
+  - `'warn'` → `.bl-notif-btn--warn` (legacy red, still supported for non-card warn buttons).
+  - omitted → default green styling.
 
 ---
 
@@ -103,7 +108,6 @@ Private helper. Builds a single `bl-notif-card` element from a config object:
 | Constant | Type | Purpose |
 |---|---|---|
 | `_TYPE_KEY` | `object` | Maps blur type strings to i18n keys for mode chips |
-| `_PII_KEY` | `object` | Maps PII mode strings to i18n keys |
 | `_CAT_KEY` | `object` | Maps blur category names to i18n keys |
 | `_PICKER_MODE_KEY` | `object` | Maps picker mode strings to i18n keys for mode badge buttons |
 | `_PICKER_MODE_ASSET` | `object` | Maps picker mode strings to tooltip SVG asset URLs |

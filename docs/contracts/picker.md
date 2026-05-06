@@ -6,7 +6,7 @@
 
 - Global: `blsi.Picker`
 - IIFE pattern: `const Picker = (() => { ... })(); blsi.Picker = Picker;`
-- Depends on: `blsi.BlurEngine`, `blsi.SelectorUtils`, `blsi.ContentI18n`, `blsi.Shortcuts` (for the area-too-small toast), `blsi.css`, `blsi.ids`, `blsi.picker_modes`, `blsi.DEFAULT_MODEL`.
+- Depends on: `blsi.BlurEngine`, `blsi.SelectorUtils`, `blsi.ContentI18n`, `blsi.Toast` (for the area-too-small toast), `blsi.css`, `blsi.ids`, `blsi.picker_modes`, `blsi.DEFAULT_MODEL`.
 
 ---
 

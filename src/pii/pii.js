@@ -20,6 +20,11 @@ const BlurrySitePiiDetector = (() => {
    */
   function _wrapTextNode(textNode, matches) {
     if (matches.length === 0) return 0;
+    // Defensive: some pages monkey-patch CharacterData methods (e.g. via SPA
+    // frameworks) and TreeWalker may surface non-Text CharacterData (Comment,
+    // ProcessingInstruction). Only real Text nodes support `splitText` reliably.
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE
+        || typeof textNode.splitText !== 'function') return 0;
     const parent = textNode.parentNode;
     if (!parent) return 0;
 
@@ -147,7 +152,13 @@ const BlurrySitePiiDetector = (() => {
 
   var _SHORT_DIGIT_RE = /^\s*\d[\d \-]{2,14}\d\s*$/;
 
-  var _SKIP_RE = /^(?:CODE|KBD|SAMP)$/;
+  // Element tags whose text children we never scan / wrap.
+  // - CODE/KBD/SAMP: inline code; matches are almost always false positives.
+  // - SCRIPT/STYLE/NOSCRIPT: machine-only source — not rendered to the user.
+  //   Wrapping their text in <span> corrupts JS / CSS source for any code that
+  //   re-reads `.textContent` / `sheet.cssText` later, and serves no privacy
+  //   purpose because the contents aren't visible on the page.
+  var _SKIP_RE = /^(?:CODE|KBD|SAMP|SCRIPT|STYLE|NOSCRIPT)$/;
 
   var _walkerFilter = {
     acceptNode: function (node) {
@@ -158,7 +169,11 @@ const BlurrySitePiiDetector = (() => {
         if (blsi.PiiPreFilter.isCodeEditorWidget(node)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_SKIP;
       }
-      return NodeFilter.FILTER_ACCEPT;
+      // Only accept actual Text nodes. Comments / ProcessingInstructions /
+      // CDATASections also reach here under SHOW_ALL; we reject them so the
+      // wrap path never tries to splitText on a non-Text CharacterData.
+      if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+      return NodeFilter.FILTER_REJECT;
     }
   };
 
@@ -274,7 +289,13 @@ const BlurrySitePiiDetector = (() => {
           }
         }
       } else if (mutation.type === "characterData") {
-        if (mutation.target && !_shouldSkipMutation(mutation.target)) _processTextNode(mutation.target, activeTypes);
+        // characterData target is always a CharacterData (Text/Comment/PI/CDATA).
+        // Only process real Text nodes — Comments etc. shouldn't be PII-wrapped.
+        if (mutation.target
+            && mutation.target.nodeType === Node.TEXT_NODE
+            && !_shouldSkipMutation(mutation.target)) {
+          _processTextNode(mutation.target, activeTypes);
+        }
       }
     }
   }

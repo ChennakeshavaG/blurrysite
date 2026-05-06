@@ -74,8 +74,9 @@ Isolated world (run_at:"document_idle"):
 18a. automate/screen_share.js → blsi.Automate.ScreenShare (postMessage bridge; init/destroy/whoAmI/getTabId — listens for window 'message' with type '__blsi_screen_share' from MAIN world, opens port 'blsi-screen-share' + sends SCREEN_SHARE_STARTED/ENDED; port disconnect = crash-safety)
 18b. automate/overlay.js  → blsi.Automate.Overlay (viewport overlay primitive; show/hide/update; content only)
 18c. automate/visibility.js → blsi.Automate.Visibility (per-tab Page Lifecycle observer; init({tab_id})/destroy)
-18d. automate/manager.js  → blsi.Automate.Manager (automate orchestrator; drives Overlay from live state via Model.on_automate_change; init({tab_id,get_host_url,ss_stop_actions,idle_stop_actions,tab_switch_stop_actions})/destroy/on_url_change)
+18d. automate/manager.js  → blsi.Automate.Manager (automate orchestrator; drives Overlay from live state via Model.on_automate_change; init({tab_id,get_host_url,ss_stop_actions})/destroy/on_url_change — only screen-share carries action buttons; idle is persistent info-only, tab-switch is a 3s info notification)
 20. reveal_controller.js  → blsi.Reveal
+20a. toast.js             → blsi.Toast (in-page floating toast; show/dismiss/clearIfTransient — distinct from popup_ui toast)
 21. shortcut_handler.js   → blsi.Shortcuts
 22. selection_blur.js     → blsi.SelectionBlur (text selection blur; init/destroy/blurSelection/clearAll)
 23. screenshot.js         → blsi.Screenshot (viewport capture; captureViewport/download/copyToClipboard)
@@ -143,7 +144,7 @@ A module may only depend on modules loaded before it.
 - **Adding a detector** in 4 steps: (1) regex constant near the top of the file in the right grouping; (2) optional checksum function — if it requires a new algorithm, add to `pii_checksums.js` first with its own tests + contract entry; (3) frozen descriptor entry in the right array (Stage 1 if dispositive, Stage 2 otherwise); (4) integration test in `pii.test.js` (drive country via `<html lang>`, NOT `blsi.PiiState.setCountry()` — the facade clobbers it during scan).
 - **Checksum policy**: keep cheap algorithms with Stage-4 cascade savings (Luhn, Verhoeff, mod-97, mod-11 weighted, ISO 7064 mod-11-2, ISBN-10/13). Skip heavy or marginal ones — letter-table validators (Codice Fiscale / DNI / NIE / NRIC SG) drop in favour of country-aware positional shape; Base58Check / bech32 (BTC) deferred entirely (use prefix + keyword if/when added). Tradeoff: ~1% extra FP for letter-table-shaped IDs without country gate, ~0% on country-gated pages.
 - **Pattern order matters in `NUMERIC_RE`**: 7 alternations (currency-prefix / currency-code-suffix / comma-thousands / **parens-phone** / cc-and-2-digit-phone / phone-like-fallback / bare-4+-digits). Phone-form separator class is `[ \- ]` — NBSP via `\u00A0` escape (raw NBSP gets lost on copy-paste).
-- **Identifier-context sub-pass** runs after Stage 1, before Stage 2. Bespoke logic (does NOT use `_runDescriptor`) because PREFIX_RE captures a value group that the generic descriptor shape doesn't model. Two passes: `DISPOSITIVE_RE` (single alternation regex combining 18 provider patterns: Bearer / AKIA / ghp_ / github_pat_ / sk_/pk_ / AIza / xox- / JWT / glpat- / sk-ant- / sk- / SG. / npm_ / pypi- / AC / dop_v1_ / dckr_pat_ / hf_) + `PREFIX_RE` (`KEYWORD[: = # - --] value`). Value-validator: `length >= 4` AND contains at least one non-letter character AND not all-same-char.
+- **Identifier-context sub-pass** runs after Stage 1, before Stage 2. Bespoke logic (does NOT use `_runDescriptor`) because PREFIX_RE captures a value group that the generic descriptor shape doesn't model. Two passes: `DISPOSITIVE_RE` (single alternation regex combining 18 provider patterns: Bearer / AKIA / ghp_ / github_pat_ / sk_/pk_ / AIza / xox- / JWT / glpat- / sk-ant- / sk- / SG. / npm_ / pypi- / AC / dop_v1_ / dckr_pat_ / hf_) + `PREFIX_RE` (`KEYWORD[: = # - --] value`). Value-validator: `length >= 12` AND contains at least one non-letter character AND not all-same-char.
 - `findMatches` retrieves cached regex instances via `blsi.PiiState.getCachedRegex(prototype)` — never call `.exec()` on a live pattern object directly (lastIndex would persist).
 - Calls `blsi.PiiSuppressors.falsePositivesCheck` only on the Stage 3 NUMERIC_RE path — email matches and Stage 1/2 hits skip the suppressor cascade entirely.
 - Sorts and de-overlaps results before returning so the facade can splice text right-to-left without conflicts.
@@ -281,7 +282,7 @@ if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return
 - `debounced_patch(section, delta, delay?)` — same as `patch_section` but batches rapid calls (default **150 ms**). Use from popup inputs to avoid saturating storage writes.
 - `save_settings(patch)` — merges a partial settings patch into `model.global_default_settings`. Pass only the keys you want to update; unspecified keys are preserved.
 - `resolve_settings(hostname, url, tab_id?)` — **engine surface**. Folded settings + `engage` (= `(enabled !== false) && manual_blur`). Excludes automate decision fields. Used by `content_script._sync` / `handleStorageChange` / `onUrlChange` / init.
-- `resolve_automate(hostname, url, tab_id)` — **Manager surface**. Returns `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only/_skipped/_skip_reason`, `screen_share_state`, `screen_share_suppressed_*`, `automate_idle/_tab_switch/_screen_share` (gate settings post-rule fold), `_rule_match`, `_rule_overrides_automate`. Used exclusively by `blsi.Automate.Manager`.
+- `resolve_automate(hostname, url, tab_id)` — **Manager surface**. Returns `automate_blur_active`, `automate_blur_triggers`, `screen_share_state`, `screen_share_suppressed_*`, `automate_idle/_tab_switch/_screen_share` (gate settings post-rule fold), `_rule_match`, `_rule_overrides_automate`. Used exclusively by `blsi.Automate.Manager`. Each automate trigger fires independently of manual blur — there is no skipped/automate-only classification.
 - `resolve(hostname, url, tab_id?)` — backward-compat shim returning `{...resolve_settings, ...resolve_automate}`. Used by popup. Engine never calls this.
 - `get_blur_items(host)` / `save_blur_item(item)` / `remove_blur_item(id)` — blur item CRUD.
 - `clear_host(host)` — clears items for the host in local storage. Does not touch automate trigger state (per-tab/global, not per-host).
@@ -313,7 +314,14 @@ if (el.dataset.blSiBlur || el.dataset.blSiPickBlur || el.dataset.blSiPii) return
 - `CODE_TO_LABEL` is the complete letter/digit/symbol/function/numpad map. Unknown codes fall back to the code string itself.
 - `isReserved(chord)` / `lookup(chord)` / `RESERVED` — 14-entry browser-reserved chord hint list with per-platform filters (`any`, `mac`, `win`). Not a deny list — capture UI shows a warning but always allows save.
 
+### toast.js
+- In-page floating toast surface — `blsi.Toast`. Public: `show(text, duration?, actions?, opts?)`, `dismiss()`, `clearIfTransient()`. Single-slot; persistent toasts block replacement. Renders `.bl-si-toast` (CSS classes in `styles/content.css`).
+- Distinct from popup toast (`popup/popup_ui.js` → `.bl-toast`) — different DOM, lifecycle, and CSS prefix. Never cross-reference the two.
+- Used by `shortcut_handler` (Blurry Site action toast), `automate/manager` (idle / tab_switch / screen_share transitions), `content_script` (catch-up + PWA hint), `picker` (area-too-small).
+- `clearIfTransient()` is the destroy hook for `Shortcuts.destroy()` — preserves persistent toasts so the screen-share live toast survives shortcut teardown.
+
 ### shortcut_handler.js
+- Toast rendering is delegated to `blsi.Toast` — this module is now a pure matcher. No `showToast` / `dismissToast` exports.
 - `init(shortcuts, callbacks)` accepts `{ 'action-id': { binding: [{code, mods}] } }` (kebab-case action ids). Multi-chord bindings (length > 1) are skipped in phase 1 with a logger warning.
 - Modifiers are read from `event.altKey/ctrlKey/metaKey/shiftKey` — side-agnostic. Do NOT reintroduce a held-keys Set.
 - Key matching uses `event.code` (physical key, layout-independent).

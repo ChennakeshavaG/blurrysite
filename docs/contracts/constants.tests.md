@@ -110,9 +110,9 @@ Loaded implicitly by `tests/setup.js` via `require('../../src/constants.js')` �
 ### validate_model boundary values
 
 - `blur_radius accepts min boundary (2)` — value `2` passes through.
-- `blur_radius accepts max boundary (32)` — value `32` passes through.
+- `blur_radius accepts max boundary (20)` — value `20` passes through.
 - `blur_radius rejects below min (1)` — value `1` falls back to default `8`.
-- `blur_radius rejects above max (33)` — value `33` falls back to default `8`.
+- `blur_radius rejects above max (21)` — value `21` falls back to default `8`.
 - `blur_mode (in blur_all.settings) validates against enum` — `'blur'` passes; `'invalid'` falls back to `'blur'`.
 - `blur_mode migrates legacy values: gaussian→blur, masked→solid→censored` — `'gaussian'` → `'blur'`; `'masked'` → `'censored'`; `'solid'` → `'censored'`.
 - `pick_and_blur blur_type migrates legacy gaussian→blur` — `'gaussian'` in `pick_and_blur.settings.blur_type` → `'blur'`.

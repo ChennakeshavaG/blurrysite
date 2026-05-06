@@ -1,0 +1,102 @@
+/* triggers.css — Smart Triggers section (neutral cards) */
+
+.bl-trigger-card {
+  background: var(--bl-raised);
+  border: 1px solid var(--bl-divider);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.bl-triggers-title svg { color: var(--bl-text-muted); }
+
+/* Toggle track needs contrast against raised bg */
+.bl-trigger-card .bl-toggle__track {
+  background: var(--bl-surface);
+}
+
+/* ── Idle slider section ────────────────────────────────────────────── */
+.bl-auto-slider-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 6px;
+  transition: opacity 0.18s ease;
+}
+
+.bl-auto-slider-section[hidden] {
+  display: none;
+}
+
+.bl-auto-slider-val {
+  font-size: var(--bl-text-xl);
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.bl-auto-slider-val--idle  { color: var(--bl-text-primary); }
+
+/* ── Range slider ────────────────────────────────────────────────────── */
+.bl-auto-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--bl-auto-fill) var(--bl-slider-pct, 0%),
+    color-mix(in srgb, var(--bl-text-dim) 40%, transparent) var(--bl-slider-pct, 0%)
+  );
+  transition: opacity 0.18s ease;
+}
+
+.bl-auto-slider--idle  { --bl-auto-fill: var(--bl-text-muted); }
+
+.bl-auto-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bl-auto-fill);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bl-auto-fill) 22%, transparent);
+  transition: box-shadow 0.15s ease;
+}
+
+.bl-auto-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--bl-auto-fill) 28%, transparent);
+}
+
+.bl-auto-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bl-auto-fill);
+  cursor: pointer;
+}
+
+.bl-auto-slider:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.bl-auto-slider:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+}
+
+/* ── Min / max labels ────────────────────────────────────────────────── */
+.bl-auto-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--bl-text-xs);
+  color: var(--bl-text-dim);
+  padding: 0 1px;
+}
+

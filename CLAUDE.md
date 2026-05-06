@@ -37,6 +37,28 @@ Full table and load order: `src/CLAUDE.md`. Load order fixed by `manifest.json` 
 
 ---
 
+## Critical: Chrome API Error Logging
+
+Every `chrome.*` async API call must check `chrome.runtime.lastError` in its callback (or `.catch()` on promise form). **Never use `void chrome.runtime.lastError`** — always log via `blsi.Logger`:
+
+```js
+// Callback pattern — use scoped logger (log = blsi.Logger.scope('xxx'))
+chrome.some.api(..., () => {
+  if (chrome.runtime.lastError) {
+    log.warn('descriptive tag', chrome.runtime.lastError.message);
+    return; // bail if the callback does real work
+  }
+  // ... success path
+});
+
+// Promise pattern
+chrome.some.api(...).catch(e => log.warn('descriptive tag', e && e.message));
+```
+
+Unchecked `lastError` causes Chrome to log noisy "Unchecked runtime.lastError" warnings. Silent `void` discards useful debugging signal. `log.warn` respects the debug toggle — errors surface only when flow logging is enabled, keeping the console clean for users.
+
+---
+
 ## Critical: Message Protocol
 
 **Sender/handler type mismatch silently drops message — no error.** Full tables and add-new-type checklist: `.claude/rules/message-protocol.md` (auto-loaded when touching src/, background.js, or popup/).

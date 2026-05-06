@@ -12,8 +12,8 @@ Single source of truth for extension **persistent** state. Accesses `chrome.stor
 | `_on_change` | `Function\|null` — single storage-change subscriber (content_script re-resolve) |
 | `_on_automate_change` | `Function\|null` — automate Manager's storage-change subscriber (independent slot) |
 | `STORAGE_KEY` | `'blsi_model'` |
-| `ITEM_LIMIT` | `10` — max blur items per hostname |
 | `RULES_LIMIT` | `200` — max non-exact site rules |
+| Pick & Blur cap | `blsi.max_pick_blur_items_per_host` (10) — single source of truth in `src/constants.js`. Enforced by `save_blur_item`. |
 
 ## Public API
 
@@ -73,9 +73,9 @@ ss_blur_for_me     = !suppressed_tabs.includes(tab_id) && ss_blur_for_me_raw
 
 Per-tab suppression silences all three triggers for that tab; per-site suppression silences screen-share only.
 
-**Derived keys on output**: `engage`, `automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab`, `_rule_overrides`, `_rule_match`.  
-**`engage`**: `(resolved.enabled !== false) && manual_blur` where `manual_blur = !!resolved.blur_all_status`. The page-wide engine gate read by `engine.js handleMainDocument` / `handleShadowRoot` / `handleIframe`. Post-engine/automate-split: automate is rendered via `blsi.Automate.Overlay` driven by `blsi.Automate.Manager` — engine teardown runs when only automate is firing. Pick-blur reconcile + CSS injection runs unconditionally inside `engine.handleSite`, independent of `engage`.  
-**`automate_blur_skip_reason`**: `'site_rule' | 'manual' | 'pick_blur' | null`. Set when `automate_blur_skipped === true`; ordered priority site_rule > manual > pick_blur.  
+**Derived keys on output**: `engage`, `automate_blur_active`, `automate_blur_triggers`, `screen_share_state`, `screen_share_suppressed_for_host`, `screen_share_suppressed_for_tab`, `_rule_overrides`, `_rule_match`.
+**`engage`**: `(resolved.enabled !== false) && manual_blur` where `manual_blur = !!resolved.blur_all_status`. The page-wide engine gate read by `engine.js handleMainDocument` / `handleShadowRoot` / `handleIframe`. Post-engine/automate-split: automate is rendered via `blsi.Automate.Overlay` driven by `blsi.Automate.Manager` — engine teardown runs when only automate is firing. Pick-blur reconcile + CSS injection runs unconditionally inside `engine.handleSite`, independent of `engage`.
+**Automate independence**: each automate trigger fires in `automate_blur_triggers` whenever its own conditions are met. There is no "skipped" or "automate-only" classification — manual blur and automate-blur layer independently. The Overlay engages even when blur-all or pick-and-blur is already active on the page.
 **`screen_share_state`**: `{ active, sharing_tab_id, started_at, is_sharing_tab }` — passed to popup notif card for the "sharing for Xm" label.  
 **`_rule_overrides`** / **`_rule_match`**: same as before; used by popup for "Managed by site rule" badges and deep-linking.
 
@@ -83,7 +83,7 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### resolve_settings(hostname, url, tab_id?)
 
-**What**: Engine surface — folded settings + the `engage` gate. Mirrors most of what `resolve()` returns but **excludes all automate-decision fields** (`automate_blur_active`, `automate_blur_triggers`, `automate_blur_only`, `automate_blur_skipped`, `automate_blur_skip_reason`, `screen_share_state`, `screen_share_suppressed_*`).
+**What**: Engine surface — folded settings + the `engage` gate. Mirrors most of what `resolve()` returns but **excludes all automate-decision fields** (`automate_blur_active`, `automate_blur_triggers`, `screen_share_state`, `screen_share_suppressed_*`).
 
 **Params**: same as `resolve()`. `tab_id` accepted for API symmetry; currently unused (resolve_settings does not consult per-tab automate state).
 
@@ -101,7 +101,7 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 **Params**: same as `resolve()`.
 
-**Returns**: `{ automate_blur_active, automate_blur_triggers, automate_blur_only, automate_blur_skipped, automate_blur_skip_reason, screen_share_state, screen_share_suppressed_for_host, screen_share_suppressed_for_tab, idle_suppressed_for_tab, idle_suppressed_for_site, tab_switch_suppressed_for_tab, tab_switch_suppressed_for_site, idle_suspended, tab_switch_suspended, screen_share_suspended, automate_idle, automate_tab_switch, automate_screen_share, _rule_match, _rule_overrides_automate }`. `idle_suspended` / `tab_switch_suspended` / `screen_share_suspended` are booleans — true when the corresponding trigger is suspended for this session (via `State.suspend_trigger()`; auto-resumes on browser restart). `idle_suppressed_for_tab/site` and `tab_switch_suppressed_for_tab/site` are booleans indicating per-trigger suppression (popup undo affordance parity with screen_share). `_rule_overrides_automate` is a slim slice over `resolve()._rule_overrides` carrying only the three automate gate keys (`automate_idle`, `automate_tab_switch`, `automate_screen_share`) — Manager uses these to decide whether each automate toast should carry a "(site rule)" suffix. No manual-blur fields, no `blur_items`, no `shortcuts`, no `engage`. Engine never calls this; Manager never calls `resolve()`.
+**Returns**: `{ automate_blur_active, automate_blur_triggers, screen_share_state, screen_share_suppressed_for_host, screen_share_suppressed_for_tab, idle_suppressed_for_tab, idle_suppressed_for_site, tab_switch_suppressed_for_tab, tab_switch_suppressed_for_site, idle_suspended, tab_switch_suspended, screen_share_suspended, automate_idle, automate_tab_switch, automate_screen_share, _rule_match, _rule_overrides_automate }`. `idle_suspended` / `tab_switch_suspended` / `screen_share_suspended` are booleans — true when the corresponding trigger is suspended for this session (via `State.suspend_trigger()`; auto-resumes on browser restart). `idle_suppressed_for_tab/site` and `tab_switch_suppressed_for_tab/site` are booleans indicating per-trigger suppression (popup undo affordance parity with screen_share). `_rule_overrides_automate` is a slim slice over `resolve()._rule_overrides` carrying only the three automate gate keys (`automate_idle`, `automate_tab_switch`, `automate_screen_share`) — Manager uses these to decide whether each automate toast should carry a "(site rule)" suffix. No manual-blur fields, no `blur_items`, no `shortcuts`, no `engage`. **No skipped fields** — each automate trigger fires independently of manual blur. Engine never calls this; Manager never calls `resolve()`.
 
 ### patch_section(section, delta)
 
@@ -137,10 +137,10 @@ Per-tab suppression silences all three triggers for that tab; per-site suppressi
 
 ### save_blur_item(hostname, item)
 
-**What**: Saves a blur item for a hostname; deduplicates by item ID before insert; enforces `ITEM_LIMIT`.  
-**Params**: `hostname` (string), `item` (object) — dynamic or sticky item shape  
-**Returns**: `Promise<void>`  
-**Handles**: Validates hostname and item; deduplicates (replaces existing entry with same ID); trims to `ITEM_LIMIT` (oldest entries removed first).
+**What**: Saves a blur item for a hostname; deduplicates by item ID before insert; enforces the per-host cap from `blsi.max_pick_blur_items_per_host`.
+**Params**: `hostname` (string), `item` (object) — dynamic or sticky item shape
+**Returns**: `Promise<{ ok: boolean, reason?: 'invalid' | 'cap' | 'duplicate' }>` — resolves to `{ ok: true }` on save; otherwise `{ ok: false, reason }` with `'invalid'` (bad hostname / item shape), `'cap'` (per-host cap reached — caller should fire the cap-reached toast), or `'duplicate'` (item with this id already saved). Storage is untouched when `ok` is false.
+**Handles**: Validates hostname and item; rejects with `reason: 'duplicate'` instead of replacing existing entry; rejects with `reason: 'cap'` once host array length reaches `blsi.max_pick_blur_items_per_host`. No oldest-first trimming — saves are simply rejected past the cap.
 
 ### remove_blur_item(hostname, item_id)
 
@@ -213,6 +213,8 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 - `'tab'` → `State.add_suppressed_tab(ctx.tab_id)`  
 - `'site_session'` → `State.suppress_screen_share_site(ctx.hostname)`  
 - `'feature'` → suspends the trigger in session storage via `State.suspend_trigger('screen_share')` — auto-resumes on browser restart  
+
+**Important — `'feature'` does NOT clear the live `blsi_screen_share` session record.** The suspend-gate inside `resolve_automate` (`!suspended.screen_share`) is enough to silence receiver tabs. Wiping the record would leave `ss.active === false` after Resume, so receiver tabs would not re-blur the still-running share until the user restarts sharing. Real share teardown is owned exclusively by `screen_share_bg.js` port disconnect.
 
 **Returns**: `Promise<void>`
 
@@ -345,7 +347,7 @@ All session state (screen_share, suppressed_tabs) is owned by `blsi.Automate.Sta
 - `_write()` always validates before persisting; `_cache` rolls back on failure.
 - `resolve()` always returns a complete flat object (all keys present).
 - Pattern rules (wildcard/regex) always precede exact rules in `site_rules[]`.
-- `ITEM_LIMIT = 10` per hostname; enforced on every `save_blur_item`.
+- Pick & Blur per-host cap is `blsi.max_pick_blur_items_per_host` (currently 10); enforced on every `save_blur_item`. Saves past the cap return `{ ok: false, reason: 'cap' }` and never touch storage.
 - `RULES_LIMIT = 200` for non-exact rules; enforced on every `save_rules`.
 - `on_change` has at most one active subscriber at any time.
 - Automate triggers NEVER write `blur_all` — idle/tab_switch state lives in `blsi.Automate.State` session keys; screen-share lives in the per-tab session map.

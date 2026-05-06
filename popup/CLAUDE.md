@@ -11,21 +11,23 @@ Extension popup: 320px panel via `popup.html`. Vanilla JS only — no bundler, n
 ```
 popup/
   popup.html          — entry point; owns CSS + JS load order
-  popup.js            — coordinator: init + event wiring only (~270 lines)
+  popup.js            — coordinator: init + event wiring only (~340 lines)
   popup_state.js      — BlurrySitePopupState: all mutable state + storage persistence
   popup_ui.js         — BlurrySitePopupUI: stateless DOM helpers
-  popup.css           — all popup styles (mode blocks, chips, sliders, toasts, etc.)
+  popup.css           — all popup styles (mode blocks, chips, sliders, toasts, welcome, etc.)
   theme.css           — CSS custom properties (dark/light tokens)
   renders/
     shared.js         — BlurrySitePopupShared: t, makeToggle, updateFill, makeDivider
-    main.js           — BlurrySitePopupRender: renderAll
+    main.js           — BlurrySitePopupRender: renderAll (delegates to protect + triggers)
     howtoblur.js      — BlurrySitePopupRenderHtb: HTB sub-page body
-    automate.js       — BlurrySitePopupRenderAutomate: Automate sub-page body
+    protect.js        — BlurrySitePopupRenderProtect: Stay Blurry section (screen share, PII, tab privacy)
+    triggers.js       — BlurrySitePopupRenderTriggers: Smart Triggers section (tab switch, idle timer)
     keyboard.js       — BlurrySitePopupRenderShortcuts: Shortcuts sub-page body
     site_rules.js     — BlurrySitePopupRenderSiteRules: Site Rules sub-page body
     general.js        — BlurrySitePopupRenderGeneral: General sub-page body
     howtoblur.css     — HTB sub-page styles
-    automate.css      — Automate sub-page styles
+    protect.css       — Stay Blurry section styles (cyan accent card)
+    triggers.css      — Smart Triggers card styles (2 accent cards + idle slider)
     keyboard.css      — Shortcuts sub-page styles
     site_rules.css    — Site Rules sub-page styles
     general.css       — General sub-page styles
@@ -38,8 +40,9 @@ popup/
 
 ```html
 <!-- CSS -->
-theme.css → popup.css → renders/howtoblur.css → renders/automate.css
-         → renders/keyboard.css → renders/site_rules.css → renders/general.css
+theme.css → popup.css → renders/protect.css → renders/triggers.css
+         → renders/howtoblur.css → renders/keyboard.css
+         → renders/site_rules.css → renders/general.css
 
 <!-- JS -->
 ../src/constants.js
@@ -51,7 +54,8 @@ theme.css → popup.css → renders/howtoblur.css → renders/automate.css
 renders/shared.js
 renders/main.js
 renders/howtoblur.js
-renders/automate.js
+renders/protect.js
+renders/triggers.js
 renders/keyboard.js
 renders/site_rules.js
 renders/general.js
@@ -74,7 +78,8 @@ popup.js            ← coordinator loads last
 | `renders/main.js` | `BlurrySitePopupRender` | main renderer |
 
 | `renders/howtoblur.js` | `BlurrySitePopupRenderHtb` | HTB sub-page |
-| `renders/automate.js` | `BlurrySitePopupRenderAutomate` | Automate sub-page |
+| `renders/protect.js` | `BlurrySitePopupRenderProtect` | Stay Blurry section (screen share, PII, tab privacy) |
+| `renders/triggers.js` | `BlurrySitePopupRenderTriggers` | Smart Triggers section (tab switch, idle) |
 | `renders/keyboard.js` | `BlurrySitePopupRenderShortcuts` | Shortcuts sub-page |
 | `renders/site_rules.js` | `BlurrySitePopupRenderSiteRules` | Site Rules sub-page |
 | `renders/general.js` | `BlurrySitePopupRenderGeneral` | General sub-page |
@@ -174,8 +179,8 @@ updateClearAll(settings, blurItems, isPageBlurred)
 
 ```js
 renderAll(settings, blurItems, isPageBlurred, onSave, activeRule, onOpenSiteRules, ctx)
-  // Renders modes block, PII section, notif area (site-rule pill + automate card),
-  // and automate section. ctx provides resolved/ruleOverrides/ruleMatch +
+  // Renders notif area, Stay Blurry (protect), modes block, and Smart Triggers.
+  // ctx provides resolved/ruleOverrides/ruleMatch +
   // onSuppress/onUnsuppress callbacks for all 3 triggers (ScreenShare, Idle, TabSwitch).
 ```
 
@@ -214,8 +219,7 @@ renderBody(containerEl, settings, {
 
 ```js
 UI.showView('bl-view-main', State.get().settings.enabled)  // back to main
-UI.showView('bl-view-htb-modify',      true)               // open HTB sub-page
-UI.showView('bl-view-automate-modify', true)               // open Automate sub-page
+UI.showView('bl-view-htb-modify',      true)               // open HTB (Blur Settings) sub-page
 UI.showView('bl-view-shortcuts',       true)               // open Shortcuts sub-page
 UI.showView('bl-view-site-rules',      true)               // open Site Rules sub-page
 UI.showView('bl-view-general',         true)               // open General sub-page
@@ -297,6 +301,14 @@ Use empty `<span class="bl-opt-sep">` — CSS renders 2px bar. No `|` as text se
 
 Dot color: `.bl-mode-block__dot.is-on` = green (`#22c55e`); default = red (`#ef4444`). Not tied to accent.
 
+### Stay Blurry cards (protect.css)
+
+Three separate `.bl-protect-card` cards, each with its own `--bl-protect-accent` via variant class: `--screen-share` (`#06b6d4` cyan-blue), `--pii` (`#0891b2` mid-cyan), `--tab-privacy` (`#10b981` cyan-green). Uses `color-mix()` tinting — distinct from mode blocks. Toggle rows use shared `.bl-feature-row` (defined in `popup.css`).
+
+### Smart Triggers cards (triggers.css)
+
+Two separate `.bl-trigger-card` cards with neutral styling (`--bl-raised` bg, `--bl-divider` border — no accent tinting). Idle slider reuses `.bl-auto-slider*` class names (migrated from old automate.css). Toggle rows use shared `.bl-feature-row`.
+
 ---
 
 ## Critical Rules
@@ -327,9 +339,9 @@ When the current host is governed by a non-empty site-rule snapshot, the popup h
 `BlurrySitePopupState.get().settings` includes `_rule_match` + `_rule_overrides` so renders can call `isRuleManaged(settings)` directly without ctx plumbing.
 
 When rule-managed:
-- `renders/main.js` renders a `BlurrySitePopupShared.makeBanner(...)` into `#bl-notif-area` and clears `#bl-mode-blur-all`, `#bl-mode-pick-blur`. Body class `bl-rule-managed` hides `#bl-pii` and `#bl-automate` via CSS.
-- `renders/general.js` omits the tab-privacy row (`tab_privacy` is in the snapshot).
-- `renders/howtoblur.js` and `renders/automate.js` are unreachable — their nav buttons live inside cleared mode blocks / hidden sections.
+- `renders/main.js` renders a `BlurrySitePopupShared.makeBanner(...)` into `#bl-notif-area` and clears `#bl-mode-blur-all`, `#bl-mode-pick-blur`, `#bl-stay-blurry`, `#bl-smart-triggers`. Body class `bl-rule-managed` hides mode blocks via CSS.
+- Tab privacy control lives exclusively in `renders/protect.js` (Stay Blurry card) — removed from `renders/general.js`.
+- `renders/howtoblur.js` is unreachable — its nav button lives inside a cleared mode block.
 - Banner CTA invokes `popup.js → _openSiteRulesPage({ focusRule })` which scrolls + auto-expands the matching rule card.
 
 Defence-in-depth: `BlurrySitePopupState.saveSettings(patch)` strips snapshot-managed sections (`blur_all`, `pick_and_blur`, `auto_detect_pii`, `automate`) when current host is rule-managed. `global_default_settings` is never snapshot-captured — every display knob (blur_radius, reveal_mode, etc.) stays editable globally; the strip leaves global_default_settings, shortcuts, and site_rules untouched.

@@ -28,8 +28,6 @@ const BlurrySitePopupState = (() => {
       settings: Object.assign({}, m, {
         automate_blur_active:   !!(resolved && resolved.automate_blur_active),
         automate_blur_triggers: triggers,
-        automate_blur_skipped:  !!(resolved && resolved.automate_blur_skipped),
-        automate_blur_skip_reason: resolved ? resolved.automate_blur_skip_reason : null,
         screen_share_state:        resolved ? resolved.screen_share_state : null,
         screen_share_suppressed_for_host: !!(resolved && resolved.screen_share_suppressed_for_host),
         screen_share_suppressed_for_tab:  !!(resolved && resolved.screen_share_suppressed_for_tab),

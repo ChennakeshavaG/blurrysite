@@ -819,26 +819,23 @@ describe('pii_detector.js', () => {
 
   // ── Decision #3 (identifier sub-pass) ──────────────────────────────────
   // The keyword-prefix detector adds order/invoice/tracking/case/ticket as
-  // positive triggers. Their value-validator (length >= 4 + digit OR len >= 16)
-  // wraps the value while leaving short public references unblurred. The
-  // legacy isOrderRef suppressor still applies when the identifier sub-pass
-  // is bypassed (no value of length >= 4 follows the keyword).
-  test('Decision #3 — "Order #12345" wraps the value (5 chars + digit)', () => {
+  // positive triggers. Value-validator requires length >= 12 + non-alpha char
+  // + not all-same-char. Short pure-digit values (12345) still wrap via
+  // NUMERIC_RE Stage 3. The legacy isOrderRef suppressor still applies when
+  // the identifier sub-pass is bypassed.
+  test('Decision #3 — "Order #12345" suppressed by isOrderRef (order keyword near bare digit)', () => {
     document.body.innerHTML = '<p>Your Order #12345 ships.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
-  test('Decision #3 — "Tracking 12345" wraps the value', () => {
+  test('Decision #3 — "Tracking 12345" suppressed by isOrderRef', () => {
     document.body.innerHTML = '<p>Tracking 12345 here.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
-  test('Decision #3 — "Invoice 12345" wraps the value', () => {
+  test('Decision #3 — "Invoice 12345" suppressed by isOrderRef', () => {
     document.body.innerHTML = '<p>Invoice 12345 today.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('isOrderRef — bare number with no order context blurred', () => {
@@ -1149,7 +1146,7 @@ describe('pii_detector.js', () => {
   // Sub-pass inside types.numeric. Two passes:
   //   A. Dispositive provider prefixes (AKIA / ghp_ / sk_/pk_ / AIza / xox- / JWT / Bearer)
   //   B. Keyword-prefix wrapper (KEYWORD[: = # - —] value), value-validated
-  //      (length >= 4 AND (digit OR length >= 16) AND not all-same-char).
+  //      (length >= 12 AND non-alpha char AND not all-same-char).
   // Spans use type='numeric' so existing CSS / reveal logic apply unchanged.
 
   // -- keyword-prefix positive cases --
@@ -1160,10 +1157,10 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
   });
 
-  test('identifier — "user_id=abc123def" wraps alphanumeric value', () => {
-    document.body.innerHTML = '<p>Setting user_id=abc123def now.</p>';
+  test('identifier — "user_id=abc123def456g" wraps alphanumeric value', () => {
+    document.body.innerHTML = '<p>Setting user_id=abc123def456g now.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('abc123def');
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('abc123def456g');
   });
 
   test('identifier — em-dash separator "API Key — 7HsKx9aZ2pQrLm" wraps', () => {
@@ -1172,22 +1169,20 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('7HsKx9aZ2pQrLm');
   });
 
-  test('identifier — "password: hunter2" wraps the value', () => {
+  test('identifier — short alphanumeric "password: hunter2" NOT wrapped (under 12 chars)', () => {
     document.body.innerHTML = '<p>password: hunter2 saved.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('hunter2');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
-  test('identifier — copula "OTP is 4729" wraps the value', () => {
+  test('identifier — copula "OTP is 4729" wraps via NUMERIC_RE (not PREFIX_RE)', () => {
     document.body.innerHTML = '<p>Your OTP is 4729 today.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('4729');
   });
 
-  test('identifier — "Confirmation code: VX7-9PQ" wraps the alnum value', () => {
+  test('identifier — short alnum "Confirmation code: VX7-9PQ" NOT wrapped (under 12 chars)', () => {
     document.body.innerHTML = '<p>Confirmation code: VX7-9PQ here.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('VX7-9PQ');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('identifier — "customer #12345" wraps the value', () => {
@@ -1196,16 +1191,14 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('12345');
   });
 
-  test('identifier — "employee no 88421" wraps the value', () => {
+  test('identifier — "employee no 88421" NOT wrapped (short value, bare digit suppressed)', () => {
     document.body.innerHTML = '<p>Hi employee no 88421 listed.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('88421');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
-  test('identifier — quoted value `client_secret = "abc123_xyz"` wraps inside quotes', () => {
+  test('identifier — short quoted value `client_secret = "abc123_xyz"` NOT wrapped (under 12 chars)', () => {
     document.body.innerHTML = '<p>client_secret = "abc123_xyz" set.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('abc123_xyz');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('identifier — "Verification: 123456" wraps the value', () => {
@@ -1214,7 +1207,7 @@ describe('pii_detector.js', () => {
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('123456');
   });
 
-  test('identifier — borderline length-4 value "Pin 4242" wraps', () => {
+  test('identifier — short pure-digit "Pin 4242" wraps via NUMERIC_RE (not PREFIX_RE)', () => {
     document.body.innerHTML = '<p>Pin 4242 today.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('4242');
@@ -1240,22 +1233,48 @@ describe('pii_detector.js', () => {
     expect(texts).toContain('67890');
   });
 
-  test('identifier — long order number "Order #1234567890" wraps via Decision #3', () => {
+  test('identifier — "Order #1234567890" suppressed by isOrderRef (order keyword)', () => {
     document.body.innerHTML = '<p>Your Order #1234567890 shipped.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('1234567890');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
-  test('identifier — alphanumeric order "Order ABC-12345" wraps via Decision #3', () => {
+  test('identifier — short alphanumeric order "Order ABC-12345" NOT wrapped via PREFIX_RE (under 12 chars)', () => {
     document.body.innerHTML = '<p>Your Order ABC-12345 placed.</p>';
-    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
-    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('ABC-12345');
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
   });
 
   test('identifier — tie-break: identifier wraps first, NUMERIC duplicate dropped', () => {
     document.body.innerHTML = '<p>User ID: 12345 logged in.</p>';
     expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
     expect(document.querySelectorAll('[data-bl-si-pii="numeric"]').length).toBe(1);
+  });
+
+  // -- keyword-prefix: 12-char minimum negative cases (FP prevention) --
+
+  test('identifier — "user: sdk-alpha" NOT wrapped (9 chars, under 12)', () => {
+    document.body.innerHTML = '<p>user: sdk-alpha released.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('identifier — "key: page-3" NOT wrapped (6 chars, under 12)', () => {
+    document.body.innerHTML = '<p>key: page-3 shown.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('identifier — "id: v2-beta" NOT wrapped (7 chars, under 12)', () => {
+    document.body.innerHTML = '<p>id: v2-beta deployed.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('identifier — "ref: ABC-001" NOT wrapped (7 chars, under 12)', () => {
+    document.body.innerHTML = '<p>ref: ABC-001 filed.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
+  });
+
+  test('identifier — long credential "api_key: abc123def456ghi" wraps (15 chars)', () => {
+    document.body.innerHTML = '<p>api_key: abc123def456ghi used.</p>';
+    expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+    expect(document.querySelector('[data-bl-si-pii="numeric"]').textContent).toBe('abc123def456ghi');
   });
 
   // -- dispositive provider positive cases --
@@ -1871,8 +1890,8 @@ describe('pii_detector.js', () => {
       document.documentElement.setAttribute('lang', 'en-US');
       document.body.innerHTML = '<p>Reference 9434765919 logged.</p>';
       // Stage 2 declines (US country, no NHS keyword); Stage 3 bare-numeric
-      // still wraps the 10-digit run. 1 span via Stage 3.
-      expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(1);
+      // suppressed by isOrderRef ("reference" keyword). 0 spans.
+      expect(blsi.PiiDetector.scan(document.body, { numeric: true })).toBe(0);
     });
 
     test('mod-11 fail on GB page NOT wrapped via Stage 2', () => {

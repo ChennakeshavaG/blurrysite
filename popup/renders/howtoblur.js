@@ -190,12 +190,12 @@ const BlurrySitePopupRenderHtb = (() => {
     slider.type  = 'range';
     slider.className = 'bl-slider';
     slider.min   = '2';
-    slider.max   = '32';
+    slider.max   = '20';
     slider.step  = '1';
     slider.value = String((settings.global_default_settings && settings.global_default_settings.blur_radius) || 6);
 
     function _strengthLabel(r) {
-      var key = r <= 4 ? 'htb_strength_subtle' : r <= 9 ? 'htb_strength_moderate' : 'htb_strength_strong';
+      var key = r <= 6 ? 'htb_strength_subtle' : r <= 13 ? 'htb_strength_moderate' : 'htb_strength_strong';
       return _t(key);
     }
 

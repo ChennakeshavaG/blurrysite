@@ -9,8 +9,8 @@
  * counterparts exclusively via postMessage / CustomEvents.
  *
  * Intercepted APIs:
- *   MediaDevices.prototype.getDisplayMedia  → '__blsi_screen_share' via postMessage
- *   Element.prototype.attachShadow          → '__blsi_shadow_attached' on the element
+ *   MediaDevices.prototype.getDisplayMedia  → window.postMessage({ type: '__blsi_screen_share', active, streamId })
+ *   Element.prototype.attachShadow          → CustomEvent '__blsi_shadow_attached' (bubbles, composed) on the host element
  */
 (function () {
   'use strict';
@@ -81,7 +81,7 @@
           };
           win.MediaDevices.prototype.__blsi_patched = true;
         }
-      } catch (_) { /* cross-origin — Chrome all_frames handles it */ }
+      } catch (_) { /* cross-origin — iframe runs its own MAIN-world bridge via manifest all_frames */ }
     }
 
     if (typeof MutationObserver !== 'undefined') {
@@ -106,8 +106,9 @@
 
   // ── Shadow root attachment interception ───────────────────────────────────
   // attachShadow() is not a DOM tree mutation — MutationObserver never fires
-  // for it. Patching here lets blur_engine.js discover and observe shadow roots
-  // that are attached asynchronously (after the idle-callback stamp pass).
+  // for it. Patching here lets core/observer.js (Obs.initShadowAttachListener)
+  // discover and observe shadow roots attached asynchronously, after the
+  // initial idle-callback stamp pass.
   // Closed shadow roots are skipped — el.shadowRoot returns null from outside
   // the component regardless, so there is nothing to observe.
 

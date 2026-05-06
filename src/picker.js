@@ -542,8 +542,8 @@ const Picker = (() => {
       drawState = null;
       if (dx > 2 || dy > 2) {
         // User tried to draw but too small — show feedback
-        if (blsi.Shortcuts && blsi.Shortcuts.showToast) {
-          blsi.Shortcuts.showToast(_t('pickerAreaTooSmall', 'Area too small (min ' + MIN_ZONE_SIZE + 'px)'));
+        if (blsi.Toast && blsi.Toast.show) {
+          blsi.Toast.show(_t('pickerAreaTooSmall', 'Area too small (min ' + MIN_ZONE_SIZE + 'px)'));
         }
       }
       return;

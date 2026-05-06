@@ -184,9 +184,11 @@ No external module dependencies are mocked — the `src/pii/` modules operate pu
 - `NUMERIC phone — French "01 23 45 67 89" wraps with all 2-digit groups` — alt #5 all-2-digit groups, no `+`
 
 ### Identifier-context detection (added — sub-pass inside types.numeric)
-Decision #3 reframe — `Order #12345` / `Tracking 12345` / `Invoice 12345` (previous 3 isOrderRef negatives) **flipped to wrap** the value via the new keyword-prefix detector. `isOrderRef` itself is unchanged.
+Decision #3 reframe — `Order #12345` / `Tracking 12345` / `Invoice 12345` now suppressed by `isOrderRef` (order keyword near bare digit). PREFIX_RE minimum value length raised to 12 chars — short values no longer captured by keyword-prefix path, fall through to NUMERIC_RE Stage 3 where suppressors apply.
 
-Keyword-prefix positives: `User ID: 12345`, `user_id=abc123def`, `API Key — 7HsKx9aZ2pQrLm`, `password: hunter2`, `OTP is 4729`, `Confirmation code: VX7-9PQ`, `customer #12345`, `employee no 88421`, `client_secret = "abc123_xyz"`, `Verification: 123456`, `Pin 4242`, `refresh_token: VeryLongAlpha_Token42` (long value with non-alpha char), `Account #12345 / Customer ID 67890`, `Order #1234567890`, `Order ABC-12345`, tie-break `User ID: 12345`.
+Keyword-prefix positives (12+ char alphanumeric values): `User ID: 12345` (via NUMERIC_RE), `user_id=abc123def456g`, `API Key — 7HsKx9aZ2pQrLm`, `OTP is 4729` (via NUMERIC_RE), `customer #12345` (via NUMERIC_RE), `Verification: 123456` (via NUMERIC_RE), `Pin 4242` (via NUMERIC_RE), `refresh_token: VeryLongAlpha_Token42` (long value with non-alpha char), `Account #12345 / Customer ID 67890` (via NUMERIC_RE), `api_key: abc123def456ghi` (15 chars), tie-break `User ID: 12345`.
+
+Keyword-prefix negatives (under 12 chars): `password: hunter2` (7 chars), `Confirmation code: VX7-9PQ` (7 chars), `client_secret = "abc123_xyz"` (10 chars), `employee no 88421` (suppressed), `Order ABC-12345` (9 chars), `user: sdk-alpha` (9 chars), `key: page-3` (6 chars), `id: v2-beta` (7 chars), `ref: ABC-001` (7 chars).
 
 Dispositive providers: bare AWS `AKIA…`, GitHub PAT `ghp_…`, 3-segment JWT, `Authorization: Bearer eyJ…`, Stripe `api_key: sk_live_…`, Bearer + JWT overlap → one span, GitLab `glpat-…`, Anthropic `sk-ant-…`, OpenAI `sk-…`, SendGrid `SG.…`, npm `npm_…`, Twilio `AC…`, HuggingFace `hf_…`.
 

@@ -84,7 +84,7 @@
     "message": "General"
   },
   "nav_general_desc": {
-    "message": "Language, tab privacy, and more"
+    "message": "Language, backup & restore, and more"
   },
   "setting_language": {
     "message": "Display Language"
@@ -647,6 +647,16 @@
       }
     }
   },
+  "popup_pick_blur_cap_reached": {
+    "message": "$COUNT$ / $MAX$ — max items per site reached. Remove one to add another.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "10" },
+      "max":   { "content": "$2", "example": "10" }
+    }
+  },
+  "toast_pick_blur_cap_reached": {
+    "message": "Pick & Blur — max items per site reached"
+  },
   "mode_open_picker": {
     "message": "Open Picker"
   },
@@ -722,29 +732,14 @@
   "automate_toast_tab_switch": {
     "message": "Blur applied — tab switch"
   },
-  "automate_toast_skipped": {
-    "message": "Blur already active — automate skipped"
-  },
   "notif_screen_share_active": {
     "message": "Screen share active"
-  },
-  "notif_automate_skipped": {
-    "message": "Automate trigger skipped"
   },
   "notif_sharing_for": {
     "message": "sharing for"
   },
   "notif_sharing_this_screen": {
     "message": "Sharing this screen"
-  },
-  "notif_skipped_reason_site_rule": {
-    "message": "blur already on (site rule)"
-  },
-  "notif_skipped_reason_manual": {
-    "message": "blur already on"
-  },
-  "notif_skipped_reason_pick_blur": {
-    "message": "pick & blur already on"
   },
   "notif_suppressed_for_tab": {
     "message": "Suppressed for this tab"
@@ -767,5 +762,96 @@
   },
   "site_rule_managed_edit_cta": {
     "message": "Edit in Site Rules"
+  },
+
+  "section_stay_blurry": {
+    "message": "Stay Blurry"
+  },
+  "section_stay_blurry_desc": {
+    "message": "Your screen stays blurry when it should"
+  },
+  "section_activity": {
+    "message": "Activity"
+  },
+  "section_how_to_blur": {
+    "message": "How to Blur"
+  },
+  "section_how_to_blur_desc": {
+    "message": "Blur anything. Your way."
+  },
+  "section_smart_triggers": {
+    "message": "Smart Triggers"
+  },
+  "section_smart_triggers_desc": {
+    "message": "Hands-free blur for when you step away"
+  },
+  "subpage_blur_settings_title": {
+    "message": "Blur Settings"
+  },
+  "protect_screen_share": {
+    "message": "Screen Share"
+  },
+  "protect_screen_share_desc": {
+    "message": "Auto-blurs when you share your screen"
+  },
+  "protect_sensitive_info": {
+    "message": "Sensitive Info"
+  },
+  "protect_sensitive_info_desc": {
+    "message": "Hides emails, cards, and phone numbers"
+  },
+  "protect_hide_tab_title": {
+    "message": "Hide Tab Title"
+  },
+  "protect_hide_tab_title_desc": {
+    "message": "Replaces the tab title so others can't see it"
+  },
+  "trigger_tab_switch": {
+    "message": "Tab Switch"
+  },
+  "trigger_tab_switch_desc": {
+    "message": "Blurs when you switch to another tab"
+  },
+  "trigger_idle_timer": {
+    "message": "Idle Timer"
+  },
+  "trigger_idle_timer_desc": {
+    "message": "Blurs after you've been away for a while"
+  },
+  "welcome_headline": {
+    "message": "Welcome to Blurry Site"
+  },
+  "welcome_intro": {
+    "message": "Your browser is now protected:"
+  },
+  "welcome_screen_share_title": {
+    "message": "Screen Share Protection"
+  },
+  "welcome_screen_share_desc": {
+    "message": "Auto-blurs when sharing"
+  },
+  "welcome_pii_title": {
+    "message": "Sensitive Info Hiding"
+  },
+  "welcome_pii_desc": {
+    "message": "Hides emails, cards, phones"
+  },
+  "welcome_pick_blur_title": {
+    "message": "Pick & Blur"
+  },
+  "welcome_pick_blur_desc": {
+    "message": "Click any element to blur it"
+  },
+  "welcome_triggers_title": {
+    "message": "Smart Triggers"
+  },
+  "welcome_triggers_desc": {
+    "message": "Auto-blur on tab switch / idle"
+  },
+  "welcome_cta": {
+    "message": "Got it, let’s go →"
+  },
+  "welcome_badge_on": {
+    "message": "ON"
   }
 }

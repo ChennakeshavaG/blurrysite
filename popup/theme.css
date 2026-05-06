@@ -1,9 +1,9 @@
 /* Slate dark mode (default) */
 :root {
   /* ── Surfaces ── stepped deliberately so layers read clearly */
-  --bl-base:         #0c0d14;
-  --bl-surface:      #13151e;
-  --bl-raised:       #1c1f2c;
+  --bl-base:         #0e1018;
+  --bl-surface:      #181b28;
+  --bl-raised:       #242838;
 
   /* ── Brand + semantic accents ── all calibrated for 4.5:1+ on --bl-surface */
   --bl-amber:        #f5c518;   /* 10.4:1 on surface — brand, unchanged */
@@ -17,11 +17,12 @@
 
   /* ── Text hierarchy ── critical: muted must read against raised surfaces */
   --bl-text-primary: #ecedf4;   /* near-white, slight cool tint */
-  --bl-text-muted:   #8e97b4;   /* was #6b7280 (3.9:1) → now 5.1:1 on surface */
-  --bl-text-dim:     #636b96;   /* raised: was #505878 (2.5:1) → now 3.6:1 on raised, 4.1:1 on surface */
+  --bl-text-muted:   #8e97b4;   /* ~4.7:1 on surface, ~3.9:1 on raised */
+  --bl-text-dim:     #6b74a0;   /* 3.5:1 on raised, 4.0:1 on surface */
 
   /* ── Structural ── */
-  --bl-divider:      #20233a;   /* explicit, no color-mix — clear layer boundary */
+  --bl-border:       #3a3f52;   /* section/card borders — visible on surface */
+  --bl-divider:      #2e3348;   /* explicit, no color-mix — clear layer boundary */
 
   /* ── Themed assets ── swap by theme so callers stay theme-agnostic */
   --bl-icon-32:      url('../icons/icon32.png');
@@ -56,6 +57,7 @@
   --bl-text-muted:   #4b5473;
   --bl-text-dim:     #7c85a3;
 
+  --bl-border:       #c0c6da;
   --bl-divider:      #cdd2e8;
 
   --bl-icon-32:      url('../icons/icon32-light.png');

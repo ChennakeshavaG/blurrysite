@@ -34,7 +34,7 @@ Other state lives in `blsi.PiiState`.
 - Increments `blsi.PiiState._matchCount` once per wrapped span (via `_wrapTextNode`).
 - **Chunked path**: uses an **incremental TreeWalker** — pulls `CHUNK_SIZE` (500) text nodes per idle callback directly from the walker. No upfront collection. Sets `_scanComplete = false` at start, `true` in `onDone`. Stores an internal `_chunkedIdleHandle` for the pending idle callback. Cancellable via `cancelChunkedScan()`.
 - **Synchronous path**: sets `_scanComplete = true` immediately, delegates to `_scanSubtree`.
-- **TreeWalker filter** (`_walkerFilter`): uses `NodeFilter.SHOW_ALL` with a custom `acceptNode` that returns `FILTER_REJECT` for: extension UI elements (`isExtensionUIElement`), `<code>`/`<kbd>`/`<samp>` tags (via `_SKIP_RE`), code-signaling `<pre>` elements (`isCodePre` — has `<code>` child, syntax-highlighting class, or `data-code` attr; bare `<pre>` is NOT rejected since it may contain real PII like preformatted addresses), and code editor widgets (`isCodeEditorWidget`). All checks are O(1) element-self checks — no `closest()` ancestor walk. Non-rejected elements get `FILTER_SKIP` (walker descends into children). Text nodes get `FILTER_ACCEPT`.
+- **TreeWalker filter** (`_walkerFilter`): uses `NodeFilter.SHOW_ALL` with a custom `acceptNode` that returns `FILTER_REJECT` for: extension UI elements (`isExtensionUIElement`), `<code>`/`<kbd>`/`<samp>`/`<script>`/`<style>`/`<noscript>` tags (via `_SKIP_RE` — code-bearing or machine-only source elements; wrapping their text would corrupt JS/CSS source for any code that re-reads `.textContent` and serves no privacy purpose because they aren't rendered), code-signaling `<pre>` elements (`isCodePre` — has `<code>` child, syntax-highlighting class, or `data-code` attr; bare `<pre>` is NOT rejected since it may contain real PII like preformatted addresses), and code editor widgets (`isCodeEditorWidget`). All checks are O(1) element-self checks — no `closest()` ancestor walk. Non-rejected elements get `FILTER_SKIP` (walker descends into children). **Only `Node.TEXT_NODE` gets `FILTER_ACCEPT`** — Comments, ProcessingInstructions, and CDATASections (also surfaced under `SHOW_ALL`) are rejected, so the wrap path never sees a non-Text CharacterData and never tries to `splitText` on a node that may lack the method (some pages monkey-patch CharacterData prototypes).
 - **Trade-off**: TreeWalker is mutable — DOM mutations between chunks can cause it to skip or revisit nodes. `_processTextNode` handles detached nodes (parent null → 0), `isInsidePiiSpan` guards double-wrapping, and `handleMutations` catches new content after `_scanComplete = true`.
 **Skips** (Stage 0 pre-filter, in order):
 - `null` `rootEl` or `types` → returns `0` (calls `onDone(0)` if provided).
@@ -80,7 +80,7 @@ Other state lives in `blsi.PiiState`.
   - `addedNodes` of type `TEXT_NODE` → guarded by `_shouldSkipMutation(node)` (extension UI + code blocks), then delegates to `_processTextNode(node, activeTypes)`. Same pre-filter chain, digit gate, cross-node fallback as the initial scan path.
   - `addedNodes` of type `ELEMENT_NODE` → skips self-generated PII spans (elements carrying `PII_ATTR`) via a direct attribute check, skips extension UI and code block nodes via `_shouldSkipMutation`, then recurses via `_scanSubtree(node, activeTypes)`. Uses the private `_scanSubtree` rather than the public `scan()` so stats counters accumulate across multi-subtree drains instead of being reset on each recursive call.
 - For each `characterData` mutation:
-  - guarded by `_shouldSkipMutation(mutation.target)`, then delegates to `_processTextNode(mutation.target, activeTypes)`.
+  - gated on `mutation.target.nodeType === Node.TEXT_NODE` (Comments / ProcessingInstructions / CDATASections are skipped), then guarded by `_shouldSkipMutation(mutation.target)`, then delegates to `_processTextNode(mutation.target, activeTypes)`.
 - Other mutation types → ignored.
 
 **Stats**: `handleMutations` does NOT reset stats — counters accumulate across the drain on top of whatever the most recent `scan()` left behind. This means a `getStats()` snapshot after a mutation drain reflects: counters from the drain's mutations + counters from the most recent `scan()`. Call `scan()` to start a fresh stats window.
@@ -122,6 +122,8 @@ Collects up to `limit` characters of text preceding `textNode` by walking backwa
 ### _wrapTextNode(textNode, matches)
 
 Right-to-left split: for each match in reverse order, `splitText(end)` then `splitText(start)`, then replace the match-text node with a `<span data-bl-si-pii="…">` carrying the original text. Each wrapped span calls `blsi.PiiState.incrementMatchCount`. Returns the count of wrapped spans (`number`).
+
+**Defensive guard**: returns `0` early when `textNode` is missing, has `nodeType !== Node.TEXT_NODE`, or has no `splitText` method. Walker filter and the characterData mutation gate already ensure only Text nodes reach here, but the guard belt-and-suspenders against pages that monkey-patch CharacterData prototypes (some SPA frameworks do).
 
 The PII span carries ONLY the `[data-bl-si-pii]` attribute — never `[data-bl-si-blur]`. Blur is owned by the CSS rule in `content.css`. blur_engine sweeps must not touch these spans (they pass the EXCLUDE chain via `:not([data-bl-si-pii])`).
 

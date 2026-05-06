@@ -7,6 +7,8 @@ const MODULE_PATH = path.resolve(__dirname, '../../popup/renders/main.js');
 
 function loadRender() {
   if (global.BlurrySitePopupRender) return;
+  global.BlurrySitePopupRenderProtect = { renderSection: jest.fn() };
+  global.BlurrySitePopupRenderTriggers = { renderSection: jest.fn() };
   if (fs.existsSync(MODULE_PATH)) {
     require(MODULE_PATH);
   } else {
@@ -84,14 +86,10 @@ function setupDom() {
   document.body.innerHTML = `
     <div id="bl-htb-chips"></div>
     <div id="bl-htb-summary"></div>
-    <section id="bl-pii">
-      <input type="checkbox" id="bl-pii-master">
-      <div id="bl-pii-chips"></div>
-      <div id="bl-pii-color-row"></div>
-    </section>
-    <div id="bl-automate-summary"></div>
+    <section id="bl-stay-blurry"></section>
     <div id="bl-mode-blur-all" class="bl-mode-block"></div>
     <div id="bl-mode-pick-blur" class="bl-mode-block"></div>
+    <section id="bl-smart-triggers"></section>
   `;
 }
 
@@ -181,69 +179,6 @@ describe('renderHtbSection', () => {
     expect(labels).toContain('htb_label_color');
     expect(labels).not.toContain('htb_label_strength');
     expect(labels).not.toContain('htb_label_reveal');
-  });
-});
-
-// ── renderPiiSection ─────────────────────────────────────────────────────────
-
-describe('renderPiiSection', () => {
-  test('master toggle is checked when EMAIL is true', () => {
-    BlurrySitePopupRender.renderPiiSection(makeSettings({
-      auto_detect_pii: { settings: { email: true, numeric: false } },
-    }));
-    expect(document.getElementById('bl-pii-master').checked).toBe(true);
-  });
-
-  test('master toggle is unchecked when both are false', () => {
-    BlurrySitePopupRender.renderPiiSection(makeSettings({
-      auto_detect_pii: { settings: { email: false, numeric: false } },
-    }));
-    expect(document.getElementById('bl-pii-master').checked).toBe(false);
-  });
-
-  test('renders 4 PII mode chips', () => {
-    BlurrySitePopupRender.renderPiiSection(makeSettings());
-    expect(document.querySelectorAll('#bl-pii-chips .bl-chip')).toHaveLength(4);
-  });
-
-  test('active PII chip has bl-chip--active (amber, no sky class)', () => {
-    BlurrySitePopupRender.renderPiiSection(makeSettings({ auto_detect_pii: { settings: { pii_mode: 'redacted' } } }));
-    const chips = document.querySelectorAll('#bl-pii-chips .bl-chip');
-    const active = [...chips].find(c => c.classList.contains('bl-chip--active'));
-    expect(active).toBeTruthy();
-    expect(active.dataset.piiMode).toBe('redacted');
-    expect(active.classList.contains('bl-chip--sky')).toBe(false);
-  });
-});
-
-// ── renderAutomateSection ────────────────────────────────────────────────────
-
-describe('renderAutomateSection', () => {
-  test('renders 3 summary rows', () => {
-    BlurrySitePopupRender.renderAutomateSection(makeSettings());
-    expect(document.querySelectorAll('#bl-automate-summary .bl-summary-row')).toHaveLength(3);
-  });
-
-  test('IDLE enabled with value=5 unit=min shows value and unit key', () => {
-    BlurrySitePopupRender.renderAutomateSection(makeSettings({
-      automate: { settings: { idle: { value: 5, unit: 'min', enabled: true }, tab_switch: { enabled: false } } },
-    }));
-    const rows = document.querySelectorAll('#bl-automate-summary .bl-summary-row');
-    const idleRow = [...rows].find(
-      r => r.querySelector('.bl-summary-row__label').textContent === 'automate_idle'
-    );
-    expect(idleRow.querySelector('.bl-summary-row__value').textContent).toBe('5 automate_unit_min');
-  });
-
-  test('TAB_SWITCH enabled shows On value', () => {
-    BlurrySitePopupRender.renderAutomateSection(makeSettings({
-      automate: { settings: { idle: { value: 5, unit: 'min', enabled: false }, tab_switch: { enabled: true } } },
-    }));
-    const rows = document.querySelectorAll('#bl-automate-summary .bl-summary-row');
-    const tabRow = [...rows].find(
-      r => r.querySelector('.bl-summary-row__label').textContent === 'automate_tab_switch'
-    );
-    expect(tabRow.querySelector('.bl-summary-row__value').textContent).toBe('automate_on');
   });
 });
 
@@ -574,19 +509,21 @@ describe('renderModesSection', () => {
 describe('renderAll rule-managed branch', () => {
   function setupFullDom() {
     document.body.innerHTML = `
+      <section id="bl-stay-blurry"></section>
       <section id="bl-modes" class="bl-section bl-modes">
         <div id="bl-notif-area"></div>
         <div id="bl-mode-blur-all" class="bl-mode-block"><span>old-content</span></div>
         <div id="bl-mode-pick-blur" class="bl-mode-block"><span>old-content</span></div>
       </section>
-      <section id="bl-pii"><div id="bl-pii-chips"></div><div id="bl-pii-color-row"></div></section>
-      <section id="bl-automate"><div id="bl-automate-summary"></div></section>
+      <section id="bl-smart-triggers"></section>
     `;
   }
 
   beforeEach(() => {
     setupFullDom();
     document.body.classList.remove('bl-rule-managed');
+    BlurrySitePopupRenderProtect.renderSection.mockClear();
+    BlurrySitePopupRenderTriggers.renderSection.mockClear();
   });
 
   test('rule-managed: stamps body class, renders banner, clears mode blocks', () => {
@@ -602,6 +539,8 @@ describe('renderAll rule-managed branch', () => {
     expect(document.querySelector('#bl-notif-area .bl-rule-banner')).not.toBeNull();
     expect(document.getElementById('bl-mode-blur-all').children.length).toBe(0);
     expect(document.getElementById('bl-mode-pick-blur').children.length).toBe(0);
+    expect(document.getElementById('bl-stay-blurry').children.length).toBe(0);
+    expect(document.getElementById('bl-smart-triggers').children.length).toBe(0);
   });
 
   test('non-rule-managed: removes body class, renders modes normally', () => {
@@ -638,13 +577,13 @@ describe('renderAll rule-managed branch', () => {
 describe('renderNotifArea per-trigger sub-cards', () => {
   function setupNotifDom() {
     document.body.innerHTML = `
+      <section id="bl-stay-blurry"></section>
       <section id="bl-modes" class="bl-section bl-modes">
         <div id="bl-notif-area"></div>
         <div id="bl-mode-blur-all" class="bl-mode-block"></div>
         <div id="bl-mode-pick-blur" class="bl-mode-block"></div>
       </section>
-      <section id="bl-pii"><div id="bl-pii-chips"></div><div id="bl-pii-color-row"></div></section>
-      <section id="bl-automate"><div id="bl-automate-summary"></div></section>
+      <section id="bl-smart-triggers"></section>
     `;
   }
 
@@ -716,16 +655,14 @@ describe('renderNotifArea per-trigger sub-cards', () => {
     expect(btns.length).toBe(1);
   });
 
-  test('skipped state renders info-only card with no actions', () => {
+  test('manual blur active alone (no automate trigger) renders no notif card', () => {
+    // No automate trigger fires + nothing suspended/suppressed → notif area stays empty.
+    // The popup never renders a "skipped" card; manual blur and automate are independent.
     const area = render({
       automate_blur_active: false,
-      automate_blur_skipped: true,
-      automate_blur_skip_reason: 'manual',
     });
     const cards = area.querySelectorAll('.bl-notif-card');
-    expect(cards.length).toBe(1);
-    expect(cards[0].querySelector('.bl-notif-card__info')).not.toBeNull();
-    expect(cards[0].querySelector('.bl-notif-card__actions')).toBeNull();
+    expect(cards.length).toBe(0);
   });
 
   test('site-rule pill renders before sub-cards', () => {
@@ -742,8 +679,9 @@ describe('renderNotifArea per-trigger sub-cards', () => {
     );
     const area = document.getElementById('bl-notif-area');
     const children = area.children;
-    expect(children[0].classList.contains('bl-notif-pill')).toBe(true);
-    expect(children[1].classList.contains('bl-notif-card')).toBe(true);
+    expect(children[0].classList.contains('bl-notif-heading')).toBe(true);
+    expect(children[1].classList.contains('bl-notif-pill')).toBe(true);
+    expect(children[2].classList.contains('bl-notif-card')).toBe(true);
   });
 
   test('all three triggers render three sub-cards', () => {
