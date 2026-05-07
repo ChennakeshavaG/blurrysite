@@ -170,8 +170,8 @@ Single source of truth for the `blsi_model` storage shape. Feature-grouped. **Sh
   },
   auto_detect_pii: {
     settings: {
-      email:               true,
-      numeric:             true,
+      email:               false,
+      numeric:             false,
       pii_mode:            'blur',   // pii_modes
       pii_redaction_color: '#000000',
     },

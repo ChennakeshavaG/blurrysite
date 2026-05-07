@@ -214,7 +214,7 @@
     var features = [
       { titleKey: 'welcome_screen_share_title', descKey: 'welcome_screen_share_desc', badgeOn: true,
         svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
-      { titleKey: 'welcome_pii_title', descKey: 'welcome_pii_desc', badgeOn: true,
+      { titleKey: 'welcome_pii_title', descKey: 'welcome_pii_desc', badgeOn: false,
         svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 11h1a3 3 0 0 1 0 6h-1"/><path d="M9 12v6"/><path d="M13 12v6"/><circle cx="12" cy="6" r="4"/></svg>' },
       { titleKey: 'welcome_pick_blur_title', descKey: 'welcome_pick_blur_desc', badgeOn: false,
         svg: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>' },

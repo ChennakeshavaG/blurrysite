@@ -216,8 +216,8 @@ const Constants = (() => {
 
     auto_detect_pii: Object.freeze({
       settings: Object.freeze({
-        email:              true,
-        numeric:            true,
+        email:              false,
+        numeric:            false,
         pii_mode:           'blur',
         pii_redaction_color: '#000000',
       }),

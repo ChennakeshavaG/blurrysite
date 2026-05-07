@@ -121,8 +121,8 @@ describe('BlurrySite constants', () => {
 
     test('auto_detect_pii defaults', () => {
       const pii = PB.DEFAULT_MODEL.auto_detect_pii;
-      expect(pii.settings.email).toBe(true);
-      expect(pii.settings.numeric).toBe(true);
+      expect(pii.settings.email).toBe(false);
+      expect(pii.settings.numeric).toBe(false);
       expect(pii.settings.pii_mode).toBe('blur');
     });
 

@@ -35,7 +35,7 @@ Alias for `_saveAndApply`. Passed as callback into all render files.
 `State.unsuppressScreenShare(scope)` then `_renderCurrent()`. Used by the notif card's Undo affordance.
 
 ### `_showWelcomeCard()`
-Builds the first-install welcome overlay into `#bl-welcome`. Shows four feature rows (Screen Share, Sensitive Info, Pick & Blur, Smart Triggers) with ON badges for defaults-on features. CTA button sets `chrome.storage.local` key `welcome_dismissed` to `true` and hides the overlay. Called once during `init()` when `welcome_dismissed` is falsy.
+Builds the first-install welcome overlay into `#bl-welcome`. Shows four feature rows (Screen Share, Sensitive Info, Pick & Blur, Smart Triggers); only Screen Share carries an ON badge (the sole defaults-on feature). CTA button sets `chrome.storage.local` key `welcome_dismissed` to `true` and hides the overlay. Called once during `init()` when `welcome_dismissed` is falsy.
 
 ### `_openHtbModify(isBlurAll: boolean)`
 Renders HTB sub-page body and calls `UI.showView('bl-view-htb-modify', true)`.
