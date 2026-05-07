@@ -24,12 +24,13 @@ const popupGlobals = {
   BlurrySitePopupUI: 'writable',
   BlurrySitePopupShared: 'writable',
   BlurrySitePopupRender: 'writable',
-  BlurrySitePopupRenderAutomate: 'writable',
   BlurrySitePopupRenderGeneral: 'writable',
   BlurrySitePopupRenderHtb: 'writable',
   BlurrySitePopupRenderMyPage: 'writable',
+  BlurrySitePopupRenderProtect: 'writable',
   BlurrySitePopupRenderShortcuts: 'writable',
   BlurrySitePopupRenderSiteRules: 'writable',
+  BlurrySitePopupRenderTriggers: 'writable',
 };
 
 module.exports = [
