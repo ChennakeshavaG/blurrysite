@@ -211,7 +211,15 @@
       var ss_suspended = !!(r && r.screen_share_suspended);
       if (ss_suspended && ss_state && ss_state.active && typeof _ss_resume_action === 'function') {
         var actions = _ss_resume_action();
-        Toast.show(_i18n_msg('notif_suspended'), 8000, Array.isArray(actions) ? actions : [], { override: true });
+        // persistent: true so clearIfTransient (called by Shortcuts.destroy
+        // during the _sync → applyState cycle) does not remove this toast.
+        // Manual setTimeout provides the 8s auto-dismiss.
+        Toast.show(_i18n_msg('notif_suspended'), undefined, Array.isArray(actions) ? actions : [], { persistent: true, override: true });
+        setTimeout(function () {
+          if (!_initialized) return;
+          var Tc = _toast();
+          if (Tc && typeof Tc.dismiss === 'function') Tc.dismiss();
+        }, 8000);
       }
     }
   }
