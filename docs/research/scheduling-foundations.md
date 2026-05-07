@@ -15,7 +15,13 @@
 
 ### 1.1 A tab is not (always) one process
 
-Pre-2018: one tab → one renderer process. Post-Chrome 67 with **Site Isolation**: each *site* (scheme + registrable domain — `https://example.com` is one site, `*.example.com` collapses into it) gets its own renderer process. A page with cross-site iframes spans multiple renderer processes, glued together by **Out-of-Process Iframes (OOPIFs)**.
+Pre-2018: one tab → one renderer process. Post-Chrome 67 with **Site Isolation**: each *site* (scheme + registrable domain — `https://example.com` is one site, `*.example.com` collapses into it; on low-RAM Android devices Chrome may fall back to per-process-per-tab) gets its own renderer process. A page with cross-site iframes spans multiple renderer processes, glued together by **Out-of-Process Iframes (OOPIFs)**.
+
+> **Quick glossary for the diagram below:**
+> - **Mojo** — Chromium's internal message-passing system between processes (think gRPC for the browser).
+> - **Viz** — the GPU service process that draws the final pixels.
+> - **OOPIF** — an `<iframe>` whose document lives in a different OS process from its parent — invisible to the page, decisive for scheduling because each renderer process has its own main thread.
+> - **Inter-Process Communication (IPC)** — message-passing between two OS processes (browser ↔ renderer ↔ GPU). Each hop costs microseconds.
 
 ```
                                           BROWSER PROCESS
@@ -41,6 +47,8 @@ For our extension, this means: a content script running in the main frame and a 
 ### 1.2 Inside one renderer
 
 A renderer process runs many threads. The main thread is one of them — but most discussion treats it as "the thread" because it owns Document Object Model (DOM), JavaScript (JS), and most of the rendering pipeline.
+
+> **If you only remember one thing from the diagram below:** **the main thread is where everything you write runs** — your JS, your event handlers, DOM mutations, layout. The other threads exist to keep the main thread free for that work. They matter for understanding *why* something runs on the main thread, not what.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -84,7 +92,9 @@ A typical renderer in 2026 has ~12 threads. **Only the main thread runs page Jav
 
 ### 1.3 RenderingNG: 12-stage pipeline
 
-For background only — Chromium's "RenderingNG" architecture splits the path from "Document Object Model (DOM) mutation" to "pixels on screen" into 12 stages. Stages 1-7 run on the main thread (animate → style → layout → pre-paint → scroll → paint → commit). Stages 8-11 run on compositor + raster threads. Stage 12 is the Graphics Processing Unit (GPU) "Viz" process drawing the actual pixels.
+**Why this matters in one sentence:** every visible UI update goes through this 12-stage pipeline, and the main-thread half competes with your JavaScript for the same thread. If your JS runs long, the pipeline can't start the next stage — that's where dropped frames come from.
+
+For background only — Chromium's "RenderingNG" architecture splits the path from "Document Object Model (DOM) mutation" to "pixels on screen" into 12 stages. Stages 1–4 and 6–7 run on the main thread (animate → style → layout → pre-paint → paint → commit). **Stage 5 (scroll) runs on the compositor thread** — this is what enables smooth scrolling while the main thread is busy. Stages 8 (layerize), 9 (raster), and 10 (activate) run on compositor + raster threads. Stages 11 (aggregate) and 12 (draw) run in the Graphics Processing Unit (GPU) "Viz" process drawing the actual pixels.
 
 You don't need to memorise this. The point is: when we say "the main thread is busy," it could be busy doing JavaScript (JS), or doing layout, or doing paint-record generation — all of which prevent the next task from being picked.
 
@@ -201,7 +211,7 @@ For our work (chunking + yielding), this nuance rarely matters — but it explai
 
 The term "macrotask" appears in Mozilla Developer Network (MDN) copy and Jake Archibald's "In The Loop" talk. **It is not a spec term.** The HyperText Markup Language (HTML) spec uses "task." This doc uses "task."
 
-> **Sources**: [HyperText Markup Language (HTML) Living Standard §8.1.7](https://html.spec.whatwg.org/multipage/webappapis.html#event-loops); [HyperText Markup Language (HTML) §8.6 Timers](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html); [Tasks, microtasks, queues and schedules — Jake Archibald](https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/); [In depth: Microtasks — Mozilla Developer Network (MDN)](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/HTML_DOM_API/Microtask_guide/In_depth).
+> **Sources**: [HyperText Markup Language (HTML) Living Standard §8.1.7](https://html.spec.whatwg.org/multipage/webappapis.html#event-loops); [HyperText Markup Language (HTML) §8.6 Timers](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html); [Tasks, microtasks, queues and schedules — Jake Archibald](https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/); [In depth: Microtasks — Mozilla Developer Network (MDN)](https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide/In_depth).
 
 ---
 
@@ -262,7 +272,11 @@ A click does not jump straight from your finger to `onclick`. It travels:
 This is the key surprise: **input first hits the compositor thread, not the main thread.** Two consequences:
 
 - **Smooth scrolling while main is blocked.** A scroll wheel turn travels Operating System (OS) → browser → compositor. If no main-thread listener will preventDefault (i.e. all wheel listeners are `passive: true`), the compositor scrolls the page itself, paints a new frame, and the user sees buttery-smooth scrolling — even if the main thread is in a 5-second long task running JavaScript (JS). This is why `addEventListener('wheel', fn, { passive: true })` matters for jank.
-- **Click always goes to main.** Discrete events — `click`, `keydown`, `keyup`, `mousedown`, `mouseup`, `touchstart`, `touchend` — never have a compositor fast path. They are always posted to the main thread. So clicks block on main-thread availability.
+- **Click always goes to main.** Discrete events — `click`, `keydown`, `keyup`, `mousedown`, `mouseup`, `touchstart`, `touchend` — never have a compositor fast path *for handler dispatch*. They are always posted to the main thread. So clicks block on main-thread availability.
+
+> **Two classifications, easy to confuse:** `touchstart`/`touchend` are "discrete" for `isInputPending()` classification (Foundation 4.2) but participate in the **compositor passive-listener fast path** for scroll-decision purposes — the compositor needs them to decide whether to start a scroll. If all touch listeners are `passive: true`, the compositor scrolls without waiting on main; otherwise it posts to main and waits for `preventDefault()`. `click`, `keydown`, `keyup`, `mousedown`, `mouseup` have no compositor fast path of any kind.
+
+> **What's a "non-fast-scrollable region"?** A rectangle on the page that the compositor must NOT scroll on its own because some main-thread JS might want to call `preventDefault()` on the scroll. Attaching a non-passive `wheel`, `touchstart`, or `touchmove` listener to an element marks the element's bounding box as non-fast-scrollable. Chrome 56+ defaults document/window-level touch listeners to `passive: true`, and Chrome 73+ does the same for `wheel`, so most pages get the compositor fast path automatically. DevTools → Rendering → "Scrolling performance issues" highlights non-fast-scrollable regions in green overlay so you can see what your listeners cost you.
 
 > **⏱ Timings — 3.2:**
 > - **Compositor-only smooth scroll (passive listeners)** — **~1–4 ms** compositor work per frame. Sits well under 16.67 ms / 8.33 ms frame budget. _Source: [Improving scroll performance with passive event listeners, developer.chrome.com](https://developer.chrome.com/blog/passive-event-listeners); [Browser Rendering Guide 2026](https://abdallahzakzouk.com/blog/browser-rendering-performance-guide)._
@@ -297,6 +311,8 @@ The gap between "click queued" and "click handler runs" is **input delay** — t
 
 For continuous events (`mousemove`, `wheel`, `pointermove`, `touchmove`, `pointerrawupdate`, `drag`), Chrome 60+ coalesces them and dispatches once per frame, just before `requestAnimationFrame` callbacks run. `event.getCoalescedEvents()` exposes the merged points (drawing apps, sensitive trackpad input). Discrete events bypass coalescing — they fire immediately on the next main-thread task pick.
 
+**Where in the event loop:** the coalesced continuous-event dispatch runs as part of the **rendering update** (step 4 of the event loop in Foundation 2), not as a separate task. Order within the rendering update: `resize` → `scroll` → coalesced input → `requestAnimationFrame` callbacks → style/layout/paint. Your `mousemove` handler and your rAF callback see the same DOM state for the same frame.
+
 > **⏱ Timings — 3.4:**
 > - **requestAnimationFrame (rAF)-aligned input coalescing window** — **~16.67 ms @ 60 Hz**, **~8.33 ms @ 120 Hz**. All continuous events arriving within this window merge into one dispatch. Exceeding: hit-tests reduced ~35%; raw events still recoverable via `getCoalescedEvents()`. _Source: [Aligned input events, developer.chrome.com](https://developer.chrome.com/blog/aligning-input-events)._
 
@@ -318,7 +334,9 @@ This is the surprise: it does **NOT** read the main-thread input queue. It reads
                    (lock-free read of compositor queue)
 ```
 
-The Meta engineering blog (Comminos & Schloss, the Application Programming Interface (API)'s original proposers) confirms this. The implementation hooks into the compositor's pending-dispatch queue *before* the event hops to main. That's why the call is cheap — no Inter-Process Communication (IPC) round-trip, just a local read of a thread-local structure.
+The Meta engineering blog (Comminos & Schloss, the Application Programming Interface (API)'s original proposers) confirms this. The implementation hooks into the compositor's pending-dispatch queue *before* the event hops to main. That's why the call is cheap — no Inter-Process Communication (IPC) round-trip, just an atomic read of a shared queue-state flag.
+
+> **Why query the compositor queue, not the main-thread queue?** If the event were already on the main-thread queue, your existing event listener would already be queued to fire — the loop just needs to pick it. The whole value of `isInputPending()` is **early warning** — peeking one stage upstream so you can stop work *before* the event reaches main. The compositor queue is "next door" on the renderer process; the read is a thread-local atomic, not an IPC.
 
 > **⏱ Timings — 4.1:**
 > - **`isInputPending()` single-call cost** — **~1–10 µs** (no ref / estimate only — no public 2024–2026 microbenchmark). Mechanism: cross-thread atomic read of compositor input-queue flag.
@@ -344,7 +362,7 @@ For our PII scan, discrete-only is correct: we want to yield to a click or keyst
 
 ### 4.3 Cross-origin iframe false negatives
 
-Chrome docs flag this: "Setting complex clips and masks for cross-origin iframes may report false negatives." Root cause: the implementation uses **compositor-side hit testing** to decide which frame an input is targeting. For cross-origin frames (rendered by a different renderer process), this hit test runs on the Graphics Processing Unit (GPU)/Viz process. Complex Cascading Style Sheets (CSS) `clip-path` or `mask` defeats the fast-path hit test, and the implementation conservatively returns `false` rather than risk leaking timing about another origin.
+Chrome docs flag this: "Setting complex clips and masks for cross-origin iframes may report false negatives." Root cause: the implementation uses **compositor-side hit testing** to decide which frame an input is targeting. For cross-origin frames (rendered by a different renderer process), this hit test runs on the Graphics Processing Unit (GPU)/Viz process. Complex Cascading Style Sheets (CSS) `clip-path` or `mask` defeats the fast-path hit test, and the slow-path hit test cannot answer in the lock-free read window — so the API returns `false` rather than block the call. The conservative return is a perf-budget choice, not a documented cross-origin information-leak mitigation.
 
 > **⏱ Timings — 4.3:** No timing applies — semantic / correctness limitation, not a perf number.
 
@@ -369,13 +387,13 @@ The successor isn't a renamed function — it's a different Application Programm
 
 > **⏱ Timings — 4.5:**
 > - **`scheduler.yield()` per-call overhead** — **~10–100 µs** (no ref / estimate only): one Promise allocation + queue enqueue + new task setup + resume.
-> - **`scheduler.yield()` × 1000 in tight loop** — **~10–100 ms** total. Exceeding: Web Incubator Community Group (WICG) + web.dev explicit warning — "if jobs are very short, the overhead could quickly add up to more time spent yielding than executing the actual work." Mitigation: chunk to ≥ 5 ms before yielding. _Source: [web.dev — Optimize long tasks 2024-12-19](https://web.dev/articles/optimize-long-tasks); [Web Incubator Community Group (WICG) yield-and-continuation explainer](https://github.com/Web Incubator Community Group (WICG)/scheduling-apis/blob/main/explainers/yield-and-continuation.md)._
+> - **`scheduler.yield()` × 1000 in tight loop** — **~10–100 ms** total. Exceeding: Web Incubator Community Group (WICG) + web.dev explicit warning — "if jobs are very short, the overhead could quickly add up to more time spent yielding than executing the actual work." Mitigation: chunk to ≥ 5 ms before yielding. _Source: [web.dev — Optimize long tasks 2024-12-19](https://web.dev/articles/optimize-long-tasks); [Web Incubator Community Group (WICG) yield-and-continuation explainer](https://github.com/WICG/scheduling-apis/blob/main/explainers/yield-and-continuation.md)._
 
 ### 4.6 Browser support, May 2026
 
 Chromium-only. Chrome 87+, Edge 87+. Mozilla standards-positions issue #155 unsigned. WebKit no signal. Not in Firefox, not in Safari, no shipped intent.
 
-> **Sources**: [Chrome dev docs — isInputPending](https://developer.chrome.com/docs/capabilities/web-apis/isinputpending); [Meta Engineering — isInputPending](https://engineering.fb.com/2019/04/22/developer-tools/isinputpending-api/); [Web Incubator Community Group (WICG) is-input-pending spec](https://wicg.github.io/is-input-pending/); [Mozilla Developer Network (MDN) — Scheduling.isInputPending](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Scheduling/isInputPending); [Mozilla standards-positions #155](https://github.com/mozilla/standards-positions/issues/155).
+> **Sources**: [Chrome dev docs — isInputPending](https://developer.chrome.com/docs/capabilities/web-apis/isinputpending); [Meta Engineering — isInputPending](https://engineering.fb.com/2019/04/22/developer-tools/isinputpending-api/); [Web Incubator Community Group (WICG) is-input-pending spec](https://wicg.github.io/is-input-pending/); [Mozilla Developer Network (MDN) — Scheduling.isInputPending](https://developer.mozilla.org/en-US/docs/Web/API/Scheduling/isInputPending); [Mozilla standards-positions #155](https://github.com/mozilla/standards-positions/issues/155).
 
 ---
 
@@ -390,6 +408,8 @@ Per World Wide Web Consortium (W3C) Long Tasks Application Programming Interface
 - The pause **between** two event-loop steps if the loop itself is delayed (rare).
 
 The 50 ms threshold derives from the **Response, Animation, Idle, Load (RAIL) response budget**: aim to respond to user input within 100 ms; if a 50 ms task is already in flight when input arrives, you have 50 ms left for the input task to dispatch and produce a paint.
+
+**On the RAIL "Response" budget — 100 ms.** The RAIL model (Google, 2015; still cited in 2024+ docs) sets a 100 ms budget for acknowledging user input — beyond that, users perceive lag. INP's 200 ms "good" threshold is RAIL's 100 ms response budget plus headroom for presentation delay (paint/commit cost the handler can't directly control). When you see 50 ms / 100 ms / 200 ms / 500 ms thresholds in this doc, they all derive from this lineage.
 
 > **⏱ Timings — 5.1:**
 > - **Long Task threshold** — **50 ms**. Exceeding: surfaced via `PerformanceObserver({type: 'longtask'})`; main thread blocked → input delay risk. _Source: [Long Tasks Application Programming Interface (API) World Wide Web Consortium (W3C) Editor's Draft 2026-03-19](https://w3c.github.io/longtasks/)._
@@ -411,7 +431,7 @@ What does NOT count:
 - Pure swipe (one that doesn't resolve to a tap)
 
 > **⏱ Timings — 5.2:**
-> - **Date Interaction to Next Paint (INP) became a Core Web Vital** — **2024-03-12**. _Source: [Interaction to Next Paint (INP) becomes a Core Web Vital, web.dev 2024-03-12](https://web.dev/blog/inp-cwv-launch)._
+> - **Date Interaction to Next Paint (INP) became a Core Web Vital** — **2024-03-12**. _Source: [Interaction to Next Paint (INP) becomes a Core Web Vital, web.dev 2024-03-12](https://web.dev/blog/inp-cwv-march-12)._
 > - **Date First Input Delay (FID) guaranteed availability removed** — **2024-09-09**. _Source: same._
 > - **Chrome User Experience Report (CrUX) 2024 Interaction to Next Paint (INP) Core Web Vitals (CWV) pass-rate** — Mobile **74%** good (up from 55% in 2022); Desktop **97%**; mobile-desktop gap **23 pp**. _Source: [Web Almanac 2024 — Performance, 2024-11-11](https://almanac.httparchive.org/en/2024/performance)._
 
@@ -439,6 +459,8 @@ Three components:
 - **Processing duration** — handler code executing. Driven by your handler's complexity.
 - **Presentation delay** — from handler end to the next paint that visually reflects the change. Driven by layout/paint cost.
 
+> **What's a "paint"?** A paint is the browser pixel commit that follows style → layout → composite — the moment your DOM mutation actually appears on screen. INP's "next paint" is the *first* paint after the handler ends that includes the visual change driven by the interaction (e.g. menu opens, checkbox toggles, spinner appears). A paint that contains no response-related update doesn't end the INP measurement.
+
 > **⏱ Timings — 5.3 (p75 components, healthy sites):**
 > - **Input delay** — **~37 ms**. Exceeding: pushes total Interaction to Next Paint (INP) past 200 ms "good" cutoff. _Source: [Web Almanac 2024 — Performance](https://almanac.httparchive.org/en/2024/performance)._
 > - **Processing duration** — **~56 ms**. Exceeding: handler logic dominates Interaction to Next Paint (INP); primary fix target for `scheduler.yield()`. _Source: same._
@@ -459,6 +481,8 @@ Per-page Interaction to Next Paint (INP) value is hybrid:
 
 The reported field metric (used for Core Web Vitals (CWV) passing) is the **p75 of those per-page values across all visits to the URL**.
 
+**Why a hybrid?** A user spamming the same flaky button 200 times shouldn't fail a URL on a single 2-second outlier — but neither should one rage-click be hidden by 199 fast ones. The **per-page** stage absorbs noise within one visit; the **across-visits p75** stage means 75% of real user sessions need to clear 200 ms for the URL to pass. Stage 1 picks the representative bad interaction *for this session*; stage 2 asks whether bad sessions are the exception or the rule.
+
 > **⏱ Timings — 5.4 (Core Web Vitals (CWV) thresholds at p75):**
 > - **"Good"** — **≤ 200 ms**. _Source: [Interaction to Next Paint (INP), web.dev (updated 2025-09-02)](https://web.dev/articles/inp)._
 > - **"Needs improvement"** — **> 200 ms and ≤ 500 ms**. _Source: same._
@@ -466,7 +490,11 @@ The reported field metric (used for Core Web Vitals (CWV) passing) is the **p75 
 
 ### 5.5 Long Animation Frames (LoAF) — the modern attribution surface
 
-Long Animation Frames Application Programming Interface (API) shipped Chrome 123 (March 2024). Where Long Tasks gives you "something on the main thread took > 50 ms" with crude attribution (which iframe), Long Animation Frames (LoAF) gives you per-script:
+Long Animation Frames Application Programming Interface (API) shipped Chrome 123 (March 2024).
+
+**Why LoAF exists:** Long Tasks fires per *single task* > 50 ms. But INP-relevant jank often comes from many sub-50 ms tasks stacking between two renders — each individually invisible to Long Tasks. LoAF reframes the unit from "task" to "animation frame" (the work between two consecutive renders) and surfaces a frame when its total work clears 50 ms. That makes LoAF's window match INP's window: input → all intervening work → paint.
+
+Where Long Tasks gives you "a task on the main thread took > 50 ms" attributed only to the *frame container* (which iframe / same-origin descendant via `containerType`/`containerSrc`/`containerId`/`containerName`), Long Animation Frames (LoAF) gives you per-script attribution within the offending frame:
 
 - `sourceURL`, `sourceFunctionName`, `sourceCharPosition`
 - `invoker` — what triggered the script (event listener, `setTimeout`, requestAnimationFrame (rAF), etc.)
@@ -478,7 +506,7 @@ For Interaction to Next Paint (INP) debugging in 2026, prefer Long Animation Fra
 > **⏱ Timings — 5.5:**
 > - **Long Animation Frames (LoAF) frame threshold** — **≥ 50 ms**. Exceeding: frame surfaced via Long Animation Frames (LoAF) Application Programming Interface (API); `blockingDuration` sums tasks > 50 ms. _Source: [Long Animation Frames (LoAF) docs, developer.chrome.com 2024-10-14](https://developer.chrome.com/docs/web-platform/long-animation-frames)._
 > - **Long Animation Frames (LoAF) script-attribution threshold** — scripts running **> 5 ms** within a long animation frame get per-script attribution. _Source: same._
-> - **Long Animation Frames (LoAF) Application Programming Interface (API) ship date** — **Chrome 123, 2024-03-13** stable (after origin trial Chrome 116–122). _Source: [Chrome Releases March 2024](https://chromereleases.googleblog.com/2024/03/); [Long Animation Frames (LoAF) has shipped, developer.chrome.com](https://developer.chrome.com/blog/loaf-has-shipped)._
+> - **Long Animation Frames (LoAF) Application Programming Interface (API) ship date** — **Chrome 123 stable, 2024-03-19** (desktop release; after origin trial Chrome 116–122). _Source: [Chrome Releases — Stable Channel Update for Desktop, 2024-03-19](https://chromereleases.googleblog.com/2024/03/stable-channel-update-for-desktop_19.html); [Long Animation Frames (LoAF) has shipped, developer.chrome.com](https://developer.chrome.com/blog/loaf-has-shipped)._
 > - **Real-world Interaction to Next Paint (INP) wins from `scheduler.yield()` adoption (2024 case studies):**
 >   - **Trendyol** — p75 Interaction to Next Paint (INP) **963 ms → ~650 ms** (~50% reduction). _Source: [web.dev/case-studies/trendyol-inp](https://web.dev/case-studies/trendyol-inp)._
 >   - **Taboola** — publisher A **75 → 48 ms** (36%); publisher C **135 → 92 ms** (33%); publisher D **52 → 37 ms** (29%); RELEASE.js Total Blocking Time (TBT) **691 → 206 ms** (70%). _Source: [web.dev/case-studies/taboola-inp 2024-02-01](https://web.dev/case-studies/taboola-inp)._
@@ -511,7 +539,7 @@ async function work() {                      ┌──────────�
 ```
 
 > **⏱ Timings — 6.1:**
-> - **`await scheduler.yield()` continuation latency** — **~0.1–5 ms** typical (longer if higher-priority tasks ahead) (no ref / estimate only). Exceeding: jank, missed 16.67 ms frame budget, Interaction to Next Paint (INP) regression past 200 ms target. _Source: [Mozilla Developer Network (MDN) Scheduler.yield (2025-09-25)](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Scheduler/yield)._
+> - **`await scheduler.yield()` continuation latency** — **~0.1–5 ms** typical (longer if higher-priority tasks ahead) (no ref / estimate only). Exceeding: jank, missed 16.67 ms frame budget, Interaction to Next Paint (INP) regression past 200 ms target. _Source: [Mozilla Developer Network (MDN) Scheduler.yield (2025-09-25)](https://developer.mozilla.org/en-US/docs/Web/API/Scheduler/yield)._
 > - **`scheduler.yield()` overhead per call** — **~10–100 µs** (no ref / estimate only): Promise alloc + boosted-queue enqueue + new task pickup. Exceeding: dominates wall-time if work-per-iteration < ~100 µs (web.dev explicit warning). _Source: [web.dev — Optimize long tasks 2024-12-19](https://web.dev/articles/optimize-long-tasks)._
 
 ### 6.2 Continuation queue + effective priority
@@ -531,9 +559,20 @@ Selection algorithm (§2.4.3 of Web Incubator Community Group (WICG) spec): pick
 
 A continuation slots **between** its base priority and the next higher one. The "+1" framing is shorthand — there's no numeric arithmetic.
 
+```
+Effective-priority ladder (highest at top):
+                                                   ┌──────────────────────────────────────────┐
+  5  user-blocking, continuation                   │ scheduler drains highest-priority         │
+  4  user-blocking, fresh                          │ runnable bucket first (FIFO within)       │
+  3  user-visible, continuation     ← A2 lands here, jumps the queue ahead of B
+  2  user-visible, fresh            ← B is here
+  1  background, continuation
+  0  background, fresh                              └──────────────────────────────────────────┘
+```
+
 > **⏱ Timings — 6.2:**
 > - **Effective-priority queue selection** — **O(1) per dispatch** (UA picks oldest task at highest effective priority); absolute ns: no ref / estimate only.
-> - **Continuation queue drain** — **O(N) FIFO**, **~10–100 µs per dequeue** (no ref / estimate only). Exceeding: starvation of lower-priority `postTask` while continuations drain. _Source: [Web Incubator Community Group (WICG) yield-and-continuation explainer](https://github.com/Web Incubator Community Group (WICG)/scheduling-apis/blob/main/explainers/yield-and-continuation.md)._
+> - **Continuation queue drain** — **O(N) FIFO**, **~10–100 µs per dequeue** (no ref / estimate only). Exceeding: starvation of lower-priority `postTask` while continuations drain. _Source: [Web Incubator Community Group (WICG) yield-and-continuation explainer](https://github.com/WICG/scheduling-apis/blob/main/explainers/yield-and-continuation.md)._
 
 ### 6.3 Worked example
 
@@ -579,6 +618,8 @@ Iter 3:  log 'A2'
 
 Output: **A1, B, A2**. Continuation lost its place.
 
+**Why setTimeout(0) loses:** timer callbacks run from the **timer task source**, which the event loop treats as a peer-priority generic task — it has no notion of `'user-visible'` vs `'background'` and no continuation boost. So A's "continuation" is just another generic task at the back of the run queue, picked after B (which was queued earlier). Plus, repeated nested `setTimeout(0)` hits the HTML-spec 4 ms clamp after 5 levels of nesting — making it strictly worse than `scheduler.yield()` for chunked work.
+
 > **⏱ Timings — 6.3:** No timing applies — illustrative ordering only.
 
 ### 6.4 What happens between yield and continuation
@@ -590,6 +631,8 @@ Between the two tasks, the event loop completes a full iteration:
 - ✅ Other queued tasks of higher effective priority run.
 - ✅ Input dispatch happens if input was queued and its priority outranks the continuation.
 
+**About that priority outrank:** user-input dispatch (clicks, keys, pointer events) runs at effective priority 4 (`'user-blocking'` fresh) — it outranks every `'user-visible'` and `'background'` continuation. So a yield from a `'user-visible'` `postTask` reliably lets queued input through before resuming, even when the continuation has the +1 boost.
+
 The yield is therefore a real "let the browser breathe" point — not a fake microtask trick.
 
 > **⏱ Timings — 6.4 (gap between yield and continuation):**
@@ -600,7 +643,7 @@ The yield is therefore a real "let the browser breathe" point — not a fake mic
 
 ### 6.5 Priority inheritance
 
-`scheduler.yield()` inherits from the surrounding `postTask`'s priority. Outside any `postTask`, defaults to `'user-visible'`. Surprising case: **inside `requestIdleCallback`**, the inherited priority is `'background'` AND the continuation is non-abortable (no signal to attach to).
+`scheduler.yield()` inherits from the surrounding `postTask`'s priority. Outside any `postTask`, defaults to `'user-visible'`. It also inherits the surrounding `postTask`'s `TaskSignal` — meaning aborting the parent signal also cancels the pending continuation (and resumes throw an `AbortError` inside the awaiting function). Surprising case: **inside `requestIdleCallback`**, there is no signal to inherit — the inherited priority is `'background'` AND the continuation is non-abortable.
 
 > **⏱ Timings — 6.5:** No timing applies — semantic / behavioural fact.
 
@@ -616,7 +659,7 @@ yield() {
 }
 ```
 
-Polyfilled continuations always run at `'user-visible'` regardless of base priority. On native browsers (Chrome 129+, Firefox 142+) the polyfill detects native and bails — no degradation.
+Polyfilled continuations always run at `'user-visible'` regardless of base priority. The polyfill's native-detection is per-method, not per-API: on Chrome 94–128 (where `postTask` was native but `yield` was not), the polyfill leaves native `postTask` in place and patches only `Scheduler.prototype.yield`. From Chrome 129 / Firefox 142 onward, both are native and the polyfill is a no-op.
 
 > **⏱ Timings — 6.6:**
 > - **Polyfill yield extra cost vs native** — **~100 µs to 4 ms per yield** (no ref / estimate only): MessageChannel path ~µs, `setTimeout` fallback hits the 4 ms clamp after nesting. Exceeding: under nested yields the polyfill collapses to **4 ms-per-yield** — 10–20× slower than native. _Source: [scheduler-polyfill v1.3.0 README, 2024-10-22](https://github.com/GoogleChromeLabs/scheduler-polyfill)._
@@ -635,7 +678,7 @@ Polyfilled continuations always run at `'user-visible'` regardless of base prior
 > - **Chrome 129 stable** — **2024-09-17**. _Source: [Chrome Releases blog 2024-09-17](https://chromereleases.googleblog.com/2024/09/stable-channel-update-for-desktop_17.html)._
 > - **Firefox 142 stable** — **2025-08-19** (pref `dom.enable_web_task_scheduling` preffed on by default). _Source: [Firefox 142 release notes](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/142)._
 
-> **Sources**: [Web Incubator Community Group (WICG) Scheduling APIs spec](https://wicg.github.io/scheduling-apis/); [yield-and-continuation explainer](https://github.com/Web Incubator Community Group (WICG)/scheduling-apis/blob/main/explainers/yield-and-continuation.md); [Mozilla Developer Network (MDN) — Scheduler.yield](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Scheduler/yield); [Chrome dev blog: Use scheduler.yield](https://developer.chrome.com/blog/use-scheduler-yield); [scheduler-polyfill v1.3.0 source](https://github.com/GoogleChromeLabs/scheduler-polyfill); [caniuse Scheduler.yield](https://caniuse.com/mdn-api_scheduler_yield).
+> **Sources**: [Web Incubator Community Group (WICG) Scheduling APIs spec](https://wicg.github.io/scheduling-apis/); [yield-and-continuation explainer](https://github.com/WICG/scheduling-apis/blob/main/explainers/yield-and-continuation.md); [Mozilla Developer Network (MDN) — Scheduler.yield](https://developer.mozilla.org/en-US/docs/Web/API/Scheduler/yield); [Chrome dev blog: Use scheduler.yield](https://developer.chrome.com/blog/use-scheduler-yield); [scheduler-polyfill v1.3.0 source](https://github.com/GoogleChromeLabs/scheduler-polyfill); [caniuse Scheduler.yield](https://caniuse.com/mdn-api_scheduler_yield).
 
 ---
 
@@ -708,6 +751,10 @@ Three things going wrong:
 3. **No upper bound on chunk duration.** If `process(item)` takes 50 ms, input delay is 50 ms. The pattern degrades silently with item complexity.
 
 The deeper problem: **on a fully idle page (user reading, no clicks), the loop never yields.** `isInputPending` returns false forever. The whole thing becomes one giant long task. This is the chained-timer trap from a different angle — the pattern *appears* responsive in benchmarks where input is constant, then catastrophically fails in the common case where it's sparse.
+
+> **Recap of Iron Rule #2 (Foundation 2.1):** once a task starts, the event loop will not preempt it for input, rendering, or anything else — the task runs synchronously to its return point, then the next loop iteration picks. This is why `isInputPending()` *inside* the work body would also be useless: even if it returned true, you'd have nowhere to deliver the input until your task ended. The only escape is for *your* task to end (return / `await` a real task boundary) so a *new* task — input dispatch — can be picked.
+
+> **Note on current Chrome team guidance (web.dev, Dec 2024):** the "Optimize long tasks" article now recommends *against* `isInputPending()` as a primary signal — citing false-negatives (cross-origin iframes; complex clip/mask) and the fact that input is not the only thing worth yielding for (rendering, animations, other priorities all matter). The pattern in §7.3 still uses `isInputPending()` as an *optional accelerator* for the time-budget — not as the primary signal. If you drop it entirely and rely on the 5 ms time budget alone, you lose at most 5 ms of input latency in exchange for simpler code; for many extensions that's the better tradeoff. **Keep the time budget; treat `isInputPending` as cosmetic.**
 
 > **⏱ Timings — 7.2 (anti-pattern, illustrative scenario):**
 > - **Per-chunk duration** — **8 ms** (illustrative; can be much higher in practice as chunk size doesn't adapt).
@@ -851,7 +898,9 @@ Issues:
 2. **No `isInputPending` peek.** Typing in a contenteditable while the scan runs gets the "process 500 nodes first" treatment.
 3. **Chunk size doesn't adapt to main-thread load.** On a busy page (heavy Garbage Collection (GC), layout from a SPA's React re-render), each `_processTextNode` is slower → 500 nodes can be 50-100 ms of work.
 
-The migration plan in `scheduling-deep-dive.md` Phase 2 replaces this with the §7.3 correct-pattern shape — `scheduler.postTask({priority: 'user-visible'}) + scheduler.yield()` driven by a 5 ms time budget with `isInputPending` early-trigger. This is the one-paragraph version of why that's the right fix.
+**What each chunk actually does:** `_processTextNode` runs the enabled PII regexes against the node's `textContent` and, on match, splits the text node and wraps the match in a `<span data-bl-si-pii>` — so per-node cost is regex time **plus** potential DOM mutation (`splitText` + `replaceChild`, see §8 Timings below). Adversarial input on a naive regex like `/.+@.+\..+/` can hit catastrophic backtracking; modern V8 Irregexp mitigates worst case in practice but production PII regexes should be anchored, possessive, or atomic where supported.
+
+The migration plan in `scheduling-deep-dive.md` Phase 2 replaces this with the §7.3 correct-pattern shape — `scheduler.postTask({priority: 'user-visible'}) + scheduler.yield()` driven by a 5 ms time budget with `isInputPending` early-trigger. This is the one-paragraph version of why that's the right fix. See `scheduling-deep-dive.md` §Phase 2 for the full callsite-by-callsite migration sequence, and `scheduling-alternatives.md` §3 for why `scheduler.yield()` was chosen over `setTimeout(0)`, `await new Promise(r => setTimeout(r))`, and `MessageChannel` ping-pong.
 
 The MutationObserver (MO) drain in `src/core/observer.js:186-214` has the same shape (`_processObservedChanges` runs full chunks of `ENGINE_CHUNK_SIZE = 500` nodes with no deadline check) and is the second-priority migration target.
 
@@ -875,7 +924,7 @@ The MutationObserver (MO) drain in `src/core/observer.js:186-214` has the same s
 > - **`querySelectorAll('*')` on ~5 k-element page** — **~1–5 ms**. _Source: [Web Almanac 2024 — Markup](https://almanac.httparchive.org/en/2024/markup) (90th-percentile mobile = 1716 elements)._
 >
 > _Style + paint:_
-> - **MutationObserver callback latency from mutation → callback** — **~50 µs – 2 ms**; microtask-queued, NOT synchronous. _Source: [Behind the Curtain: MutationObserver Performance, fsjs.dev 2024](https://fsjs.dev/behind-the-curtain-mutationobserver-performance-optimization/); [Mozilla Developer Network (MDN) Microtask guide](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/HTML_DOM_API/Microtask_guide)._
+> - **MutationObserver callback latency from mutation → callback** — **~50 µs – 2 ms**; microtask-queued, NOT synchronous. _Source: [Behind the Curtain: MutationObserver Performance, fsjs.dev 2024](https://fsjs.dev/behind-the-curtain-mutationobserver-performance-optimization/); [Mozilla Developer Network (MDN) Microtask guide](https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide)._
 > - **Style invalidation cascade for `[data-bl-si-blur] { filter: blur(10px) }` stamping N elements** —
 >   - N = 100: **~0.5–2 ms**
 >   - N = 1000: **~5–25 ms**
@@ -893,13 +942,16 @@ The MutationObserver (MO) drain in `src/core/observer.js:186-214` has the same s
 ## Glossary
 
 - **Compositor thread** — A renderer-process thread that owns scrolling, simple animations, and first-stage input triage. Doesn't run page JavaScript (JS).
-- **Continuation** — In scheduler-Application Programming Interface (API) parlance, a task that resumes an `await scheduler.yield()`. Flagged with `isContinuation = true` and given an effective-priority slot above fresh tasks of the same nominal priority.
+- **`contenteditable`** — HTML attribute marking an element as user-editable text. Frequent target for INP-relevant scanning issues since typing fires input events the scan must yield to.
+- **Continuation** — In scheduler-API parlance, a task that resumes an `await scheduler.yield()`. Flagged with `isContinuation = true` and given an effective-priority slot above fresh tasks of the same nominal priority.
 - **Compositor Thread Event Queue (CTEQ)** — `CompositorThreadEventQueue`. The queue where input lands first inside the renderer.
+- **`deadline.timeRemaining()`** — Method on the `IdleDeadline` passed to `requestIdleCallback` callbacks; returns ms until the idle period ends (capped at ~50 ms by spec).
 - **Effective priority** — Combined `(priority, isContinuation)` selector key for scheduler queues. Continuations slot between adjacent priorities.
 - **Event loop** — The HyperText Markup Language (HTML) spec's main-thread processing model: pick task → run → drain microtasks → maybe render. Repeat forever.
 - **Idle period** — A window between rendering steps when the UA grants `requestIdleCallback` callbacks. Length capped at 50 ms by spec.
-- **Interaction to Next Paint (INP)** — Interaction to Next Paint. Core Web Vital measuring user-interaction latency. Replaced First Input Delay (FID) in March 2024.
+- **Interaction to Next Paint (INP)** — Core Web Vital measuring user-interaction latency (75th-percentile responsiveness across an entire page session). Replaced First Input Delay (FID) on 12 March 2024.
 - **InputHandlerProxy** — Compositor-thread component that triages incoming input, deciding compositor-handle vs main-thread-post.
+- **`isInputPending(options?)`** — Synchronous check on `navigator.scheduling`: returns `true` if the renderer's compositor input queue has a queued event waiting. Chrome 87+ (Chromium-only). Now considered superseded by `scheduler.yield()` for most cases.
 - **Iron rules** — (1) one task per loop iteration; (2) tasks run to completion; (3) rendering is browser-decided.
 - **Long Animation Frames (LoAF)** — Long Animation Frames Application Programming Interface (API). Per-script attribution surface, supersedes Long Tasks for Interaction to Next Paint (INP) debugging. Chrome 123+.
 - **Long task** — Main-thread work exceeding 50 ms. Per World Wide Web Consortium (W3C) Long Tasks Application Programming Interface (API).
@@ -907,10 +959,14 @@ The MutationObserver (MO) drain in `src/core/observer.js:186-214` has the same s
 - **Microtask** — Queue position drained at end of every event-loop task and whenever the JavaScript (JS) stack empties. Sources: Promise reactions, `queueMicrotask`, MutationObserver.
 - **Microtask checkpoint** — The spec algorithm that drains the microtask queue.
 - **Out-of-Process Iframe (OOPIF)** — Out-of-process iframe. Cross-site iframes run in a separate renderer process.
+- **Priority ladder (effective)** — From highest to lowest: `'user-blocking'` continuation (5) > `'user-blocking'` fresh (4) > `'user-visible'` continuation (3) > `'user-visible'` fresh (2) > `'background'` continuation (1) > `'background'` fresh (0). Continuations of priority P slot above fresh tasks of priority P, below fresh P+1.
 - **Response, Animation, Idle, Load (RAIL)** — Response/Animation/Idle/Load performance model. Source of the 50 ms long-task threshold (predecessor framing to Core Web Vitals).
 - **Renderer process** — One per site (post Site Isolation). Owns Document Object Model (DOM), JavaScript (JS), layout, paint records for that site.
 - **Run-to-completion** — The guarantee that nothing on the main thread interrupts a running task.
+- **`scheduler.postTask(callback, {priority, signal, delay})`** — Posts a task with explicit priority (`'user-blocking'` / `'user-visible'` / `'background'`) and optional `TaskSignal` for abort + dynamic priority change. Returns a Promise resolving to the callback's return value. Chrome 94+, Firefox 142+.
+- **`scheduler.yield()`** — Returns a Promise resolving in a continuation task at the same effective priority, slotted ahead of fresh same-priority work. Lets long work split without losing queue position. Chrome 129+, Firefox 142+.
 - **Site Isolation** — Chrome 67+ architecture: each site (scheme + registrable domain) gets its own renderer process.
+- **`TaskController` / `TaskSignal`** — Extends `AbortController` / `AbortSignal` for the scheduler API. `controller.abort()` cancels queued tasks; `controller.setPriority('user-blocking')` mutates priority of every task posted with that signal still in the queue.
 - **Task source** — A logical stream of tasks per HyperText Markup Language (HTML) spec: timer, Document Object Model (DOM)-manipulation, user-interaction, idle, etc. Throttling rules are per-source.
 - **Task** — A queued unit of work, picked one per event-loop iteration.
 
@@ -922,7 +978,7 @@ The MutationObserver (MO) drain in `src/core/observer.js:186-214` has the same s
 - [HyperText Markup Language (HTML) Living Standard §8.1.7 — Event loops](https://html.spec.whatwg.org/multipage/webappapis.html#event-loops)
 - [HyperText Markup Language (HTML) §8.6 — Timers](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html)
 - [Web Incubator Community Group (WICG) Prioritized Task Scheduling](https://wicg.github.io/scheduling-apis/)
-- [Web Incubator Community Group (WICG) yield-and-continuation explainer](https://github.com/Web Incubator Community Group (WICG)/scheduling-apis/blob/main/explainers/yield-and-continuation.md)
+- [Web Incubator Community Group (WICG) yield-and-continuation explainer](https://github.com/WICG/scheduling-apis/blob/main/explainers/yield-and-continuation.md)
 - [Web Incubator Community Group (WICG) is-input-pending](https://wicg.github.io/is-input-pending/)
 - [World Wide Web Consortium (W3C) Long Tasks Application Programming Interface (API)](https://w3c.github.io/longtasks/)
 - [World Wide Web Consortium (W3C) requestIdleCallback](https://w3c.github.io/requestidlecallback/)
@@ -947,11 +1003,11 @@ The MutationObserver (MO) drain in `src/core/observer.js:186-214` has the same s
 - [Defining Core Web Vitals thresholds](https://web.dev/articles/defining-core-web-vitals-thresholds)
 
 ### Mozilla Developer Network (MDN)
-- [Scheduler.postTask](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Scheduler/postTask)
-- [Scheduler.yield](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Scheduler/yield)
-- [Scheduling.isInputPending](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Scheduling/isInputPending)
-- [Window.requestIdleCallback](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/Window/requestIdleCallback)
-- [Microtask guide — in depth](https://developer.mozilla.org/en-US/docs/Web/Application Programming Interface (API)/HTML_DOM_API/Microtask_guide/In_depth)
+- [Scheduler.postTask](https://developer.mozilla.org/en-US/docs/Web/API/Scheduler/postTask)
+- [Scheduler.yield](https://developer.mozilla.org/en-US/docs/Web/API/Scheduler/yield)
+- [Scheduling.isInputPending](https://developer.mozilla.org/en-US/docs/Web/API/Scheduling/isInputPending)
+- [Window.requestIdleCallback](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestIdleCallback)
+- [Microtask guide — in depth](https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide/In_depth)
 
 ### External writing
 - [Tasks, microtasks, queues and schedules — Jake Archibald](https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/)

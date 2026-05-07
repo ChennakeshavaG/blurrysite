@@ -55,9 +55,11 @@ This is the part that makes rIC unreliable for "must-eventually-run" work. Chrom
 | **Standard throttling** | Page hidden < 5 min, OR chain count < 5, OR WebRTC active | rIC backed by 1 Hz "wake-up" — callback runs at most ~1× per second; if `timeout` set, can preempt |
 | **Intensive throttling** | Page hidden ≥ 5 min AND chain count ≥ 5 AND silent ≥ 30 s AND no WebRTC | rIC fires at most ~1× per minute |
 
-"Chain count" = how many timers/idle-callbacks chained from each other since the last user input. Crucially, the chained-timer heuristic counts rICs that re-post rICs. Our `_processStampQueue` is exactly that — it self-reschedules. After the 5th hop, throttling kicks in even on a foreground-but-recently-idle tab.
+"Chain count" = how many timers/idle-callbacks chained from each other since the last user input. The chained-timer heuristic is documented for `setTimeout`/`setInterval` (Chrome 88 timer-throttling post). Chromium's `BackgroundTaskQueue` applies analogous chained-callback heuristics to rIC, but the precise threshold for rIC is implementation detail rather than documented contract — empirically the cliff lands around the same 5-hop mark. Our `_processStampQueue` is a self-rescheduling rIC chain, so it sits in this regime.
 
-**Exemption list**: open WebSocket, open RTCDataChannel, live MediaStreamTrack, active getDisplayMedia (the screen-share path uses this — but that exemption applies only to the *sharing tab*, not to other tabs in the same browser).
+**Exemption list (per Chrome 88 documentation, scoped to setTimeout/setInterval)**: open `RTCPeerConnection` with open `RTCDataChannel` or live `MediaStreamTrack`. `getDisplayMedia` qualifies because it produces a live `MediaStreamTrack` — but the exemption applies only to the *sharing tab*, not other tabs. WebSocket is **not** in the documented exemption list. Treat the exemption list as the source-of-truth for timer throttling and a strong implementation hint for rIC.
+
+> **Sourcing caveat for the table above.** The 5-min / chain-count / 30-s-silent rules on `developer.chrome.com/blog/timer-throttling-in-chrome-88` formally apply to `setTimeout`/`setInterval`. rIC is not in scope of that post. Chromium routes `requestIdleCallback` through the same best-effort queue as background timers, so the practical effect is comparable; the W3C spec separately permits hidden-document idle-period throttling (e.g. one period per 10 s). When you read "rIC throttling tier" above, treat it as Chromium-implementation observation, not Chrome 88 documentation.
 
 **For Blurry Site this means**: a user enables blur-all on a long-form article, doesn't interact for 5 minutes, then a SPA injects new DOM. Our MO callback buffers the nodes. Our `_runWhenIdle` schedules the drain. The drain may not fire for up to 60 seconds. The user sees unblurred content while reading.
 
@@ -209,12 +211,12 @@ This is symptomatic of rIC's biggest failure mode: **on a fully idle page with n
 
 ### II.7 Summary table (rIC sites only)
 
-| # | Site | Deadline used? | Cancellable? | Throttle exposure | User-visible breakage if delayed |
-|---|---|---|---|---|---|
-| 1 | observer.js stamp queue | Yes (`< 1` ms guard) | No | High (chain count + hidden tab) | Picker/context-menu blur/unblur misses; tag-rule blur still works |
-| 2 | observer.js MO drain | **No** | No | High | New DOM nodes don't blur; PII subscriber doesn't fire |
-| 3 | pii.js chunked scan | **No** | Yes (`_chunkedIdleHandle`) | High | PII spans don't appear |
-| 4 | content_script.js bootstrap | n/a (`setTimeout(0)`) | Yes (`_piiScanIdleHandle`) | Low | First-load PII permanently off until next `applyState` |
+| # | Site | Deadline used? | Cancellable? | Throttle exposure | User-visible breakage if delayed | **Migration target** |
+|---|---|---|---|---|---|---|
+| 1 | observer.js stamp queue | Yes (`< 1` ms guard) | No | High (chain count + hidden tab) | Picker/context-menu blur/unblur misses; tag-rule blur still works | `postTask('user-visible')` + `yield()` per 5 ms; abort via TaskController |
+| 2 | observer.js MO drain | **No** | No | High | New DOM nodes don't blur; PII subscriber doesn't fire | Same as #1; add deadline check that's currently absent |
+| 3 | pii.js chunked scan | **No** | Yes (`_chunkedIdleHandle`) | High | PII spans don't appear | `postTask('user-visible')` + `yield()` with `isInputPending` early-trigger; replace 500-node chunk with 5 ms time budget |
+| 4 | content_script.js bootstrap | n/a (`setTimeout(0)`) | Yes (`_piiScanIdleHandle`) | Low | First-load PII permanently off until next `applyState` | **No change** — bootstrap is one-shot, not chained, doesn't enter throttling tier |
 
 Two sites (#2, #3) ignore the deadline — they're idle-scheduled but use a fixed chunk size. That's exactly the workload `scheduler.yield()` is designed for.
 
@@ -258,7 +260,7 @@ The spec is deliberately implementation-defined here. Chromium's mapping (per `t
 
 - `'user-blocking'` → posted to the high-priority task queue, runs ahead of timers and rAF.
 - `'user-visible'` → posted to the default task queue, similar to `setTimeout(0)` but without the 4 ms nested clamp.
-- `'background'` → posted to the *best-effort* queue, which is the same queue that `requestIdleCallback` uses on Chromium — meaning **`'background'` is subject to the same throttling as rIC**. This is the trap most articles don't mention.
+- `'background'` → posted to the *best-effort* queue, which is the same queue that `requestIdleCallback` uses on Chromium — meaning **`'background'` is subject to the same throttling as rIC**. This is the trap most articles don't mention. Citation: Chromium routes `'background'` through `MainThreadTaskQueue::QueueType::kIdle` (same queue as rIC). Firefox 142+ ships the API but its priority-to-queue mapping is not publicly documented; assume equivalent on FF until measured. **Doc-level takeaway: do not migrate II.2 / II.3 to `'background'`** — the throttling is identical to today's rIC. Use `'user-visible'` for chunked work that should be deferred from the critical path but not throttled.
 
 The win for our codebase isn't "no throttling." It's "explicit priority, abort signals, yield continuations, and `'user-visible'` for chunked work that *shouldn't* be throttled."
 
@@ -268,10 +270,10 @@ The win for our codebase isn't "no throttling." It's "explicit priority, abort s
 |---|---|---|
 | Chrome | 94 (Aug 2021) | All three priorities + TaskController + TaskSignal + setPriority |
 | Edge | 94 | Chromium parity |
-| Firefox | 121 (Dec 2023) | Full support |
+| Firefox | 142+ (Aug 2025) | Full support — entire Prioritized Task Scheduling API shipped together |
 | Safari | not shipped | None planned |
 
-Realistic install base on Chrome MV3 in May 2026 is ≥ 110. Firefox MV3 minimum is 109; range 109-120 needs polyfill.
+Realistic install base on Chrome MV3 in May 2026 is ≥ 110. Firefox MV3 minimum is 109; range 109–141 needs the polyfill (Prioritized Task Scheduling API was preffed-off until Firefox 142).
 
 ### III.2 `scheduler.yield()`
 
@@ -460,7 +462,7 @@ We don't do this today. Doing so could *avoid* the throttling discussion entirel
 - `TaskController`: full impl of abort + setPriority. Priority change re-queues pending tasks.
 - `isInputPending` is **not** polyfilled — it has no portable shim.
 
-For Firefox 109-120 (pre-native), the polyfill gives us `postTask` correctness but priority ordering is best-effort. For Chrome with native (≥ 94), the polyfill is a no-op (it detects `self.scheduler` and bails).
+For Firefox 109–141 (pre-native), the polyfill gives us `postTask` correctness but priority ordering is best-effort. For Chrome with native (≥ 94), the polyfill is a no-op (it detects `self.scheduler` and bails).
 
 ---
 
@@ -561,9 +563,19 @@ Steps:
        });
      }
 
+     // Cached MessageChannel reused across all yieldToBrowser() calls.
+     // Avoids setTimeout(0)'s 4 ms nested-timer clamp + background throttling
+     // (matches Part VII.4's universal "yield to event loop" recommendation).
+     let _yieldChannel = null;
+     let _yieldResolve = null;
+     function _initYieldChannel() {
+       _yieldChannel = new MessageChannel();
+       _yieldChannel.port1.onmessage = () => { const r = _yieldResolve; _yieldResolve = null; r && r(); };
+     }
      async function yieldToBrowser() {
        if (hasYield) return scheduler.yield();
-       return new Promise(resolve => setTimeout(resolve, 0));
+       if (!_yieldChannel) _initYieldChannel();
+       return new Promise(resolve => { _yieldResolve = resolve; _yieldChannel.port2.postMessage(null); });
      }
 
      function isInputPending() {
@@ -608,19 +620,28 @@ Steps:
 3. `cancelChunkedScan()` becomes `_scanController?.abort()`.
 4. `scan(rootEl, types, onDone)` becomes:
    ```js
+   // Note: when passing a TaskSignal via `signal`, the priority is read from
+   // the controller — re-passing `priority` in postTask options is redundant
+   // and ignored per the WICG spec. Keep one or the other.
    const controller = new TaskController({ priority: 'user-visible' });
    _scanController = controller;
    blsi.Scheduling.postTask(async () => {
+     let total;
      try {
-       const total = await _runChunked(walker, enabledTypes, controller);
-       _scanComplete = true;
-       /* drain _pendingMutations as today */
-       onDone(total);
+       total = await _runChunked(walker, enabledTypes, controller);
      } catch (e) {
        if (controller.signal.aborted) return;
        throw e;
      }
-   }, { priority: 'user-visible', signal: controller.signal });
+     _scanComplete = true;
+     /* drain _pendingMutations as today */
+     onDone(total); // outside try — onDone errors are NOT scan errors
+   }, { signal: controller.signal });
+   ```
+   Note: `isInputPending()` is called every iteration of the inner `_runChunked` loop. On µs-scale work units the call cost dominates. If profiling shows the check is expensive vs the per-node work, gate it behind a coarser elapsed check:
+   ```js
+   const elapsed = performance.now() - chunkStart;
+   if (elapsed > 5 || (elapsed > 1 && blsi.Scheduling.isInputPending())) { ... }
    ```
 5. Remove `CHUNK_SIZE = 500` constant. Replace docs reference in `docs/contracts/pii/pii.md` with the time-budget pattern.
 6. Update `tests/unit/pii/pii.test.js`:
@@ -687,6 +708,8 @@ Skip if Phase 2 + 3 acceptance criteria already met. This is belt-and-braces.
 
 Don't migrate. `setTimeout(0)` is fine. Bikeshed. Do it only if a future PR is already touching `applyState` and wants unified abort semantics.
 
+**Why this is acceptable when the rest of the doc argues against `setTimeout(0)`:** the bootstrap fires once at content-script init — it's not a chained timer and never enters Chrome's nested-timer (≥5 chain count) throttling tier. Migration would unify the API surface but yields no measurable INP / long-task improvement.
+
 ### Phase 6 — Telemetry follow-up (½ day)
 
 Re-run Phase 0 measurements after Phase 2 + 3. Append to `docs/perf/scheduling-baseline-2026-05.md`. Decide on Phase 4.
@@ -715,7 +738,7 @@ Each phase is one PR. Each PR can be reverted by `git revert` cleanly because th
 
 | # | Risk | Severity | Mitigation |
 |---|---|---|---|
-| 1 | Polyfill priority ordering wrong on Firefox 109-120 (~0.5% of FF MV3 users in 2026) | Low | Polyfill's MessageChannel-based ordering is correct enough for our workload; we don't depend on strict priority ordering between unrelated tasks |
+| 1 | Polyfill priority ordering best-effort on Firefox 109–141 (small share of FF MV3 users in 2026) | Low | Polyfill's MessageChannel-based ordering is correct enough for our workload; we don't depend on strict priority ordering between unrelated tasks |
 | 2 | Sync test stub for `scheduler.yield` returns resolved promise — ordering differs from native (continuations skip the queue check entirely in tests) | Medium | Document explicitly in `tests/CLAUDE.md`. Add e2e test that exercises yield ordering with real Chrome. |
 | 3 | `'user-visible'` posting could compete with rendering on a paint-heavy page (CSS animations, video) | Low-Medium | Time-budget kept at 5 ms per chunk well below the 16.7 ms frame budget. If observed, easy fix: drop to `'background'` for the stamp queue and accept the throttling. |
 | 4 | `isInputPending()` returns false negatives in cross-origin iframes — typing in an embedded form may not preempt the scan | Low | We only call from main frame (PII scan is main-frame-bound today). Document; revisit if iframe support added. |
@@ -728,7 +751,7 @@ Each phase is one PR. Each PR can be reverted by `git revert` cleanly because th
 
 2. **Is `isInputPending()` worth the feature-detect indirection given Chromium-only support?** Decision: yes — the call is cheap (~100 ns) and the responsiveness win during heavy typing is measurable. Falls back to time-budget on Firefox.
 
-3. **Polyfill or no polyfill for Chrome 94+ / Firefox 121+?** Polyfill ships ~2 KB and detects native at runtime (no-ops on supported browsers). Cost is ~2 KB content script size. Decision: ship the polyfill — the added safety on the long tail of versions outweighs 2 KB.
+3. **Polyfill or no polyfill for Chrome 94+ / Firefox 142+?** Polyfill ships ~2 KB and detects native at runtime (no-ops on supported browsers). Cost is ~2 KB content script size. Decision: ship the polyfill — the added safety on the long tail of versions outweighs 2 KB.
 
 4. **Do we wire up the abort signal for `observer.js` callers?** Today nothing aborts the stamp drain. Decision: not in the migration. Wire abort *if and when* we add visibility-aware pause (Phase 4).
 
@@ -743,7 +766,7 @@ Each phase is one PR. Each PR can be reverted by `git revert` cleanly because th
 | Yield via `scheduler.yield()` not `await new Promise(setTimeout)` | Continuation runs ahead of fresh tasks of same priority — non-starvable | Bare `setTimeout(0)` — works but loses ordering; behind unrelated extension tasks |
 | Use `isInputPending()` as early-yield trigger, not as sole condition | WICG explainer flags sole-condition use as anti-pattern (input may arrive between checks) | Skip `isInputPending` entirely and yield purely on time budget — works on Firefox, slightly worse on Chrome under heavy typing |
 | Skip `setTimeout(0)` → `postTask` migration for the PII bootstrap | Bikeshed; no observable improvement | Do it for surface-uniformity — optional cleanup PR |
-| Ship `scheduler-polyfill` to all browsers including Chrome 94+ / FF 121+ | 2 KB cost; native is detected and polyfill no-ops; long-tail safety | Don't ship — saves 2 KB; risks breakage on outlier browser versions |
+| Ship `scheduler-polyfill` to all browsers including Chrome 94+ / FF 142+ | 2 KB cost; native is detected and polyfill no-ops; long-tail safety | Don't ship — saves 2 KB; risks breakage on outlier browser versions |
 
 ---
 
@@ -757,7 +780,8 @@ Each phase is one PR. Each PR can be reverted by `git revert` cleanly because th
 | Run a callback as soon as event loop is free, with priority over other queued work | `postTask({priority:'user-blocking'})` | Effective priority 4 — beats timers, rAF, normal tasks |
 | Run a callback as soon as event loop is free, default priority | `postTask({priority:'user-visible'})` | Effective priority 2 — replaces `setTimeout(0)` cleanly |
 | Yield mid-task and resume before any newly-queued same-priority work | `await scheduler.yield()` | Effective priority +1 vs fresh tasks |
-| Defer work past LCP | `setTimeout(0)` | Simple, cancellable, no library |
+| Defer work past current task (one-shot, not "until idle") | `setTimeout(fn, 0)` | Simple, cancellable, no library — note `setTimeout(0)` does NOT actually defer past LCP, it just queues the next macrotask |
+| Defer work until main thread is genuinely idle | `postTask({priority:'background'})` or `requestIdleCallback` | Browser picks the moment; subject to throttling on hidden tabs |
 | Yield to user input mid-loop | `await scheduler.yield()` triggered by 5 ms budget OR `isInputPending()` | Best INP profile |
 | Visual work that must commit before paint | `requestAnimationFrame` | Frame-aligned |
 | Do something after current sync code, no event-loop yield | `queueMicrotask` | Drains within current task |

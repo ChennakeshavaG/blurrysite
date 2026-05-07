@@ -104,10 +104,10 @@ scheduler.postTask(() => doWork(), {
 ```
 
 - Three explicit priorities; relative ordering is stable per spec.
-- `'background'` falls back to rIC under the hood on Chrome ≥ 94 — so background tab throttling applies to *that* priority, but `'user-visible'` (the polyfill's `yield` default) does **not** throttle the same way. Picking the priority is the entire point.
+- `'background'` runs on a dedicated low-priority task queue. Chromium subjects it to visibility-aware throttling similar to rIC's idle-period gating — so background tabs starve `'background'` work — but it does **not** literally call `requestIdleCallback`. `'user-visible'` (the polyfill's `yield` default) is **not** throttled the same way. Picking the priority is the entire point.
 - `TaskSignal` extends `AbortSignal` — pass it once, use it for cancel + dynamic priority change.
 
-**Browser support (May 2026)**: Chrome 94+, Edge 94+, Firefox 121+ (Dec 2023), Safari ✗.
+**Browser support (May 2026)**: Chrome 94+ (Aug 2021), Edge 94+, Firefox 142+ (Aug 2025), Safari ✗.
 
 ### 4.2 `scheduler.yield()`
 
@@ -178,14 +178,14 @@ Out of scope. Our work is DOM-touching (stamping attributes, mutating PII spans)
 | `navigator.scheduling.isInputPending` | 87+ | 87+ | ✗ | ✗ |
 | `MessageChannel` | universal | universal | universal | universal |
 
-Blurry Site ships Chrome MV3 + Firefox MV3 only. Safari is not a target. Chromium ≥ 94 covers Manifest V3 (MV3 baseline is Chrome 88, but realistic install base is 94+ since MV2 sunset). Firefox MV3 requires 109+ — past 121 we need only `scheduler.postTask`; for `scheduler.yield`, Firefox 142 is required. Below 142 in Firefox the polyfill provides `scheduler.yield` as `await postTask(..., {priority: inherited})`.
+Blurry Site ships Chrome MV3 + Firefox MV3 only. Safari is not a target. Chromium ≥ 94 covers Manifest V3 (MV3 baseline is Chrome 88, but realistic install base is 94+ since MV2 sunset). Firefox MV3 baseline is 109; **the entire Prioritized Task Scheduling API (`postTask`, `yield`, `TaskController`, `TaskSignal`, `TaskPriorityChangeEvent`) shipped together in Firefox 142 on 2025-08-19** — earlier Firefox versions kept it behind a Nightly flag. So Firefox range 109–141 needs the polyfill for the whole surface; from 142 onward both `postTask` and `yield` are native.
 
 ---
 
 ## 6. Polyfill: `@google-chrome/scheduler-polyfill`
 
 - 100% JS, Apache 2.0, ~2 KB minified+gzip.
-- Polyfills `self.scheduler.postTask`, `scheduler.yield`, `TaskController`, `TaskPriorityChangeEvent`.
+- Polyfills `self.scheduler.postTask`, `scheduler.yield`, `TaskController`, `TaskSignal`, `TaskPriorityChangeEvent`. Exposes both `Window.scheduler` and `WorkerGlobalScope.scheduler`.
 - Fallback chain: `'background'` → `requestIdleCallback`; `'user-visible'`/`'user-blocking'` → `MessageChannel`; absolute fallback → `setTimeout`.
 - Limitations:
   - `'user-blocking'` has no real higher priority on browsers lacking native `scheduler` (degrades to MessageChannel queue).
@@ -194,7 +194,7 @@ Blurry Site ships Chrome MV3 + Firefox MV3 only. Safari is not a target. Chromiu
 
 For this extension we'd ship the polyfill via `<script src="vendor/scheduler-polyfill.js">` in `manifest.json > content_scripts` ahead of `constants.js`. **MV3 service-worker context** also gets a `self.scheduler` shim — fine, but background.js currently doesn't need scheduling primitives.
 
-> Note: the polyfill is published as an npm package. Since this repo has **no bundler** (vanilla JS, IIFE-only, see `CLAUDE.md`), we'd vendor the IIFE/UMD build into `vendor/` and load it as a normal content script. The polyfill ships a UMD bundle — drop-in compatible.
+> Note: the polyfill is published as an npm package. Since this repo has **no bundler** (vanilla JS, IIFE-only, see `CLAUDE.md`), we'd vendor the minified `dist/scheduler-polyfill.js` into `vendor/` and load it as a normal content script. The polyfill installs onto `self.scheduler` on load — drop-in for vanilla `<script>` usage. (It's an IIFE/global-installer, not technically a UMD wrapper.)
 
 ---
 
@@ -297,10 +297,10 @@ But this is bikeshedding — ship if Phase 1 + 2 land cleanly.
 
 ## 8. MV3 / extension caveats
 
-- **Service worker (`background.js`)**: `self.scheduler` is exposed in service workers (Chrome 117+) but our background.js has no long tasks today — skip.
+- **Service worker (`background.js`)**: `self.scheduler` is exposed in service workers (Chrome 94+, alongside the original `postTask` ship) but our background.js has no long tasks today — skip.
 - **Content script load order** (`manifest.json`): polyfill must load before `constants.js`. Add to `content_scripts[].js` array as the first entry.
 - **MAIN-world bridge** (`main_world_bridge.js`): runs in page context, so it sees the page's own `scheduler` (or lack thereof). Don't ship the polyfill into the MAIN world unless we start using it there.
-- **Firefox**: `scheduler.postTask` shipped Firefox 121 (Dec 2023). Firefox MV3 minimum is 109. Range 109–120 needs the polyfill. Realistic install base in 2026 is 128+, but the polyfill costs ~2 KB so ship it unconditionally.
+- **Firefox**: the full Prioritized Task Scheduling API (`postTask` + `yield` + `TaskController` + `TaskSignal` + `TaskPriorityChangeEvent`) shipped together in Firefox 142 on 2025-08-19; earlier versions kept it behind the `dom.enable_web_task_scheduling` Nightly flag. Firefox MV3 minimum is 109. Range 109–141 needs the polyfill. Realistic Firefox install base in May 2026 is 142+, but the polyfill costs ~2 KB so ship it unconditionally for long-tail ESR / older users.
 - **CSP**: polyfill is plain JS, no `eval`/`new Function` — works under MV3's default CSP (`script-src 'self'`).
 
 ---
