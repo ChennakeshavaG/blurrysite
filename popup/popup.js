@@ -268,6 +268,11 @@
     }
     frag.appendChild(list);
 
+    var pinHint = document.createElement('div');
+    pinHint.className = 'bl-welcome__pin-hint';
+    pinHint.textContent = _t('welcome_pin_hint');
+    frag.appendChild(pinHint);
+
     var cta = document.createElement('button');
     cta.className = 'bl-welcome__cta';
     cta.textContent = _t('welcome_cta');

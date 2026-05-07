@@ -135,6 +135,19 @@
     ];
   }
 
+  function _ssResumeAction() {
+    const myTabId = blsi.Automate.ScreenShare && blsi.Automate.ScreenShare.getTabId
+      ? blsi.Automate.ScreenShare.getTabId()
+      : null;
+    return [{
+      label: chrome.i18n.getMessage('notif_suppressed_undo'),
+      onClick: async () => {
+        await Store.unsuppress_screen_share('feature', { hostname, tab_id: myTabId });
+        await _sync();
+      },
+    }];
+  }
+
   // Idle and tab-switch toasts no longer carry action buttons (idle = persistent
   // info-only, tab-switch = 3s info notification). Per-trigger Skip-tab /
   // Skip-site / Disable controls live in the popup notif card only.
@@ -835,6 +848,7 @@
         tab_id: _initTabId,
         get_host_url: () => ({ host: _topHostname, url: location.href }),
         ss_stop_actions: _ssBlurStopActions,
+        ss_resume_action: _ssResumeAction,
       });
     }
 

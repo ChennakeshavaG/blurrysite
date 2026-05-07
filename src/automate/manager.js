@@ -29,6 +29,7 @@
   let _tab_id                   = null;
   let _get_host_url             = null;   // function() → { host, url }
   let _ss_stop_actions          = null;   // async function() → Array<{label,onClick,variant?}> — screen-share only
+  let _ss_resume_action         = null;   // async function() → Array<{label,onClick}> — undo suspend
   let _last_active      = false;  // tracks Overlay state to detect transitions
   // Toast transition tracking — seeded on first _evaluate so the bootstrap
   // call doesn't fire toasts for state that already existed when the tab
@@ -202,10 +203,16 @@
       }
     }
 
-    // 3b. Screen-share falling edge — dismiss persistent toast.
+    // 3b. Screen-share falling edge — suspended (share still live) or ended.
     if (!ss_blurring && _last_ss_blurring) {
       const T = _toast();
       if (T && typeof T.dismiss === 'function') T.dismiss();
+      var ss_state = r && r.screen_share_state;
+      var ss_suspended = !!(r && r.screen_share_suspended);
+      if (ss_suspended && ss_state && ss_state.active && typeof _ss_resume_action === 'function') {
+        var actions = _ss_resume_action();
+        Toast.show(_i18n_msg('notif_suspended'), 8000, Array.isArray(actions) ? actions : [], { override: true });
+      }
     }
   }
 
@@ -215,6 +222,7 @@
     const next_tab_id      = (opts && typeof opts.tab_id === 'number') ? opts.tab_id : null;
     const next_get         = (opts && typeof opts.get_host_url === 'function') ? opts.get_host_url : null;
     const next_ss_actions  = (opts && typeof opts.ss_stop_actions === 'function') ? opts.ss_stop_actions : null;
+    const next_ss_resume   = (opts && typeof opts.ss_resume_action === 'function') ? opts.ss_resume_action : null;
     if (next_get === null) return;  // can't operate without a host source
 
     if (_initialized) destroy();
@@ -222,6 +230,7 @@
     _tab_id                  = next_tab_id;
     _get_host_url            = next_get;
     _ss_stop_actions         = next_ss_actions;
+    _ss_resume_action        = next_ss_resume;
     _initialized             = true;
     _seeded                  = false;  // first _evaluate seeds tracking without firing toasts.
 
@@ -249,6 +258,7 @@
     _tab_id                   = null;
     _get_host_url             = null;
     _ss_stop_actions          = null;
+    _ss_resume_action         = null;
     _last_active              = false;
     _seeded           = false;
     _last_idle_phase  = 'active';

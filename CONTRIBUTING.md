@@ -21,8 +21,7 @@ of the project's working agreements; the long version lives in
    matching `docs/contracts/<module>.md` updates in the same commit.
    If you add or remove tests, update the matching
    `docs/contracts/<module>.tests.md`.
-4. **Tests must stay green.** `npm run test:unit` reports `1205 / 1205`
-   today. Don't push a PR with regressions.
+4. **Tests must stay green.** `npm run test:unit` . Don't push a PR with regressions.
 5. **Conventional Commits.** Commit subjects follow `type(scope):
    short description`. Types: `feat`, `fix`, `chore`, `perf`,
    `refactor`, `docs`, `test`.
@@ -64,7 +63,7 @@ of the project's working agreements; the long version lives in
 
 ```bash
 npm install
-npm run test:unit       # confirm 1205 / 1205 baseline
+npm run test:unit
 ```
 
 The `package-lock.json` pins to the public npm registry. If you have a
@@ -177,10 +176,7 @@ file security issues in the public tracker.
 
 ## Code of conduct
 
-This project follows the
-[Contributor Covenant v2.1](CODE_OF_CONDUCT.md). Be kind, assume
-good faith, prefer questions over assumptions. Reports to the email
-in `CODE_OF_CONDUCT.md`.
+Be kind, assume good faith, prefer questions over assumptions.
 
 ---
 

@@ -9,7 +9,7 @@
     "message": "Blur selected text"
   },
   "pickerPrefixLabel": {
-    "message": "Blur An:"
+    "message": ""
   },
   "pickerChipLabelDynamic": {
     "message": "Element"
@@ -21,13 +21,13 @@
     "message": "Area on screen"
   },
   "pickerChipDescDynamic": {
-    "message": "Tap an element on the page to blur it. The blur follows that item. Click to switch mode."
+    "message": "Click an element on the page to blur it. The blur follows that element. Click the chip to switch mode."
   },
   "pickerChipDescStickyPage": {
-    "message": "Draw a box over a region of the page. Scrolls with the content. Click to switch mode."
+    "message": "Draw a box over part of the page. It scrolls with the content. Click the chip to switch mode."
   },
   "pickerChipDescStickyScreen": {
-    "message": "Draw a box fixed to your screen. Stays put when you scroll. Click to switch mode."
+    "message": "Draw a box pinned to your screen. Stays put when you scroll. Click the chip to switch mode."
   },
   "pickerChipAria": {
     "message": "Picker mode — click to cycle"
@@ -57,7 +57,7 @@
     "message": "Unblurred"
   },
   "pickerAreaTooSmall": {
-    "message": "Area too small (min 10px)"
+    "message": "Too small — draw a bigger area"
   },
   "popup_title": {
     "message": "Blurry Site"
@@ -117,7 +117,7 @@
     "message": "Automate"
   },
   "section_pii_desc": {
-    "message": "Detects emails and numeric patterns"
+    "message": "Finds and hides emails, phone numbers, and card numbers"
   },
   "section_automate_desc": {
     "message": "Blur on a timer, after idle, or when switching tabs"
@@ -147,10 +147,10 @@
     "message": "Blur Style"
   },
   "setting_thorough_blur": {
-    "message": "Catch Hidden Layouts"
+    "message": "Thorough Mode"
   },
   "setting_thorough_hint": {
-    "message": "Also blur empty containers. Catches more, but may hide layouts."
+    "message": "Also blurs containers that appear empty. Hides more content, but may break page layouts."
   },
   "setting_tab_privacy": {
     "message": "Hide Tab Title & Icon"
@@ -222,7 +222,7 @@
     "message": "Tables"
   },
   "cat_structure": {
-    "message": "Layout blocks"
+    "message": "Page sections"
   },
   "tooltip_cat_text": {
     "message": "Headings, paragraphs, quotes, lists, and captions"
@@ -237,7 +237,7 @@
     "message": "Tables and their cells"
   },
   "tooltip_cat_structure": {
-    "message": "Page layout blocks like sections and articles"
+    "message": "Page sections, sidebars, and content areas"
   },
   "shortcut_toggle_blur_all": {
     "message": "Blur Everything"
@@ -288,10 +288,10 @@
     "message": "Reset All"
   },
   "shortcut_reserved_known": {
-    "message": "Reserved: {label} — saving anyway will override it."
+    "message": "Reserved by {label} — saving will override it."
   },
   "shortcut_reserved_browser": {
-    "message": "This chord is reserved by the browser."
+    "message": "This shortcut is reserved by the browser."
   },
   "shortcut_conflict": {
     "message": "Already assigned to {action}"
@@ -300,7 +300,7 @@
     "message": "This shortcut is already set for this action."
   },
   "shortcut_reset_all_confirm": {
-    "message": "Tap again to reset all"
+    "message": "Press again to reset all"
   },
   "rule_pattern": {
     "message": "Matches URL"
@@ -479,6 +479,9 @@
   "toast_cleared": {
     "message": "Page cleared"
   },
+  "footer_github": {
+    "message": "GitHub"
+  },
   "footer_feedback": {
     "message": "Feedback"
   },
@@ -519,7 +522,7 @@
     "message": "Close Blurry Site settings"
   },
   "toast_pwa_hint": {
-    "message": "PWA — right-click or press $SHORTCUT$ to open settings",
+    "message": "Right-click or press $SHORTCUT$ to open settings",
     "placeholders": {
       "shortcut": {
         "content": "$1",
@@ -534,7 +537,7 @@
     "message": "Open Settings in Tab"
   },
   "manifest_cmd_open_settings_desc": {
-    "message": "Open Blurry Site settings panel (or settings tab in normal browser)"
+    "message": "Open Blurry Site settings panel"
   },
   "off_state_message": {
     "message": "Blurry Site is off"
@@ -546,7 +549,7 @@
     "message": "This page is restricted"
   },
   "restricted_state_message": {
-    "message": "Chrome blocks extensions on the Web Store, the new tab page, and chrome:// pages. Try Blurry Site on a regular website."
+    "message": "Your browser blocks extensions on this page. Try Blurry Site on a regular website."
   },
   "power_turn_on": {
     "message": "Turn On"
@@ -570,7 +573,7 @@
     "message": "Mode"
   },
   "htb_label_covers": {
-    "message": "Covers"
+    "message": "Applies to"
   },
   "htb_label_strength": {
     "message": "Strength"
@@ -636,7 +639,7 @@
     "message": "No elements picked yet. Open the picker to start."
   },
   "mode_pick_off_hint": {
-    "message": "Pick & Blur is off. Toggle on to blur specific elements."
+    "message": "Pick & Blur is off. Turn it on to blur specific elements."
   },
   "mode_pick_off_paused": {
     "message": "$COUNT$ items · paused",
@@ -673,13 +676,13 @@
     "message": "Area on screen"
   },
   "tooltip_mode_dynamic": {
-    "message": "Tap any element to blur it"
+    "message": "Click any element to blur it"
   },
   "tooltip_mode_sticky_page": {
-    "message": "Draw a blur region that scrolls with the page"
+    "message": "Draw a blur area that scrolls with the page"
   },
   "tooltip_mode_sticky_screen": {
-    "message": "Draw a blur region that stays fixed when you scroll"
+    "message": "Draw a blur area that stays fixed when you scroll"
   },
   "automate_footer": {
     "message": "When triggered → applies current blur mode settings"
@@ -688,7 +691,7 @@
     "message": "Screen Share"
   },
   "automate_screen_share_desc": {
-    "message": "Auto-blur when screen sharing is detected"
+    "message": "Detects screen sharing in Zoom, Meet, or any app and blurs all tabs instantly"
   },
   "automate_turn_off": {
     "message": "Turn Off"
@@ -715,7 +718,7 @@
     "message": "Suspended"
   },
   "automate_tooltip_resume": {
-    "message": "Resume this automate trigger."
+    "message": "Resume this trigger."
   },
   "notif_suspended": {
     "message": "Suspended — resumes on restart"
@@ -724,7 +727,7 @@
     "message": "Resume"
   },
   "automate_toast_screen_share": {
-    "message": "Blur applied — screen share active"
+    "message": "Screen share detected — page blurred to protect your content"
   },
   "automate_toast_idle": {
     "message": "Blur applied — idle detected"
@@ -792,7 +795,7 @@
     "message": "Screen Share"
   },
   "protect_screen_share_desc": {
-    "message": "Auto-blurs when you share your screen"
+    "message": "Detects screen sharing and instantly blurs other tabs so nothing leaks"
   },
   "protect_sensitive_info": {
     "message": "Sensitive Info"
@@ -828,7 +831,7 @@
     "message": "Screen Share Protection"
   },
   "welcome_screen_share_desc": {
-    "message": "Auto-blurs when sharing"
+    "message": "Start a Zoom, Meet, or any screen-sharing call and your page blurs itself — no scrambling to hide tabs"
   },
   "welcome_pii_title": {
     "message": "Sensitive Info Hiding"
@@ -847,6 +850,9 @@
   },
   "welcome_triggers_desc": {
     "message": "Auto-blur on tab switch / idle"
+  },
+  "welcome_pin_hint": {
+    "message": "Tip: Pin the extension to your toolbar for quick access — click the puzzle icon and hit the pin."
   },
   "welcome_cta": {
     "message": "Got it, let’s go →"

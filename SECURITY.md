@@ -83,7 +83,7 @@ extension, we'll help shepherd the report to the right vendor.
 ## Credit
 
 Security reporters are credited (with their permission) in the
-release notes for the fixed version and in `CHANGELOG.md`.
+release notes for the fixed version.
 
 ## Bug bounty
 

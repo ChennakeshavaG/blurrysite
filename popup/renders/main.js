@@ -196,7 +196,7 @@ const BlurrySitePopupRender = (() => {
     if (!showAny) return;
 
     // Sharing-tab card — this tab IS the one sharing its screen
-    if (ssIsSharingTab && ssShareLive) {
+    if (ssIsSharingTab && ssShareLive && !ssSuspended) {
       el.appendChild(_buildTriggerSubCard({
         triggerLabel: _t('notif_sharing_this_screen'),
         elapsed: _shareElapsed(ssState),
@@ -211,6 +211,16 @@ const BlurrySitePopupRender = (() => {
         actions: onSuppressSS
           ? [{ label: _t('automate_disable_feature'), onClick: function () { onSuppressSS('feature'); }, variant: 'suspend', tooltip: _t('automate_tooltip_turn_off') }]
           : null,
+      }));
+      _prependActivityHeading(el);
+      return;
+    }
+
+    // Sharing-tab suspended — share still live but trigger paused
+    if (ssIsSharingTab && ssShareLive && ssSuspended) {
+      el.appendChild(_buildTriggerSubCard({
+        triggerLabel: _t('notif_sharing_this_screen'),
+        suppression: { label: _t('notif_suspended'), onUndo: function () { if (onUnsuppressSS) onUnsuppressSS('feature'); } },
       }));
       _prependActivityHeading(el);
       return;

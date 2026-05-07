@@ -1505,6 +1505,14 @@ body.bl-rule-managed .bl-main {
   flex-shrink: 0;
 }
 
+.bl-welcome__pin-hint {
+  font-size: var(--bl-text-xs);
+  color: var(--bl-text-muted);
+  text-align: center;
+  margin: 6px 0 2px;
+  line-height: 1.4;
+}
+
 .bl-welcome__cta {
   background: var(--bl-amber);
   color: var(--bl-base);

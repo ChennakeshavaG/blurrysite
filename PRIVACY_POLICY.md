@@ -1,7 +1,5 @@
 # Privacy Policy — BlurrySite
 
-**Last updated:** May 1, 2026
-
 ## Summary
 
 BlurrySite does not collect, transmit, or share any user data. The
@@ -19,17 +17,19 @@ Two namespaces are used:
 |---|---|---|
 | `blsi_model` | Single object holding all your settings: blur radius, reveal mode, blur categories, keyboard shortcuts, blur-all status, pick-and-blur items per hostname, auto-detect-PII configuration, automate trigger configuration, and any custom site rules you create. | Core state — without it the extension can't restore your setup on the next page load. |
 | `blsi_debug` | Boolean — whether the extension's verbose logger is enabled. | Off by default. You can flip it for diagnostics. |
-| `picker_toolbar_pos` | Last position (top / left) of the in-page picker toolbar pill. | Remembers where you dragged it. |
-| `theme` | `'dark'` \| `'light'` for the popup. | UI preference. |
+| `blsi_popup_theme` | `'dark'` \| `'light'` for the popup. | UI preference. |
+| `welcome_dismissed` | Boolean — whether the first-run welcome modal has been dismissed. | Prevents the welcome screen from reappearing after the first visit to the popup. |
+| `blsi_pwa_hint_shown` | Boolean — whether the PWA settings-access hint has been shown. | Prevents the hint from reappearing after the first display. |
 
 ### `chrome.storage.session` (cleared when the browser closes or crashes)
 
 | Key | Contents | Why |
 |---|---|---|
-| `blsi_automate_idle` | One of `'active'` \| `'idle'` \| `'locked'`. | Mirrors the OS idle state so blur applies when you step away. |
-| `blsi_automate_tab_switch_by_tab` | Map `{ [tab_id]: 'fired' }`. | Tracks which tabs have triggered the tab-switch automate rule for the current session. |
-| `blsi_screen_share` | `{ active, sharing_tab_id, started_at, suppressed_sites }`. | Tracks an in-progress screen-share so other tabs can blur while you present. |
+| `blsi_automate_idle` | `{ status, ignore_tabs, ignore_sites }` — OS idle phase (`'active'` / `'idle'` / `'locked'`) plus per-tab and per-site ignore lists. | Mirrors the OS idle state so blur applies when you step away. |
+| `blsi_automate_tab_switch_by_tab` | `{ status: { [tab_id]: 'fired' }, ignore_tabs, ignore_sites }` — per-tab phase map plus ignore lists. | Tracks which tabs have triggered the tab-switch automate rule for the current session. |
+| `blsi_screen_share` | `{ [tab_id]: { streams: { [stream_key]: { started_at } }, suppressed_sites } }` — per-tab, per-stream map. | Tracks in-progress screen-shares so other tabs can blur while you present. |
 | `blsi_automate_suppressed_tabs` | Array of tab IDs you silenced via the "This tab" toast. | Per-session silence list. |
+| `blsi_automate_suspended` | `{ idle, tab_switch, screen_share }` — boolean per trigger. | Tracks which automate triggers are temporarily suspended via the popup master toggle. |
 
 This data never leaves your browser.
 
@@ -88,14 +88,12 @@ For technical completeness:
 
 Your data can be removed at any time:
 
-- **Selective**: "Clear All Sites" in the extension popup wipes blur
-  state for every site without touching your global settings.
 - **Total**: uninstalling the extension automatically removes every
   storage key listed above. Nothing persists outside the browser.
 
 ## Data sale or sharing
 
-We do not sell, rent, share, or transmit any user data. Ever. There
+I do not sell, rent, share, or transmit any user data. Ever. There
 is no party with whom data could be shared because data never leaves
 your device in the first place.
 
@@ -109,9 +107,8 @@ in [the GitHub repository](https://github.com/ChennakeshavaG/blurrysite).
 
 ## Changes to this policy
 
-Material changes to this policy will be reflected by:
-- Bumping the "Last updated" date at the top of this file.
-- A note in the project [`CHANGELOG.md`](CHANGELOG.md) (when present).
+Material changes to this policy will be reflected by bumping the
+"Last updated" date at the top of this file.
 
 ## Contact
 

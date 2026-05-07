@@ -1,82 +1,96 @@
 # BlurrySite
 
-A Chrome and Firefox MV3 extension that blurs anything on a page — text,
-images, videos, form fields, full sections — so what's on your screen
-stays yours during screen-shares, presentations, and over-the-shoulder
-moments.
+A Chrome (released) and Firefox (in testing) MV3 extension that blurs anything on a page: 
+text, images, videos, form fields, full sections
+so what's on your screen stays yours during screen shares, presentations, and over the shoulder moments.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/unit_tests-1205_passing-brightgreen)](#testing)
 [![Vanilla JS](https://img.shields.io/badge/vanilla-JS-yellow)](#how-it-works)
 
-> **Status:** preparing for a public open-source release. Web Store
-> listing in progress. Built incrementally with [Claude](https://claude.ai)
+> Built incrementally with [Claude](https://claude.ai)
 > as a thinking-and-typing partner — see [Acknowledgments](#acknowledgments).
+
+[GitHub](https://github.com/ChennakeshavaG/blurrysite) · [Feedback / Rate on Chrome Web Store](https://chromewebstore.google.com/detail/nceghmchnpfippfofmbagckbinnkgaje)
 
 ---
 
 ## Why
 
-Screen-shares leak. Bank tabs, chat windows, draft emails, dashboards
-with internal numbers — every meeting carries the risk that one
-window-switch reveals something you didn't intend to share. BlurrySite
-gives you a fast, predictable way to hide arbitrary parts of a page,
-on any site, with a couple of keystrokes.
+Screen shares leak. Bank tabs, chat windows, draft emails, dashboards
+with internal numbers every meeting carries the risk that one
+window switch reveals something you didn't intend to share. I built
+BlurrySite to give you a fast, predictable way to hide arbitrary
+parts of a page, on any site, with a couple of keystrokes.
 
 The whole thing runs locally in your browser. There is **no server,
-no telemetry, no analytics, no remote configuration, no update channel
-beyond the browser's own**. See [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md)
-for the line-item disclosure and [`SECURITY.md`](SECURITY.md) for the
-disclosure channel.
+no telemetry, no analytics, no remote configuration, no update
+channel beyond the browser's own**. See
+[`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) for the line item disclosure
+and [`SECURITY.md`](SECURITY.md) for the disclosure channel.
 
 ---
 
 ## Features
 
-### Blurring modes
+### Stay Blurry
 
-- **Blur all** — one shortcut blurs every element matching your
-  category mix (text / media / form / table / structure). Choose
-  between standard CSS blur, frosted glass, redacted bars, or
-  censored-disc font.
-- **Pick & blur** — point-and-click blur for individual elements;
-  also supports **sticky zones** (draw a rectangle that stays put
-  even after the page reflows or you scroll).
-- **Auto-detect PII** — opt-in regex pipeline that finds emails,
-  phone numbers, card numbers, and other PII patterns in page text,
-  with a tier-based false-positive suppressor cascade tuned to keep
-  prices, version numbers, and dates from being mistaken for PII.
-- **Selection blur** — select text, hit a shortcut, blur just that
-  range.
-
-### Triggers
-
-- **Manual toggle** via popup, keyboard, or right-click menu.
-- **Idle automate** — blur the whole page if you walk away.
-- **Tab-switch automate** — blur when the tab loses focus.
-- **Screen-share automate** — when you start sharing your screen,
-  every other tab blurs automatically until the share ends.
-- **Site rules** — pin a full snapshot of settings to a hostname
-  (wildcard or regex). Applies forever for that site, until you
-  remove the rule.
-
-### Reveal + capture
-
-- **Reveal mode** — hold mouse over a blurred element to peek
-  (configurable: hover / click / disabled).
-- **Screenshot tool** — capture a screenshot with the blur preserved
-  (the blur is real CSS rendering, not a UI overlay).
+- **Screen share protection** — when you start sharing your screen,
+  every other tab blurs automatically until the share ends. Per tab
+  and per site suppression if you need to exempt something mid share.
+- **Sensitive info auto-detect** — opt in regex pipeline that finds
+  emails, phone numbers, card numbers, and other PII patterns in page
+  text. Tier based false positive suppressor keeps prices, version
+  numbers, and dates from being mistaken for PII. Choose blur,
+  frosted, redacted, or starred rendering.
 - **Tab privacy** — replace the tab title with `…` so the title bar
   doesn't leak the page name during a share.
 
-### Customisation
+### How to Blur
 
-- **5 blur categories** with per-category opt-in.
-- **Configurable shortcuts** — every action is rebindable; supports
-  multi-modifier chords (Cmd / Ctrl / Alt / Shift + key).
-- **Multi-language UI** — strings live in `_locales/<lang>/` and the
-  popup picks one based on `chrome.i18n`.
+- **Blur all** — one shortcut blurs every element matching your
+  category mix (text / media / form / table / structure). Four blur
+  modes: standard CSS blur, frosted glass, redacted bars, or
+  censored disc font in customise section.
+- **Pick & blur** — pick and click blur for individual elements.
+  Three picker modes: **dynamic** (selector based, follows the
+  element), **sticky page** (rectangle anchored to document), and
+  **sticky screen** (rectangle fixed to viewport, ideal for
+  streaming). Supports blur, frosted, and solid color types.
+
+### Smart Triggers
+
+- **Tab switch** — blur the page when it loses focus.
+- **Idle timer** — blur after a configurable period of inactivity
+  (15 seconds to 60 minutes). Uses the system idle API, not DOM
+  timers.
+
+### General
+
+- **Blur strength** — adjustable radius slider.
+- **Reveal mode** — hover, click, or disabled. Peek through blur
+  without removing it.
+- **Transition duration** — instant or smooth
+- **Screenshot** — capture a viewport screenshot with blur preserved
+  (real CSS rendering, not a UI overlay).
+- **Selection blur** — select text, hit a shortcut, blur just that
+  range.
+- **Multi language UI** — strings in `_locales/<lang>/`, picked via
+  `chrome.i18n`.
 - **Dark / light theme** for the popup.
+- **Export / import** — full settings backup as JSON.
+
+### Shortcuts
+
+- **5 rebindable actions** — toggle blur all, toggle picker, clear
+  all blur, screenshot, and selection blur. Supports multi modifier
+  chords (Cmd / Ctrl / Alt / Shift + key).
+
+### Site Rules
+
+- **Per hostname snapshots** — pin a full settings snapshot to a
+  hostname (exact, wildcard, or regex). Applies automatically on
+  every visit until you remove the rule. Popup shows a "managed by
+  site rule" banner when a rule is active.
 
 ---
 
@@ -84,10 +98,10 @@ disclosure channel.
 
 ### From a release build
 
-Once published, BlurrySite will be available on:
+BlurrySite is available on:
 
-- **Chrome Web Store:** _(pending)_
-- **Firefox Add-ons:** _(pending)_
+- **Chrome Web Store:** [BlurrySite](https://chromewebstore.google.com/detail/nceghmchnpfippfofmbagckbinnkgaje)
+- **Firefox Addons:** _(pending)_
 
 ### From source (developer install)
 
@@ -95,16 +109,16 @@ Once published, BlurrySite will be available on:
 
 1. Clone or download this repository.
 2. Open `chrome://extensions`.
-3. Enable **Developer mode** (top-right toggle).
+3. Enable **Developer mode** (top right toggle).
 4. Click **Load unpacked** and select the project folder.
 
 #### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on**.
+2. Click **Load Temporary Addon**.
 3. Select `manifest.json` from the project folder.
 
-The extension runs out of the box — there is no build step required.
+The extension runs out of the box, there is no build step required.
 
 ---
 
@@ -114,80 +128,167 @@ Once installed:
 
 | Action | Default shortcut |
 |---|---|
-| Toggle blur-all on the current page | `Alt+Shift+B` |
+| Toggle blur all on the current page | `Alt+Shift+B` |
 | Open the picker | `Alt+Shift+P` |
 | Clear all blur on the page | `Alt+Shift+U` |
 | Open the settings panel | `Alt+Shift+O` |
 | Exit picker mode | `Escape` |
 
-Every shortcut is rebindable in the popup → "Shortcuts". Browser-level
+Every shortcut is rebindable in the popup → "Shortcuts". Browser level
 chord conflicts can be resolved at `chrome://extensions/shortcuts`.
 
 ---
 
 ## How it works
 
-BlurrySite is **vanilla JavaScript** — no bundler, no transpiler, no
-TypeScript. Every source file under `src/` is an IIFE that assigns a
-single `window.BlurrySite*` global. The browser loads them in a
-fixed order from `manifest.json` and the orchestration logic in
-`content_script.js` wires everything up.
+I wrote BlurrySite in **vanilla JavaScript** -> no bundler, no
+transpiler, no TypeScript. Every source file under `src/` is an IIFE
+that assigns a single `window.BlurrySite*` global. The browser loads
+them in a fixed order declared in `manifest.json`, and
+`content_script.js` wires everything together at page load.
 
-```
-src/
-├── constants.js               message types + DEFAULT_MODEL
-├── logger.js                  flow-tagged logger, runtime toggle
-├── action_registry.js         single source of truth for shortcut actions
-├── shortcut_label.js          platform-aware key glyphs (⌘ vs Ctrl)
-├── url_matcher.js             wildcard + regex URL pattern engine
-├── selector_utils.js          structural→semantic CSS-selector generator
-├── storage_model.js           single chrome.storage namespace; resolve()
-├── tab_privacy.js             title masking
-├── content_i18n.js            content-world localization
-├── pii/                       8-stage PII detection pipeline
-│   ├── pii_state.js           shared private state
-│   ├── pii_pre_filter.js      whole-node drop heuristics
-│   ├── pii_suppressors.js     tier-based false-positive cascade
-│   ├── pii_detectors.js       regex catalog + match finder
-│   ├── pii_checksums.js       Luhn / Verhoeff / mod-N (phase 3)
-│   ├── pii_country.js         country signal (phase 4)
-│   └── pii.js                 facade: scan / clear / handleMutations
-├── fonts.js                   bundled OFL fonts (disc, asterisk)
-├── core/                      blur engine split by responsibility
-│   ├── engine_state.js        shared private state
-│   ├── categories.js          5 categories + element lists
-│   ├── css_manager.js         3 CSS injection systems (blur-all / pick / pii)
-│   ├── marker_engine.js       per-element stamping + match queries
-│   ├── observer.js            one MO per root + idle drain + pub/sub
-│   └── target_engine.js       pick-blur zones + dynamic items
-├── engine.js                  facade + orchestrator (handleSite)
-├── automate/                  idle / tab-switch / screen-share / overlay
-├── reveal_controller.js       hover-/click-to-peek
-├── shortcut_handler.js        chord detection
-├── selection_blur.js          text-selection driven blur
-├── screenshot.js              viewport capture (blur preserved)
-├── picker.js                  point-and-click + sticky zones
-├── main_world_bridge.js       MAIN-world hook (getDisplayMedia, attachShadow)
-└── content_script.js          orchestrator (wires the rest)
-```
+All settings live under a single `chrome.storage.local` key
+(`blsi_model`), accessed through `blsi.Model`. When any setting
+changes, `chrome.storage.onChanged` fires, the content script
+resolves the new state, and each subsystem rerenders in one pass.
 
-The orchestration entry point is `blsi.Engine.handleSite(resolved)` —
-it takes a fully resolved settings snapshot from `blsi.Model.resolve()`
-and reconciles the DOM in one pass. There is no per-feature observer;
-a single `MutationObserver` per root drains on `requestIdleCallback`
-and dispatches batches to subscribers (PII, etc.).
+### Stay Blurry
 
-For per-module contracts, see [`docs/contracts/`](docs/contracts/) and
-[`CLAUDE.md`](CLAUDE.md). The contracts describe public APIs, edge
-cases, and module-specific invariants — they're the source of truth
-that PRs are reviewed against.
+**Screen share protection** hooks
+`navigator.mediaDevices.getDisplayMedia` in the page's MAIN world
+via a small bridge script injected at `document_start`. When a share
+starts, the bridge posts a message to the content script, which
+relays it to the background service worker. Active streams are
+tracked per tab in `chrome.storage.session`, and a notification is
+broadcast to every other tab. Non sharing tabs read the session state
+and show a full viewport frosted overlay until the share ends. Each
+stream is tracked independently, so multiple concurrent shares from
+different tabs work correctly.
+
+**Sensitive info auto detect** is a multi stage PII pipeline that
+runs in idle chunks (500 text nodes per tick) to avoid blocking the
+page. Stage 1 applies regex detectors for emails, phone numbers,
+card numbers, and financial patterns. Stage 2 runs dispositive
+validators (Luhn for credit cards, mod-97 for IBANs, Verhoeff for
+Aadhaar). Stage 3 applies a false positive suppressor cascade that
+filters out dates, version numbers, prices, measurements, and other
+number like patterns. Matches are wrapped in `<span>` elements with
+a `data-bl-si-pii` attribute and blurred via CSS independently of
+blur all. A MutationObserver subscription rescans new content as
+the page changes.
+
+**Tab privacy** intercepts `document.title` writes via a property
+descriptor override and replaces the title with a generic string.
+Favicon `<link>` elements are swapped with a blank 1×1 PNG data URI,
+preventing tabbar text like unread counts or page names from leaking
+during a share.
+
+### How to Blur
+
+**Blur all** works by injecting three independent `<style>` blocks
+into the document head (and into each observed shadow root): one for
+blur all, one for pick & blur, and one for PII. The blur all stylesheet
+targets elements by tag name across five categories (text, media,
+form, table, structure) and applies a CSS `filter: blur()` with a
+configurable radius. Each matched element is stamped with a
+`data-bl-si-blur` attribute so the reveal system can find it. Four
+rendering modes are available: standard Gaussian blur, a frosted
+glass effect (SVG `feTurbulence` filter), solid colour redacted bars,
+and a censored disc font substitution.
+
+A single `MutationObserver` per document root (including shadow
+roots) watches for new elements and text changes. Mutations are
+buffered and drained on `requestIdleCallback` to avoid long task
+violations. The drain stamps new elements that match active
+categories and dispatches text change records to PII subscribers.
+
+**Pick & blur** lets you target individual elements or draw
+rectangles. In dynamic mode, clicking an element generates a stable
+CSS selector (structural path with semantic fallbacks like class,
+aria, or data attributes) and stores it per hostname. On page load,
+stored selectors are requeried and matched elements receive a
+`data-bl-si-pick-blur` stamp. In sticky page mode, you drag a
+rectangle anchored to document coordinates, it scrolls with the
+page. In sticky screen mode, the rectangle is viewport fixed
+(`position: fixed`) and stays in place during scroll, which is useful
+for streaming. Up to 10 pick & blur items are stored per hostname.
+
+### Smart Triggers
+
+**Tab switch** uses `document.visibilitychange` and `window.blur` /
+`window.focus` events to detect when a tab loses focus. When the tab
+becomes hidden or unfocused, a `'fired'` state is written to
+`chrome.storage.session` for that tab ID. The automate manager reads
+this state and shows the full viewport frosted overlay. The overlay
+dismisses automatically when the tab regains focus.
+
+**Idle timer** runs in the background service worker using
+`chrome.idle.onStateChanged`, which monitors system level inactivity
+(not DOM events). You configure a threshold between 15 seconds and
+60 minutes. When the system transitions to `'idle'` or `'locked'`,
+the background writes the phase to session storage. Every content
+script reads the change and the manager shows the overlay. The
+overlay clears when the system returns to `'active'`.
+
+Both triggers operate independently of manual blur,the overlay
+layers on top of whatever blur state already exists and does not
+modify `blur_all.status`.
+
+### General
+
+**Reveal** attaches capture phase `mouseover` and `click` listeners
+(depending on the configured mode) to the document. When triggered,
+it walks up the DOM, including through shadow root boundaries via
+`composedPath()` — to find the nearest blurred ancestor, then stamps
+it and all blurred descendants with `data-bl-si-reveal`. A CSS rule
+`[data-bl-si-reveal] { filter: none !important }` clears the blur
+temporarily. The reveal dismisses on mouseout (with a 50 ms debounce)
+or on Escape.
+
+**Screenshot** sends a message to the background service worker,
+which calls `chrome.tabs.captureVisibleTab()` to grab the current
+viewport as a PNG. Because the blur is real CSS rendering (not a UI
+overlay), it gets captured in the image. The content script receives
+the data URL and offers download or copy-to-clipboard.
+
+**Selection blur** reads `document.getSelection()`, walks the
+selected text ranges with a `TreeWalker`, and wraps matched text
+nodes in `<span data-bl-si-selection>` elements that receive blur
+CSS. The wrapping is done right-to-left to preserve text offsets.
+The blur persists until page reload.
+
+### Shortcuts
+
+Every action (toggle blur all, toggle picker, clear all, screenshot,
+selection blur) is registered in `action_registry.js` with a default
+key binding. `shortcut_handler.js` listens for `keydown` at capture
+phase, matches `event.code` plus sorted modifier flags against the
+registered bindings, and dispatches the first match back to the
+content script. All bindings are rebindable, the popup's Shortcuts
+page captures a new chord and persists it to `model.shortcuts`.
+
+### Site Rules
+
+Site rules are stored in `model.site_rules` as an array of
+`{ hostname_value, hostname_type, snapshot }` entries.
+`hostname_type` can be `'exact'`, `'wildcard'`, or `'regex'`, matched
+via `url_matcher.js`. When `blsi.Model.resolve()` runs for a page, it
+checks the current hostname against every rule. If a rule matches,
+its snapshot is deep merged over the global defaults, and the resolved
+settings carry `_rule_overrides` so the popup can show a "managed by
+site rule" banner and lock the overridden controls. Display knobs
+like blur radius and reveal mode are never captured in snapshots,
+they remain globally editable.
+
+For per module contracts, see [`docs/contracts/`](docs/contracts/) and
+[`CLAUDE.md`](CLAUDE.md).
 
 ---
 
 ## Reproducibility
 
 Because there is **no build step**, the published extension is
-identical to the tagged release commit byte-for-byte. To verify a
+identical to the tagged release commit byte for byte. To verify a
 release:
 
 1. Note the version on the Chrome Web Store / Firefox AMO listing
@@ -199,7 +300,7 @@ release:
    exactly. There is no minification, no transpilation, no source
    maps to chase.
 
-If the bytes don't match, that's a bug — please report via the
+If the bytes don't match, that's a bug, please report it via the
 channel in [`SECURITY.md`](SECURITY.md).
 
 ---
@@ -229,19 +330,19 @@ npm run lint            # ESLint over src/ + tests/
 npm run i18n:lint       # locale-coverage and key-shape lint
 ```
 
-End-to-end tests under `tests/e2e/` and performance fixtures under
-`tests/perf/` exist but are independently maintained — see
+End to end tests under `tests/e2e/` and performance fixtures under
+`tests/perf/` exist but are independently maintained, see
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for status.
 
 ### Project conventions
 
 | Rule | Source |
 |---|---|
-| Vanilla JS only — no ES modules, no bundler. Every `src/*.js` is an IIFE assigning `blsi.Xxx`. | [`CLAUDE.md`](CLAUDE.md) |
-| Read the per-module contract under `docs/contracts/` before changing any module. A pre-edit hook will remind you. | [`.claude/rules/code-contracts.md`](.claude/rules/code-contracts.md) |
-| Settings are snake_case end-to-end. Stored under one `blsi_model` key, accessed via `blsi.Model`. | [`CLAUDE.md`](CLAUDE.md) |
+| Vanilla JS only; no ES modules, no bundler. Every `src/*.js` is an IIFE assigning `blsi.Xxx`. | [`CLAUDE.md`](CLAUDE.md) |
+| Read the per-module contract under `docs/contracts/` before changing any module. A pre edit hook will remind you. | [`.claude/rules/code-contracts.md`](.claude/rules/code-contracts.md) |
+| Settings are snake_case end to end. Stored under one `blsi_model` key, accessed via `blsi.Model`. | [`CLAUDE.md`](CLAUDE.md) |
 | Conventional Commits (`feat:`, `fix:`, `chore:`, `perf:`, `refactor:`, `docs:`, `test:`). | repo history |
-| `Co-Authored-By: Claude` trailer is the project convention — see Acknowledgments. | repo history |
+| `Co-Authored-By: Claude` trailer is the project convention; see Acknowledgments. | repo history |
 
 For a fuller contributor brief, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -253,42 +354,64 @@ For a fuller contributor brief, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 |---|---|
 | Per-module contracts | [`docs/contracts/`](docs/contracts/) |
 | Project architecture rules | [`CLAUDE.md`](CLAUDE.md) |
-| Privacy promises + storage-key inventory | [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) |
+| Privacy promises + storage key inventory | [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) |
 | Vulnerability reporting | [`SECURITY.md`](SECURITY.md) |
 | Third-party assets + licenses | [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) |
 | Browser compatibility quirks | [`docs/browser-compatibility.md`](docs/browser-compatibility.md) |
 
 ---
 
-## Known limitations
+## Known limitations and what I'm improving
 
-A short list — full table including root causes lives in
-[`CLAUDE.md`](CLAUDE.md) under "Known Limitations":
-
-- **Cross-origin iframes** — picker can't reach inside; same-origin
-  iframes work via `all_frames: true`.
-- **Closed shadow DOM** — picker can't enter; reveal does work via
-  `event.composedPath()`.
-- **Chrome-restricted URLs** — `chrome://`, the extension store,
-  devtools, and similar pages are blocked at the platform level. The
-  popup shows a dedicated empty state on those tabs.
-- **Compositing memory at scale** — every `filter: blur()` element
-  becomes its own GPU compositing layer. Pages with thousands of
-  blur targets may use significant renderer memory.
-- **PII auto-detect over `<canvas>`** — text rendered to canvas has
-  no DOM nodes to walk; `media` blur on the canvas element is the
-  workaround.
+- **Shadow DOM on some sites** — sites like Reddit use closed shadow
+  roots heavily, which the picker can't reach into yet. Blur all and
+  reveal work fine, but selecting individual elements inside shadow
+  DOM is a planned improvement.
+- **Iframes on some sites** — cross origin iframes (embedded videos,
+  third party widgets) are browser sandboxed, so pick and blur can't
+  cross into them. Same origin iframes work.
+- **Deeply nested layouts** — sites like WhatsApp Web use many layers
+  of nested `<div>` wrappers, which can make category based blur
+  over select or under select. I'm improving selector heuristics for
+  these patterns.
+- **Chrome-restricted pages** — browser internal pages (`chrome://`,
+  the Web Store, devtools) block all extensions at the platform
+  level. The popup shows a friendly empty state on those tabs.
+- **Performance on heavy pages** — DOM walkthroughs currently use
+  `requestIdleCallback` for batching, which works well on most pages
+  but can feel sluggish on very large DOMs. I'm exploring
+  alternatives like chunked scheduling and off main thread
+  approaches to make blur and PII scanning faster on heavy sites.
+  Research lives in three companion docs (read in order):
+  - [`docs/research/scheduling-foundations.md`](docs/research/scheduling-foundations.md) —
+    first principles: event loop, input pipeline, `isInputPending`
+    internals, INP, `scheduler.yield()` mechanics, with timing
+    callouts and ASCII diagrams.
+  - [`docs/research/scheduling-deep-dive.md`](docs/research/scheduling-deep-dive.md) —
+    full repo audit (every `requestIdleCallback` call site with
+    file:line, deadlines, throttling exposure), per-site comparison
+    against alternatives, and a 6-phase migration plan.
+  - [`docs/research/scheduling-alternatives.md`](docs/research/scheduling-alternatives.md) —
+    surface summary of `scheduler.postTask` / `scheduler.yield` /
+    `isInputPending` / `MessageChannel` with browser support.
+- **PII regex coverage** — the current detector handles common
+  patterns (emails, card numbers, phone numbers) but regional
+  variations and edge case formats can slip through. I'm working on
+  expanding the regex catalog and improving the false positive
+  suppressor cascade to handle more locale specific patterns.
+- **Canvas content** — text drawn inside `<canvas>` elements has no
+  DOM nodes, so PII detection can't scan it. Blurring the entire
+  canvas element is the workaround for now.
 
 ---
 
 ## Acknowledgments
 
-BlurrySite was built incrementally as a vibe-coded project — the
+I built BlurrySite incrementally as a vibe coded project, the
 design + iteration happened in conversation with
 [Claude](https://claude.ai) (Anthropic). Every commit carries a
-`Co-Authored-By: Claude …` trailer. The licensing, architecture,
-and any human-judgment calls are the author's; the keyboard time
-was shared.
+`Co Authored By: Claude …` trailer. The licensing, architecture,
+and any human judgment calls are mine.
 
 Third-party assets:
 
@@ -304,7 +427,7 @@ inventory.
 
 [GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`).
 
-Copyright (C) 2025 Chennakeshava G.
+Copyright (C) 2026 Chennakeshava G.
 
 BlurrySite is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

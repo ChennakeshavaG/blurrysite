@@ -63,11 +63,14 @@
 
 Only screen-share carries action buttons in-page. `_ssBlurStopActions()` returns `[{label, onClick, variant?, tooltip?}]` with the 3 actions: "Skip tab", "Skip site", "Turn off" (i18n keys `automate_stop_per_tab`, `automate_stop_site_session`, `automate_disable_feature`; tooltips `automate_tooltip_skip_*`). Each `onClick` calls `Store.suppress_screen_share(scope, ctx)` then `await _sync()`. Manager calls the builder async at toast-fire time so each invocation captures the *current* `_topHostname` / `_initTabId` closure.
 
+`_ssResumeAction()` (synchronous) returns `[{label, onClick}]` with a single "Undo" button (i18n key `notif_suppressed_undo`). `onClick` calls `Store.unsuppress_screen_share('feature', ctx)` then `await _sync()`. Must be synchronous — Manager calls it inline within `_fire_toasts` so the undo toast is created before `_seed_tracking` clobbers `_last_ss_blurring`. Manager calls this when the screen-share trigger is suspended while the share is still live, showing a transient 8s toast so the user can resume without opening the popup.
+
 `_idleStopActions` and `_tabSwitchStopActions` were removed in the toast-redesign — idle is a persistent info-only toast (no buttons), tab-switch is a 3s info notification (no buttons). Per-trigger Skip-tab / Skip-site / Disable controls remain available in the popup notif card via `Store.suppress_idle` / `Store.suppress_tab_switch`.
 
 | Builder | Suppress call | Manager init key |
 |---|---|---|
 | `_ssBlurStopActions()` | `Store.suppress_screen_share(scope, ctx)` | `ss_stop_actions` |
+| `_ssResumeAction()` | `Store.unsuppress_screen_share('feature', ctx)` | `ss_resume_action` |
 
 ### Manager.init wiring
 
@@ -76,6 +79,7 @@ blsi.Automate.Manager.init({
   tab_id: _initTabId,
   get_host_url: () => ({ host: _topHostname, url: location.href }),
   ss_stop_actions: _ssBlurStopActions,
+  ss_resume_action: _ssResumeAction,
 });
 ```
 
