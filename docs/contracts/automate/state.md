@@ -220,8 +220,8 @@ Side effects: Updates `_screen_share_cache`; fires subscribers; writes screen_sh
 
 ### `set_screen_share_inactive(opt_tabId?)` → Promise
 
-With `opt_tabId: number`: removes only that tab's entire entry (all streams) from the map. No-op if the tab is not sharing.
-Without argument: clears the entire map (used by `init()` on SW startup to clear stale state).
+With `opt_tabId: number`: removes only that tab's entire entry (all streams) from the map. No-op if the tab is not sharing. After removal, if no active shares remain across any tab and `suspended.screen_share` is true, auto-calls `resume_trigger('screen_share')` to clear the stale suspension.
+Without argument: clears the entire map (used by `init()` on SW startup to clear stale state). Also auto-resumes `screen_share` suspension if set.
 
 ### `suppress_screen_share_site(hostname, opt_tabId?)` → Promise
 

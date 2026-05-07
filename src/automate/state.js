@@ -470,10 +470,15 @@
       var next = Object.assign({}, _screen_share_cache);
       delete next[key];
       _screen_share_cache = next;
+      var any_active = Object.keys(next).some(function (k) {
+        return next[k] && next[k].streams && Object.keys(next[k].streams).length > 0;
+      });
+      if (!any_active && _suspended_cache.screen_share) resume_trigger('screen_share');
       _fire_subscribers();
       return _session_set(KEYS.screen_share, next);
     }
     _screen_share_cache = {};
+    if (_suspended_cache.screen_share) resume_trigger('screen_share');
     _fire_subscribers();
     return _session_set(KEYS.screen_share, {});
   }

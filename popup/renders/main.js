@@ -251,8 +251,8 @@ const BlurrySitePopupRender = (() => {
       el.appendChild(_buildTriggerSubCard(ssCfg));
     }
 
-    // Screen-share suspended card
-    if (ssSuspended && !triggers.screen_share && !ssSuppressedTab && !ssSuppressedHost) {
+    // Screen-share suspended card — only while a share is still live
+    if (ssSuspended && ssShareLive && !triggers.screen_share && !ssSuppressedTab && !ssSuppressedHost) {
       el.appendChild(_buildTriggerSubCard({
         triggerLabel: _t('notif_screen_share_active'),
         suppression: { label: _t('notif_suspended'), onUndo: function () { if (onUnsuppressSS) onUnsuppressSS('feature'); } },
