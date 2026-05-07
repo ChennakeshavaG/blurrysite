@@ -8,7 +8,12 @@ once it leaves the `0.x` line.
 
 ---
 
-## [Unreleased]
+## [0.69.3] — 2025-05-07
+
+### Removed
+- Competitive analysis and market strategy documents stripped from the
+  tracked tree and working directory ahead of the public open-source
+  release.
 
 ### Added
 - `THIRD_PARTY_LICENSES.md` — consolidated inventory of bundled third-party
