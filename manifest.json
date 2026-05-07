@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Blurry Site",
-  "version": "0.69.3",
+  "version": "0.69.4",
   "description": "Blur anything you want on a website. Configure and forget...",
   "default_locale": "en",
 
